@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   FileText, CheckCircle, Clock, Edit3, Check, X, Flag, ChevronDown, ChevronUp,
-  Send, MessageSquare, ArrowLeft, AlertTriangle, Loader, Shield, Award, Pause
+  Send, MessageSquare, ArrowLeft, AlertTriangle, Loader, Shield, Award, Pause, Plus, Trash2
 } from "lucide-react";
 
 const CONFIDENCE_CONFIG = {
@@ -52,7 +52,7 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
   return (
     <div className={`border rounded-lg overflow-hidden mb-3 ${mapping.status === "rejected" ? "opacity-60" : ""}`} data-testid={`evidence-card-${mapping.id}`}>
       <div
-        className={`flex items-center justify-between p-3 cursor-pointer ${type === "cqc" ? "bg-blue-50 border-b border-blue-100" : "bg-emerald-50 border-b border-emerald-100"}`}
+        className={`flex items-center justify-between p-3 cursor-pointer ${type === "cqc" ? "bg-purple-50 border-b border-purple-100" : "bg-emerald-50 border-b border-emerald-100"}`}
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -151,6 +151,8 @@ export default function MeetingReport() {
   const [newComment, setNewComment] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [addingAction, setAddingAction] = useState(false);
+  const [newAction, setNewAction] = useState({ text: "", assigned_to: "", due_date: "" });
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
   const isInReview = meeting?.status === "in_review";
@@ -206,6 +208,38 @@ export default function MeetingReport() {
     } catch (err) {
       console.error("Evidence update failed", err);
     }
+  };
+
+  const saveActions = async (updatedActions) => {
+    try {
+      await axios.put(`${API}/review/${meetingId}/actions`, { actions: updatedActions }, getAuthConfig());
+      fetchMeeting();
+    } catch (err) {
+      setActionMessage(err.response?.data?.detail || "Failed to save actions");
+    }
+  };
+
+  const addAction = async () => {
+    if (!newAction.text.trim()) return;
+    const current = meeting?.analysis?.actions || [];
+    const updated = [
+      ...current,
+      {
+        id: `action_manual_${Date.now()}`,
+        text: newAction.text.trim(),
+        assigned_to: newAction.assigned_to.trim() || null,
+        due_date: newAction.due_date.trim() || null,
+      },
+    ];
+    await saveActions(updated);
+    setNewAction({ text: "", assigned_to: "", due_date: "" });
+    setAddingAction(false);
+  };
+
+  const removeAction = async (idx) => {
+    const current = meeting?.analysis?.actions || [];
+    const updated = current.filter((_, i) => i !== idx);
+    await saveActions(updated);
   };
 
   const markReviewed = async () => {
@@ -408,14 +442,31 @@ export default function MeetingReport() {
                     )}
 
                     {/* Actions */}
-                    {analysis.actions?.length > 0 && (
+                    {(analysis.actions?.length > 0 || canReview) && (
                       <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-                        <h3 className="font-semibold text-gray-900 text-sm mb-3" style={{fontFamily:'Work Sans,sans-serif'}}>Action Items</h3>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="font-semibold text-gray-900 text-sm" style={{fontFamily:'Work Sans,sans-serif'}}>
+                            Action Items
+                            {analysis.actions?.length > 0 && (
+                              <span className="ml-2 text-xs font-normal text-gray-400">({analysis.actions.length})</span>
+                            )}
+                          </h3>
+                          {canReview && !addingAction && (
+                            <button
+                              onClick={() => setAddingAction(true)}
+                              className="flex items-center gap-1 text-xs text-[#1E3A8A] hover:underline font-medium"
+                              data-testid="add-action-btn"
+                            >
+                              <Plus className="w-3 h-3" /> Add Action
+                            </button>
+                          )}
+                        </div>
+
                         <div className="space-y-2" data-testid="actions-list">
-                          {analysis.actions.map((action, i) => (
-                            <div key={i} className="flex items-start gap-3 p-2.5 bg-gray-50 rounded-md">
+                          {(analysis.actions || []).map((action, i) => (
+                            <div key={i} className="flex items-start gap-3 p-2.5 bg-gray-50 rounded-md group">
                               <div className="w-5 h-5 rounded-full bg-[#1E3A8A] text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</div>
-                              <div>
+                              <div className="flex-1 min-w-0">
                                 <p className="text-sm text-gray-800">{action.text}</p>
                                 {(action.assigned_to || action.due_date) && (
                                   <p className="text-xs text-gray-500 mt-0.5">
@@ -425,9 +476,75 @@ export default function MeetingReport() {
                                   </p>
                                 )}
                               </div>
+                              {canReview && (
+                                <button
+                                  onClick={() => removeAction(i)}
+                                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded flex-shrink-0"
+                                  data-testid={`remove-action-${i}`}
+                                  title="Remove action"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           ))}
+
+                          {analysis.actions?.length === 0 && !addingAction && (
+                            <p className="text-sm text-gray-400 py-2 text-center">No actions yet — add one below</p>
+                          )}
                         </div>
+
+                        {/* Add action form */}
+                        {addingAction && (
+                          <div className="mt-3 border border-dashed border-[#1E3A8A] rounded-md p-3 bg-blue-50 fade-in" data-testid="add-action-form">
+                            <p className="text-xs font-semibold text-[#1E3A8A] mb-2">New Action</p>
+                            <input
+                              type="text"
+                              value={newAction.text}
+                              onChange={e => setNewAction(a => ({...a, text: e.target.value}))}
+                              placeholder="Describe the action required..."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white mb-2"
+                              data-testid="new-action-text"
+                              autoFocus
+                              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addAction(); } }}
+                            />
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                              <input
+                                type="text"
+                                value={newAction.assigned_to}
+                                onChange={e => setNewAction(a => ({...a, assigned_to: e.target.value}))}
+                                placeholder="Assigned to (optional)"
+                                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
+                                data-testid="new-action-assigned"
+                              />
+                              <input
+                                type="text"
+                                value={newAction.due_date}
+                                onChange={e => setNewAction(a => ({...a, due_date: e.target.value}))}
+                                placeholder="Due date (optional)"
+                                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
+                                data-testid="new-action-due"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={addAction}
+                                disabled={!newAction.text.trim()}
+                                className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-[#1E40AF] disabled:opacity-50 transition-colors"
+                                data-testid="save-new-action-btn"
+                              >
+                                <Plus className="w-3 h-3" /> Add Action
+                              </button>
+                              <button
+                                onClick={() => { setAddingAction(false); setNewAction({ text: "", assigned_to: "", due_date: "" }); }}
+                                className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors"
+                                data-testid="cancel-add-action-btn"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
