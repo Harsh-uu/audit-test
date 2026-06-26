@@ -9,6 +9,7 @@ import RecordingScreen from "@/pages/RecordingScreen";
 import MeetingReport from "@/pages/MeetingReport";
 import AdminLibrary from "@/pages/AdminLibrary";
 import StaffPortfolio from "@/pages/StaffPortfolio";
+import TeamInsights from "@/pages/TeamInsights";
 import "@/App.css";
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
           <Route path="/meetings/:meetingId/record" element={<ProtectedRoute><RecordingScreen /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/report" element={<ProtectedRoute><MeetingReport /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><AdminLibrary /></ProtectedRoute>} />
+          <Route path="/admin/team" element={<ProtectedRoute roles={["admin", "manager"]}><TeamInsights /></ProtectedRoute>} />
           <Route path="/portfolio" element={<ProtectedRoute><StaffPortfolio /></ProtectedRoute>} />
           <Route path="/portfolio/:userId" element={<ProtectedRoute><StaffPortfolio /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

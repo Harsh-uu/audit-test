@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
-  LayoutDashboard, Mic, FileText, Settings, LogOut, Shield, ChevronLeft, Menu, BookOpen, Users, TrendingUp, Download
+  LayoutDashboard, Mic, FileText, Settings, LogOut, Shield, ChevronLeft, Menu, BookOpen, Users, TrendingUp, Download, BarChart2
 } from "lucide-react";
 
 export default function Layout({ children }) {
@@ -26,6 +26,7 @@ export default function Layout({ children }) {
 
   const adminItems = [
     { path: "/admin", icon: BookOpen, label: "Standards Library" },
+    { path: "/admin/team", icon: BarChart2, label: "Team Intelligence" },
   ];
 
   return (
@@ -76,28 +77,40 @@ export default function Layout({ children }) {
           {(user?.role === "admin" || user?.role === "manager") && (
             <>
               {!collapsed && <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Admin</div>}
-              {user?.role === "admin" && adminItems.map(({ path, icon: Icon, label }) => (
-                <Link
-                  key={path}
-                  to={path}
-                  data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    isActive(path) ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  {!collapsed && <span>{label}</span>}
-                </Link>
-              ))}
+              {/* Team Intelligence visible to both admin and manager */}
               <Link
-                to="/admin#export"
-                data-testid="nav-evidence-export"
-                onClick={() => {/* AdminLibrary will handle hash */}}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100`}
+                to="/admin/team"
+                data-testid="nav-team-intelligence"
+                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isActive("/admin/team") ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
+                }`}
               >
-                <Download className="w-4 h-4 flex-shrink-0" />
-                {!collapsed && <span>Evidence Export</span>}
+                <BarChart2 className="w-4 h-4 flex-shrink-0" />
+                {!collapsed && <span>Team Intelligence</span>}
               </Link>
+              {user?.role === "admin" && (
+                <>
+                  <Link
+                    to="/admin"
+                    data-testid="nav-standards-library"
+                    className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      location.pathname === "/admin" ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4 flex-shrink-0" />
+                    {!collapsed && <span>Standards Library</span>}
+                  </Link>
+                  <Link
+                    to="/admin"
+                    data-testid="nav-evidence-export"
+                    onClick={() => setTimeout(() => document.querySelector('[data-tab="export"]')?.click(), 100)}
+                    className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100"
+                  >
+                    <Download className="w-4 h-4 flex-shrink-0" />
+                    {!collapsed && <span>Evidence Export</span>}
+                  </Link>
+                </>
+              )}
             </>
           )}
         </nav>

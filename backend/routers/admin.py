@@ -302,6 +302,153 @@ async def rescan_meetings_background(doc_id: str, db):
         logger.error(f"Auto-rescan failed for doc {doc_id}: {e}")
 
 
+@router.get("/team-insights")
+async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current_user)):
+    """Returns evidence matrix + team themes for all staff."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    # ── Staff ──────────────────────────────────────────────────────────────
+    staff = []
+    async for u in db.users.find({"role": {"$in": ["attendee", "manager"]}, "is_active": {"$ne": False}}):
+        staff.append({"id": str(u["_id"]), "name": u.get("name", ""), "role": u.get("role", "")})
+
+    if not staff:
+        return {"staff_count": 0, "meeting_count": 0, "matrix": {"cqc": {"standards": [], "rows": []}, "care_cert": {"standards": [], "rows": []}, "custom": {"standards": [], "rows": []}}, "themes": {"coverage_gaps": [], "common_risks": [], "outstanding_actions": []}}
+
+    staff_ids = {s["id"] for s in staff}
+
+    # ── Standards ──────────────────────────────────────────────────────────
+    cqc_stds, cc_stds = [], []
+    async for s in db.standards_entries.find({"type": "cqc", "is_active": True}).sort("reference", 1):
+        cqc_stds.append({"ref": s["reference"], "name": s.get("name", "")})
+    async for s in db.standards_entries.find({"type": "care_cert", "is_active": True}).sort("reference", 1):
+        cc_stds.append({"ref": s["reference"], "name": s.get("name", "")})
+
+    # ── Load all signed-off meetings ────────────────────────────────────────
+    all_items = []
+    async for meeting in db.meetings.find(
+        {"status": {"$in": ["signed_off", "shared"]}, "analysis_id": {"$exists": True}}
+    ).sort("date", -1):
+        adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+        if adoc:
+            all_items.append({"meeting": meeting, "analysis": adoc})
+
+    # ── Evidence maps: staff_id → standard_ref → cell data ─────────────────
+    def empty(): return {"likely": 0, "review": 0, "total": 0, "last_date": ""}
+
+    cqc_ev = {s["id"]: {} for s in staff}
+    cc_ev  = {s["id"]: {} for s in staff}
+    cust_ev = {s["id"]: {} for s in staff}
+    cust_names: dict = {}  # ref → display name
+
+    all_risks: list = []
+    all_outstanding: list = []
+
+    for item in all_items:
+        mtg, ana = item["meeting"], item["analysis"]
+        date = mtg.get("date", "")
+
+        for attendee in mtg.get("attendees", []):
+            uid = attendee.get("user_id", "")
+            if uid not in staff_ids:
+                continue
+
+            for m in ana.get("cqc_mappings", []):
+                ref = m.get("regulation_ref", "")
+                if not ref: continue
+                if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = empty()
+                c = cqc_ev[uid][ref]; c["total"] += 1
+                if m.get("confidence") == "likely_evidence": c["likely"] += 1
+                elif m.get("confidence") == "needs_review": c["review"] += 1
+                if date > c["last_date"]: c["last_date"] = date
+
+            for m in ana.get("care_cert_mappings", []):
+                ref = m.get("standard_ref", "")
+                if not ref: continue
+                if ref not in cc_ev[uid]: cc_ev[uid][ref] = empty()
+                c = cc_ev[uid][ref]; c["total"] += 1
+                if m.get("confidence") == "likely_evidence": c["likely"] += 1
+                elif m.get("confidence") == "needs_review": c["review"] += 1
+                if date > c["last_date"]: c["last_date"] = date
+
+            for m in ana.get("custom_mappings", []):
+                ref = m.get("criterion_ref", "") or m.get("document_name", "")
+                if not ref: continue
+                cust_names.setdefault(ref, m.get("criterion_name", ref))
+                if ref not in cust_ev[uid]: cust_ev[uid][ref] = empty()
+                c = cust_ev[uid][ref]; c["total"] += 1
+                if m.get("confidence") == "likely_evidence": c["likely"] += 1
+                elif m.get("confidence") == "needs_review": c["review"] += 1
+                if date > c["last_date"]: c["last_date"] = date
+
+        for risk in ana.get("risks", []):
+            text = risk if isinstance(risk, str) else (risk.get("text", "") if isinstance(risk, dict) else "")
+            if text.strip(): all_risks.append(text.strip())
+
+        for action in ana.get("actions", []):
+            if isinstance(action, dict) and not action.get("completed", False):
+                text = action.get("text", "").strip()
+                if text: all_outstanding.append(text)
+
+    # ── Build matrix helper ─────────────────────────────────────────────────
+    def build_matrix(stds, ev_map):
+        rows = []
+        for s in staff:
+            cells = {}
+            for std in stds:
+                ref = std["ref"]
+                cell = ev_map[s["id"]].get(ref)
+                if cell and cell["total"] > 0:
+                    cells[ref] = {**cell, "status": "evidenced" if cell["likely"] > 0 else "needs_review"}
+                else:
+                    cells[ref] = {"status": "gap", "total": 0, "likely": 0, "review": 0, "last_date": ""}
+            rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
+        return {"standards": stds, "rows": rows}
+
+    cust_stds = [{"ref": r, "name": cust_names.get(r, r)} for r in sorted(cust_names)]
+
+    # ── Coverage gaps ───────────────────────────────────────────────────────
+    gaps = []
+    for std in cqc_stds:
+        ref = std["ref"]
+        covered = sum(1 for s in staff if cqc_ev[s["id"]].get(ref, {}).get("total", 0) > 0)
+        gaps.append({"ref": ref, "name": std["name"], "type": "cqc", "covered": covered, "total": len(staff)})
+    for std in cc_stds:
+        ref = std["ref"]
+        covered = sum(1 for s in staff if cc_ev[s["id"]].get(ref, {}).get("total", 0) > 0)
+        gaps.append({"ref": ref, "name": std["name"], "type": "care_cert", "covered": covered, "total": len(staff)})
+    for std in cust_stds:
+        ref = std["ref"]
+        covered = sum(1 for s in staff if cust_ev[s["id"]].get(ref, {}).get("total", 0) > 0)
+        gaps.append({"ref": ref, "name": std["name"], "type": "custom", "covered": covered, "total": len(staff)})
+    gaps.sort(key=lambda x: x["covered"])  # fewest covered first
+
+    # ── Aggregate risks / actions ───────────────────────────────────────────
+    def agg(items, top=10):
+        counts: dict = {}
+        for text in items:
+            key = text[:60].lower()
+            if key not in counts: counts[key] = {"text": text, "count": 0}
+            counts[key]["count"] += 1
+        return sorted(counts.values(), key=lambda x: -x["count"])[:top]
+
+    return {
+        "staff_count": len(staff),
+        "meeting_count": len(all_items),
+        "matrix": {
+            "cqc": build_matrix(cqc_stds, cqc_ev),
+            "care_cert": build_matrix(cc_stds, cc_ev),
+            "custom": build_matrix(cust_stds, cust_ev),
+        },
+        "themes": {
+            "coverage_gaps": gaps[:20],
+            "common_risks": agg(all_risks),
+            "outstanding_actions": agg(all_outstanding),
+        },
+    }
+
+
 @router.get("/meetings-brief")
 async def list_meetings_brief(db=Depends(get_db), current_user=Depends(get_current_user)):
     """Return lightweight meeting list for the export filter UI."""

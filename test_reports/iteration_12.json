@@ -1,0 +1,44 @@
+{
+  "summary": "Tested Team Intelligence feature — GET /api/admin/team-insights backend (12/12 tests pass) and TeamInsights frontend page (/admin/team). All critical flows verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Evidence Matrix", "issues": ["Organisational sub-tab badge shows '14' (same as CQC) but Organisational has 0 standards mapped — cosmetic confusion"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_team_insights.py",
+    "/app/test_reports/pytest/team_insights.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_team_insights.py"
+  ],
+  "success_rate": {"backend": "100% (12/12 passed)", "frontend": "100%"},
+  "test_credentials": "admin@supervision.com / Admin123!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Team Intelligence feature fully verified. Backend: 14 CQC standards, 16 Care Cert standards, 2 staff (Test Manager, Test Staff), 1 meeting. Test Staff + Test Manager both show evidenced dot for Regulation 18 / same standard in the CQC matrix. Team Themes shows Coverage Gaps (all standards 0/2), empty Recurring Risks and empty Outstanding Actions panels. Nav link [data-testid='nav-team-intelligence'] present in Layout.js for admin/manager roles.",
+  "verified_features": {
+    "api_returns_correct_shape": "PASS — staff_count, meeting_count, matrix.cqc.standards(14), matrix.care_cert.standards(16), themes.coverage_gaps all present",
+    "api_403_for_staff": "PASS — staff user gets 403",
+    "api_401_unauthenticated": "PASS",
+    "page_loads": "PASS — /admin/team loads with 'Team Intelligence' header, '2 staff · 1 signed-off sessions'",
+    "evidence_matrix_tab_default": "PASS — Evidence Matrix tab active by default",
+    "matrix_subtabs": "PASS — CQC(14), Care Certificate(14), Organisational(14) sub-tabs visible and switchable",
+    "matrix_staff_rows": "PASS — Test Manager and Test Staff rows with evidenced (green dot) and gap cells",
+    "coverage_row": "PASS — TEAM COVERAGE row at bottom with % values",
+    "team_themes_coverage_gaps": "PASS — Standards Coverage Gaps section with CQC and Care Cert cards",
+    "recurring_risks_panel": "PASS — 'Recurring Risks Across Team' panel (shows 'No risks recorded yet')",
+    "outstanding_actions_panel": "PASS — 'Outstanding Actions Across Team' panel (shows 'No outstanding actions — great!')",
+    "nav_link": "PASS — Link present in Layout.js with correct data-testid (minor Playwright timing delayed detection)",
+    "refresh_button": "PASS — Refresh button top-right, clickable"
+  }
+}
