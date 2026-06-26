@@ -432,23 +432,13 @@ CARE_CERT_STANDARDS = [
     },
     {
         "reference": "Standard 16", "name": "Awareness of learning disability and autism",
-        "description": "The care worker has awareness of learning disabilities and autism, including different communication styles, behaviours, sensory needs, and how to apply person-centred and positive behaviour support approaches.",
-        "keywords": ["learning disability", "autism", "communication", "behaviour", "support needs", "neurodivergent", "sensory", "positive behaviour support", "PBS"],
+        "description": "It is a legal requirement that all staff working in CQC-regulated services undertake training on how to interact appropriately with people with a learning disability and autistic people, at a level appropriate to their role (CQC Regulation 18: Staffing).",
+        "keywords": ["learning disability", "autism", "training", "CQC regulation 18", "staffing", "awareness"],
         "outcomes": [
-            {"ref": "16.1", "name": "Understand what is meant by learning disability and autism"},
-            {"ref": "16.2", "name": "Understand the impact of learning disability and autism on individuals"},
-            {"ref": "16.3", "name": "Understand communication and behaviour in relation to learning disability and autism"},
+            {"ref": "16.1", "name": "Demonstrate awareness of learning disability and autism"},
         ],
         "sub_outcomes": [
-            {"ref": "16.1a", "desc": "Define learning disability and give examples of different types and levels of support need"},
-            {"ref": "16.1b", "desc": "Define autism and describe key characteristics associated with it, including how it presents differently in different individuals"},
-            {"ref": "16.1c", "desc": "Explain how learning disability and autism are lifelong conditions and differ from mental health conditions"},
-            {"ref": "16.2a", "desc": "Describe how learning disability and autism may affect how a person communicates, learns, processes information and behaves"},
-            {"ref": "16.2b", "desc": "Explain the principles of person-centred and strengths-based approaches when supporting someone with a learning disability or autism"},
-            {"ref": "16.2c", "desc": "Describe how positive behaviour support (PBS) and other approaches can improve quality of life and reduce distress"},
-            {"ref": "16.3a", "desc": "Describe communication approaches and augmentative and alternative communication (AAC) that may help individuals with learning disabilities and/or autism"},
-            {"ref": "16.3b", "desc": "Explain how environments, predictable routines and sensory considerations can support individuals with learning disabilities or autism"},
-            {"ref": "16.3c", "desc": "Describe how to recognise, understand and respond positively to behaviour that may be distressing or challenging, including de-escalation strategies"},
+            {"ref": "16.1a", "desc": "Complete training on how to interact appropriately with people with a learning disability and autistic people, at a level appropriate to their role, as required by CQC Regulation 18: Staffing"},
         ]
     },
 ]
@@ -483,11 +473,13 @@ async def migrate_standard_outcomes(db):
             continue
         if not existing.get("outcomes"):
             update_fields["outcomes"] = std["outcomes"]
-        if not existing.get("sub_outcomes"):
+        # Always overwrite sub_outcomes so corrections in seed.py are applied
+        if existing.get("sub_outcomes") != std["sub_outcomes"]:
             update_fields["sub_outcomes"] = std["sub_outcomes"]
-        # Always update name to match 2025 standards
         if existing.get("name") != std["name"]:
             update_fields["name"] = std["name"]
+        if existing.get("description") != std["description"]:
+            update_fields["description"] = std["description"]
         if update_fields:
             await db.standards_entries.update_one(
                 {"reference": ref, "type": "care_cert"},
