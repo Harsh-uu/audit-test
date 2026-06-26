@@ -42,7 +42,7 @@ export default function RecordingScreen() {
   const [inIframe, setInIframe] = useState(false);
   const [template, setTemplate] = useState(null);
   const [completedSteps, setCompletedSteps] = useState({});
-  const [guideOpen, setGuideOpen] = useState(true);
+  const [guideOpen, setGuideOpen] = useState(() => window.innerWidth >= 768);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
@@ -265,15 +265,15 @@ export default function RecordingScreen() {
 
   return (
     <Layout>
-      <div className="p-6 md:p-8 max-w-3xl mx-auto fade-in">
+      <div className="p-4 sm:p-6 md:p-8 max-w-2xl mx-auto w-full fade-in">
         {meeting && (
-          <div className="mb-6">
-            <h1 className="text-xl font-semibold text-gray-900" style={{fontFamily:'Work Sans,sans-serif'}}>{meeting.title}</h1>
-            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+          <div className="mb-5">
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900 leading-snug" style={{fontFamily:'Work Sans,sans-serif'}}>{meeting.title}</h1>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-sm text-gray-500">
               {meeting.attendees?.length > 0 && (
-                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{meeting.attendees.length} attendees</span>
+                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{meeting.attendees.length} attendee{meeting.attendees.length !== 1 ? "s" : ""}</span>
               )}
-              {meeting.sign_off_manager_name && <span>Manager: {meeting.sign_off_manager_name}</span>}
+              {meeting.sign_off_manager_name && <span className="hidden sm:inline">Manager: {meeting.sign_off_manager_name}</span>}
             </div>
           </div>
         )}
@@ -385,10 +385,13 @@ export default function RecordingScreen() {
 
         {/* Recording controls */}
         {["ready", "recording", "paused", "stopped"].includes(stage) && (
-          <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm fade-in">
+          <div className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 shadow-sm fade-in">
             {/* Timer */}
-            <div className="text-center mb-8">
-              <div className={`text-5xl font-mono font-bold tracking-tight mb-2 ${stage === "recording" ? "text-[#DC2626]" : "text-gray-400"}`} data-testid="recording-timer">
+            <div className="text-center mb-8 sm:mb-10">
+              <div
+                className={`text-5xl sm:text-6xl font-mono font-bold tracking-tight mb-2 ${stage === "recording" ? "text-[#DC2626]" : "text-gray-400"}`}
+                data-testid="recording-timer"
+              >
                 {formatDuration(elapsed)}
               </div>
               {pausedTotal > 0 && (
@@ -399,27 +402,28 @@ export default function RecordingScreen() {
               )}
               {stage === "recording" && (
                 <div className="flex items-center justify-center gap-2 mt-2">
-                  <div className="w-2 h-2 bg-[#DC2626] rounded-full recording-pulse"></div>
+                  <div className="w-2.5 h-2.5 bg-[#DC2626] rounded-full recording-pulse"></div>
                   <span className="text-sm text-[#DC2626] font-medium">Recording in progress</span>
                 </div>
               )}
               {stage === "paused" && (
                 <div className="flex items-center justify-center gap-2 mt-2">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  <span className="text-sm text-amber-600 font-medium">Recording paused — sensitive discussion</span>
+                  <div className="w-2.5 h-2.5 bg-amber-500 rounded-full"></div>
+                  <span className="text-sm text-amber-600 font-medium">Paused — sensitive discussion</span>
                 </div>
               )}
             </div>
 
             {/* Controls */}
-            <div className="flex items-center justify-center gap-4">
+            <div className="flex items-center justify-center gap-4 sm:gap-6">
               {stage === "ready" && (
                 <button
                   onClick={startRecording}
-                  className="flex flex-col items-center gap-2 bg-[#DC2626] text-white rounded-full w-24 h-24 flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
+                  className="flex flex-col items-center justify-center gap-2 bg-[#DC2626] text-white rounded-full w-28 h-28 sm:w-32 sm:h-32 shadow-lg hover:bg-red-700 active:scale-95 transition-all touch-manipulation"
                   data-testid="start-recording-btn"
                 >
-                  <Mic className="w-8 h-8" />
+                  <Mic className="w-9 h-9 sm:w-10 sm:h-10" />
+                  <span className="text-xs font-semibold tracking-wide">TAP TO START</span>
                 </button>
               )}
 
@@ -427,23 +431,23 @@ export default function RecordingScreen() {
                 <>
                   <button
                     onClick={pauseRecording}
-                    className="flex flex-col items-center gap-1.5 px-5 py-3 border-2 border-amber-400 text-amber-700 rounded-lg hover:bg-amber-50 transition-colors"
+                    className="flex flex-col items-center gap-2 px-5 py-4 sm:px-6 sm:py-5 border-2 border-amber-400 text-amber-700 rounded-xl hover:bg-amber-50 active:scale-95 transition-all touch-manipulation min-w-[80px]"
                     data-testid="pause-recording-btn"
                   >
-                    <Pause className="w-6 h-6" />
-                    <span className="text-xs font-medium">Pause</span>
+                    <Pause className="w-7 h-7 sm:w-8 sm:h-8" />
+                    <span className="text-xs font-semibold">Pause</span>
                   </button>
-                  <div className="flex flex-col items-center gap-1.5 bg-[#DC2626] text-white rounded-full w-20 h-20 flex items-center justify-center recording-pulse shadow-lg cursor-default">
-                    <Mic className="w-7 h-7" />
-                    <span className="text-xs font-medium">REC</span>
+                  <div className="flex flex-col items-center justify-center gap-1.5 bg-[#DC2626] text-white rounded-full w-24 h-24 sm:w-28 sm:h-28 recording-pulse shadow-lg cursor-default flex-shrink-0">
+                    <Mic className="w-8 h-8 sm:w-9 sm:h-9" />
+                    <span className="text-xs font-bold tracking-wide">REC</span>
                   </div>
                   <button
                     onClick={stopRecording}
-                    className="flex flex-col items-center gap-1.5 px-5 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex flex-col items-center gap-2 px-5 py-4 sm:px-6 sm:py-5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:scale-95 transition-all touch-manipulation min-w-[80px]"
                     data-testid="stop-recording-btn"
                   >
-                    <Square className="w-6 h-6" />
-                    <span className="text-xs font-medium">Stop</span>
+                    <Square className="w-7 h-7 sm:w-8 sm:h-8" />
+                    <span className="text-xs font-semibold">Stop</span>
                   </button>
                 </>
               )}
@@ -452,34 +456,37 @@ export default function RecordingScreen() {
                 <>
                   <button
                     onClick={resumeRecording}
-                    className="flex flex-col items-center gap-1.5 px-5 py-3 bg-[#1E3A8A] text-white rounded-lg hover:bg-[#1E40AF] transition-colors"
+                    className="flex flex-col items-center gap-2 px-5 py-4 sm:px-6 sm:py-5 bg-[#1E3A8A] text-white rounded-xl hover:bg-[#1E40AF] active:scale-95 transition-all touch-manipulation min-w-[80px]"
                     data-testid="resume-recording-btn"
                   >
-                    <Play className="w-6 h-6" />
-                    <span className="text-xs font-medium">Resume</span>
+                    <Play className="w-7 h-7 sm:w-8 sm:h-8" />
+                    <span className="text-xs font-semibold">Resume</span>
                   </button>
-                  <div className="flex flex-col items-center gap-1.5 bg-amber-100 text-amber-700 rounded-full w-20 h-20 flex items-center justify-center border-2 border-amber-300">
-                    <MicOff className="w-7 h-7" />
-                    <span className="text-xs font-medium">PAUSED</span>
+                  <div className="flex flex-col items-center justify-center gap-1.5 bg-amber-100 text-amber-700 rounded-full w-24 h-24 sm:w-28 sm:h-28 border-2 border-amber-300 flex-shrink-0 cursor-default">
+                    <MicOff className="w-8 h-8 sm:w-9 sm:h-9" />
+                    <span className="text-xs font-bold">PAUSED</span>
                   </div>
                   <button
                     onClick={stopRecording}
-                    className="flex flex-col items-center gap-1.5 px-5 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex flex-col items-center gap-2 px-5 py-4 sm:px-6 sm:py-5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:scale-95 transition-all touch-manipulation min-w-[80px]"
                     data-testid="stop-paused-recording-btn"
                   >
-                    <Square className="w-6 h-6" />
-                    <span className="text-xs font-medium">Stop</span>
+                    <Square className="w-7 h-7 sm:w-8 sm:h-8" />
+                    <span className="text-xs font-semibold">Stop</span>
                   </button>
                 </>
               )}
 
               {stage === "stopped" && (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="flex items-center justify-center w-20 h-20 bg-gray-100 rounded-full">
-                    <MicOff className="w-8 h-8 text-gray-400" />
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex items-center justify-center w-24 h-24 bg-gray-100 rounded-full">
+                    <MicOff className="w-10 h-10 text-gray-400" />
                   </div>
                   <p className="text-sm text-gray-500">Recording stopped</p>
-                  <button onClick={handleUpload} className="flex items-center gap-2 bg-[#1E3A8A] text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors">
+                  <button
+                    onClick={handleUpload}
+                    className="flex items-center gap-2 bg-[#1E3A8A] text-white px-6 py-3 rounded-lg text-sm font-medium hover:bg-[#1E40AF] active:scale-95 transition-all touch-manipulation"
+                  >
                     <Upload className="w-4 h-4" />
                     Upload &amp; Process
                   </button>
@@ -488,8 +495,10 @@ export default function RecordingScreen() {
             </div>
 
             {(stage === "ready" || stage === "recording" || stage === "paused") && (
-              <p className="text-center text-xs text-gray-400 mt-6">
-                {stage === "paused" ? "Audio is not being recorded during this pause. Sensitive discussion will not be captured." : "Use Pause for any sensitive or personal discussion — paused audio is never recorded."}
+              <p className="text-center text-xs text-gray-400 mt-6 leading-relaxed max-w-sm mx-auto">
+                {stage === "paused"
+                  ? "Audio is not being recorded during this pause. Sensitive discussion will not be captured."
+                  : "Use Pause for any sensitive or personal discussion — paused audio is never recorded."}
               </p>
             )}
           </div>

@@ -150,9 +150,12 @@ export default function AdminLibrary() {
         } catch (err) {
           console.error("Poll status error:", err);
         }
+      }, 3000);
+    } else if (!hasParsingDocs && pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docs]);
 
   const fetchAll = async () => {
