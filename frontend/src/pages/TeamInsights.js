@@ -10,22 +10,59 @@ import {
 
 // ── Cell rendering ──────────────────────────────────────────────────────────
 const CELL_CFG = {
-  evidenced:    { bg: "bg-emerald-100", border: "border-emerald-200", dot: "bg-emerald-500", label: "Evidenced" },
-  needs_review: { bg: "bg-amber-50",    border: "border-amber-200",   dot: "bg-amber-400",   label: "Needs review" },
-  gap:          { bg: "bg-gray-50",     border: "border-gray-100",    dot: null,              label: "Gap" },
+  evidenced:    { bg: "bg-emerald-100", border: "border-emerald-300", label: "All outcomes evidenced" },
+  partial:      { bg: "bg-amber-50",    border: "border-amber-200",   label: "Partially evidenced" },
+  needs_review: { bg: "bg-amber-50",    border: "border-amber-200",   label: "Needs review" },
+  gap:          { bg: "bg-gray-50",     border: "border-gray-100",    label: "Gap — no evidence" },
 };
 
 function MatrixCell({ cell }) {
-  const cfg = CELL_CFG[cell?.status] || CELL_CFG.gap;
+  const status = cell?.status || "gap";
+
+  if (status === "evidenced") {
+    return (
+      <div
+        title={cell?.total_sub ? `All ${cell.total_sub} sub-outcomes evidenced` : "All outcomes evidenced"}
+        className="w-10 h-10 flex items-center justify-center rounded border bg-emerald-100 border-emerald-300 transition-opacity hover:opacity-80 cursor-default"
+      >
+        <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (status === "partial") {
+    const covered = cell?.covered_sub ?? 0;
+    const total = cell?.total_sub ?? 0;
+    return (
+      <div
+        title={`${covered}/${total} sub-outcomes evidenced (${cell?.pct ?? 0}%)`}
+        className="w-10 h-10 flex items-center justify-center rounded border bg-amber-50 border-amber-200 transition-opacity hover:opacity-80 cursor-default"
+      >
+        <span className="text-[9px] font-bold text-amber-600 leading-none">{covered}/{total}</span>
+      </div>
+    );
+  }
+
+  if (status === "needs_review") {
+    return (
+      <div
+        title={`${cell?.review || 0} item(s) need review`}
+        className="w-10 h-10 flex items-center justify-center rounded border bg-amber-50 border-amber-200 transition-opacity hover:opacity-80 cursor-default"
+      >
+        <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+      </div>
+    );
+  }
+
+  // gap
   return (
     <div
-      title={cell?.status === "gap" ? "No evidence" : `${cell?.likely || 0} likely · ${cell?.review || 0} needs review`}
-      className={`w-10 h-10 flex items-center justify-center rounded border ${cfg.bg} ${cfg.border} transition-opacity hover:opacity-80 cursor-default`}
+      title="No evidence"
+      className="w-10 h-10 flex items-center justify-center rounded border bg-gray-50 border-gray-100 cursor-default"
     >
-      {cfg.dot
-        ? <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot} ${cell?.total > 1 ? "ring-2 ring-offset-1 ring-current opacity-80" : ""}`} />
-        : <span className="w-2 h-2 rounded-full bg-gray-200" />
-      }
+      <span className="w-2 h-2 rounded-full bg-gray-200" />
     </div>
   );
 }
@@ -119,15 +156,17 @@ function MatrixView({ matrix }) {
                     Team coverage
                   </td>
                   {data.standards.map(std => {
-                    const covered = data.rows.filter(r => r.cells[std.ref]?.status !== "gap").length;
-                    const pct = data.rows.length ? Math.round((covered / data.rows.length) * 100) : 0;
+                    const rows = data.rows;
+                    // For Care Cert: green only when 100% sub-outcomes covered
+                    const fullyEvidenced = rows.filter(r => r.cells[std.ref]?.status === "evidenced").length;
+                    const pct = rows.length ? Math.round((fullyEvidenced / rows.length) * 100) : 0;
                     return (
                       <td key={std.ref} className="px-2 py-2 text-center">
                         <span
                           className={`text-xs font-bold ${
                             pct === 100 ? "text-emerald-600" : pct >= 50 ? "text-amber-500" : "text-red-400"
                           }`}
-                          title={`${covered}/${data.rows.length} staff`}
+                          title={`${fullyEvidenced}/${rows.length} staff fully evidenced`}
                         >
                           {pct}%
                         </span>
@@ -140,15 +179,25 @@ function MatrixView({ matrix }) {
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 mt-3 px-1">
-            {Object.entries(CELL_CFG).map(([key, cfg]) => (
-              <div key={key} className="flex items-center gap-1.5 text-xs text-gray-500">
-                <div className={`w-3 h-3 rounded border ${cfg.bg} ${cfg.border} flex items-center justify-center`}>
-                  {cfg.dot && <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />}
-                </div>
-                {cfg.label}
+          <div className="flex items-center gap-5 mt-3 px-1 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <div className="w-7 h-7 rounded border bg-emerald-100 border-emerald-300 flex items-center justify-center">
+                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
               </div>
-            ))}
+              All sub-outcomes evidenced
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <div className="w-7 h-7 rounded border bg-amber-50 border-amber-200 flex items-center justify-center">
+                <span className="text-[8px] font-bold text-amber-600">3/8</span>
+              </div>
+              Partial (shows covered/total)
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <div className="w-7 h-7 rounded border bg-gray-50 border-gray-100 flex items-center justify-center">
+                <span className="w-2 h-2 rounded-full bg-gray-200" />
+              </div>
+              No evidence yet
+            </div>
           </div>
         </>
       )}

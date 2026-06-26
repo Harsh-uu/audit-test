@@ -320,10 +320,15 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
 
     # ── Standards ──────────────────────────────────────────────────────────
     cqc_stds, cc_stds = [], []
+    # Build Care Cert sub-outcomes lookup: standard_ref → list of sub-outcome refs
+    cc_sub_outcomes: dict = {}  # "Standard 2" → ["2.1a", "2.1b", ...]
     async for s in db.standards_entries.find({"type": "cqc", "is_active": True}).sort("reference", 1):
         cqc_stds.append({"ref": s["reference"], "name": s.get("name", "")})
     async for s in db.standards_entries.find({"type": "care_cert", "is_active": True}).sort("reference", 1):
         cc_stds.append({"ref": s["reference"], "name": s.get("name", "")})
+        subs = s.get("sub_outcomes", [])
+        if subs:
+            cc_sub_outcomes[s["reference"]] = [so["ref"] for so in subs]
 
     # ── Load all signed-off meetings ────────────────────────────────────────
     all_items = []
@@ -334,8 +339,11 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
         if adoc:
             all_items.append({"meeting": meeting, "analysis": adoc})
 
-    # ── Evidence maps: staff_id → standard_ref → cell data ─────────────────
-    def empty(): return {"likely": 0, "review": 0, "total": 0, "last_date": ""}
+    # ── Evidence maps ───────────────────────────────────────────────────────
+    # CQC: staff_id → standard_ref → count data
+    def empty_cqc(): return {"likely": 0, "review": 0, "total": 0, "last_date": ""}
+    # Care Cert: staff_id → standard_ref → {count data + set of covered sub-outcome refs}
+    def empty_cc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "covered_refs": set()}
 
     cqc_ev = {s["id"]: {} for s in staff}
     cc_ev  = {s["id"]: {} for s in staff}
@@ -357,20 +365,23 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
             for m in ana.get("cqc_mappings", []):
                 ref = m.get("regulation_ref", "")
                 if not ref: continue
-                if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = empty()
+                if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = empty_cqc()
                 c = cqc_ev[uid][ref]; c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
                 elif m.get("confidence") == "needs_review": c["review"] += 1
                 if date > c["last_date"]: c["last_date"] = date
 
             for m in ana.get("care_cert_mappings", []):
-                ref = m.get("standard_ref", "")
-                if not ref: continue
-                if ref not in cc_ev[uid]: cc_ev[uid][ref] = empty()
-                c = cc_ev[uid][ref]; c["total"] += 1
+                std_ref = m.get("standard_ref", "")
+                outcome_ref = m.get("outcome_ref", "")
+                if not std_ref: continue
+                if std_ref not in cc_ev[uid]: cc_ev[uid][std_ref] = empty_cc()
+                c = cc_ev[uid][std_ref]; c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
                 elif m.get("confidence") == "needs_review": c["review"] += 1
                 if date > c["last_date"]: c["last_date"] = date
+                if outcome_ref:
+                    c["covered_refs"].add(outcome_ref)
 
             for m in ana.get("custom_mappings", []):
                 ref = m.get("criterion_ref", "") or m.get("document_name", "")
@@ -391,8 +402,65 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
                 text = action.get("text", "").strip()
                 if text: all_outstanding.append(text)
 
-    # ── Build matrix helper ─────────────────────────────────────────────────
-    def build_matrix(stds, ev_map):
+    # ── Build matrix helpers ────────────────────────────────────────────────
+    def build_cqc_matrix(stds, ev_map):
+        """CQC matrix: evidenced if any likely evidence; needs_review if any review."""
+        rows = []
+        for s in staff:
+            cells = {}
+            for std in stds:
+                ref = std["ref"]
+                cell = ev_map[s["id"]].get(ref)
+                if cell and cell["total"] > 0:
+                    cells[ref] = {**cell, "status": "evidenced" if cell["likely"] > 0 else "needs_review"}
+                else:
+                    cells[ref] = {"status": "gap", "total": 0, "likely": 0, "review": 0, "last_date": ""}
+            rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
+        return {"standards": stds, "rows": rows}
+
+    def build_cc_matrix(stds, ev_map):
+        """Care Cert matrix: green ONLY when ALL sub-outcomes have evidence; amber when partial."""
+        rows = []
+        for s in staff:
+            cells = {}
+            for std in stds:
+                ref = std["ref"]
+                all_subs = set(cc_sub_outcomes.get(ref, []))
+                total_subs = len(all_subs)
+                ev = ev_map[s["id"]].get(ref, {})
+                covered_refs = ev.get("covered_refs", set())
+
+                if total_subs > 0:
+                    covered_count = len(covered_refs & all_subs)
+                    pct = round((covered_count / total_subs) * 100)
+                else:
+                    # No sub-outcomes defined — fall back to old behaviour
+                    covered_count = 1 if ev.get("total", 0) > 0 else 0
+                    total_subs = 1
+                    pct = 100 if covered_count else 0
+
+                if covered_count == total_subs and total_subs > 0:
+                    status = "evidenced"
+                elif covered_count > 0:
+                    status = "partial"
+                else:
+                    status = "gap"
+
+                cells[ref] = {
+                    "status": status,
+                    "total": ev.get("total", 0),
+                    "likely": ev.get("likely", 0),
+                    "review": ev.get("review", 0),
+                    "last_date": ev.get("last_date", ""),
+                    "covered_sub": covered_count,
+                    "total_sub": total_subs,
+                    "pct": pct,
+                }
+            rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
+        return {"standards": stds, "rows": rows}
+
+    def build_custom_matrix(stds, ev_map):
+        """Custom standards matrix: same as CQC (no sub-outcomes)."""
         rows = []
         for s in staff:
             cells = {}
@@ -416,13 +484,22 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
         gaps.append({"ref": ref, "name": std["name"], "type": "cqc", "covered": covered, "total": len(staff)})
     for std in cc_stds:
         ref = std["ref"]
-        covered = sum(1 for s in staff if cc_ev[s["id"]].get(ref, {}).get("total", 0) > 0)
-        gaps.append({"ref": ref, "name": std["name"], "type": "care_cert", "covered": covered, "total": len(staff)})
+        all_subs = set(cc_sub_outcomes.get(ref, []))
+        total_subs = len(all_subs)
+        # Fully covered = staff member has all sub-outcomes covered
+        if total_subs > 0:
+            fully_covered = sum(
+                1 for s in staff
+                if len(cc_ev[s["id"]].get(ref, {}).get("covered_refs", set()) & all_subs) == total_subs
+            )
+        else:
+            fully_covered = sum(1 for s in staff if cc_ev[s["id"]].get(ref, {}).get("total", 0) > 0)
+        gaps.append({"ref": ref, "name": std["name"], "type": "care_cert", "covered": fully_covered, "total": len(staff)})
     for std in cust_stds:
         ref = std["ref"]
         covered = sum(1 for s in staff if cust_ev[s["id"]].get(ref, {}).get("total", 0) > 0)
         gaps.append({"ref": ref, "name": std["name"], "type": "custom", "covered": covered, "total": len(staff)})
-    gaps.sort(key=lambda x: x["covered"])  # fewest covered first
+    gaps.sort(key=lambda x: x["covered"])
 
     # ── Aggregate risks / actions ───────────────────────────────────────────
     def agg(items, top=10):
@@ -437,9 +514,9 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
         "staff_count": len(staff),
         "meeting_count": len(all_items),
         "matrix": {
-            "cqc": build_matrix(cqc_stds, cqc_ev),
-            "care_cert": build_matrix(cc_stds, cc_ev),
-            "custom": build_matrix(cust_stds, cust_ev),
+            "cqc": build_cqc_matrix(cqc_stds, cqc_ev),
+            "care_cert": build_cc_matrix(cc_stds, cc_ev),
+            "custom": build_custom_matrix(cust_stds, cust_ev),
         },
         "themes": {
             "coverage_gaps": gaps[:20],

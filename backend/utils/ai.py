@@ -34,8 +34,8 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "id": "unique_id",
       "standard_ref": "Standard 2",
       "standard_name": "Your personal development",
-      "outcome_ref": "2.1",
-      "outcome_name": "Agree a personal development plan",
+      "outcome_ref": "2.1a",
+      "outcome_name": "Describe the processes for identifying own learning needs",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
       "confidence": "likely_evidence|needs_review|not_enough_evidence"
@@ -61,7 +61,7 @@ Rules:
 - Use "likely_evidence" only when clearly demonstrated
 - Use "needs_review" when partially demonstrated or unclear
 - Use "not_enough_evidence" when barely touched on
-- For Care Certificate mappings, ALWAYS include the specific outcome_ref and outcome_name (e.g. "2.1" and "Agree a personal development plan"). Choose the single most relevant outcome for the evidence found.
+- For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h", "13.9c"). Use the exact sub-outcome ref and its description as provided in the standards context below. One evidence item = one sub-outcome ref. Create separate mapping entries if evidence covers multiple sub-outcomes.
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
 - If no custom standards are provided, return custom_mappings as an empty array []
 - If the meeting had paused sections, note this in the summary
@@ -222,12 +222,18 @@ async def analyze_meeting(
         for s in cqc_standards[:20]
     ])
 
-    # Care Certificate context includes outcomes for precise outcome-level mapping
+    # Care Certificate context — includes granular sub-outcomes for precise mapping
     cc_lines = []
     for s in care_cert_standards[:16]:
         line = f"- {s['reference']}: {s['name']}"
+        sub_outcomes = s.get("sub_outcomes", [])
         outcomes = s.get("outcomes", [])
-        if outcomes:
+        if sub_outcomes:
+            # Use granular sub-outcomes
+            so_list = "\n    ".join([f"{so['ref']}: {so['desc']}" for so in sub_outcomes])
+            line += f"\n    Sub-outcomes (map to these specific refs):\n    {so_list}"
+        elif outcomes:
+            # Fallback to top-level outcomes if no sub-outcomes available
             outcome_list = " | ".join([f"Outcome {o['ref']}: {o['name']}" for o in outcomes])
             line += f"\n    Outcomes: {outcome_list}"
         cc_lines.append(line)
