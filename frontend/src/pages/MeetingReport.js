@@ -52,7 +52,7 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
   return (
     <div className={`border rounded-lg overflow-hidden mb-3 ${mapping.status === "rejected" ? "opacity-60" : ""}`} data-testid={`evidence-card-${mapping.id}`}>
       <div
-        className={`flex items-center justify-between p-3 cursor-pointer ${type === "cqc" ? "bg-purple-50 border-b border-purple-100" : "bg-emerald-50 border-b border-emerald-100"}`}
+        className={`flex items-center justify-between p-3 cursor-pointer ${type === "cqc" ? "bg-purple-50 border-b border-purple-100" : "bg-blue-50 border-b border-blue-100"}`}
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-2 min-w-0">
