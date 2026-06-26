@@ -44,8 +44,8 @@ export default function Login() {
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#1E3A8A] flex-col justify-between p-12">
         <div className="flex items-center gap-3">
-          <img src="/logo.svg" alt="1two.one" className="w-10 h-10" />
-          <span className="text-white text-2xl font-semibold tracking-tight" style={{fontFamily:'Work Sans,sans-serif'}}>1two.one</span>
+          <img src="/logo.svg" alt="1two.one" className="w-16 h-16" />
+          <span className="text-white text-4xl font-semibold tracking-tight" style={{fontFamily:'Work Sans,sans-serif'}}>1two.one</span>
         </div>
         <div>
           <h1 className="text-4xl font-bold text-white mb-4 leading-tight" style={{fontFamily:'Work Sans,sans-serif'}}>
