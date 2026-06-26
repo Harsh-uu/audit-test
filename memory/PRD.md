@@ -179,8 +179,8 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Meeting search and filtering on the Dashboard
 
 ### P2 (Future/Backlog)
-- Mobile-responsive recording screen
 - CQC inspection preparation summary view
+- Date-range filter on Team Intelligence matrix
 
 ### P2 (Future)
 - Internal evidence framework (job descriptions, company values, targets)
