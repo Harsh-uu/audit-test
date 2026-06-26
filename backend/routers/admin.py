@@ -3,13 +3,17 @@ from pydantic import BaseModel, EmailStr
 from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional
-import uuid
+import uuid, re as _re
 import logging
 from deps import get_db, get_current_user, require_roles
 from utils.storage import put_object
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+def _ref_nums(ref: str):
+    """Natural numeric sort key — 'Standard 10' → [10], 'Regulation 9' → [9]."""
+    return [int(n) for n in _re.findall(r'\d+', ref)] or [0]
 
 
 def doc_to_dict(doc):
@@ -329,6 +333,9 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
         subs = s.get("sub_outcomes", [])
         if subs:
             cc_sub_outcomes[s["reference"]] = [so["ref"] for so in subs]
+    # Re-sort numerically (DB sort is alphabetical: Standard 10 < Standard 2)
+    cqc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
+    cc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
 
     # ── Load all signed-off meetings ────────────────────────────────────────
     all_items = []
@@ -508,7 +515,9 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
         ref = std["ref"]
         covered = sum(1 for s in staff if cust_ev[s["id"]].get(ref, {}).get("total", 0) > 0)
         gaps.append({"ref": ref, "name": std["name"], "type": "custom", "covered": covered, "total": len(staff)})
-    gaps.sort(key=lambda x: x["covered"])
+    # Sort gaps numerically by reference within each type
+    _type_order = {"cqc": 0, "care_cert": 1, "custom": 2}
+    gaps.sort(key=lambda x: (_type_order.get(x["type"], 9), _ref_nums(x["ref"])))
 
     # ── Aggregate risks / actions ───────────────────────────────────────────
     def agg(items, top=10):
@@ -528,7 +537,7 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
             "custom": build_custom_matrix(cust_stds, cust_ev),
         },
         "themes": {
-            "coverage_gaps": gaps[:20],
+            "coverage_gaps": gaps,
             "common_risks": agg(all_risks),
             "outstanding_actions": agg(all_outstanding),
         },

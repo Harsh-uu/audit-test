@@ -258,7 +258,7 @@ function ThemesView({ themes }) {
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="w-4 h-4 text-[#1E3A8A]" />
           <h3 className="text-sm font-semibold text-gray-900">Standards Coverage Gaps</h3>
-          <span className="text-xs text-gray-400">(sorted by fewest staff with evidence)</span>
+          <span className="text-xs text-gray-400">(numerical order)</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
@@ -270,11 +270,14 @@ function ThemesView({ themes }) {
               <div className={`flex items-center gap-1.5 mb-3 text-sm font-semibold ${color}`}>
                 <Icon className="w-3.5 h-3.5" />
                 {label}
+                <span className="ml-auto text-xs font-normal text-gray-400">{gapsByType[key].length} standards</span>
               </div>
               {gapsByType[key].length === 0 ? (
                 <p className="text-xs text-gray-400 italic">No standards mapped yet</p>
               ) : (
-                gapsByType[key].slice(0, 8).map(gap => <GapBar key={gap.ref} gap={gap} />)
+                <div className="max-h-80 overflow-y-auto pr-1">
+                  {gapsByType[key].map(gap => <GapBar key={gap.ref} gap={gap} />)}
+                </div>
               )}
             </div>
           ))}
