@@ -149,7 +149,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 ---
 
-## What's Working (Tested v1)
+## What's Working (Tested v1 + v2)
 - All auth flows (3 roles tested)
 - Meeting creation (2-step with attendees + manager)
 - Recording notice, start, pause, resume, stop
@@ -157,6 +157,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Admin: standards library (30 entries), user management
 - Meeting report: evidence cards, summary editing, sign-off
 - Audio deletion grace period (5 min)
+- Comments tab: add/view comments (admin/manager always, others post-sign-off)
+- Audit Trail tab: chronological log of all events (recording, transcription, edits, sign-off, comments)
+- Transcript anonymization: names replaced with initials in transcript text only; full names shown throughout all UI elements
 
 ---
 
@@ -168,16 +171,17 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Validate GPT-4o compliance mappings are relevant and accurate
 
 ### P1 (Important)
-- Configure Resend API key for email functionality
+- Auto audio deletion confirmation workflow display improvements
 - Add PDF export of approved reports
 - Shared reviewer access control (share with specific users)
+- Email/report sharing via Resend
+- Admin Library: upload CQC/Care Cert reference documents for AI evidence matching
 - Meeting search and filtering improvements
 - Mobile-responsive recording screen
 
 ### P2 (Future)
 - Internal evidence framework (job descriptions, company values, targets)
 - Role-specific competency framework upload
-- Advanced audit log viewer
 - Meeting duplicate / template feature
 - Bulk export of evidence reports
 - CQC inspection preparation summary view

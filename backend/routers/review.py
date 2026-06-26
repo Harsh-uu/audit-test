@@ -359,6 +359,17 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
         })
 
     # 2. Recording events
+    # 2. Recording events — resolve user names from users collection
+    rec_user_ids = list({ev.get("user_id") for ev in meeting.get("recording_events", []) if ev.get("user_id")})
+    rec_users = {}
+    for uid in rec_user_ids:
+        try:
+            u = await db.users.find_one({"_id": ObjectId(uid)})
+            if u:
+                rec_users[uid] = u.get("name", "Unknown")
+        except Exception:
+            pass
+
     label_map_rec = {
         "notice_acknowledged": "Recording notice acknowledged",
         "started": "Recording started",
@@ -367,11 +378,12 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
         "stopped": "Recording stopped",
     }
     for ev in meeting.get("recording_events", []):
-        ev_type = ev.get("event_type", "unknown")
+        ev_type = ev.get("type") or ev.get("event_type", "unknown")
+        actor = rec_users.get(ev.get("user_id", ""), ev.get("user_name", "System"))
         events.append({
             "type": f"recording_{ev_type}",
             "label": label_map_rec.get(ev_type, f"Recording {ev_type}"),
-            "actor": ev.get("user_name", "System"),
+            "actor": actor,
             "timestamp": ev.get("timestamp", ""),
             "detail": None,
         })
