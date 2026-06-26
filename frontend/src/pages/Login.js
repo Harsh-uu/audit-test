@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Shield, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
 
 function formatError(detail) {
   if (!detail) return "Something went wrong. Please try again.";
@@ -44,9 +44,7 @@ export default function Login() {
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#1E3A8A] flex-col justify-between p-12">
         <div className="flex items-center gap-3">
-          <Shield className="w-8 h-8 text-white" />
-          <span className="text-white text-2xl font-semibold tracking-tight" style={{fontFamily:'Work Sans,sans-serif'}}>Supervision</span>
-          <span className="text-blue-300 text-sm font-medium bg-blue-800 px-2 py-0.5 rounded">2.0</span>
+          <span className="text-white text-2xl font-semibold tracking-tight" style={{fontFamily:'Work Sans,sans-serif'}}>1two.one</span>
         </div>
         <div>
           <h1 className="text-4xl font-bold text-white mb-4 leading-tight" style={{fontFamily:'Work Sans,sans-serif'}}>
@@ -64,22 +62,21 @@ export default function Login() {
             ))}
           </div>
         </div>
-        <p className="text-blue-300 text-sm">Supervision 2.0 &copy; 2025</p>
+        <p className="text-blue-300 text-sm">1two.one &copy; 2025</p>
       </div>
 
       {/* Right panel */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md fade-in">
           <div className="lg:hidden flex items-center gap-2 mb-8">
-            <Shield className="w-6 h-6 text-[#1E3A8A]" />
-            <span className="text-[#1E3A8A] text-xl font-semibold" style={{fontFamily:'Work Sans,sans-serif'}}>Supervision</span>
+            <span className="text-[#1E3A8A] text-xl font-semibold" style={{fontFamily:'Work Sans,sans-serif'}}>1two.one</span>
           </div>
 
           <h2 className="text-2xl font-semibold text-gray-900 mb-1" style={{fontFamily:'Work Sans,sans-serif'}}>
             {mode === "login" ? "Sign in to your account" : "Create account"}
           </h2>
           <p className="text-gray-500 text-sm mb-8">
-            {mode === "login" ? "Welcome back. Enter your credentials to continue." : "Set up your Supervision account."}
+            {mode === "login" ? "Welcome back. Enter your credentials to continue." : "Set up your account."}
           </p>
 
           {error && (
