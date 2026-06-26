@@ -162,9 +162,11 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Transcript anonymization: names replaced with initials in transcript text only; full names shown throughout all UI elements
 - Care Certificate outcome references: all 16 standards seeded with specific outcome refs (1.1, 2.1, etc.), AI includes outcome_ref in evidence mappings, EvidenceCard displays "Outcome X.X: name" badge
 - CQC Five Key Questions: all 14 regulations tagged with key questions (Safe/Effective/Caring/Responsive/Well-led), coloured badges shown on CQC evidence cards, existing analyses back-filled on startup
-- Admin Library Custom Standards: upload PDF/DOCX/TXT documents, AI extracts criteria (~15s), active docs included in all future meeting analyses as 'Organisational Standards' evidence section
+- Admin Library Custom Standards: upload PDF/DOCX/TXT documents, AI extracts criteria (~15s), active docs included in all future meeting analyses as 'Organisational Standards' evidence section; auto-rescan runs against existing meetings after each new document is parsed
 - PDF Export: signed-off meetings only, toggle to include/exclude transcript, generates professional reportlab PDF with all sections
 - Resend Email: manager sends report link to attendees after sign-off via noreply@1two.one, optional personal message
+- Actions rollover: outstanding incomplete actions from previous meetings for same attendees prepended to new meeting's action list (amber styling, 'Carried over from' label); checkbox UI to mark complete/incomplete
+- Supervision Template: admin configures org-wide supervision steps in Admin Panel; shown as collapsible checklist in RecordingScreen; AI uses steps as context in summary and evidence mapping
 
 ---
 
