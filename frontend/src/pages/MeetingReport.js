@@ -5,9 +5,9 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   FileText, CheckCircle, Clock, Edit3, Check, X, Flag, ChevronDown, ChevronUp,
-  Send, MessageSquare, ArrowLeft, AlertTriangle, Loader, Shield, Award, Pause, Plus, Trash2
+  Send, MessageSquare, ArrowLeft, AlertTriangle, Loader, Shield, Award, Pause, Plus, Trash2, History
 } from "lucide-react";
-import { anonymiseName } from "@/utils/anonymise";
+import { anonymiseTranscript } from "@/utils/anonymise";
 
 const CONFIDENCE_CONFIG = {
   likely_evidence: { label: "Likely Evidence", color: "bg-emerald-100 text-emerald-800 border-emerald-200", dot: "bg-emerald-500" },
@@ -133,6 +133,43 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
   );
 }
 
+const AUDIT_EVENT_CONFIG = {
+  meeting_created:   { color: "bg-blue-100 text-blue-700", dot: "bg-blue-400" },
+  recording_started: { color: "bg-red-100 text-red-700", dot: "bg-red-400" },
+  recording_paused:  { color: "bg-amber-100 text-amber-700", dot: "bg-amber-400" },
+  recording_resumed: { color: "bg-amber-100 text-amber-700", dot: "bg-amber-400" },
+  recording_stopped: { color: "bg-gray-100 text-gray-600", dot: "bg-gray-400" },
+  recording_notice_acknowledged: { color: "bg-gray-100 text-gray-600", dot: "bg-gray-300" },
+  transcribed:       { color: "bg-indigo-100 text-indigo-700", dot: "bg-indigo-400" },
+  analyzed:          { color: "bg-purple-100 text-purple-700", dot: "bg-purple-400" },
+  edit_summary:      { color: "bg-blue-50 text-blue-600", dot: "bg-blue-300" },
+  edit_actions:      { color: "bg-blue-50 text-blue-600", dot: "bg-blue-300" },
+  edit_evidence:     { color: "bg-blue-50 text-blue-600", dot: "bg-blue-300" },
+  mark_reviewed:     { color: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-400" },
+  signed_off:        { color: "bg-emerald-100 text-emerald-800 font-semibold", dot: "bg-emerald-600" },
+  comment_added:     { color: "bg-gray-100 text-gray-700", dot: "bg-gray-400" },
+  audio_deleted:     { color: "bg-red-50 text-red-600", dot: "bg-red-300" },
+};
+
+function AuditEvent({ event }) {
+  const cfg = AUDIT_EVENT_CONFIG[event.type] || { color: "bg-gray-100 text-gray-600", dot: "bg-gray-400" };
+  return (
+    <div className="relative">
+      <div className={`absolute -left-5 w-2.5 h-2.5 rounded-full border-2 border-white ${cfg.dot}`} style={{ top: "0.35rem" }} />
+      <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+        <div className="flex items-start justify-between gap-2">
+          <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${cfg.color}`}>{event.label}</span>
+          <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+            {event.timestamp ? new Date(event.timestamp).toLocaleString("en-GB") : "—"}
+          </span>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">by <strong className="text-gray-700">{event.actor}</strong></p>
+        {event.detail && <p className="text-xs text-gray-500 mt-1 italic">"{event.detail}"</p>}
+      </div>
+    </div>
+  );
+}
+
 const PROCESSING_STAGES = {
   processing: { label: "Uploading audio...", pct: 20 },
   transcribing: { label: "Transcribing audio with Whisper...", pct: 50 },
@@ -146,7 +183,7 @@ export default function MeetingReport() {
   const navigate = useNavigate();
   const [meeting, setMeeting] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("evidence"); // evidence | transcript | comments
+  const [activeTab, setActiveTab] = useState("evidence"); // evidence | transcript | comments | audit
   const [editingSummary, setEditingSummary] = useState(false);
   const [summaryText, setSummaryText] = useState("");
   const [newComment, setNewComment] = useState("");
@@ -154,6 +191,8 @@ export default function MeetingReport() {
   const [submitting, setSubmitting] = useState(false);
   const [addingAction, setAddingAction] = useState(false);
   const [newAction, setNewAction] = useState({ text: "", assigned_to: "", due_date: "" });
+  const [auditTrail, setAuditTrail] = useState(null);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
   const isInReview = meeting?.status === "in_review";
@@ -183,6 +222,19 @@ export default function MeetingReport() {
     }
   }, [meetingId]);
 
+  const fetchAuditTrail = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/review/${meetingId}/audit-trail`, getAuthConfig());
+      setAuditTrail(data.events || []);
+    } catch (err) {
+      console.error("Failed to load audit trail", err);
+      setAuditTrail([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [meetingId]);
+
   useEffect(() => {
     fetchMeeting();
     const interval = setInterval(() => {
@@ -190,6 +242,12 @@ export default function MeetingReport() {
     }, 5000);
     return () => clearInterval(interval);
   }, [fetchMeeting, isProcessing]);
+
+  useEffect(() => {
+    if (activeTab === "audit" && auditTrail === null) {
+      fetchAuditTrail();
+    }
+  }, [activeTab, auditTrail, fetchAuditTrail]);
 
   const saveSummary = async () => {
     try {
@@ -396,6 +454,9 @@ export default function MeetingReport() {
                 <button onClick={() => setActiveTab("comments")} className={`text-sm font-medium pb-1 border-b-2 transition-colors ${activeTab === "comments" ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"}`} data-testid="comments-tab">
                   Comments {meeting.comments?.length > 0 && `(${meeting.comments.length})`}
                 </button>
+                <button onClick={() => setActiveTab("audit")} className={`text-sm font-medium pb-1 border-b-2 transition-colors ${activeTab === "audit" ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"}`} data-testid="audit-trail-tab">
+                  Audit Trail
+                </button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6">
@@ -571,7 +632,7 @@ export default function MeetingReport() {
                         <div className="space-y-2">
                           {meeting.attendees.map(a => (
                             <div key={a.user_id} className="flex items-center justify-between">
-                              <span className="text-sm text-gray-700">{anonymiseName(a.name)}</span>
+                              <span className="text-sm text-gray-700">{a.name}</span>
                               {a.reviewed
                                 ? <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Reviewed</span>
                                 : <span className="text-xs text-amber-600 flex items-center gap-1"><Clock className="w-3 h-3" /> Pending</span>}
@@ -586,7 +647,7 @@ export default function MeetingReport() {
                       <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                         <div className="flex items-center gap-2">
                           <Shield className="w-4 h-4 text-emerald-600" />
-                          <p className="text-sm font-medium text-emerald-800">Signed off by {anonymiseName(meeting.sign_off_record.signed_by_name)}</p>
+                          <p className="text-sm font-medium text-emerald-800">Signed off by {meeting.sign_off_record.signed_by_name}</p>
                         </div>
                         <p className="text-xs text-emerald-600 mt-1">{new Date(meeting.sign_off_record.signed_at).toLocaleString("en-GB")}</p>
                       </div>
@@ -619,7 +680,7 @@ export default function MeetingReport() {
                     </div>
                     <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
                       <pre className="text-sm text-gray-700 whitespace-pre-wrap font-[inherit] leading-relaxed" data-testid="transcript-text">
-                        {meeting.transcript?.text || "Transcript not available."}
+                        {anonymiseTranscript(meeting.transcript?.text, meeting.attendees || []) || "Transcript not available."}
                       </pre>
                     </div>
                   </div>
@@ -634,7 +695,7 @@ export default function MeetingReport() {
                       {meeting.comments?.map(c => (
                         <div key={c.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-900">{anonymiseName(c.user_name)}</span>
+                            <span className="text-sm font-medium text-gray-900">{c.user_name}</span>
                             <span className="text-xs text-gray-400">{new Date(c.created_at).toLocaleString("en-GB")}</span>
                           </div>
                           <p className="text-sm text-gray-700">{c.text}</p>
@@ -656,6 +717,37 @@ export default function MeetingReport() {
                             <Send className="w-3.5 h-3.5" />
                             Add Comment
                           </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === "audit" && (
+                  <div data-testid="audit-trail-view">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <History className="w-4 h-4 text-gray-500" />
+                        <h3 className="text-sm font-semibold text-gray-700" style={{fontFamily:'Work Sans,sans-serif'}}>Audit Trail</h3>
+                      </div>
+                      <button onClick={fetchAuditTrail} className="text-xs text-[#1E3A8A] hover:underline" data-testid="refresh-audit-btn">Refresh</button>
+                    </div>
+                    {auditLoading && (
+                      <div className="flex items-center justify-center py-10 text-gray-400">
+                        <Loader className="w-5 h-5 animate-spin mr-2" />
+                        <span className="text-sm">Loading audit trail…</span>
+                      </div>
+                    )}
+                    {!auditLoading && auditTrail?.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-8">No audit events yet</p>
+                    )}
+                    {!auditLoading && auditTrail && auditTrail.length > 0 && (
+                      <div className="relative" data-testid="audit-trail-list">
+                        <div className="absolute left-3 top-0 bottom-0 w-px bg-gray-200" />
+                        <div className="space-y-4 pl-8">
+                          {auditTrail.map((ev, idx) => (
+                            <AuditEvent key={idx} event={ev} />
+                          ))}
                         </div>
                       </div>
                     )}

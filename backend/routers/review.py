@@ -340,6 +340,135 @@ async def add_comment(meeting_id: str, data: CommentRequest, db=Depends(get_db),
     return comment_doc
 
 
+@router.get("/{meeting_id}/audit-trail")
+async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    events = []
+
+    # 1. Meeting created
+    if meeting.get("created_at"):
+        events.append({
+            "type": "meeting_created",
+            "label": "Meeting created",
+            "actor": meeting.get("created_by_name", "Unknown"),
+            "timestamp": meeting["created_at"],
+            "detail": meeting.get("title", ""),
+        })
+
+    # 2. Recording events
+    label_map_rec = {
+        "notice_acknowledged": "Recording notice acknowledged",
+        "started": "Recording started",
+        "paused": "Recording paused",
+        "resumed": "Recording resumed",
+        "stopped": "Recording stopped",
+    }
+    for ev in meeting.get("recording_events", []):
+        ev_type = ev.get("event_type", "unknown")
+        events.append({
+            "type": f"recording_{ev_type}",
+            "label": label_map_rec.get(ev_type, f"Recording {ev_type}"),
+            "actor": ev.get("user_name", "System"),
+            "timestamp": ev.get("timestamp", ""),
+            "detail": None,
+        })
+
+    # 3. Transcript created
+    if meeting.get("transcript_id"):
+        try:
+            tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
+            if tdoc and tdoc.get("created_at"):
+                events.append({
+                    "type": "transcribed",
+                    "label": "Audio transcribed",
+                    "actor": "System (Whisper)",
+                    "timestamp": tdoc["created_at"],
+                    "detail": None,
+                })
+        except Exception:
+            pass
+
+    # 4. Analysis completed
+    if meeting.get("analysis_id"):
+        try:
+            adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+            if adoc and adoc.get("created_at"):
+                events.append({
+                    "type": "analyzed",
+                    "label": "AI analysis completed",
+                    "actor": "System (GPT-4o)",
+                    "timestamp": adoc["created_at"],
+                    "detail": None,
+                })
+        except Exception:
+            pass
+
+    # 5. Review edits
+    label_map_edit = {
+        "summary": "Summary edited",
+        "actions": "Action items updated",
+        "evidence": "Evidence item updated",
+    }
+    async for edit in db.review_edits.find({"meeting_id": meeting_id}).sort("created_at", 1):
+        edit_type = edit.get("edit_type", "unknown")
+        events.append({
+            "type": f"edit_{edit_type}",
+            "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
+            "actor": edit.get("editor_name", "Unknown"),
+            "timestamp": edit.get("created_at", ""),
+            "detail": None,
+        })
+
+    # 6. Attendees marked as reviewed
+    for a in meeting.get("attendees", []):
+        if a.get("reviewed") and a.get("reviewed_at"):
+            events.append({
+                "type": "mark_reviewed",
+                "label": "Marked as reviewed",
+                "actor": a.get("name", "Unknown"),
+                "timestamp": a["reviewed_at"],
+                "detail": None,
+            })
+
+    # 7. Sign-off
+    sign_off = meeting.get("sign_off_record")
+    if sign_off:
+        events.append({
+            "type": "signed_off",
+            "label": "Meeting signed off",
+            "actor": sign_off.get("signed_by_name", "Unknown"),
+            "timestamp": sign_off.get("signed_at", ""),
+            "detail": None,
+        })
+
+    # 8. Comments
+    async for c in db.reviewer_comments.find({"meeting_id": meeting_id}).sort("created_at", 1):
+        text = c.get("text", "")
+        events.append({
+            "type": "comment_added",
+            "label": "Comment added",
+            "actor": c.get("user_name", "Unknown"),
+            "timestamp": c.get("created_at", ""),
+            "detail": text[:100] + ("…" if len(text) > 100 else ""),
+        })
+
+    # 9. Audio deleted
+    if meeting.get("audio_deletion_status") == "deleted" and meeting.get("audio_deleted_at"):
+        events.append({
+            "type": "audio_deleted",
+            "label": "Raw audio deleted (GDPR)",
+            "actor": "System",
+            "timestamp": meeting["audio_deleted_at"],
+            "detail": "Audio file removed after sign-off grace period",
+        })
+
+    events.sort(key=lambda e: e.get("timestamp") or "")
+    return {"events": events}
+
+
 @router.get("/{meeting_id}/comments")
 async def get_comments(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     comments = []
