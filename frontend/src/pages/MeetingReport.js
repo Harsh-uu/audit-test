@@ -56,14 +56,23 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
         className={`flex items-center justify-between p-3 cursor-pointer ${type === "cqc" ? "bg-purple-50 border-b border-purple-100" : "bg-blue-50 border-b border-blue-100"}`}
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          {type === "cqc"
-            ? <Shield className="w-3.5 h-3.5 text-[#1E3A8A] flex-shrink-0" />
-            : <Award className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
-          <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex-shrink-0">{type === "cqc" ? "CQC" : "Care Cert"}</span>
-          <span className="text-xs font-medium text-gray-900 truncate">{refLabel} — {refName}</span>
+        <div className="flex flex-col min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {type === "cqc"
+              ? <Shield className="w-3.5 h-3.5 text-[#1E3A8A] flex-shrink-0" />
+              : <Award className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex-shrink-0">{type === "cqc" ? "CQC" : "Care Cert"}</span>
+            <span className="text-xs font-medium text-gray-900 truncate">{refLabel} — {refName}</span>
+          </div>
+          {type === "care_cert" && mapping.outcome_ref && (
+            <div className="ml-9 mt-0.5">
+              <span className="inline-flex items-center gap-1 text-xs text-blue-700 font-medium bg-blue-100 border border-blue-200 rounded px-1.5 py-0.5" data-testid={`outcome-ref-${mapping.id}`}>
+                Outcome {mapping.outcome_ref}: {mapping.outcome_name}
+              </span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
           <ConfidenceBadge confidence={mapping.confidence} />
           {mapping.status !== "pending" && (
             <span className={`text-xs font-medium ${statusCfg.color}`}>{statusCfg.label}</span>

@@ -34,6 +34,8 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "id": "unique_id",
       "standard_ref": "Standard 2",
       "standard_name": "Your personal development",
+      "outcome_ref": "2.1",
+      "outcome_name": "Agree a personal development plan",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
       "confidence": "likely_evidence|needs_review|not_enough_evidence"
@@ -47,6 +49,7 @@ Rules:
 - Use "likely_evidence" only when clearly demonstrated
 - Use "needs_review" when partially demonstrated or unclear
 - Use "not_enough_evidence" when barely touched on
+- For Care Certificate mappings, ALWAYS include the specific outcome_ref and outcome_name (e.g. "2.1" and "Agree a personal development plan"). Choose the single most relevant outcome for the evidence found.
 - If the meeting had paused sections, note this in the summary
 - Include transcript excerpts as exact quotes from the provided text
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1")"""
@@ -87,7 +90,17 @@ async def analyze_meeting(transcript_text: str, cqc_standards: list, care_cert_s
 
     # Build standards context
     cqc_context = "\n".join([f"- {s['reference']}: {s['name']} - {s.get('description', '')}" for s in cqc_standards[:20]])
-    cc_context = "\n".join([f"- {s['reference']}: {s['name']} - {s.get('description', '')}" for s in care_cert_standards[:16]])
+
+    # Care Certificate context includes outcomes for precise outcome-level mapping
+    cc_lines = []
+    for s in care_cert_standards[:16]:
+        line = f"- {s['reference']}: {s['name']}"
+        outcomes = s.get("outcomes", [])
+        if outcomes:
+            outcome_list = " | ".join([f"Outcome {o['ref']}: {o['name']}" for o in outcomes])
+            line += f"\n    Outcomes: {outcome_list}"
+        cc_lines.append(line)
+    cc_context = "\n".join(cc_lines)
 
     pause_note = ""
     if paused_periods:

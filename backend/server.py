@@ -14,7 +14,7 @@ from routers.processing import router as processing_router
 from routers.review import router as review_router
 from routers.admin import router as admin_router
 from utils.storage import init_storage
-from utils.seed import seed_standards
+from utils.seed import seed_standards, migrate_standard_outcomes
 from fastapi import APIRouter
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -59,6 +59,7 @@ async def startup():
 
     await seed_admin(db)
     await seed_standards(db)
+    await migrate_standard_outcomes(db)
 
     try:
         init_storage()

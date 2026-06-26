@@ -1,0 +1,28 @@
+{
+  "summary": "Tested Care Certificate standards outcomes feature. Backend: all 7 tests pass - 16 care cert standards with outcomes arrays, Standard 2 has 3 outcomes (2.1-2.3), Standard 6 has 7 outcomes, Standard 13 has 7 outcomes, all outcomes have ref/name fields. AI prompt verified to include outcome_ref in schema. Frontend: Evidence tab loads correctly, CQC cards show no outcome_ref badge (correct), Care Cert card without outcome_ref renders gracefully (no crash, no badge shown). AI context builder includes outcomes per standard in prompt.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_standards_outcomes.py",
+    "/app/test_reports/pytest/standards_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AI prompt correctly specifies outcome_ref/outcome_name in care_cert_mappings schema and includes outcomes in cc_context building",
+    "EvidenceCard conditionally renders outcome badge only for type=care_cert AND mapping.outcome_ref present - correct graceful handling",
+    "migrate_standard_outcomes() called on startup to add outcomes to existing DB entries that lack them"
+  ],
+  "updated_files": ["/app/backend/tests/test_standards_outcomes.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 16 Care Certificate standards have outcomes arrays in DB. The test meeting 'test' (id: 6a3e6204373ddc91df1947cf) has existing care_cert_mappings without outcome_ref - renders gracefully. New AI analyses will include outcome_ref. EvidenceCard in MeetingReport.js shows outcome badge at lines 67-73 conditionally."
+}
