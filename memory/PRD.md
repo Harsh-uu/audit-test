@@ -215,4 +215,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 - Backend `flake8` linting — zero errors achieved (2026-Feb). Fixes: duplicate imports removed (`processing.py` F811), unused imports/variables removed (`review.py` F401/F841 — TA_LEFT, TA_CENTER, styles, h2_style, h3_style, label_style), E402 `# noqa` for `load_dotenv`-before-imports pattern in `server.py`, blank-line E302/E303 formatting, E221 alignment spacing in `admin.py`/`portfolio.py`, E701 multi-statement lines in `admin.py`, F541 bare f-strings in test files, W291/W293/W391 whitespace issues, very-long lines broken or annotated with `# noqa: E501`. Created `.flake8` config with `max-line-length=120` and `per-file-ignores` for data/test files (seed.py, ai.py, review.py, portfolio.py, tests/*).
 
+- Refactored `AdminLibrary.js` (825 → 371 lines) and `MeetingReport.js` (1015 → 382 lines) to reduce cyclomatic complexity (2026-Feb). Extracted 5 admin tab components under `src/components/admin/` (StandardsTab, DocumentsTab, TemplateTab, UsersTab, ExportTab) and 6 report sub-components under `src/components/report/` (EvidenceTab, TranscriptTab, CommentsTab, AuditTrailTab, EvidenceSidebar, EmailModal). 14/14 frontend regression tests passed.
+
 *Last Updated: 2026-Feb*
