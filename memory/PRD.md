@@ -209,6 +209,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 - Regression test (iteration 14) after code quality fixes: 9/9 frontend scenarios PASS, zero JS runtime errors
 
-- Granular Care Certificate sub-outcomes (2025): all 16 standards now have flat `sub_outcomes` list (224 total across standards 1–16, e.g. 2.1a, 2.1b, 2.2h). AI maps evidence to specific sub-outcome refs. Team Intelligence matrix only shows green (checkmark) when ALL sub-outcomes for a standard have at least one piece of evidence; partial coverage shows `covered/total` fraction in amber. Standard names updated to 2025 edition (Standard 4, 9 renamed). DB migrated on startup.
+- Granular Care Certificate sub-outcomes (2025): all 16 standards now have flat `sub_outcomes` list (216 total, e.g. 2.1a, 2.1b, 2.2h). Standard 16 correctly has 1 sub-outcome (training compliance per CQC Reg 18, matching official March 2025 PDF). AI maps evidence to specific sub-outcome refs. Team Intelligence matrix only shows green when ALL sub-outcomes evidenced; partial shows covered/total fraction in amber. Standard names updated to 2025 edition. DB migrated on startup.
 
 *Last Updated: 2026-07-01*
