@@ -149,7 +149,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 ---
 
-## What's Working (Tested v1 + v2)
+## What's Working (Tested v1 + v2 + v3)
 - All auth flows (3 roles tested)
 - Meeting creation (2-step with attendees + manager)
 - Recording notice, start, pause, resume, stop
@@ -160,6 +160,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Comments tab: add/view comments (admin/manager always, others post-sign-off)
 - Audit Trail tab: chronological log of all events (recording, transcription, edits, sign-off, comments)
 - Transcript anonymization: names replaced with initials in transcript text only; full names shown throughout all UI elements
+- Care Certificate outcome references: all 16 standards seeded with specific outcome refs (1.1, 2.1, etc.), AI includes outcome_ref in evidence mappings, EvidenceCard displays "Outcome X.X: name" badge
 
 ---
 
