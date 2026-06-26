@@ -52,7 +52,8 @@ export default function RecordingScreen() {
 
   useEffect(() => {
     setInIframe(isInIframe());
-    // Fetch supervision template
+    // Fetch supervision template — runs once on mount; API/getAuthConfig are stable references
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     axios.get(`${API}/admin/template`, getAuthConfig())
       .then(r => { if (r.data?.steps?.length > 0) setTemplate(r.data); })
       .catch(() => {});
@@ -100,6 +101,7 @@ export default function RecordingScreen() {
 
   const releaseWakeLock = async () => {
     if (wakeLockRef.current) {
+      // Intentional: release can throw if the lock was already released by the OS (e.g. low battery)
       try { await wakeLockRef.current.release(); } catch {}
       wakeLockRef.current = null;
       setWakeLockActive(false);
@@ -139,6 +141,7 @@ export default function RecordingScreen() {
       "audio/mpeg",
     ];
     for (const t of candidates) {
+      // Intentional: isTypeSupported can throw in some browsers; probe each type silently
       try { if (MediaRecorder.isTypeSupported(t)) return t; } catch {}
     }
     return ""; // let browser decide
@@ -584,7 +587,7 @@ export default function RecordingScreen() {
             <h4 className="text-xs font-semibold uppercase text-gray-500 tracking-wider mb-3">Recording Timeline</h4>
             <div className="space-y-2">
               {events.map((ev, i) => (
-                <div key={i} className="flex items-center gap-3 text-sm">
+                <div key={`${ev.time}-${ev.label}`} className="flex items-center gap-3 text-sm">
                   <span className={`font-mono text-xs ${eventIcons[ev.type]}`}>{ev.time}</span>
                   <div className={`w-1.5 h-1.5 rounded-full ${ev.type === "start" ? "bg-emerald-500" : ev.type === "pause" ? "bg-amber-500" : ev.type === "resume" ? "bg-blue-500" : "bg-red-500"}`}></div>
                   <span className="text-gray-700">{ev.label}</span>

@@ -256,6 +256,8 @@ export default function MeetingReport() {
     ? meeting.attendees.every(a => a.reviewed)
     : true;
 
+  // API and getAuthConfig are stable context references; meetingId is the only meaningful dep
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchMeeting = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/meetings/${meetingId}`, getAuthConfig());
@@ -270,6 +272,7 @@ export default function MeetingReport() {
     }
   }, [meetingId]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchAuditTrail = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -634,7 +637,7 @@ export default function MeetingReport() {
                         </div>
                         <p className="text-xs text-amber-700 mb-2">The recording was paused during this meeting. Paused sections were not recorded.</p>
                         {meeting.paused_periods.map((p, i) => (
-                          <div key={i} className="text-xs text-amber-700 font-mono">
+                          <div key={p.paused_at || i} className="text-xs text-amber-700 font-mono">
                             Pause {i + 1}: {new Date(p.paused_at).toLocaleTimeString()} — {p.resumed_at ? new Date(p.resumed_at).toLocaleTimeString() : "ongoing"} ({p.duration_seconds}s)
                           </div>
                         ))}
@@ -664,7 +667,7 @@ export default function MeetingReport() {
 
                         <div className="space-y-2" data-testid="actions-list">
                           {(analysis.actions || []).map((action, i) => (
-                            <div key={i} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-colors ${action.completed ? "bg-gray-50 border-gray-100 opacity-70" : action.is_rolled_over ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-transparent"}`}>
+                            <div key={action.id || action.text?.slice(0, 40) || i} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-colors ${action.completed ? "bg-gray-50 border-gray-100 opacity-70" : action.is_rolled_over ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-transparent"}`}>
                               {/* Completion checkbox */}
                               <button
                                 onClick={() => toggleActionComplete(action.id || i, !action.completed)}
@@ -765,7 +768,7 @@ export default function MeetingReport() {
                         <h3 className="font-semibold text-gray-900 text-sm mb-3" style={{fontFamily:'Work Sans,sans-serif'}}>Risks &amp; Concerns</h3>
                         <div className="space-y-2" data-testid="risks-list">
                           {analysis.risks.map((risk, i) => (
-                            <div key={i} className={`flex items-start gap-2 p-2.5 rounded-md border ${risk.severity === "high" ? "bg-red-50 border-red-200" : risk.severity === "medium" ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-gray-200"}`}>
+                            <div key={risk.text?.slice(0, 40) || i} className={`flex items-start gap-2 p-2.5 rounded-md border ${risk.severity === "high" ? "bg-red-50 border-red-200" : risk.severity === "medium" ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-gray-200"}`}>
                               <AlertTriangle className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${risk.severity === "high" ? "text-red-500" : risk.severity === "medium" ? "text-amber-500" : "text-gray-400"}`} />
                               <p className="text-sm text-gray-800">{risk.text}</p>
                             </div>
