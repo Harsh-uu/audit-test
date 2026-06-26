@@ -490,7 +490,6 @@ async def migrate_standard_outcomes(db):
         logger.info(f"Migrated outcomes/sub_outcomes to {updated} Care Certificate standard entries")
 
 
-
 async def migrate_cqc_key_questions(db):
     """Add key_questions to existing CQC regulation entries that don't have them yet."""
     kq_map = {reg["reference"]: reg["key_questions"] for reg in CQC_REGULATIONS}

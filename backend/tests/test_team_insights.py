@@ -5,17 +5,20 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
+
 @pytest.fixture(scope="module")
 def admin_token():
     r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "admin@supervision.com", "password": "Admin123!"})
     assert r.status_code == 200
     return r.cookies
 
+
 @pytest.fixture(scope="module")
 def staff_token():
     r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "staff@supervision.com", "password": "Staff123!"})
     assert r.status_code == 200
     return r.cookies
+
 
 class TestTeamInsights:
     """Tests for GET /api/admin/team-insights"""

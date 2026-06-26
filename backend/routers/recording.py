@@ -28,7 +28,7 @@ async def log_notice(meeting_id: str, db=Depends(get_db), current_user=Depends(g
 
 
 @router.post("/{meeting_id}/start")
-async def start_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def start_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
     try:
         body = await request.json()
         data = RecordingEventRequest(**body)
@@ -47,7 +47,7 @@ async def start_recording(meeting_id: str, request: Request, db=Depends(get_db),
 
 
 @router.post("/{meeting_id}/pause")
-async def pause_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def pause_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
     try:
         body = await request.json()
         data = RecordingEventRequest(**body)
@@ -66,7 +66,7 @@ async def pause_recording(meeting_id: str, request: Request, db=Depends(get_db),
 
 
 @router.post("/{meeting_id}/resume")
-async def resume_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def resume_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
     try:
         body = await request.json()
         data = RecordingEventRequest(**body)
@@ -117,7 +117,7 @@ async def stop_recording(meeting_id: str, request: Request, db=Depends(get_db), 
 
 @router.get("/{meeting_id}/events")
 async def get_events(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    doc = await db.meetings.find_one({"_id": ObjectId(meeting_id)}, {"recording_events": 1, "paused_periods": 1, "total_paused_duration_seconds": 1})
+    doc = await db.meetings.find_one({"_id": ObjectId(meeting_id)}, {"recording_events": 1, "paused_periods": 1, "total_paused_duration_seconds": 1})  # noqa: E501
     if not doc:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return {

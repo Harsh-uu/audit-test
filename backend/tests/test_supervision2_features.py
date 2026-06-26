@@ -143,7 +143,7 @@ class TestPDFExport:
         r = requests.get(f"{BASE_URL}/api/review/{TEST_MEETING_ID}/export-pdf", headers=admin_headers)
         # Should be 400 since not signed off
         assert r.status_code == 400, f"Expected 400, got {r.status_code}: {r.text}"
-        print(f"Correctly returned 400 for non-signed-off meeting")
+        print("Correctly returned 400 for non-signed-off meeting")
 
     def test_signed_off_meeting_pdf(self, admin_headers):
         """Create a signed-off meeting and test PDF export"""

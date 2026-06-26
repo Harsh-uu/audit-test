@@ -42,8 +42,8 @@ def create_refresh_token(user_id: str) -> str:
 
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
-    response.set_cookie("access_token", access_token, httponly=True, secure=False, samesite="lax", max_age=28800, path="/")
-    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    response.set_cookie("access_token", access_token, httponly=True, secure=False, samesite="lax", max_age=28800, path="/")  # noqa: E501
+    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")  # noqa: E501
 
 
 class RegisterRequest(BaseModel):
@@ -97,7 +97,7 @@ async def login(data: LoginRequest, response: Response, request: Request, db=Dep
     if not user or not verify_password(data.password, user.get("password_hash", "")):
         await db.login_attempts.update_one(
             {"identifier": identifier},
-            {"$inc": {"count": 1}, "$set": {"locked_until": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()}},
+            {"$inc": {"count": 1}, "$set": {"locked_until": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()}},  # noqa: E501
             upsert=True,
         )
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -136,7 +136,7 @@ async def refresh_token(request: Request, response: Response, db=Depends(get_db)
             raise HTTPException(status_code=401, detail="User not found")
         user_id = str(user["_id"])
         new_access = create_access_token(user_id, user["email"])
-        response.set_cookie("access_token", new_access, httponly=True, secure=False, samesite="lax", max_age=28800, path="/")
+        response.set_cookie("access_token", new_access, httponly=True, secure=False, samesite="lax", max_age=28800, path="/")  # noqa: E501
         return {"message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
@@ -180,14 +180,19 @@ async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_db)):
             "from": f"1two.one <{sender}>",
             "to": [email],
             "subject": "Reset your password",
-            "html": f"""
-            <div style="font-family:Poppins,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#f8fafc;border-radius:12px;">
-              <h2 style="color:#1E3A8A;font-size:22px;margin-bottom:8px;">Reset your password</h2>
-              <p style="color:#475569;font-size:15px;margin-bottom:24px;">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
-              <a href="{reset_link}" style="display:inline-block;background:#1E3A8A;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600;">Reset Password</a>
-              <p style="color:#94a3b8;font-size:12px;margin-top:28px;">If you didn't request this, you can safely ignore this email.</p>
-            </div>
-            """,
+            "html": (
+                "<div style='font-family:Poppins,sans-serif;max-width:480px;margin:0 auto;"
+                "padding:32px 24px;background:#f8fafc;border-radius:12px;'>"
+                f"<h2 style='color:#1E3A8A;font-size:22px;margin-bottom:8px;'>Reset your password</h2>"
+                "<p style='color:#475569;font-size:15px;margin-bottom:24px;'>Click the button below to set a new password. "  # noqa: E501
+                "This link expires in <strong>1 hour</strong>.</p>"
+                f"<a href='{reset_link}' style='display:inline-block;background:#1E3A8A;color:#fff;"
+                "text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;"
+                "font-weight:600;'>Reset Password</a>"
+                "<p style='color:#94a3b8;font-size:12px;margin-top:28px;'>"
+                "If you didn't request this, you can safely ignore this email.</p>"
+                "</div>"
+            ),
         })
     except Exception:
         pass  # Don't expose email sending errors

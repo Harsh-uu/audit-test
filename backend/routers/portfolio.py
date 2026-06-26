@@ -1,8 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from bson import ObjectId
-from datetime import datetime, timezone
-from typing import Optional, List
 import logging
 
 from deps import get_db, get_current_user
@@ -194,29 +192,30 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
 
-    NAVY   = colors.HexColor("#1E3A8A")
-    TEAL   = colors.HexColor("#0D9488")
+    NAVY = colors.HexColor("#1E3A8A")
+    TEAL = colors.HexColor("#0D9488")
     EMERALD = colors.HexColor("#059669")
     MID_GRAY = colors.HexColor("#6B7280")
-    LIGHT  = colors.HexColor("#F8FAFC")
+    LIGHT = colors.HexColor("#F8FAFC")
     PURPLE_BG = colors.HexColor("#EDE9FE")
-    BLUE_BG   = colors.HexColor("#EFF6FF")
-    TEAL_BG   = colors.HexColor("#F0FDF4")
+    BLUE_BG = colors.HexColor("#EFF6FF")
+    TEAL_BG = colors.HexColor("#F0FDF4")
 
-    title_s  = ParagraphStyle("T",  fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=2)
-    h2_s     = ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=11, textColor=NAVY, spaceAfter=3, spaceBefore=10)
-    h3_s     = ParagraphStyle("H3", fontName="Helvetica-Bold", fontSize=9,  textColor=NAVY, spaceAfter=2, spaceBefore=6)
-    body_s   = ParagraphStyle("B",  fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=2, leading=12)
-    small_s  = ParagraphStyle("S",  fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
-    italic_s = ParagraphStyle("I",  fontName="Helvetica-Oblique", fontSize=8, textColor=MID_GRAY, leading=11, spaceAfter=2)
+    title_s = ParagraphStyle("T", fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=2)
+    body_s = ParagraphStyle("B", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=2, leading=12)
+    small_s = ParagraphStyle("S", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
+    italic_s = ParagraphStyle("I", fontName="Helvetica-Oblique", fontSize=8, textColor=MID_GRAY, leading=11, spaceAfter=2)
 
     def section_hdr(title, bg=NAVY):
         t = Table([[Paragraph(f'<font color="white"><b>{title}</b></font>',
                     ParagraphStyle("SH", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white))]],
                   colWidths=[170*mm])
-        t.setStyle(TableStyle([("BACKGROUND", (0,0),(-1,-1), bg),
-                                ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
-                                ("LEFTPADDING",(0,0),(-1,-1),8)]))
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), bg),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ]))
         return t
 
     def conf_str(c):
@@ -237,11 +236,16 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     ]
     mt = Table(meta, colWidths=[28*mm, 57*mm, 28*mm, 57*mm])
     mt.setStyle(TableStyle([
-        ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),9),
-        ("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"),("FONTNAME",(2,0),(2,-1),"Helvetica-Bold"),
-        ("TEXTCOLOR",(0,0),(0,-1),MID_GRAY),("TEXTCOLOR",(2,0),(2,-1),MID_GRAY),
-        ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-        ("BACKGROUND",(0,0),(-1,-1),LIGHT),("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#E5E7EB")),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, 0), (0, -1), MID_GRAY),
+        ("TEXTCOLOR", (2, 0), (2, -1), MID_GRAY),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
     ]))
     story.append(mt)
     story.append(Spacer(1, 4*mm))
@@ -254,11 +258,20 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     stat_rows.append([str(stats["cqc_count"]), str(stats["care_cert_count"]), str(stats["custom_count"]), str(total_ev)])
     st = Table(stat_rows, colWidths=[42*mm, 42*mm, 43*mm, 43*mm])
     st.setStyle(TableStyle([
-        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,0),8),("TEXTCOLOR",(0,0),(-1,0),MID_GRAY),
-        ("FONTNAME",(0,1),(-1,1),"Helvetica-Bold"),("FONTSIZE",(0,1),(-1,1),16),("TEXTCOLOR",(0,1),(0,1),NAVY),
-        ("TEXTCOLOR",(1,1),(1,1),EMERALD),("TEXTCOLOR",(2,1),(2,1),TEAL),("TEXTCOLOR",(3,1),(3,1),MID_GRAY),
-        ("ALIGN",(0,0),(-1,-1),"CENTER"),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ("BACKGROUND",(0,0),(-1,-1),LIGHT),("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#E5E7EB")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("TEXTCOLOR", (0, 0), (-1, 0), MID_GRAY),
+        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 1), (-1, 1), 16),
+        ("TEXTCOLOR", (0, 1), (0, 1), NAVY),
+        ("TEXTCOLOR", (1, 1), (1, 1), EMERALD),
+        ("TEXTCOLOR", (2, 1), (2, 1), TEAL),
+        ("TEXTCOLOR", (3, 1), (3, 1), MID_GRAY),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
     ]))
     story.append(st)
 
@@ -283,11 +296,16 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
                 rows.append([Paragraph(f'"{s["latest_excerpt"]}"', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
             t.setStyle(TableStyle([
-                ("BACKGROUND",(0,0),(-1,-1),PURPLE_BG),("SPAN",(0,1),(1,1)),("SPAN",(0,2),(1,2)),
-                ("SPAN",(0,3),(1,3)),("SPAN",(0,4),(1,4)),
-                ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-                ("LEFTPADDING",(0,0),(-1,-1),8),("RIGHTPADDING",(0,0),(-1,-1),8),
-                ("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#E5E7EB")),
+                ("BACKGROUND", (0, 0), (-1, -1), PURPLE_BG),
+                ("SPAN", (0, 1), (1, 1)),
+                ("SPAN", (0, 2), (1, 2)),
+                ("SPAN", (0, 3), (1, 3)),
+                ("SPAN", (0, 4), (1, 4)),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
             ]))
             story.append(t)
             story.append(Spacer(1, 1.5*mm))
@@ -312,11 +330,16 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
                 rows.append([Paragraph(f'"{s["latest_excerpt"]}"', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
             t.setStyle(TableStyle([
-                ("BACKGROUND",(0,0),(-1,-1),BLUE_BG),("SPAN",(0,1),(1,1)),("SPAN",(0,2),(1,2)),
-                ("SPAN",(0,3),(1,3)),("SPAN",(0,4),(1,4)),
-                ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-                ("LEFTPADDING",(0,0),(-1,-1),8),("RIGHTPADDING",(0,0),(-1,-1),8),
-                ("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#E5E7EB")),
+                ("BACKGROUND", (0, 0), (-1, -1), BLUE_BG),
+                ("SPAN", (0, 1), (1, 1)),
+                ("SPAN", (0, 2), (1, 2)),
+                ("SPAN", (0, 3), (1, 3)),
+                ("SPAN", (0, 4), (1, 4)),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
             ]))
             story.append(t)
             story.append(Spacer(1, 1.5*mm))
@@ -341,11 +364,16 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
                 rows.append([Paragraph(f'"{s["latest_excerpt"]}"', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
             t.setStyle(TableStyle([
-                ("BACKGROUND",(0,0),(-1,-1),TEAL_BG),("SPAN",(0,1),(1,1)),("SPAN",(0,2),(1,2)),
-                ("SPAN",(0,3),(1,3)),("SPAN",(0,4),(1,4)),
-                ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-                ("LEFTPADDING",(0,0),(-1,-1),8),("RIGHTPADDING",(0,0),(-1,-1),8),
-                ("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#E5E7EB")),
+                ("BACKGROUND", (0, 0), (-1, -1), TEAL_BG),
+                ("SPAN", (0, 1), (1, 1)),
+                ("SPAN", (0, 2), (1, 2)),
+                ("SPAN", (0, 3), (1, 3)),
+                ("SPAN", (0, 4), (1, 4)),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
             ]))
             story.append(t)
             story.append(Spacer(1, 1.5*mm))
@@ -367,12 +395,15 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
         ]
         tbl = Table(rows, colWidths=[22*mm, 75*mm, 14*mm, 17*mm, 14*mm, 28*mm])
         tbl.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),NAVY),("TEXTCOLOR",(0,0),(-1,0),colors.white),
-            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, LIGHT]),
-            ("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#E5E7EB")),
-            ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-            ("LEFTPADDING",(0,0),(-1,-1),5),
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT]),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
         ]))
         story.append(tbl)
 
@@ -380,7 +411,7 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     story.append(Spacer(1, 8*mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GRAY))
     story.append(Paragraph(
-        f"Generated by Supervision 2.0 on {_dt.now().strftime('%d %b %Y %H:%M')} UTC. Confidential.",
+        f"Generated by 1two.one on {_dt.now().strftime('%d %b %Y %H:%M')} UTC. Confidential.",
         small_s
     ))
 

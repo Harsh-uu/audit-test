@@ -7,7 +7,7 @@ from emergentintegrations.llm.openai import OpenAISpeechToText
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers. 
+ANALYSIS_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers.
 Analyze meeting transcripts to identify evidence of compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
 
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:

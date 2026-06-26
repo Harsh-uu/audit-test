@@ -1,22 +1,21 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import logging
+from fastapi import FastAPI, APIRouter  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
+import os  # noqa: E402
+import logging  # noqa: E402
 
-from routers.auth import router as auth_router, seed_admin
-from routers.meetings import router as meetings_router
-from routers.recording import router as recording_router
-from routers.processing import router as processing_router
-from routers.review import router as review_router
-from routers.admin import router as admin_router
-from routers.portfolio import router as portfolio_router
-from utils.storage import init_storage
-from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions
-from fastapi import APIRouter
+from routers.auth import router as auth_router, seed_admin  # noqa: E402
+from routers.meetings import router as meetings_router  # noqa: E402
+from routers.recording import router as recording_router  # noqa: E402
+from routers.processing import router as processing_router  # noqa: E402
+from routers.review import router as review_router  # noqa: E402
+from routers.admin import router as admin_router  # noqa: E402
+from routers.portfolio import router as portfolio_router  # noqa: E402
+from utils.storage import init_storage  # noqa: E402
+from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions  # noqa: E402,E501
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -46,9 +45,11 @@ api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(portfolio_router, prefix="/portfolio", tags=["portfolio"])
 app.include_router(api_router)
 
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "Supervision 2.0"}
+
 
 @app.on_event("startup")
 async def startup():
@@ -70,6 +71,7 @@ async def startup():
         logger.info("Object storage initialized")
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown():

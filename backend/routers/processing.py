@@ -7,15 +7,6 @@ from deps import get_db, get_current_user
 from utils.storage import put_object
 from utils.ai import transcribe_audio, analyze_meeting
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
-from bson import ObjectId
-from datetime import datetime, timezone
-import uuid
-import logging
-from deps import get_db, get_current_user
-from utils.storage import put_object
-from utils.ai import transcribe_audio, analyze_meeting
-
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -111,7 +102,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
 
         # Analyze
         logger.info(f"Starting AI analysis for meeting {meeting_id} with {len(custom_standards)} custom docs")
-        analysis_result = await analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template)
+        analysis_result = await analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template)  # noqa: E501
 
         # Add status/defaults to each mapping and enrich CQC with key_questions
         cqc_kq_map = {s["reference"]: s.get("key_questions", []) for s in cqc_standards}

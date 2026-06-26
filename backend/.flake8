@@ -1,0 +1,13 @@
+[flake8]
+max-line-length = 120
+per-file-ignores =
+    utils/seed.py: E501
+    utils/ai.py: E501
+    routers/review.py: E501
+    routers/portfolio.py: E501
+    tests/test_audit_trail.py: E501
+    tests/test_supervision2_features.py: E501
+    tests/test_portfolio_features.py: E501
+    tests/test_reject_button_fix.py: E501
+    tests/test_standards_outcomes.py: E501
+    tests/test_team_insights.py: E501

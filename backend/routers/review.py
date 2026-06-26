@@ -595,10 +595,9 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str) -> bytes:
     from io import BytesIO
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-    from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
@@ -615,13 +614,9 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str) -> bytes:
         "not_enough_evidence": colors.HexColor("#9CA3AF"),
     }
 
-    styles = getSampleStyleSheet()
     title_style = ParagraphStyle("Title", fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=4)
-    h2_style = ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=12, textColor=NAVY, spaceAfter=4, spaceBefore=12)
-    h3_style = ParagraphStyle("H3", fontName="Helvetica-Bold", fontSize=10, textColor=NAVY, spaceAfter=2, spaceBefore=8)
     body_style = ParagraphStyle("Body", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=3, leading=13)
     small_style = ParagraphStyle("Small", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=2, leading=11)
-    label_style = ParagraphStyle("Label", fontName="Helvetica-Bold", fontSize=8, textColor=MID_GRAY, spaceAfter=1)
     mono_style = ParagraphStyle("Mono", fontName="Courier", fontSize=8, textColor=colors.HexColor("#374151"), leading=12, spaceAfter=4)
 
     def section_header(title, bg=NAVY):

@@ -3,13 +3,15 @@ from pydantic import BaseModel, EmailStr
 from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional
-import uuid, re as _re
+import re as _re
+import uuid
 import logging
-from deps import get_db, get_current_user, require_roles
+from deps import get_db, get_current_user
 from utils.storage import put_object
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
 
 def _ref_nums(ref: str):
     """Natural numeric sort key — 'Standard 10' → [10], 'Regulation 9' → [9]."""
@@ -79,7 +81,7 @@ async def create_user(data: CreateUserRequest, db=Depends(get_db), current_user=
 
 
 @router.put("/users/{user_id}")
-async def update_user(user_id: str, data: UpdateUserRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def update_user(user_id: str, data: UpdateUserRequest, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
     if current_user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
@@ -158,7 +160,7 @@ async def upload_document(
     allowed_ext = {"pdf", "docx", "txt", "md", "csv"}
     file_ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "txt"
     if file_ext not in allowed_ext:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: .{file_ext}. Allowed: {', '.join(allowed_ext)}")
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: .{file_ext}. Allowed: {', '.join(allowed_ext)}")  # noqa: E501
 
     storage_path = f"standards/docs/{uuid.uuid4()}.{file_ext}"
     try:
@@ -257,7 +259,7 @@ async def get_template(db=Depends(get_db), current_user=Depends(get_current_user
     doc = await db.settings.find_one({"_id": "supervision_template"})
     if not doc:
         return {"steps": [], "name": "Supervision Template", "description": ""}
-    return {"steps": doc.get("steps", []), "name": doc.get("name", "Supervision Template"), "description": doc.get("description", "")}
+    return {"steps": doc.get("steps", []), "name": doc.get("name", "Supervision Template"), "description": doc.get("description", "")}  # noqa: E501
 
 
 @router.put("/template")
@@ -267,7 +269,14 @@ async def save_template(data: dict, db=Depends(get_db), current_user=Depends(get
     now = datetime.now(timezone.utc).isoformat()
     await db.settings.replace_one(
         {"_id": "supervision_template"},
-        {"_id": "supervision_template", "steps": data.get("steps", []), "name": data.get("name", "Supervision Template"), "description": data.get("description", ""), "updated_at": now, "updated_by_name": current_user.get("name", "")},
+        {
+            "_id": "supervision_template",
+            "steps": data.get("steps", []),
+            "name": data.get("name", "Supervision Template"),
+            "description": data.get("description", ""),
+            "updated_at": now,
+            "updated_by_name": current_user.get("name", ""),
+        },
         upsert=True,
     )
     return {"message": "Template saved", "steps": data.get("steps", [])}
@@ -318,7 +327,15 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
         staff.append({"id": str(u["_id"]), "name": u.get("name", ""), "role": u.get("role", "")})
 
     if not staff:
-        return {"staff_count": 0, "meeting_count": 0, "matrix": {"cqc": {"standards": [], "rows": []}, "care_cert": {"standards": [], "rows": []}, "custom": {"standards": [], "rows": []}}, "themes": {"coverage_gaps": [], "common_risks": [], "outstanding_actions": []}}
+        return {
+            "staff_count": 0, "meeting_count": 0,
+            "matrix": {
+                "cqc": {"standards": [], "rows": []},
+                "care_cert": {"standards": [], "rows": []},
+                "custom": {"standards": [], "rows": []},
+            },
+            "themes": {"coverage_gaps": [], "common_risks": [], "outstanding_actions": []},
+        }
 
     staff_ids = {s["id"] for s in staff}
 
@@ -353,7 +370,7 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
     def empty_cc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "covered_refs": set()}
 
     cqc_ev = {s["id"]: {} for s in staff}
-    cc_ev  = {s["id"]: {} for s in staff}
+    cc_ev = {s["id"]: {} for s in staff}
     cust_ev = {s["id"]: {} for s in staff}
     cust_names: dict = {}  # ref → display name
 
@@ -371,43 +388,63 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
 
             for m in ana.get("cqc_mappings", []):
                 ref = m.get("regulation_ref", "")
-                if not ref: continue
-                if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = empty_cqc()
-                c = cqc_ev[uid][ref]; c["total"] += 1
-                if m.get("confidence") == "likely_evidence": c["likely"] += 1
-                elif m.get("confidence") == "needs_review": c["review"] += 1
-                if date > c["last_date"]: c["last_date"] = date
+                if not ref:
+                    continue
+                if ref not in cqc_ev[uid]:
+                    cqc_ev[uid][ref] = empty_cqc()
+                c = cqc_ev[uid][ref]
+                c["total"] += 1
+                if m.get("confidence") == "likely_evidence":
+                    c["likely"] += 1
+                elif m.get("confidence") == "needs_review":
+                    c["review"] += 1
+                if date > c["last_date"]:
+                    c["last_date"] = date
 
             for m in ana.get("care_cert_mappings", []):
                 std_ref = m.get("standard_ref", "")
                 outcome_ref = m.get("outcome_ref", "")
-                if not std_ref: continue
-                if std_ref not in cc_ev[uid]: cc_ev[uid][std_ref] = empty_cc()
-                c = cc_ev[uid][std_ref]; c["total"] += 1
-                if m.get("confidence") == "likely_evidence": c["likely"] += 1
-                elif m.get("confidence") == "needs_review": c["review"] += 1
-                if date > c["last_date"]: c["last_date"] = date
+                if not std_ref:
+                    continue
+                if std_ref not in cc_ev[uid]:
+                    cc_ev[uid][std_ref] = empty_cc()
+                c = cc_ev[uid][std_ref]
+                c["total"] += 1
+                if m.get("confidence") == "likely_evidence":
+                    c["likely"] += 1
+                elif m.get("confidence") == "needs_review":
+                    c["review"] += 1
+                if date > c["last_date"]:
+                    c["last_date"] = date
                 if outcome_ref:
                     c["covered_refs"].add(outcome_ref)
 
             for m in ana.get("custom_mappings", []):
                 ref = m.get("criterion_ref", "") or m.get("document_name", "")
-                if not ref: continue
+                if not ref:
+                    continue
                 cust_names.setdefault(ref, m.get("criterion_name", ref))
-                if ref not in cust_ev[uid]: cust_ev[uid][ref] = empty()
-                c = cust_ev[uid][ref]; c["total"] += 1
-                if m.get("confidence") == "likely_evidence": c["likely"] += 1
-                elif m.get("confidence") == "needs_review": c["review"] += 1
-                if date > c["last_date"]: c["last_date"] = date
+                if ref not in cust_ev[uid]:
+                    cust_ev[uid][ref] = empty_cqc()
+                c = cust_ev[uid][ref]
+                c["total"] += 1
+                if m.get("confidence") == "likely_evidence":
+                    c["likely"] += 1
+                elif m.get("confidence") == "needs_review":
+                    c["review"] += 1
+                if date > c["last_date"]:
+                    c["last_date"] = date
 
         for risk in ana.get("risks", []):
             text = risk if isinstance(risk, str) else (risk.get("text", "") if isinstance(risk, dict) else "")
-            if text.strip(): all_risks.append(text.strip())
+            if text.strip():
+                all_risks.append(text.strip())
 
         for action in ana.get("actions", []):
             if isinstance(action, dict) and not action.get("completed", False):
                 text = action.get("text", "").strip()
-                if text: all_outstanding.append(text)
+                if text:
+                    all_outstanding.append(text)
 
     # ── Build matrix helpers ────────────────────────────────────────────────
     def build_cqc_matrix(stds, ev_map):
@@ -524,7 +561,8 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
         counts: dict = {}
         for text in items:
             key = text[:60].lower()
-            if key not in counts: counts[key] = {"text": text, "count": 0}
+            if key not in counts:
+                counts[key] = {"text": text, "count": 0}
             counts[key]["count"] += 1
         return sorted(counts.values(), key=lambda x: -x["count"])[:top]
 
@@ -658,14 +696,12 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
     NAVY = colors.HexColor("#1E3A8A")
     MID_GRAY = colors.HexColor("#6B7280")
-    LIGHT = colors.HexColor("#F8FAFC")
     PURPLE_BG = colors.HexColor("#EDE9FE")
     BLUE_BG = colors.HexColor("#EFF6FF")
     TEAL_BG = colors.HexColor("#F0FDF4")
 
     title_s = ParagraphStyle("T", fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=2)
     h2_s = ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=11, textColor=NAVY, spaceAfter=3, spaceBefore=8)
-    body_s = ParagraphStyle("B", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=2, leading=12)
     small_s = ParagraphStyle("S", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
 
     story = []
@@ -678,9 +714,12 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
         t = Table([[Paragraph(f'<font color="white"><b>{title}</b></font>',
                     ParagraphStyle("SH", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white))]],
                   colWidths=[170*mm])
-        t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),bg),
-                                ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
-                                ("LEFTPADDING",(0,0),(-1,-1),8)]))
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), bg),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ]))
         return t
 
     for i, item in enumerate(mtg_analyses):
@@ -691,13 +730,13 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
 
         story.append(Paragraph(mtg.get("title", "Meeting"), title_s))
         attendees = ", ".join(a.get("name", "") for a in mtg.get("attendees", []))
-        story.append(Paragraph(f'Date: {mtg.get("date", "—")} | Attendees: {attendees} | Manager: {mtg.get("sign_off_manager_name", "—")}', small_s))
+        story.append(Paragraph(f'Date: {mtg.get("date", "—")} | Attendees: {attendees} | Manager: {mtg.get("sign_off_manager_name", "—")}', small_s))  # noqa: E501
         story.append(Spacer(1, 3*mm))
 
         for maps, label, bg, ref_key, name_key in [
             (ana.get("cqc_mappings", []), "CQC Regulatory Evidence", PURPLE_BG, "regulation_ref", "regulation_name"),
             (ana.get("care_cert_mappings", []), "Care Certificate Evidence", BLUE_BG, "standard_ref", "standard_name"),
-            (ana.get("custom_mappings", []), "Organisational Standards Evidence", TEAL_BG, "criterion_ref", "criterion_name"),
+            (ana.get("custom_mappings", []), "Organisational Standards Evidence", TEAL_BG, "criterion_ref", "criterion_name"),  # noqa: E501
         ]:
             if not maps:
                 continue
@@ -712,12 +751,16 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
             ] for m in maps]
             tbl = Table(hdr_row + data_rows, colWidths=[22*mm, 40*mm, 28*mm, 18*mm, 62*mm])
             tbl.setStyle(TableStyle([
-                ("BACKGROUND",(0,0),(-1,0),NAVY),("TEXTCOLOR",(0,0),(-1,0),colors.white),
-                ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),
-                ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, bg]),
-                ("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#E5E7EB")),
-                ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-                ("LEFTPADDING",(0,0),(-1,-1),4),("WORDWRAP",(0,0),(-1,-1),True),
+                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, bg]),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("WORDWRAP", (0, 0), (-1, -1), True),
             ]))
             story.append(tbl)
             story.append(Spacer(1, 2*mm))

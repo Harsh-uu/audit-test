@@ -161,7 +161,7 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
 
 
 @router.put("/{meeting_id}/attendees")
-async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
     attendees = []
     for uid in data.attendee_ids:
         try:
@@ -186,7 +186,7 @@ async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Dep
 
 
 @router.put("/{meeting_id}/manager")
-async def update_manager(meeting_id: str, data: UpdateManagerRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def update_manager(meeting_id: str, data: UpdateManagerRequest, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
     mgr = await db.users.find_one({"_id": ObjectId(data.manager_id)})
     if not mgr:
         raise HTTPException(status_code=404, detail="Manager not found")
