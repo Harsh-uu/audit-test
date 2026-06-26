@@ -78,7 +78,7 @@ export default function Login() {
             {mode === "login" ? "Sign in to your account" : "Create account"}
           </h2>
           <p className="text-gray-500 text-sm mb-8">
-            {mode === "login" ? "Welcome back. Enter your credentials to continue." : "Set up your account."}
+            {mode === "login" ? "" : "Set up your account."}
           </p>
 
           {error && (
