@@ -316,8 +316,15 @@ async def add_comment(meeting_id: str, data: CommentRequest, db=Depends(get_db),
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") not in ["signed_off", "shared"]:
-        raise HTTPException(status_code=400, detail="Comments only allowed on signed-off meetings")
+
+    # Admins and managers can comment at any stage; others only after sign-off
+    role = current_user.get("role")
+    if role not in ["admin", "manager"] and meeting.get("status") not in ["signed_off", "shared"]:
+        raise HTTPException(status_code=400, detail="Comments are only available after sign-off")
+
+    # Must have at least some processed content to comment on
+    if not meeting.get("analysis_id") and role not in ["admin", "manager"]:
+        raise HTTPException(status_code=400, detail="Meeting has not been processed yet")
 
     now = datetime.now(timezone.utc).isoformat()
     comment_doc = {

@@ -160,7 +160,7 @@ export default function MeetingReport() {
   const isSignedOff = ["signed_off", "shared"].includes(meeting?.status);
   const canReview = isInReview || isReviewed;
   const canSignOff = user?.role === "manager" || user?.role === "admin";
-  const canAddComment = isSignedOff;
+  const canAddComment = isSignedOff || ["admin", "manager"].includes(user?.role);
 
   const userAttendee = meeting?.attendees?.find(a => a.user_id === user?.id);
   const hasReviewed = userAttendee?.reviewed || false;
