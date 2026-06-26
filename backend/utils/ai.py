@@ -89,6 +89,19 @@ Rules:
 - Be concise and practical — these will be used to assess evidence in supervision meetings"""
 
 
+CARE_TRANSCRIPTION_PROMPT = (
+    "CQC, Care Quality Commission, safeguarding, mental capacity, Mental Capacity Act, "
+    "DoLS, Deprivation of Liberty Safeguards, person-centred care, risk assessment, "
+    "care plan, supervision, competency, clinical governance, NICE guidelines, "
+    "medication management, manual handling, infection control, safeguarding adults, "
+    "SOVA, MAPPA, MARAC, whistleblowing, duty of care, Disclosure and Barring Service, "
+    "DBS, NMC, RCN, well-led, safe, effective, caring, responsive, KLOE, "
+    "personal development plan, PDP, capacity assessment, best interest decision, "
+    "consent, dignity, MCA, deprivation of liberty, restrictive practice, "
+    "mental health, dementia, learning disability, autism, care worker, key worker"
+)
+
+
 async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> str:
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
@@ -106,9 +119,9 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> s
             response = await stt.transcribe(
                 file=audio_file,
                 model="whisper-1",
-                response_format="verbose_json",
+                response_format="json",
                 language="en",
-                timestamp_granularities=["segment"],
+                prompt=CARE_TRANSCRIPTION_PROMPT,
             )
         if hasattr(response, "text"):
             return response.text
@@ -292,54 +305,4 @@ Provide your analysis as JSON. Only map regulations/standards where there is act
             "cqc_mappings": [],
             "care_cert_mappings": [],
             "custom_mappings": [],
-        }
-
-    pause_note = ""
-    if paused_periods:
-        pause_note = f"\n\nNOTE: The recording was paused {len(paused_periods)} time(s) during this meeting. Paused sections are not included in the transcript."
-
-    user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
-
-TRANSCRIPT:{pause_note}
-{transcript_text}
-
-CQC REGULATIONS TO MAP AGAINST:
-{cqc_context}
-
-CARE CERTIFICATE STANDARDS TO MAP AGAINST:
-{cc_context}
-
-Provide your analysis as JSON. Only map regulations/standards where there is actual evidence in the transcript."""
-
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"analysis_{uuid.uuid4()}",
-        system_message=ANALYSIS_SYSTEM_PROMPT,
-    ).with_model("openai", "gpt-4o")
-
-    full_response = ""
-    async for event in chat.stream_message(UserMessage(text=user_prompt)):
-        from emergentintegrations.llm.chat import TextDelta, StreamDone
-        if isinstance(event, TextDelta):
-            full_response += event.content
-        elif isinstance(event, StreamDone):
-            break
-
-    # Parse JSON from response
-    try:
-        # Clean up if wrapped in code blocks
-        text = full_response.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
-        result = json.loads(text)
-        return result
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse AI response: {e}\nResponse: {full_response[:500]}")
-        return {
-            "summary": "Analysis could not be parsed. Please review the transcript manually.",
-            "actions": [],
-            "risks": [],
-            "cqc_mappings": [],
-            "care_cert_mappings": [],
         }

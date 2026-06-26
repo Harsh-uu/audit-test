@@ -1,0 +1,42 @@
+{
+  "summary": "Tested reject/accept/flag button fix for all evidence types (CQC, Care Cert, Custom/Organisational) and Made with Emergent badge removal. Backend fix confirmed working. Badge still visible.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Made with Emergent badge",
+        "issue": "Badge is still visible on all pages. The static anchor tag was removed from index.html, but the external script `https://assets.emergent.sh/scripts/emergent-main.js` at line 26 of /app/frontend/public/index.html dynamically injects the badge into the DOM.",
+        "selector": "#emergent-badge, a[href*='emergent']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_reject_button_fix.py",
+    "/app/test_reports/pytest/reject_button_fix.xml"
+  ],
+  "action_items": [
+    "Remove the <script src='https://assets.emergent.sh/scripts/emergent-main.js'></script> line from /app/frontend/public/index.html (line 26) to fully remove the Made with Emergent badge"
+  ],
+  "critical_code_review_comments": [
+    "index.html line 26: emergent-main.js script still present - this dynamically adds the badge even if the static anchor tag is removed"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_reject_button_fix.py"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 passed, 1 skipped - no care_cert_mappings in test data)",
+    "frontend": "50% - badge still visible"
+  },
+  "test_credentials": "admin@supervision.com / Admin123!",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend fix for custom_mappings in evidence update loop is confirmed working. Tests in /app/backend/tests/test_reject_button_fix.py test all three mapping types. The badge removal is incomplete - need to remove emergent-main.js script tag from index.html line 26.",
+  "rca_of_issue": "Badge still showing: The fix only removed the static anchor tag but the emergent-main.js external script dynamically creates and injects the badge element on load. To fully remove it, the script tag itself must be removed from index.html."
+}

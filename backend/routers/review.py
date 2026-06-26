@@ -180,7 +180,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
         raise HTTPException(status_code=404, detail="Analysis not found")
 
     update_data = {}
-    for mapping_type in ["cqc_mappings", "care_cert_mappings"]:
+    for mapping_type in ["cqc_mappings", "care_cert_mappings", "custom_mappings"]:
         mappings = analysis.get(mapping_type, [])
         for i, m in enumerate(mappings):
             if m.get("id") == evidence_id:
