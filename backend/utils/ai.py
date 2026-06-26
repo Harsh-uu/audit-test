@@ -8,7 +8,7 @@ from emergentintegrations.llm.openai import OpenAISpeechToText
 logger = logging.getLogger(__name__)
 
 ANALYSIS_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers. 
-Analyze meeting transcripts to identify evidence of compliance with CQC regulations and Care Certificate standards.
+Analyze meeting transcripts to identify evidence of compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
 
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
 {
@@ -40,6 +40,18 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "transcript_excerpt": "Exact quote from transcript",
       "confidence": "likely_evidence|needs_review|not_enough_evidence"
     }
+  ],
+  "custom_mappings": [
+    {
+      "id": "unique_id",
+      "document_id": "the document_id provided",
+      "document_name": "Company Values Policy",
+      "criterion_ref": "CV-1",
+      "criterion_name": "Compassion",
+      "evidence_summary": "Brief description of evidence",
+      "transcript_excerpt": "Exact quote from transcript",
+      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+    }
   ]
 }
 
@@ -50,9 +62,31 @@ Rules:
 - Use "needs_review" when partially demonstrated or unclear
 - Use "not_enough_evidence" when barely touched on
 - For Care Certificate mappings, ALWAYS include the specific outcome_ref and outcome_name (e.g. "2.1" and "Agree a personal development plan"). Choose the single most relevant outcome for the evidence found.
+- For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
+- If no custom standards are provided, return custom_mappings as an empty array []
 - If the meeting had paused sections, note this in the summary
 - Include transcript excerpts as exact quotes from the provided text
-- Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1")"""
+- Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")"""
+
+
+CRITERIA_EXTRACTION_PROMPT = """You are reviewing a standards/policy document from a UK adult social care provider. Extract a structured list of criteria, standards, or competencies from this document.
+
+Return valid JSON only (no markdown) in this exact structure:
+{
+  "document_summary": "One concise sentence describing what this document covers",
+  "criteria": [
+    {"ref": "1", "name": "Short criterion name (3-8 words)", "description": "What this criterion expects — one to two sentences"}
+  ]
+}
+
+Rules:
+- Extract between 3 and 20 criteria maximum
+- Each criterion should be a distinct, assessable standard or expectation
+- Use sequential numbering for refs (1, 2, 3...)
+- If the document is a job description, extract key competencies and responsibilities
+- If it is a values/policy document, extract each named value or principle
+- If it is a competency framework, extract each competency domain
+- Be concise and practical — these will be used to assess evidence in supervision meetings"""
 
 
 async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> str:
@@ -83,7 +117,47 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> s
         _os.unlink(tmp_path)
 
 
-async def analyze_meeting(transcript_text: str, cqc_standards: list, care_cert_standards: list, paused_periods: list) -> dict:
+async def extract_document_criteria(text: str, doc_name: str) -> dict:
+    """Ask GPT-4o to extract a structured list of criteria from a document."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise ValueError("EMERGENT_LLM_KEY not set")
+
+    truncated = text[:8000]  # Stay well within token budget
+    user_prompt = f"Document name: {doc_name}\n\nDocument content:\n{truncated}"
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"docparse_{uuid.uuid4()}",
+        system_message=CRITERIA_EXTRACTION_PROMPT,
+    ).with_model("openai", "gpt-4o")
+
+    full_response = ""
+    async for event in chat.stream_message(UserMessage(text=user_prompt)):
+        from emergentintegrations.llm.chat import TextDelta, StreamDone
+        if isinstance(event, TextDelta):
+            full_response += event.content
+        elif isinstance(event, StreamDone):
+            break
+
+    try:
+        text_resp = full_response.strip()
+        if text_resp.startswith("```"):
+            lines = text_resp.split("\n")
+            text_resp = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+        return json.loads(text_resp)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse criteria extraction response: {e}")
+        return {"document_summary": doc_name, "criteria": []}
+
+
+async def analyze_meeting(
+    transcript_text: str,
+    cqc_standards: list,
+    care_cert_standards: list,
+    paused_periods: list,
+    custom_standards: list = None,
+) -> dict:
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise ValueError("EMERGENT_LLM_KEY not set")
