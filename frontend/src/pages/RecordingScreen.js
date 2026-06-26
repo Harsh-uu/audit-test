@@ -47,6 +47,8 @@ export default function RecordingScreen() {
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
   const elapsedRef = useRef(0);
+  const wakeLockRef = useRef(null);
+  const [wakeLockActive, setWakeLockActive] = useState(false);
 
   useEffect(() => {
     setInIframe(isInIframe());
@@ -74,8 +76,49 @@ export default function RecordingScreen() {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
       }
+      // Release wake lock on unmount
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
     };
   }, []);
+
+  const acquireWakeLock = async () => {
+    if (!("wakeLock" in navigator)) return;
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request("screen");
+      setWakeLockActive(true);
+      wakeLockRef.current.addEventListener("release", () => {
+        setWakeLockActive(false);
+        wakeLockRef.current = null;
+      });
+    } catch (err) {
+      console.warn("Wake lock unavailable:", err.message);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLockRef.current) {
+      try { await wakeLockRef.current.release(); } catch {}
+      wakeLockRef.current = null;
+      setWakeLockActive(false);
+    }
+  };
+
+  // Re-acquire wake lock if the page is hidden then shown again mid-session
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState === "visible" && !wakeLockRef.current) {
+        await acquireWakeLock();
+      }
+    };
+    if (stage === "recording" || stage === "paused") {
+      document.addEventListener("visibilitychange", handleVisibility);
+      return () => document.removeEventListener("visibilitychange", handleVisibility);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
 
   const logNotice = async () => {
     try {
@@ -103,6 +146,7 @@ export default function RecordingScreen() {
 
   const startRecording = async () => {
     setError("");
+    await acquireWakeLock();
 
     // Check if running in an embedded iframe — browsers block mic access there
     if (inIframe || !canUseMediaDevices()) {
@@ -218,6 +262,7 @@ export default function RecordingScreen() {
   const stopRecording = async () => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") return;
     clearInterval(timerRef.current);
+    await releaseWakeLock();
     const ts = new Date().toISOString();
     setStage("stopped");
     axios.post(`${API}/recording/${meetingId}/stop`, { timestamp: ts }, getAuthConfig())
@@ -401,9 +446,17 @@ export default function RecordingScreen() {
                 </p>
               )}
               {stage === "recording" && (
-                <div className="flex items-center justify-center gap-2 mt-2">
-                  <div className="w-2.5 h-2.5 bg-[#DC2626] rounded-full recording-pulse"></div>
-                  <span className="text-sm text-[#DC2626] font-medium">Recording in progress</span>
+                <div className="flex items-center justify-center gap-3 mt-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 bg-[#DC2626] rounded-full recording-pulse"></div>
+                    <span className="text-sm text-[#DC2626] font-medium">Recording in progress</span>
+                  </div>
+                  {wakeLockActive && (
+                    <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5" title="Screen will not dim during recording" data-testid="wake-lock-indicator">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                      Screen stay-on
+                    </span>
+                  )}
                 </div>
               )}
               {stage === "paused" && (
