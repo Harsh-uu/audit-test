@@ -11,7 +11,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 ## Architecture
 - **Frontend:** React (JavaScript), Tailwind CSS, Shadcn UI, Lucide React icons
 - **Backend:** FastAPI (Python), MongoDB, Motor (async MongoDB driver)
-- **AI:** OpenAI GPT-4o (via emergentintegrations) for analysis, OpenAI Whisper-1 for transcription
+- **AI:** OpenAI GPT-4o (via emergentintegrations) for analysis, OpenAI Whisper-1 for transcription (with care/clinical domain terminology prompt for accuracy)
 - **Email:** Resend ✅ (configured with live API key)
 - **Storage:** Emergent Object Storage (for audio files and standards documents)
 - **Auth:** JWT (Bearer token in localStorage + httpOnly cookies)
@@ -172,18 +172,12 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 ## Prioritized Backlog
 
-### P0 (Critical - Next Session)
-- Test full audio upload → transcription → analysis flow with real audio
-- Verify Whisper transcription output quality
-- Validate GPT-4o compliance mappings are relevant and accurate
+### P0 (Critical)
+- None outstanding
 
 ### P1 (Important)
-- Auto audio deletion confirmation workflow display improvements
-- Add PDF export of approved reports
-- Shared reviewer access control (share with specific users)
-- Email/report sharing via Resend
-- Admin Library: upload CQC/Care Cert reference documents for AI evidence matching
-- Meeting search and filtering improvements
+- Meeting search and filtering on the Dashboard
+- "Team Themes" view in Admin panel (aggregated themes/issues/training needs across staff)
 - Mobile-responsive recording screen
 
 ### P2 (Future)
@@ -203,4 +197,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 ---
 
-*Last Updated: 2025-06-26*
+- Custom evidence (Organisational Standards): accept/reject/flag/edit buttons now work correctly — `custom_mappings` added to backend update loop (review.py)
+- Whisper transcription upgraded with care/clinical domain terminology prompt (CQC, safeguarding, MCA, DoLS, etc.) for improved accuracy
+
+*Last Updated: 2026-06-26*
