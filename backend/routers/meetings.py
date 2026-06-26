@@ -152,6 +152,11 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
         except Exception:
             pass
 
+    # Attach comments
+    meeting["comments"] = []
+    async for c in db.reviewer_comments.find({"meeting_id": str(meeting["id"])}).sort("created_at", 1):
+        meeting["comments"].append(doc_to_dict(c))
+
     return meeting
 
 
