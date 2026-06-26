@@ -211,6 +211,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 - Granular Care Certificate sub-outcomes (2025): all 16 standards now have flat `sub_outcomes` list (216 total, e.g. 2.1a, 2.1b, 2.2h). Standard 16 correctly has 1 sub-outcome (training compliance per CQC Reg 18, matching official March 2025 PDF). AI maps evidence to specific sub-outcome refs. Team Intelligence matrix only shows green when ALL sub-outcomes evidenced; partial shows covered/total fraction in amber. Standard names updated to 2025 edition. DB migrated on startup.
 
-- Forgot password flow: `POST /api/auth/forgot-password` (token in MongoDB, 1hr TTL, Resend email) + `POST /api/auth/reset-password` + `ResetPassword.js` page at `/reset-password?token=...`. Login page has inline "Forgot password?" link. Email sent from noreply@1two.one.
+- Dashboard search & filtering: search by title + attendee name, quick status chips with live counts (All/Draft/In Review/Reviewed/Signed Off), date range picker (from/to), sort newest/oldest, result count + clear-all button. All client-side via useMemo.
 
 *Last Updated: 2026-07-01*

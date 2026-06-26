@@ -1,23 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar } from "lucide-react";
 
 const STATUS_CONFIG = {
-  draft: { label: "Draft", color: "bg-gray-100 text-gray-700 border-gray-200", icon: FileText },
-  recording: { label: "Recording", color: "bg-red-100 text-red-700 border-red-200", icon: Mic },
-  stopped: { label: "Stopped", color: "bg-orange-100 text-orange-700 border-orange-200", icon: Mic },
-  processing: { label: "Processing", color: "bg-blue-100 text-blue-700 border-blue-200", icon: Loader },
-  transcribing: { label: "Transcribing", color: "bg-blue-100 text-blue-700 border-blue-200", icon: Loader },
-  analyzing: { label: "Analysing", color: "bg-purple-100 text-purple-700 border-purple-200", icon: Loader },
-  in_review: { label: "In Review", color: "bg-amber-100 text-amber-700 border-amber-200", icon: Clock },
-  reviewed: { label: "Reviewed", color: "bg-teal-100 text-teal-700 border-teal-200", icon: CheckCircle },
-  signed_off: { label: "Signed Off", color: "bg-emerald-100 text-emerald-800 border-emerald-200", icon: CheckCircle },
-  shared: { label: "Shared", color: "bg-emerald-100 text-emerald-800 border-emerald-200", icon: CheckCircle },
-  processing_failed: { label: "Failed", color: "bg-red-100 text-red-700 border-red-200", icon: AlertCircle },
+  draft:             { label: "Draft",        color: "bg-gray-100 text-gray-700 border-gray-200",       icon: FileText },
+  recording:         { label: "Recording",    color: "bg-red-100 text-red-700 border-red-200",           icon: Mic },
+  stopped:           { label: "Stopped",      color: "bg-orange-100 text-orange-700 border-orange-200",  icon: Mic },
+  processing:        { label: "Processing",   color: "bg-blue-100 text-blue-700 border-blue-200",        icon: Loader },
+  transcribing:      { label: "Transcribing", color: "bg-blue-100 text-blue-700 border-blue-200",        icon: Loader },
+  analyzing:         { label: "Analysing",    color: "bg-purple-100 text-purple-700 border-purple-200",  icon: Loader },
+  in_review:         { label: "In Review",    color: "bg-amber-100 text-amber-700 border-amber-200",     icon: Clock },
+  reviewed:          { label: "Reviewed",     color: "bg-teal-100 text-teal-700 border-teal-200",        icon: CheckCircle },
+  signed_off:        { label: "Signed Off",   color: "bg-emerald-100 text-emerald-800 border-emerald-200", icon: CheckCircle },
+  shared:            { label: "Shared",       color: "bg-emerald-100 text-emerald-800 border-emerald-200", icon: CheckCircle },
+  processing_failed: { label: "Failed",       color: "bg-red-100 text-red-700 border-red-200",           icon: AlertCircle },
 };
+
+const QUICK_FILTERS = [
+  { value: "all",       label: "All" },
+  { value: "draft",     label: "Draft" },
+  { value: "in_review", label: "In Review" },
+  { value: "reviewed",  label: "Reviewed" },
+  { value: "signed_off",label: "Signed Off" },
+];
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.draft;
@@ -33,8 +41,7 @@ function StatusBadge({ status }) {
 function formatDate(dateStr) {
   if (!dateStr) return "—";
   try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   } catch { return dateStr; }
 }
 
@@ -44,13 +51,17 @@ export default function Dashboard() {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortOrder, setSortOrder] = useState("desc"); // "desc" = newest first
+  const [showDateFilter, setShowDateFilter] = useState(false);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchMeetings();
-    const interval = setInterval(fetchMeetings, 15000); // poll for status updates
+    const interval = setInterval(fetchMeetings, 15000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchMeetings = async () => {
@@ -64,11 +75,43 @@ export default function Dashboard() {
     }
   };
 
-  const filteredMeetings = meetings.filter(m => {
-    const matchSearch = m.title?.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === "all" || m.status === filter;
-    return matchSearch && matchFilter;
-  });
+  const filteredMeetings = useMemo(() => {
+    const q = search.toLowerCase();
+    return meetings
+      .filter(m => {
+        if (q) {
+          const titleMatch = m.title?.toLowerCase().includes(q);
+          const attendeeMatch = (m.attendees || []).some(a =>
+            (typeof a === "string" ? a : a?.name || "").toLowerCase().includes(q)
+          );
+          if (!titleMatch && !attendeeMatch) return false;
+        }
+        if (statusFilter !== "all" && m.status !== statusFilter) return false;
+        if (dateFrom) {
+          const mDate = new Date(m.date || m.created_at || 0);
+          if (mDate < new Date(dateFrom)) return false;
+        }
+        if (dateTo) {
+          const mDate = new Date(m.date || m.created_at || 0);
+          if (mDate > new Date(dateTo + "T23:59:59")) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const da = new Date(a.date || a.created_at || 0).getTime();
+        const db = new Date(b.date || b.created_at || 0).getTime();
+        return sortOrder === "desc" ? db - da : da - db;
+      });
+  }, [meetings, search, statusFilter, dateFrom, dateTo, sortOrder]);
+
+  const hasActiveFilters = search || statusFilter !== "all" || dateFrom || dateTo;
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setDateFrom("");
+    setDateTo("");
+  };
 
   const stats = {
     total: meetings.length,
@@ -77,12 +120,7 @@ export default function Dashboard() {
   };
 
   const getMeetingAction = (meeting) => {
-    if (meeting.status === "draft" || meeting.status === "stopped") {
-      return () => navigate(`/meetings/${meeting.id}/record`);
-    }
-    if (["processing", "transcribing", "analyzing"].includes(meeting.status)) {
-      return () => navigate(`/meetings/${meeting.id}/report`);
-    }
+    if (["draft", "stopped"].includes(meeting.status)) return () => navigate(`/meetings/${meeting.id}/record`);
     return () => navigate(`/meetings/${meeting.id}/report`);
   };
 
@@ -92,7 +130,7 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900" style={{fontFamily:'Work Sans,sans-serif'}}>Meetings</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Meetings</h1>
             <p className="text-sm text-gray-500 mt-0.5">Manage your supervision meetings and compliance evidence</p>
           </div>
           <button
@@ -109,8 +147,8 @@ export default function Dashboard() {
         <div className="grid grid-cols-3 gap-4 mb-6">
           {[
             { label: "Total Meetings", value: stats.total, icon: FileText, color: "text-[#1E3A8A]" },
-            { label: "In Review", value: stats.inReview, icon: Clock, color: "text-amber-600" },
-            { label: "Signed Off", value: stats.signedOff, icon: CheckCircle, color: "text-emerald-600" },
+            { label: "In Review",      value: stats.inReview, icon: Clock, color: "text-amber-600" },
+            { label: "Signed Off",     value: stats.signedOff, icon: CheckCircle, color: "text-emerald-600" },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
               <div className="flex items-center justify-between mb-2">
@@ -122,32 +160,119 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-5">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search meetings..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
-              data-testid="search-input"
-            />
+        {/* Search & filter bar */}
+        <div className="space-y-3 mb-5">
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by title or attendee name..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                data-testid="search-input"
+              />
+              {search && (
+                <button onClick={() => setSearch("")} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Date filter toggle */}
+            <button
+              onClick={() => setShowDateFilter(!showDateFilter)}
+              data-testid="date-filter-toggle"
+              className={`flex items-center gap-2 px-3 py-2 border rounded-md text-sm transition-colors ${
+                (dateFrom || dateTo) ? "border-[#1E3A8A] bg-blue-50 text-[#1E3A8A]" : "border-gray-300 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              Date
+            </button>
+
+            {/* Sort toggle */}
+            <button
+              onClick={() => setSortOrder(o => o === "desc" ? "asc" : "desc")}
+              data-testid="sort-toggle"
+              className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+              title={sortOrder === "desc" ? "Newest first" : "Oldest first"}
+            >
+              <ArrowUpDown className="w-4 h-4" />
+              {sortOrder === "desc" ? "Newest" : "Oldest"}
+            </button>
+
+            {/* Clear all */}
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                data-testid="clear-filters-btn"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-md transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+                Clear
+              </button>
+            )}
           </div>
-          <select
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
-            data-testid="status-filter"
-          >
-            <option value="all">All statuses</option>
-            <option value="draft">Draft</option>
-            <option value="in_review">In Review</option>
-            <option value="reviewed">Reviewed</option>
-            <option value="signed_off">Signed Off</option>
-            <option value="shared">Shared</option>
-          </select>
+
+          {/* Date range picker */}
+          {showDateFilter && (
+            <div className="flex gap-3 items-center p-3 bg-gray-50 border border-gray-200 rounded-md" data-testid="date-range-picker">
+              <label className="text-xs font-medium text-gray-500 whitespace-nowrap">From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                data-testid="date-from-input"
+              />
+              <label className="text-xs font-medium text-gray-500">To</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                min={dateFrom}
+                className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                data-testid="date-to-input"
+              />
+              {(dateFrom || dateTo) && (
+                <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Quick status chips */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {QUICK_FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                data-testid={`filter-chip-${f.value}`}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  statusFilter === f.value
+                    ? "bg-[#1E3A8A] text-white border-[#1E3A8A]"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-[#1E3A8A] hover:text-[#1E3A8A]"
+                }`}
+              >
+                {f.label}
+                {f.value !== "all" && (
+                  <span className="ml-1.5 opacity-70">
+                    {meetings.filter(m => m.status === f.value).length}
+                  </span>
+                )}
+              </button>
+            ))}
+            {/* Result count */}
+            {hasActiveFilters && (
+              <span className="ml-auto text-xs text-gray-400">
+                {filteredMeetings.length} of {meetings.length} meetings
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Meetings list */}
@@ -163,13 +288,15 @@ export default function Dashboard() {
             <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 font-medium">No meetings found</p>
             <p className="text-gray-400 text-sm mt-1">
-              {search ? "Try adjusting your search" : "Create your first supervision meeting"}
+              {hasActiveFilters ? "Try adjusting your search or filters" : "Create your first supervision meeting"}
             </p>
-            {!search && (
-              <button
-                onClick={() => navigate("/meetings/new")}
-                className="mt-4 inline-flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors"
-              >
+            {hasActiveFilters ? (
+              <button onClick={clearFilters} className="mt-4 inline-flex items-center gap-2 text-[#1E3A8A] px-4 py-2 rounded-md text-sm font-medium border border-[#1E3A8A] hover:bg-blue-50 transition-colors">
+                <X className="w-4 h-4" />
+                Clear filters
+              </button>
+            ) : (
+              <button onClick={() => navigate("/meetings/new")} className="mt-4 inline-flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors">
                 <Plus className="w-4 h-4" />
                 New Meeting
               </button>
@@ -187,11 +314,11 @@ export default function Dashboard() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-medium text-gray-900 truncate" style={{fontFamily:'Work Sans,sans-serif'}}>{meeting.title}</h3>
+                      <h3 className="font-medium text-gray-900 truncate">{meeting.title}</h3>
                       <StatusBadge status={meeting.status} />
                     </div>
                     <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>{formatDate(meeting.date)}</span>
+                      <span>{formatDate(meeting.date || meeting.created_at)}</span>
                       {meeting.location && <span>{meeting.location}</span>}
                       {meeting.attendees?.length > 0 && (
                         <span className="flex items-center gap-1">
