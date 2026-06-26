@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
+
+const API = process.env.REACT_APP_BACKEND_URL;
 
 function formatError(detail) {
   if (!detail) return "Something went wrong. Please try again.";
@@ -13,11 +15,12 @@ function formatError(detail) {
 export default function Login() {
   const { user, login, register } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [form, setForm] = useState({ email: "", password: "", name: "", role: "attendee" });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   if (user) return <Navigate to="/dashboard" replace />;
 
@@ -25,13 +28,24 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
     try {
       if (mode === "login") {
         await login(form.email, form.password);
-      } else {
+        navigate("/dashboard");
+      } else if (mode === "register") {
         await register(form.email, form.password, form.name, form.role);
+        navigate("/dashboard");
+      } else if (mode === "forgot") {
+        const res = await fetch(`${API}/api/auth/forgot-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: form.email }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(formatError(data.detail));
+        setSuccess(data.message);
       }
-      navigate("/dashboard");
     } catch (err) {
       setError(formatError(err.response?.data?.detail) || err.message);
     } finally {
@@ -75,16 +89,22 @@ export default function Login() {
           </div>
 
           <h2 className="text-2xl font-semibold text-gray-900 mb-1" style={{fontFamily:'Poppins,sans-serif'}}>
-            {mode === "login" ? "Sign in to your account" : "Create account"}
+            {mode === "login" ? "Sign in to your account" : mode === "register" ? "Create account" : "Reset your password"}
           </h2>
           <p className="text-gray-500 text-sm mb-8">
-            {mode === "login" ? "" : "Set up your account."}
+            {mode === "register" ? "Set up your account." : mode === "forgot" ? "Enter your email and we'll send you a reset link." : ""}
           </p>
 
           {error && (
             <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 rounded-md p-3 mb-6 text-sm" data-testid="login-error">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+          {success && (
+            <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-md p-3 mb-6 text-sm" data-testid="forgot-success">
+              <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{success}</span>
             </div>
           )}
 
@@ -117,23 +137,37 @@ export default function Login() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={form.password}
-                  onChange={e => setForm(f => ({...f, password: e.target.value}))}
-                  placeholder="••••••••"
-                  required
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
-                  data-testid="login-password-input"
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            {mode !== "forgot" && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Password</label>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => { setMode("forgot"); setError(""); setSuccess(""); }}
+                      className="text-xs text-[#1E3A8A] hover:underline"
+                      data-testid="forgot-password-link"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={e => setForm(f => ({...f, password: e.target.value}))}
+                    placeholder="••••••••"
+                    required
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                    data-testid="login-password-input"
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {mode === "register" && (
               <div>
@@ -153,20 +187,20 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (mode === "forgot" && !!success)}
               className="w-full bg-[#1E3A8A] text-white py-2.5 px-4 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
               data-testid="login-submit-btn"
             >
               {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></div>}
-              {mode === "login" ? "Sign in" : "Create account"}
+              {mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Send reset link"}
             </button>
           </form>
 
           <p className="mt-6 text-center text-sm text-gray-500">
             {mode === "login" ? (
-              <>Don't have an account? <button onClick={() => setMode("register")} className="text-[#1E3A8A] font-medium hover:underline" data-testid="toggle-register-btn">Register</button></>
+              <>Don't have an account? <button onClick={() => { setMode("register"); setError(""); setSuccess(""); }} className="text-[#1E3A8A] font-medium hover:underline" data-testid="toggle-register-btn">Register</button></>
             ) : (
-              <>Already have an account? <button onClick={() => setMode("login")} className="text-[#1E3A8A] font-medium hover:underline" data-testid="toggle-login-btn">Sign in</button></>
+              <><button onClick={() => { setMode("login"); setError(""); setSuccess(""); }} className="text-[#1E3A8A] font-medium hover:underline" data-testid="toggle-login-btn">Back to sign in</button></>
             )}
           </p>
 

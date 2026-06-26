@@ -5,6 +5,7 @@ import bcrypt
 import jwt
 import os
 import secrets
+import resend
 from datetime import datetime, timezone, timedelta
 from deps import get_db, get_current_user
 
@@ -139,6 +140,79 @@ async def refresh_token(request: Request, response: Response, db=Depends(get_db)
         return {"message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_db)):
+    email = data.email.lower()
+    user = await db.users.find_one({"email": email})
+    # Always return success to prevent email enumeration
+    if not user:
+        return {"message": "If that email exists, a reset link has been sent."}
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    await db.password_reset_tokens.delete_many({"email": email})
+    await db.password_reset_tokens.insert_one({
+        "token": token,
+        "email": email,
+        "expires_at": expires_at,
+        "used": False,
+    })
+
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    reset_link = f"{frontend_url}/reset-password?token={token}"
+
+    resend.api_key = os.environ.get("RESEND_API_KEY", "")
+    sender = os.environ.get("SENDER_EMAIL", "noreply@1two.one")
+    try:
+        resend.Emails.send({
+            "from": f"1two.one <{sender}>",
+            "to": [email],
+            "subject": "Reset your password",
+            "html": f"""
+            <div style="font-family:Poppins,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#f8fafc;border-radius:12px;">
+              <h2 style="color:#1E3A8A;font-size:22px;margin-bottom:8px;">Reset your password</h2>
+              <p style="color:#475569;font-size:15px;margin-bottom:24px;">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+              <a href="{reset_link}" style="display:inline-block;background:#1E3A8A;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600;">Reset Password</a>
+              <p style="color:#94a3b8;font-size:12px;margin-top:28px;">If you didn't request this, you can safely ignore this email.</p>
+            </div>
+            """,
+        })
+    except Exception:
+        pass  # Don't expose email sending errors
+
+    return {"message": "If that email exists, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(data: ResetPasswordRequest, db=Depends(get_db)):
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+
+    record = await db.password_reset_tokens.find_one({"token": data.token, "used": False})
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+    if record["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="This reset link has expired.")
+
+    await db.users.update_one(
+        {"email": record["email"]},
+        {"$set": {"password_hash": hash_password(data.new_password)}}
+    )
+    await db.password_reset_tokens.update_one({"token": data.token}, {"$set": {"used": True}})
+
+    return {"message": "Password updated successfully. You can now log in."}
 
 
 async def seed_admin(db):
