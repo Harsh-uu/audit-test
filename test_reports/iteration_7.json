@@ -1,0 +1,29 @@
+{
+  "summary": "Tested CQC Five Key Questions feature. All 14 CQC regulations have non-empty key_questions arrays. Specific regulations verified: Reg 9=['Effective','Responsive'], Reg 12=['Safe','Effective'], Reg 13=['Safe'], Reg 17=['Well-led'], Reg 18=['Safe','Effective','Well-led'], Reg 20=['Well-led','Caring']. Back-fill migration worked: meeting 6a3e6204373ddc91df1947cf analysis has cqc_mappings[0].key_questions=['Safe','Effective','Well-led']. Frontend EvidenceCard renders colored badges for CQC cards (Safe=red, Effective=blue, Well-led=emerald). Care Certificate cards show NO key_questions badges. data-testid='key-questions-cqc_1' present on CQC card.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/review/{id}", "issue": "cqc_mappings[0].regulation field is null (None) - regulation name not persisted on the mapping, though key_questions are correct"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Minor: cqc_mappings[0].regulation is null in the back-filled analysis - check if regulation name should be populated during migrate_analyses_key_questions"
+  ],
+  "critical_code_review_comments": [
+    "All 14 CQC regulations correctly have key_questions in DB",
+    "Badge colors match spec: Safe=bg-red-100, Effective=bg-blue-100, Well-led=bg-emerald-100",
+    "Care Certificate cards correctly omit key_questions badges"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "95% (minor: regulation null in mapping)", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "CQC key_questions feature fully working. Meeting report at /meetings/6a3e6204373ddc91df1947cf/report shows Reg 18 with Safe/Effective/Well-led colored badges. Care Cert Standard 2 shows no KQ badges. The only minor issue is cqc_mappings[0].regulation is null in the back-filled analysis doc (the card still renders correctly using the regulation name from the standard lookup)."
+}

@@ -32,6 +32,23 @@ function ConfidenceBadge({ confidence }) {
   );
 }
 
+const CQC_KEY_QUESTION_STYLES = {
+  "Safe":      "bg-red-100 text-red-700 border-red-200",
+  "Effective": "bg-blue-100 text-blue-700 border-blue-200",
+  "Caring":    "bg-pink-100 text-pink-700 border-pink-200",
+  "Responsive":"bg-amber-100 text-amber-700 border-amber-200",
+  "Well-led":  "bg-emerald-100 text-emerald-700 border-emerald-200",
+};
+
+function KeyQuestionBadge({ label }) {
+  const style = CQC_KEY_QUESTION_STYLES[label] || "bg-gray-100 text-gray-600 border-gray-200";
+  return (
+    <span className={`inline-flex text-xs font-medium border rounded-full px-2 py-0.5 ${style}`}>
+      {label}
+    </span>
+  );
+}
+
 function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -69,6 +86,11 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
               <span className="inline-flex items-center gap-1 text-xs text-blue-700 font-medium bg-blue-100 border border-blue-200 rounded px-1.5 py-0.5" data-testid={`outcome-ref-${mapping.id}`}>
                 Outcome {mapping.outcome_ref}: {mapping.outcome_name}
               </span>
+            </div>
+          )}
+          {type === "cqc" && mapping.key_questions?.length > 0 && (
+            <div className="ml-9 mt-1 flex flex-wrap gap-1" data-testid={`key-questions-${mapping.id}`}>
+              {mapping.key_questions.map(q => <KeyQuestionBadge key={q} label={q} />)}
             </div>
           )}
         </div>

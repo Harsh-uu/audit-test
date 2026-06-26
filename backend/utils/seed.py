@@ -4,20 +4,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 CQC_REGULATIONS = [
-    {"reference": "Regulation 9", "name": "Person-centred care", "description": "Care and treatment must be appropriate and meet the needs and preferences of service users. Providers must involve service users in planning and decision-making.", "keywords": ["person-centred", "care plan", "individual needs", "preferences", "wishes", "involvement", "choices"]},
-    {"reference": "Regulation 10", "name": "Dignity and respect", "description": "Service users must be treated with dignity and respect at all times. Workers must respect the person's right to privacy and treat them as an individual.", "keywords": ["dignity", "respect", "privacy", "independence", "choices", "equal treatment", "individuality"]},
-    {"reference": "Regulation 11", "name": "Need for consent", "description": "Care and treatment must only be provided with the consent of the relevant person. Providers must have regard to mental capacity and best interest decisions.", "keywords": ["consent", "mental capacity", "best interests", "lasting power of attorney", "advance decision", "capacity"]},
-    {"reference": "Regulation 12", "name": "Safe care and treatment", "description": "Care and treatment must be provided in a safe way. Includes medication management, nutrition, hydration, risk assessment, and infection prevention and control.", "keywords": ["safe", "risk assessment", "medications", "nutrition", "hydration", "infection prevention", "equipment", "falls", "pressure sores"]},
-    {"reference": "Regulation 13", "name": "Safeguarding service users from abuse and improper treatment", "description": "Service users must be protected from abuse and improper treatment. Providers must have safeguarding policies and act on any concerns.", "keywords": ["safeguarding", "abuse", "neglect", "improper treatment", "restraint", "deprivation of liberty", "DoLS", "MCA", "whistleblowing"]},
-    {"reference": "Regulation 14", "name": "Meeting nutritional and hydration needs", "description": "Service users must have adequate nutrition and hydration. Providers must ensure food and drink meets service users' needs and preferences.", "keywords": ["nutrition", "hydration", "meals", "diet", "weight", "fluids", "food", "malnutrition", "dehydration"]},
-    {"reference": "Regulation 15", "name": "Premises and equipment", "description": "Premises and equipment used must be clean, secure, suitable, properly used, maintained and appropriately located.", "keywords": ["premises", "equipment", "environment", "maintenance", "infection control", "cleanliness", "safety"]},
-    {"reference": "Regulation 16", "name": "Receiving and acting on complaints", "description": "Service users must be able to make complaints about care received. Providers must have an accessible complaints process and act on complaints.", "keywords": ["complaints", "concerns", "feedback", "investigation", "response", "resolution", "whistleblowing"]},
-    {"reference": "Regulation 17", "name": "Good governance", "description": "Providers must have effective governance frameworks, assess and monitor quality and safety, maintain accurate records, and seek and act on feedback.", "keywords": ["governance", "quality", "audit", "records", "risk management", "improvement", "CQC notifications", "oversight"]},
-    {"reference": "Regulation 18", "name": "Staffing", "description": "Sufficient numbers of suitably qualified, competent, skilled and experienced staff must be deployed. Staff must receive appropriate support, training, professional development, supervision and appraisal.", "keywords": ["staffing", "training", "competency", "supervision", "induction", "workforce", "sickness", "agency", "qualifications", "appraisal", "development"]},
-    {"reference": "Regulation 19", "name": "Fit and proper persons employed", "description": "Providers must only employ persons who are of good character, have the necessary qualifications, skills and experience, are able to properly perform their duties.", "keywords": ["DBS", "references", "qualifications", "fit and proper", "employment checks", "barring", "criminal record"]},
-    {"reference": "Regulation 20", "name": "Duty of candour", "description": "Providers must be open and honest with service users when something goes wrong that results in harm or could result in harm.", "keywords": ["duty of candour", "openness", "transparency", "honesty", "notification of harm", "apology", "incident"]},
-    {"reference": "Regulation 20A", "name": "Requirement as to display of performance assessments", "description": "Providers must display their CQC performance rating in a prominent place.", "keywords": ["CQC rating", "display", "performance assessment", "inspection"]},
-    {"reference": "CQC Reg 12 (Registration)", "name": "Statement of purpose", "description": "Registered persons must provide a statement of purpose covering the regulated activities they carry out.", "keywords": ["statement of purpose", "regulated activities", "registration"]},
+    {"reference": "Regulation 9",  "name": "Person-centred care", "key_questions": ["Effective", "Responsive"], "description": "Care and treatment must be appropriate and meet the needs and preferences of service users. Providers must involve service users in planning and decision-making.", "keywords": ["person-centred", "care plan", "individual needs", "preferences", "wishes", "involvement", "choices"]},
+    {"reference": "Regulation 10", "name": "Dignity and respect", "key_questions": ["Caring", "Responsive"], "description": "Service users must be treated with dignity and respect at all times. Workers must respect the person's right to privacy and treat them as an individual.", "keywords": ["dignity", "respect", "privacy", "independence", "choices", "equal treatment", "individuality"]},
+    {"reference": "Regulation 11", "name": "Need for consent", "key_questions": ["Effective", "Caring"], "description": "Care and treatment must only be provided with the consent of the relevant person. Providers must have regard to mental capacity and best interest decisions.", "keywords": ["consent", "mental capacity", "best interests", "lasting power of attorney", "advance decision", "capacity"]},
+    {"reference": "Regulation 12", "name": "Safe care and treatment", "key_questions": ["Safe", "Effective"], "description": "Care and treatment must be provided in a safe way. Includes medication management, nutrition, hydration, risk assessment, and infection prevention and control.", "keywords": ["safe", "risk assessment", "medications", "nutrition", "hydration", "infection prevention", "equipment", "falls", "pressure sores"]},
+    {"reference": "Regulation 13", "name": "Safeguarding service users from abuse and improper treatment", "key_questions": ["Safe"], "description": "Service users must be protected from abuse and improper treatment. Providers must have safeguarding policies and act on any concerns.", "keywords": ["safeguarding", "abuse", "neglect", "improper treatment", "restraint", "deprivation of liberty", "DoLS", "MCA", "whistleblowing"]},
+    {"reference": "Regulation 14", "name": "Meeting nutritional and hydration needs", "key_questions": ["Safe", "Effective", "Caring"], "description": "Service users must have adequate nutrition and hydration. Providers must ensure food and drink meets service users' needs and preferences.", "keywords": ["nutrition", "hydration", "meals", "diet", "weight", "fluids", "food", "malnutrition", "dehydration"]},
+    {"reference": "Regulation 15", "name": "Premises and equipment", "key_questions": ["Safe", "Effective"], "description": "Premises and equipment used must be clean, secure, suitable, properly used, maintained and appropriately located.", "keywords": ["premises", "equipment", "environment", "maintenance", "infection control", "cleanliness", "safety"]},
+    {"reference": "Regulation 16", "name": "Receiving and acting on complaints", "key_questions": ["Responsive", "Well-led"], "description": "Service users must be able to make complaints about care received. Providers must have an accessible complaints process and act on complaints.", "keywords": ["complaints", "concerns", "feedback", "investigation", "response", "resolution", "whistleblowing"]},
+    {"reference": "Regulation 17", "name": "Good governance", "key_questions": ["Well-led"], "description": "Providers must have effective governance frameworks, assess and monitor quality and safety, maintain accurate records, and seek and act on feedback.", "keywords": ["governance", "quality", "audit", "records", "risk management", "improvement", "CQC notifications", "oversight"]},
+    {"reference": "Regulation 18", "name": "Staffing", "key_questions": ["Safe", "Effective", "Well-led"], "description": "Sufficient numbers of suitably qualified, competent, skilled and experienced staff must be deployed. Staff must receive appropriate support, training, professional development, supervision and appraisal.", "keywords": ["staffing", "training", "competency", "supervision", "induction", "workforce", "sickness", "agency", "qualifications", "appraisal", "development"]},
+    {"reference": "Regulation 19", "name": "Fit and proper persons employed", "key_questions": ["Safe", "Well-led"], "description": "Providers must only employ persons who are of good character, have the necessary qualifications, skills and experience, are able to properly perform their duties.", "keywords": ["DBS", "references", "qualifications", "fit and proper", "employment checks", "barring", "criminal record"]},
+    {"reference": "Regulation 20", "name": "Duty of candour", "key_questions": ["Well-led", "Caring"], "description": "Providers must be open and honest with service users when something goes wrong that results in harm or could result in harm.", "keywords": ["duty of candour", "openness", "transparency", "honesty", "notification of harm", "apology", "incident"]},
+    {"reference": "Regulation 20A", "name": "Requirement as to display of performance assessments", "key_questions": ["Well-led"], "description": "Providers must display their CQC performance rating in a prominent place.", "keywords": ["CQC rating", "display", "performance assessment", "inspection"]},
+    {"reference": "CQC Reg 12 (Registration)", "name": "Statement of purpose", "key_questions": ["Well-led"], "description": "Registered persons must provide a statement of purpose covering the regulated activities they carry out.", "keywords": ["statement of purpose", "regulated activities", "registration"]},
 ]
 
 CARE_CERT_STANDARDS = [
@@ -225,3 +225,40 @@ async def migrate_standard_outcomes(db):
             updated += 1
     if updated:
         logger.info(f"Migrated outcomes to {updated} Care Certificate standard entries")
+
+
+
+async def migrate_cqc_key_questions(db):
+    """Add key_questions to existing CQC regulation entries that don't have them yet."""
+    kq_map = {reg["reference"]: reg["key_questions"] for reg in CQC_REGULATIONS}
+    updated = 0
+    for ref, kq in kq_map.items():
+        result = await db.standards_entries.update_one(
+            {"reference": ref, "type": "cqc", "key_questions": {"$exists": False}},
+            {"$set": {"key_questions": kq}}
+        )
+        if result.modified_count:
+            updated += 1
+    if updated:
+        logger.info(f"Migrated key_questions to {updated} CQC regulation entries")
+
+
+async def migrate_analyses_key_questions(db):
+    """Back-fill key_questions onto cqc_mappings in existing analysis documents."""
+    kq_map = {reg["reference"]: reg["key_questions"] for reg in CQC_REGULATIONS}
+    updated = 0
+    async for analysis in db.analyses.find({}):
+        mappings = analysis.get("cqc_mappings", [])
+        changed = False
+        for m in mappings:
+            if not m.get("key_questions") and m.get("regulation_ref") in kq_map:
+                m["key_questions"] = kq_map[m["regulation_ref"]]
+                changed = True
+        if changed:
+            await db.analyses.update_one(
+                {"_id": analysis["_id"]},
+                {"$set": {"cqc_mappings": mappings}}
+            )
+            updated += 1
+    if updated:
+        logger.info(f"Back-filled key_questions on {updated} existing analysis documents")

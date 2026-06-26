@@ -56,11 +56,14 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         logger.info(f"Starting AI analysis for meeting {meeting_id}")
         analysis_result = await analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods)
 
-        # Add status field to each mapping
+        # Add status field to each mapping and enrich CQC with key_questions
+        cqc_kq_map = {s["reference"]: s.get("key_questions", []) for s in cqc_standards}
         for item in analysis_result.get("cqc_mappings", []):
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
+            if not item.get("key_questions"):
+                item["key_questions"] = cqc_kq_map.get(item.get("regulation_ref", ""), [])
         for item in analysis_result.get("care_cert_mappings", []):
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)

@@ -88,8 +88,13 @@ async def analyze_meeting(transcript_text: str, cqc_standards: list, care_cert_s
     if not api_key:
         raise ValueError("EMERGENT_LLM_KEY not set")
 
-    # Build standards context
-    cqc_context = "\n".join([f"- {s['reference']}: {s['name']} - {s.get('description', '')}" for s in cqc_standards[:20]])
+    # Build standards context — CQC includes key questions; Care Cert includes outcomes
+    cqc_context = "\n".join([
+        f"- {s['reference']}: {s['name']}" +
+        (f" [Key Questions: {', '.join(s.get('key_questions', []))}]" if s.get('key_questions') else "") +
+        f" — {s.get('description', '')}"
+        for s in cqc_standards[:20]
+    ])
 
     # Care Certificate context includes outcomes for precise outcome-level mapping
     cc_lines = []
