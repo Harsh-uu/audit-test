@@ -177,11 +177,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 ### P1 (Important)
 - Meeting search and filtering on the Dashboard
-- Mobile-responsive recording screen
 
 ### P2 (Future/Backlog)
-- Team Themes aggregated view in Admin panel (themes/risks/training needs across staff)
-- Rolled-over actions UX polish
+- Mobile-responsive recording screen
 - CQC inspection preparation summary view
 
 ### P2 (Future)
@@ -201,6 +199,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 ---
 
+- Team Intelligence page (`/admin/team`) — Evidence Matrix (staff × standards heatmap with coverage % row) + Team Themes (coverage gaps as progress bars, recurring risks, outstanding actions). Accessible to admin + manager roles.
 - Staff Portfolio page (`/portfolio/:userId`) — evidence grouped by CQC / Care Cert / Organisational standards + chronological meeting history + PDF export
 - Evidence Export in Admin Library — CSV/PDF bulk export with staff filter, date range, and specific meeting picker
 - Custom evidence (Organisational Standards): accept/reject/flag/edit buttons now work correctly — `custom_mappings` added to backend update loop (review.py)

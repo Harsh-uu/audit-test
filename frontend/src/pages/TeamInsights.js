@@ -42,6 +42,12 @@ function MatrixView({ matrix }) {
 
   const data = matrix[matrixTab] || { standards: [], rows: [] };
 
+  const tabCounts = {
+    cqc:       matrix.cqc?.standards?.length ?? 0,
+    care_cert: matrix.care_cert?.standards?.length ?? 0,
+    custom:    matrix.custom?.standards?.length ?? 0,
+  };
+
   return (
     <div>
       {/* Sub-tabs */}
@@ -58,7 +64,7 @@ function MatrixView({ matrix }) {
             <Icon className={`w-3.5 h-3.5 ${matrixTab === key ? "text-white" : color}`} />
             {label}
             <span className={`text-xs rounded-full px-1.5 ${matrixTab === key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
-              {data.standards?.length}
+              {tabCounts[key]}
             </span>
           </button>
         ))}
