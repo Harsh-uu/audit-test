@@ -44,6 +44,7 @@ export default function Login() {
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#1E3A8A] flex-col justify-between p-12">
         <div className="flex items-center gap-3">
+          <img src="/logo.svg" alt="1two.one" className="w-10 h-10" />
           <span className="text-white text-2xl font-semibold tracking-tight" style={{fontFamily:'Work Sans,sans-serif'}}>1two.one</span>
         </div>
         <div>
@@ -69,6 +70,7 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md fade-in">
           <div className="lg:hidden flex items-center gap-2 mb-8">
+            <img src="/logo.svg" alt="1two.one" className="w-7 h-7" />
             <span className="text-[#1E3A8A] text-xl font-semibold" style={{fontFamily:'Work Sans,sans-serif'}}>1two.one</span>
           </div>
 
