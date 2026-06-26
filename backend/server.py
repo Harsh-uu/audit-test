@@ -13,6 +13,7 @@ from routers.recording import router as recording_router
 from routers.processing import router as processing_router
 from routers.review import router as review_router
 from routers.admin import router as admin_router
+from routers.portfolio import router as portfolio_router
 from utils.storage import init_storage
 from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions
 from fastapi import APIRouter
@@ -42,6 +43,7 @@ api_router.include_router(recording_router, prefix="/recording", tags=["recordin
 api_router.include_router(processing_router, prefix="/processing", tags=["processing"])
 api_router.include_router(review_router, prefix="/review", tags=["review"])
 api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
+api_router.include_router(portfolio_router, prefix="/portfolio", tags=["portfolio"])
 app.include_router(api_router)
 
 @app.get("/api/health")

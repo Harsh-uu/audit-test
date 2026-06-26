@@ -2,17 +2,8 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
-  LayoutDashboard, Mic, FileText, Settings, LogOut, Shield, ChevronLeft, Menu, BookOpen, Users
+  LayoutDashboard, Mic, FileText, Settings, LogOut, Shield, ChevronLeft, Menu, BookOpen, Users, TrendingUp, Download
 } from "lucide-react";
-
-const navItems = [
-  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/meetings/new", icon: Mic, label: "New Meeting" },
-];
-
-const adminItems = [
-  { path: "/admin", icon: BookOpen, label: "Standards Library" },
-];
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -26,6 +17,16 @@ export default function Layout({ children }) {
   };
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + "/");
+
+  const navItems = [
+    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { path: "/meetings/new", icon: Mic, label: "New Meeting" },
+    { path: `/portfolio/${user?.id}`, icon: TrendingUp, label: "My Portfolio", matchBase: "/portfolio" },
+  ];
+
+  const adminItems = [
+    { path: "/admin", icon: BookOpen, label: "Standards Library" },
+  ];
 
   return (
     <div className="flex h-screen bg-[#F8F9FA] overflow-hidden">
@@ -56,13 +57,13 @@ export default function Layout({ children }) {
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map(({ path, icon: Icon, label }) => (
+          {navItems.map(({ path, icon: Icon, label, matchBase }) => (
             <Link
               key={path}
               to={path}
               data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}
               className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isActive(path)
+                isActive(matchBase || path)
                   ? "bg-[#1E3A8A] text-white"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
@@ -72,10 +73,10 @@ export default function Layout({ children }) {
             </Link>
           ))}
 
-          {user?.role === "admin" && (
+          {(user?.role === "admin" || user?.role === "manager") && (
             <>
               {!collapsed && <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Admin</div>}
-              {adminItems.map(({ path, icon: Icon, label }) => (
+              {user?.role === "admin" && adminItems.map(({ path, icon: Icon, label }) => (
                 <Link
                   key={path}
                   to={path}
@@ -88,6 +89,15 @@ export default function Layout({ children }) {
                   {!collapsed && <span>{label}</span>}
                 </Link>
               ))}
+              <Link
+                to="/admin#export"
+                data-testid="nav-evidence-export"
+                onClick={() => {/* AdminLibrary will handle hash */}}
+                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100`}
+              >
+                <Download className="w-4 h-4 flex-shrink-0" />
+                {!collapsed && <span>Evidence Export</span>}
+              </Link>
             </>
           )}
         </nav>

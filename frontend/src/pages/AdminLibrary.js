@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   Shield, Award, BookOpen, Upload, Plus, Trash2, CheckCircle, AlertCircle,
-  Users, UserPlus, X, Loader, ToggleLeft, ToggleRight, FileText, ChevronDown, ChevronUp, ArrowUp, ArrowDown
+  Users, UserPlus, X, Loader, ToggleLeft, ToggleRight, FileText, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
+  Download, TrendingUp, Calendar, Filter
 } from "lucide-react";
 
 function TabBtn({ active, onClick, children }) {
@@ -95,6 +97,7 @@ function DocCard({ doc, onToggle, onDelete }) {
 
 export default function AdminLibrary() {
   const { getAuthConfig, API } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState("cqc");
   const [standards, setStandards] = useState([]);
   const [users, setUsers] = useState([]);
@@ -115,6 +118,15 @@ export default function AdminLibrary() {
   const [templateSaving, setTemplateSaving] = useState(false);
   const [newStepTitle, setNewStepTitle] = useState("");
   const [newStepDesc, setNewStepDesc] = useState("");
+  // Export state
+  const [exportFormat, setExportFormat] = useState("csv");
+  const [exportStaffIds, setExportStaffIds] = useState([]);
+  const [exportDateFrom, setExportDateFrom] = useState("");
+  const [exportDateTo, setExportDateTo] = useState("");
+  const [exportMeetings, setExportMeetings] = useState([]);
+  const [exportSelectedMeetings, setExportSelectedMeetings] = useState([]);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportMeetingsLoading, setExportMeetingsLoading] = useState(false);
 
   useEffect(() => {
     fetchAll();
@@ -157,6 +169,54 @@ export default function AdminLibrary() {
       setTemplate(tmplRes.data || { name: "Supervision Template", description: "", steps: [] });
     } catch {}
     setLoading(false);
+  };
+
+  const fetchExportMeetings = async () => {
+    setExportMeetingsLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/admin/meetings-brief`, getAuthConfig());
+      setExportMeetings(data);
+    } catch {}
+    setExportMeetingsLoading(false);
+  };
+
+  const handleExport = async () => {
+    setExportLoading(true);
+    try {
+      const token = localStorage.getItem("supervision_token");
+      const payload = {
+        format: exportFormat,
+        staff_ids: exportStaffIds.length ? exportStaffIds : null,
+        date_from: exportDateFrom || null,
+        date_to: exportDateTo || null,
+        meeting_ids: exportSelectedMeetings.length ? exportSelectedMeetings : null,
+      };
+      const resp = await fetch(`${API}/admin/export-evidence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = exportFormat === "csv" ? "evidence_export.csv" : "evidence_export.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError("Export failed: " + err.message);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const toggleExportStaff = (uid) => {
+    setExportStaffIds(ids => ids.includes(uid) ? ids.filter(i => i !== uid) : [...ids, uid]);
+  };
+
+  const toggleExportMeeting = (mid) => {
+    setExportSelectedMeetings(ids => ids.includes(mid) ? ids.filter(i => i !== mid) : [...ids, mid]);
   };
 
   const cqcStandards = standards.filter(s => s.type === "cqc");
@@ -312,6 +372,10 @@ export default function AdminLibrary() {
           <TabBtn active={tab === "users"} onClick={() => setTab("users")}>
             <Users className="inline w-3.5 h-3.5 mr-1.5" />
             Users ({users.length})
+          </TabBtn>
+          <TabBtn active={tab === "export"} onClick={() => { setTab("export"); if (!exportMeetings.length) fetchExportMeetings(); }}>
+            <Download className="inline w-3.5 h-3.5 mr-1.5" />
+            Evidence Export
           </TabBtn>
         </div>
 
@@ -566,6 +630,7 @@ export default function AdminLibrary() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide">Email</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide">Role</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide">Portfolio</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -579,6 +644,15 @@ export default function AdminLibrary() {
                       <td className="px-4 py-3">
                         <span className={`text-xs ${u.is_active ? "text-emerald-600" : "text-red-500"}`}>{u.is_active ? "Active" : "Inactive"}</span>
                       </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => navigate(`/portfolio/${u.id}`)}
+                          className="flex items-center gap-1 text-xs text-[#1E3A8A] hover:underline"
+                          data-testid={`view-portfolio-${u.id}`}
+                        >
+                          <TrendingUp className="w-3 h-3" /> Portfolio
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -586,6 +660,145 @@ export default function AdminLibrary() {
             </div>
           </div>
         )}
+
+        {/* Evidence Export */}
+        {tab === "export" && (
+          <div data-testid="export-tab">
+            <div className="max-w-2xl">
+              <p className="text-sm text-gray-500 mb-6">
+                Export compliance evidence records across signed-off supervision meetings.
+                Filter by staff member, date range, or specific meetings. Choose PDF or CSV format.
+              </p>
+
+              {/* Format toggle */}
+              <div className="mb-5">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Export Format</label>
+                <div className="flex gap-2">
+                  {["csv", "pdf"].map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setExportFormat(f)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md border text-sm font-medium transition-colors ${
+                        exportFormat === f
+                          ? "bg-[#1E3A8A] text-white border-[#1E3A8A]"
+                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                      }`}
+                      data-testid={`format-${f}`}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {f.toUpperCase()}
+                      <span className="text-xs opacity-70">{f === "csv" ? "spreadsheet" : "formatted report"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date range */}
+              <div className="mb-5">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                  <Calendar className="inline w-3.5 h-3.5 mr-1" />
+                  Date Range (optional)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="date"
+                    value={exportDateFrom}
+                    onChange={e => setExportDateFrom(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                    data-testid="export-date-from"
+                  />
+                  <span className="text-gray-400 text-sm">to</span>
+                  <input
+                    type="date"
+                    value={exportDateTo}
+                    onChange={e => setExportDateTo(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                    data-testid="export-date-to"
+                  />
+                  {(exportDateFrom || exportDateTo) && (
+                    <button onClick={() => { setExportDateFrom(""); setExportDateTo(""); }} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Staff filter */}
+              <div className="mb-5">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                  <Users className="inline w-3.5 h-3.5 mr-1" />
+                  Staff Members (optional — leave blank for all)
+                </label>
+                <div className="flex flex-wrap gap-2 p-3 border border-gray-200 rounded-md bg-gray-50 max-h-36 overflow-y-auto">
+                  {users.filter(u => ["attendee", "manager"].includes(u.role)).map(u => (
+                    <button
+                      key={u.id}
+                      onClick={() => toggleExportStaff(u.id)}
+                      className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                        exportStaffIds.includes(u.id)
+                          ? "bg-[#1E3A8A] text-white border-[#1E3A8A]"
+                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                      }`}
+                      data-testid={`staff-chip-${u.id}`}
+                    >
+                      {exportStaffIds.includes(u.id) && <X className="w-2.5 h-2.5" />}
+                      {u.name}
+                    </button>
+                  ))}
+                </div>
+                {exportStaffIds.length > 0 && (
+                  <button onClick={() => setExportStaffIds([])} className="text-xs text-gray-400 hover:text-gray-600 mt-1">Clear selection</button>
+                )}
+              </div>
+
+              {/* Specific meetings */}
+              <div className="mb-6">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                  <Filter className="inline w-3.5 h-3.5 mr-1" />
+                  Specific Meetings (optional — overrides above filters if selected)
+                </label>
+                {exportMeetingsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-2"><Loader className="w-4 h-4 animate-spin" /> Loading meetings…</div>
+                ) : (
+                  <div className="border border-gray-200 rounded-md bg-gray-50 max-h-48 overflow-y-auto">
+                    {exportMeetings.length === 0 ? (
+                      <p className="text-xs text-gray-400 p-3">No signed-off meetings available</p>
+                    ) : (
+                      exportMeetings.map(m => (
+                        <label
+                          key={m.id}
+                          className="flex items-center gap-3 px-3 py-2 hover:bg-white cursor-pointer border-b border-gray-100 last:border-0"
+                          data-testid={`meeting-check-${m.id}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={exportSelectedMeetings.includes(m.id)}
+                            onChange={() => toggleExportMeeting(m.id)}
+                            className="w-3.5 h-3.5 accent-[#1E3A8A]"
+                          />
+                          <span className="flex-1 text-sm text-gray-800 truncate">{m.title}</span>
+                          <span className="text-xs text-gray-400 flex-shrink-0">{m.date ? m.date.slice(0, 10) : "—"}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
+                {exportSelectedMeetings.length > 0 && (
+                  <button onClick={() => setExportSelectedMeetings([])} className="text-xs text-gray-400 hover:text-gray-600 mt-1">Clear selection</button>
+                )}
+              </div>
+
+              <button
+                onClick={handleExport}
+                disabled={exportLoading}
+                className="flex items-center gap-2 bg-[#1E3A8A] text-white px-6 py-2.5 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
+                data-testid="run-export-btn"
+              >
+                <Download className="w-4 h-4" />
+                {exportLoading ? "Generating…" : `Export ${exportFormat.toUpperCase()}`}
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
     </Layout>
   );

@@ -1,0 +1,48 @@
+{
+  "summary": "Tested Staff Portfolio and Evidence Export features (both backend and frontend). All 12 backend tests passed. All frontend features verified visually.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_portfolio_features.py",
+    "/app/test_reports/pytest/portfolio_features.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_portfolio_features.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 passed)",
+    "frontend": "100%"
+  },
+  "test_credentials": "admin@supervision.com / Admin123!, staff@supervision.com / Staff123!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "All portfolio and evidence export features verified. Staff ID: 6a3e5728bb3b2159b3c93f63, Admin ID: 6a3e5727bb3b2159b3c93f61, Meeting ID: 6a3e6204373ddc91df1947cf (signed off test meeting).",
+  "verified_features": {
+    "portfolio_page_loads": "PASS - /portfolio/:userId loads correctly, shows Test Staff portfolio with 1 meeting, 1 CQC, 1 Care Cert",
+    "portfolio_stats_bar": "PASS - Shows 5 stats: Supervision Sessions (1), CQC Regulations (1), Care Cert Standards (1), Organisational Criteria (0), Total Evidence Items (2)",
+    "evidence_tabs": "PASS - CQC/Care Cert/Organisational tabs switch content",
+    "standard_card_expand": "PASS - Cards expand to show transcript excerpt",
+    "meeting_history": "PASS - Shows signed-off meetings with evidence counts",
+    "meeting_navigation": "PASS - Clicking meeting navigates to /meetings/:id/report",
+    "export_pdf_btn": "PASS - Export Portfolio PDF button exists and is clickable",
+    "my_portfolio_nav": "PASS - My Portfolio nav link in sidebar links to /portfolio/{admin_id}",
+    "staff_403": "PASS - Staff user gets 403 when trying to view another user's portfolio",
+    "admin_library_export_tab": "PASS - Evidence Export tab visible in Admin Panel tabs",
+    "export_format_toggle": "PASS - CSV and PDF format buttons visible",
+    "export_date_range": "PASS - Two date inputs present",
+    "export_staff_chips": "PASS - Staff chips (Test Manager, Test Staff) shown",
+    "export_meeting_checkboxes": "PASS - Meeting checkbox for 'test' meeting visible",
+    "run_export_btn": "PASS - Export CSV/PDF button found and clickable",
+    "users_portfolio_column": "PASS - Users table has Portfolio column with links per user"
+  }
+}

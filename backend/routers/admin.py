@@ -302,6 +302,191 @@ async def rescan_meetings_background(doc_id: str, db):
         logger.error(f"Auto-rescan failed for doc {doc_id}: {e}")
 
 
+@router.get("/meetings-brief")
+async def list_meetings_brief(db=Depends(get_db), current_user=Depends(get_current_user)):
+    """Return lightweight meeting list for the export filter UI."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    meetings = []
+    async for doc in db.meetings.find(
+        {"status": {"$in": ["signed_off", "shared"]}},
+        {"title": 1, "date": 1, "attendees": 1, "status": 1}
+    ).sort("date", -1):
+        meetings.append({
+            "id": str(doc["_id"]),
+            "title": doc.get("title", ""),
+            "date": doc.get("date", ""),
+            "attendees": [{"user_id": a.get("user_id"), "name": a.get("name")} for a in doc.get("attendees", [])],
+        })
+    return meetings
+
+
+@router.post("/export-evidence")
+async def export_evidence(data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
+    """Bulk evidence export. Accepts filters: format, staff_ids, date_from, date_to, meeting_ids."""
+    from fastapi.responses import Response as _Response
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    fmt = data.get("format", "csv")  # "pdf" | "csv"
+    staff_ids = data.get("staff_ids") or []
+    date_from = data.get("date_from")
+    date_to = data.get("date_to")
+    meeting_ids = data.get("meeting_ids") or []
+
+    # Build query
+    query: dict = {"status": {"$in": ["signed_off", "shared"]}, "analysis_id": {"$exists": True}}
+
+    if meeting_ids:
+        query["_id"] = {"$in": [ObjectId(mid) for mid in meeting_ids if mid]}
+    else:
+        if staff_ids:
+            query["attendees.user_id"] = {"$in": staff_ids}
+        if date_from or date_to:
+            date_filter: dict = {}
+            if date_from:
+                date_filter["$gte"] = date_from
+            if date_to:
+                date_filter["$lte"] = date_to
+            if date_filter:
+                query["date"] = date_filter
+
+    rows = []  # for CSV; (meeting, analysis) tuples for PDF
+    mtg_analyses = []
+    async for meeting in db.meetings.find(query).sort("date", -1):
+        if not meeting.get("analysis_id"):
+            continue
+        adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+        if not adoc:
+            continue
+        mtg_analyses.append({"meeting": meeting, "analysis": adoc})
+
+        for attendee in meeting.get("attendees", []):
+            staff_name = attendee.get("name", "Unknown")
+            for m in adoc.get("cqc_mappings", []):
+                rows.append([staff_name, meeting.get("title", ""), meeting.get("date", "")[:10],
+                             "CQC", m.get("regulation_ref", ""), m.get("regulation_name", ""),
+                             m.get("confidence", ""), m.get("status", "pending"),
+                             (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
+            for m in adoc.get("care_cert_mappings", []):
+                rows.append([staff_name, meeting.get("title", ""), meeting.get("date", "")[:10],
+                             "Care Cert", m.get("standard_ref", ""), m.get("standard_name", ""),
+                             m.get("confidence", ""), m.get("status", "pending"),
+                             (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
+            for m in adoc.get("custom_mappings", []):
+                rows.append([staff_name, meeting.get("title", ""), meeting.get("date", "")[:10],
+                             "Organisational", m.get("criterion_ref", ""), m.get("criterion_name", ""),
+                             m.get("confidence", ""), m.get("status", "pending"),
+                             (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
+
+    if fmt == "csv":
+        import csv
+        import io
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["Staff Member", "Meeting", "Date", "Evidence Type", "Reference", "Standard Name",
+                         "Confidence", "Status", "Evidence Summary"])
+        writer.writerows(rows)
+        csv_bytes = buf.getvalue().encode("utf-8-sig")  # BOM for Excel
+        return _Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="evidence_export.csv"'},
+        )
+    else:
+        # PDF — generate multi-meeting report
+        pdf_bytes = _generate_export_pdf(mtg_analyses)
+        return _Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="evidence_export.pdf"'},
+        )
+
+
+def _generate_export_pdf(mtg_analyses: list) -> bytes:
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak
+    from datetime import datetime as _dt
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+    NAVY = colors.HexColor("#1E3A8A")
+    MID_GRAY = colors.HexColor("#6B7280")
+    LIGHT = colors.HexColor("#F8FAFC")
+    PURPLE_BG = colors.HexColor("#EDE9FE")
+    BLUE_BG = colors.HexColor("#EFF6FF")
+    TEAL_BG = colors.HexColor("#F0FDF4")
+
+    title_s = ParagraphStyle("T", fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=2)
+    h2_s = ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=11, textColor=NAVY, spaceAfter=3, spaceBefore=8)
+    body_s = ParagraphStyle("B", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=2, leading=12)
+    small_s = ParagraphStyle("S", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
+
+    story = []
+    story.append(Paragraph("Supervision 2.0 — Evidence Export", small_s))
+    story.append(Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", small_s))
+    story.append(Paragraph(f"{len(mtg_analyses)} meeting(s) included", small_s))
+    story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=6))
+
+    def section_hdr(title, bg=NAVY):
+        t = Table([[Paragraph(f'<font color="white"><b>{title}</b></font>',
+                    ParagraphStyle("SH", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white))]],
+                  colWidths=[170*mm])
+        t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),bg),
+                                ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+                                ("LEFTPADDING",(0,0),(-1,-1),8)]))
+        return t
+
+    for i, item in enumerate(mtg_analyses):
+        mtg = item["meeting"]
+        ana = item["analysis"]
+        if i > 0:
+            story.append(PageBreak())
+
+        story.append(Paragraph(mtg.get("title", "Meeting"), title_s))
+        attendees = ", ".join(a.get("name", "") for a in mtg.get("attendees", []))
+        story.append(Paragraph(f'Date: {mtg.get("date", "—")} | Attendees: {attendees} | Manager: {mtg.get("sign_off_manager_name", "—")}', small_s))
+        story.append(Spacer(1, 3*mm))
+
+        for maps, label, bg, ref_key, name_key in [
+            (ana.get("cqc_mappings", []), "CQC Regulatory Evidence", PURPLE_BG, "regulation_ref", "regulation_name"),
+            (ana.get("care_cert_mappings", []), "Care Certificate Evidence", BLUE_BG, "standard_ref", "standard_name"),
+            (ana.get("custom_mappings", []), "Organisational Standards Evidence", TEAL_BG, "criterion_ref", "criterion_name"),
+        ]:
+            if not maps:
+                continue
+            story.append(Paragraph(label, h2_s))
+            hdr_row = [["Reference", "Standard", "Confidence", "Status", "Evidence Summary"]]
+            data_rows = [[
+                m.get(ref_key, ""),
+                m.get(name_key, ""),
+                m.get("confidence", "").replace("_", " ").title(),
+                m.get("status", "pending").title(),
+                (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:120],
+            ] for m in maps]
+            tbl = Table(hdr_row + data_rows, colWidths=[22*mm, 40*mm, 28*mm, 18*mm, 62*mm])
+            tbl.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(-1,0),NAVY),("TEXTCOLOR",(0,0),(-1,0),colors.white),
+                ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, bg]),
+                ("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#E5E7EB")),
+                ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
+                ("LEFTPADDING",(0,0),(-1,-1),4),("WORDWRAP",(0,0),(-1,-1),True),
+            ]))
+            story.append(tbl)
+            story.append(Spacer(1, 2*mm))
+
+    story.append(Spacer(1, 6*mm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GRAY))
+    story.append(Paragraph("Supervision 2.0 — Confidential evidence export.", small_s))
+    doc.build(story)
+    return buf.getvalue()
+
+
 @router.get("/stats")
 async def get_stats(db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
