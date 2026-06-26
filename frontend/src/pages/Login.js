@@ -170,14 +170,6 @@ export default function Login() {
             )}
           </p>
 
-          {mode === "login" && (
-            <div className="mt-6 bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-700">
-              <strong>Demo credentials:</strong><br/>
-              Admin: admin@supervision.com / Admin123!<br/>
-              Manager: manager@supervision.com / Manager123!<br/>
-              Staff: staff@supervision.com / Staff123!
-            </div>
-          )}
         </div>
       </div>
     </div>
