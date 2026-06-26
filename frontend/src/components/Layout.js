@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
-  LayoutDashboard, Mic, LogOut, Shield, ChevronLeft, Menu, BookOpen,
+  LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
   TrendingUp, Download, BarChart2, X
 } from "lucide-react";
 
@@ -33,13 +33,13 @@ export default function Layout({ children }) {
       <div className="flex items-center justify-between p-4 border-b border-gray-200 h-16 flex-shrink-0">
         {!collapsed && (
           <Link to="/dashboard" onClick={onNavClick} className="flex items-center gap-2">
-            <Shield className="w-6 h-6 text-[#1E3A8A]" />
-            <span className="font-semibold text-[#1E3A8A] text-lg tracking-tight" style={{ fontFamily: "Work Sans,sans-serif" }}>
-              Supervision
+            <img src="/logo.svg" alt="1two.one" className="w-8 h-8 flex-shrink-0" />
+            <span className="font-semibold text-[#1E3A8A] text-lg tracking-tight" style={{ fontFamily: "Poppins,sans-serif" }}>
+              1two.one
             </span>
           </Link>
         )}
-        {collapsed && <Shield className="w-6 h-6 text-[#1E3A8A] mx-auto" />}
+        {collapsed && <img src="/logo.svg" alt="1two.one" className="w-7 h-7 mx-auto" />}
         <button
           onClick={() => { setCollapsed(!collapsed); }}
           className="p-1 rounded hover:bg-gray-100 text-gray-500 hidden lg:block"
@@ -179,9 +179,9 @@ export default function Layout({ children }) {
             <Menu className="w-5 h-5" />
           </button>
           <Link to="/dashboard" className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-[#1E3A8A]" />
-            <span className="font-semibold text-[#1E3A8A] text-base tracking-tight" style={{ fontFamily: "Work Sans,sans-serif" }}>
-              Supervision
+            <img src="/logo.svg" alt="1two.one" className="w-7 h-7 flex-shrink-0" />
+            <span className="font-semibold text-[#1E3A8A] text-base tracking-tight" style={{ fontFamily: "Poppins,sans-serif" }}>
+              1two.one
             </span>
           </Link>
         </div>
