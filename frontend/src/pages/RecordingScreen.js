@@ -62,67 +62,118 @@ export default function RecordingScreen() {
     setStage("ready");
   };
 
+  const getBestMimeType = () => {
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
+      "audio/mp4",
+      "audio/mpeg",
+    ];
+    for (const t of candidates) {
+      try { if (MediaRecorder.isTypeSupported(t)) return t; } catch {}
+    }
+    return ""; // let browser decide
+  };
+
   const startRecording = async () => {
     setError("");
+    let stream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
-      const recorder = new MediaRecorder(stream, { mimeType });
-
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0 && recorder.state !== "paused") {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-      recorder.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        handleUpload();
-      };
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
-
-      const ts = new Date().toISOString();
-      await axios.post(`${API}/recording/${meetingId}/start`, { timestamp: ts }, getAuthConfig());
-      addEvent("Recording started", ts, "start");
-      setStage("recording");
-
-      elapsedRef.current = 0;
-      timerRef.current = setInterval(() => {
-        elapsedRef.current += 1;
-        setElapsed(elapsedRef.current);
-      }, 1000);
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     } catch (err) {
-      if (err.name === "NotAllowedError") {
-        setError("Microphone access denied. Please allow microphone access in your browser settings.");
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setError("Microphone access was denied. Please click the camera/microphone icon in your browser address bar and allow access, then try again.");
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        setError("No microphone found. Please connect a microphone and try again.");
+      } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+        setError("Microphone is in use by another application. Please close other apps using the microphone and try again.");
       } else {
-        setError(`Failed to start recording: ${err.message}`);
+        setError(`Could not access microphone: ${err.message}`);
+      }
+      return;
+    }
+
+    // Build MediaRecorder with best available format
+    let recorder;
+    try {
+      const mimeType = getBestMimeType();
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    } catch (err) {
+      // Fallback: try with no options at all
+      try {
+        recorder = new MediaRecorder(stream);
+      } catch (e2) {
+        stream.getTracks().forEach(t => t.stop());
+        setError(`Your browser does not support audio recording. Please use Chrome or Firefox.`);
+        return;
       }
     }
+
+    audioChunksRef.current = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        audioChunksRef.current.push(e.data);
+      }
+    };
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      handleUpload();
+    };
+    recorder.onerror = (e) => {
+      setError(`Recording error: ${e.error?.message || "unknown error"}`);
+      setStage("stopped");
+    };
+
+    try {
+      recorder.start(1000);
+    } catch (err) {
+      stream.getTracks().forEach(t => t.stop());
+      setError(`Failed to start recording: ${err.message}`);
+      return;
+    }
+
+    mediaRecorderRef.current = recorder;
+
+    // Log start event (non-blocking — don't let API failures break recording)
+    const ts = new Date().toISOString();
+    axios.post(`${API}/recording/${meetingId}/start`, { timestamp: ts }, getAuthConfig())
+      .catch(e => console.warn("Failed to log recording start:", e.message));
+    addEvent("Recording started", ts, "start");
+    setStage("recording");
+
+    elapsedRef.current = 0;
+    timerRef.current = setInterval(() => {
+      elapsedRef.current += 1;
+      setElapsed(elapsedRef.current);
+    }, 1000);
   };
 
   const pauseRecording = async () => {
-    if (!mediaRecorderRef.current) return;
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== "recording") return;
     mediaRecorderRef.current.pause();
     clearInterval(timerRef.current);
     const ts = new Date().toISOString();
     setPauseStart(ts);
-    await axios.post(`${API}/recording/${meetingId}/pause`, { timestamp: ts }, getAuthConfig());
-    addEvent("Recording paused", ts, "pause");
     setStage("paused");
+    axios.post(`${API}/recording/${meetingId}/pause`, { timestamp: ts }, getAuthConfig())
+      .catch(e => console.warn("Failed to log pause:", e.message));
+    addEvent("Recording paused", ts, "pause");
   };
 
   const resumeRecording = async () => {
-    if (!mediaRecorderRef.current) return;
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== "paused") return;
     mediaRecorderRef.current.resume();
     const ts = new Date().toISOString();
     const ps = pauseStart;
     const pauseDurationSec = ps ? Math.floor((new Date(ts) - new Date(ps)) / 1000) : 0;
     setPausedTotal(prev => prev + pauseDurationSec);
     setPauseStart(null);
-    await axios.post(`${API}/recording/${meetingId}/resume`, { timestamp: ts, pause_start: ps }, getAuthConfig());
-    addEvent("Recording resumed", ts, "resume");
     setStage("recording");
+    axios.post(`${API}/recording/${meetingId}/resume`, { timestamp: ts, pause_start: ps }, getAuthConfig())
+      .catch(e => console.warn("Failed to log resume:", e.message));
+    addEvent("Recording resumed", ts, "resume");
 
     timerRef.current = setInterval(() => {
       elapsedRef.current += 1;
@@ -131,12 +182,13 @@ export default function RecordingScreen() {
   };
 
   const stopRecording = async () => {
-    if (!mediaRecorderRef.current) return;
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") return;
     clearInterval(timerRef.current);
     const ts = new Date().toISOString();
-    await axios.post(`${API}/recording/${meetingId}/stop`, { timestamp: ts }, getAuthConfig());
-    addEvent("Recording stopped", ts, "stop");
     setStage("stopped");
+    axios.post(`${API}/recording/${meetingId}/stop`, { timestamp: ts }, getAuthConfig())
+      .catch(e => console.warn("Failed to log stop:", e.message));
+    addEvent("Recording stopped", ts, "stop");
     mediaRecorderRef.current.stop();
   };
 
