@@ -12,7 +12,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - **Frontend:** React (JavaScript), Tailwind CSS, Shadcn UI, Lucide React icons
 - **Backend:** FastAPI (Python), MongoDB, Motor (async MongoDB driver)
 - **AI:** OpenAI GPT-4o (via emergentintegrations) for analysis, OpenAI Whisper-1 for transcription
-- **Email:** Resend (framework implemented, needs RESEND_API_KEY)
+- **Email:** Resend ✅ (configured with live API key)
 - **Storage:** Emergent Object Storage (for audio files and standards documents)
 - **Auth:** JWT (Bearer token in localStorage + httpOnly cookies)
 
