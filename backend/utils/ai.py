@@ -181,6 +181,73 @@ async def analyze_meeting(
         cc_lines.append(line)
     cc_context = "\n".join(cc_lines)
 
+    # Custom/library document standards
+    custom_context = ""
+    if custom_standards:
+        custom_lines = []
+        for doc in custom_standards:
+            doc_id = doc.get("id", "")
+            doc_name = doc.get("label") or doc.get("filename", "Unknown Document")
+            criteria = doc.get("extracted_criteria", [])
+            if criteria:
+                custom_lines.append(f"\nDocument: {doc_name} (document_id: {doc_id})")
+                for c in criteria:
+                    custom_lines.append(f"  - {c['ref']}: {c['name']} — {c.get('description', '')}")
+        if custom_lines:
+            custom_context = "\n\nCUSTOM / ORGANISATIONAL STANDARDS TO MAP AGAINST:\n" + "\n".join(custom_lines)
+
+    pause_note = ""
+    if paused_periods:
+        pause_note = f"\n\nNOTE: The recording was paused {len(paused_periods)} time(s) during this meeting. Paused sections are not included in the transcript."
+
+    user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
+
+TRANSCRIPT:{pause_note}
+{transcript_text}
+
+CQC REGULATIONS TO MAP AGAINST:
+{cqc_context}
+
+CARE CERTIFICATE STANDARDS TO MAP AGAINST:
+{cc_context}{custom_context}
+
+Provide your analysis as JSON. Only map regulations/standards where there is actual evidence in the transcript."""
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"analysis_{uuid.uuid4()}",
+        system_message=ANALYSIS_SYSTEM_PROMPT,
+    ).with_model("openai", "gpt-4o")
+
+    full_response = ""
+    async for event in chat.stream_message(UserMessage(text=user_prompt)):
+        from emergentintegrations.llm.chat import TextDelta, StreamDone
+        if isinstance(event, TextDelta):
+            full_response += event.content
+        elif isinstance(event, StreamDone):
+            break
+
+    # Parse JSON from response
+    try:
+        text = full_response.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+        result = json.loads(text)
+        if "custom_mappings" not in result:
+            result["custom_mappings"] = []
+        return result
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse AI response: {e}\nResponse: {full_response[:500]}")
+        return {
+            "summary": "Analysis could not be parsed. Please review the transcript manually.",
+            "actions": [],
+            "risks": [],
+            "cqc_mappings": [],
+            "care_cert_mappings": [],
+            "custom_mappings": [],
+        }
+
     pause_note = ""
     if paused_periods:
         pause_note = f"\n\nNOTE: The recording was paused {len(paused_periods)} time(s) during this meeting. Paused sections are not included in the transcript."

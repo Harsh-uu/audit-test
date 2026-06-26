@@ -527,3 +527,211 @@ async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_
     except Exception as e:
         logger.error(f"Email send failed: {e}")
         return {"message": "Email sending requires Resend API key configuration", "error": str(e)}
+
+
+@router.get("/{meeting_id}/export-pdf")
+async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depends(get_db), current_user=Depends(get_current_user)):
+    from fastapi.responses import Response
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if meeting.get("status") != "signed_off":
+        raise HTTPException(status_code=400, detail="PDF export is only available for signed-off meetings")
+
+    # Gather analysis
+    analysis = {}
+    if meeting.get("analysis_id"):
+        adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+        if adoc:
+            analysis = adoc
+
+    transcript_text = ""
+    if include_transcript and meeting.get("transcript_id"):
+        tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
+        if tdoc:
+            transcript_text = tdoc.get("text", "")
+
+    pdf_bytes = _generate_pdf(meeting, analysis, transcript_text)
+    safe_title = "".join(c for c in meeting.get("title", "report") if c.isalnum() or c in " _-")
+    filename = f"supervision_{safe_title[:40].strip().replace(' ', '_')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str) -> bytes:
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+
+    NAVY = colors.HexColor("#1E3A8A")
+    PURPLE_BG = colors.HexColor("#EDE9FE")
+    BLUE_BG = colors.HexColor("#EFF6FF")
+    TEAL_BG = colors.HexColor("#F0FDF4")
+    LIGHT_GRAY = colors.HexColor("#F8FAFC")
+    MID_GRAY = colors.HexColor("#6B7280")
+    CONFIDENCE_COLORS = {
+        "likely_evidence": colors.HexColor("#059669"),
+        "needs_review": colors.HexColor("#D97706"),
+        "not_enough_evidence": colors.HexColor("#9CA3AF"),
+    }
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("Title", fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=4)
+    h2_style = ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=12, textColor=NAVY, spaceAfter=4, spaceBefore=12)
+    h3_style = ParagraphStyle("H3", fontName="Helvetica-Bold", fontSize=10, textColor=NAVY, spaceAfter=2, spaceBefore=8)
+    body_style = ParagraphStyle("Body", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=3, leading=13)
+    small_style = ParagraphStyle("Small", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=2, leading=11)
+    label_style = ParagraphStyle("Label", fontName="Helvetica-Bold", fontSize=8, textColor=MID_GRAY, spaceAfter=1)
+    mono_style = ParagraphStyle("Mono", fontName="Courier", fontSize=8, textColor=colors.HexColor("#374151"), leading=12, spaceAfter=4)
+
+    def section_header(title, bg=NAVY):
+        data = [[Paragraph(f'<font color="white"><b>{title}</b></font>', ParagraphStyle("SH", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white))]]
+        t = Table(data, colWidths=[170*mm])
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), bg), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("LEFTPADDING", (0, 0), (-1, -1), 8)]))
+        return t
+
+    def evidence_card(ref, name, badge_text, evidence_summary, excerpt, confidence, bg):
+        conf_label = {"likely_evidence": "Likely Evidence", "needs_review": "Needs Review", "not_enough_evidence": "Not Enough Evidence"}.get(confidence, confidence)
+        conf_color = CONFIDENCE_COLORS.get(confidence, MID_GRAY)
+        rows = [[Paragraph(f'<b>{ref}</b> — {name}', body_style), Paragraph(f'<font color="{conf_color.hexval()}"><b>{conf_label}</b></font>', small_style)]]
+        if badge_text:
+            rows.append([Paragraph(f'<i>{badge_text}</i>', small_style), ""])
+        if evidence_summary:
+            rows.append([Paragraph(evidence_summary, small_style), ""])
+        if excerpt:
+            rows.append([Paragraph(f'<i>"{excerpt}"</i>', small_style), ""])
+        t = Table(rows, colWidths=[130*mm, 40*mm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), bg),
+            ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
+            ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+        ]))
+        return t
+
+    story = []
+
+    # ── Header ──────────────────────────────────────────────────────────
+    story.append(Paragraph("Supervision 2.0", ParagraphStyle("App", fontName="Helvetica", fontSize=9, textColor=MID_GRAY)))
+    story.append(Paragraph(meeting.get("title", "Meeting Report"), title_style))
+    story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=6))
+
+    # Meeting metadata table
+    sign_off = meeting.get("sign_off_record", {})
+    meta_rows = [
+        ["Date", meeting.get("date", "—"), "Status", meeting.get("status", "—").replace("_", " ").title()],
+        ["Manager", meeting.get("sign_off_manager_name", "—"), "Signed off by", sign_off.get("signed_by_name", "—")],
+        ["Attendees", ", ".join([a.get("name", "") for a in meeting.get("attendees", [])]), "Signed at", sign_off.get("signed_at", "—")[:16] if sign_off.get("signed_at") else "—"],
+    ]
+    meta_table = Table(meta_rows, colWidths=[28*mm, 57*mm, 28*mm, 57*mm])
+    meta_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"), ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"), ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, 0), (0, -1), MID_GRAY), ("TEXTCOLOR", (2, 0), (2, -1), MID_GRAY),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT_GRAY), ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+    ]))
+    story.append(meta_table)
+
+    # ── Summary ──────────────────────────────────────────────────────────
+    story.append(Spacer(1, 6*mm))
+    story.append(section_header("Meeting Summary"))
+    summary = analysis.get("edited_summary") or analysis.get("summary", "No summary available.")
+    story.append(Spacer(1, 2*mm))
+    story.append(Paragraph(summary, body_style))
+
+    # ── Actions ──────────────────────────────────────────────────────────
+    actions = analysis.get("actions", [])
+    if actions:
+        story.append(Spacer(1, 4*mm))
+        story.append(section_header("Action Items"))
+        story.append(Spacer(1, 2*mm))
+        action_rows = [["#", "Action", "Assigned To", "Due Date"]]
+        for i, a in enumerate(actions, 1):
+            action_rows.append([str(i), a.get("text", ""), a.get("assigned_to") or "—", a.get("due_date") or "—"])
+        at = Table(action_rows, colWidths=[8*mm, 100*mm, 35*mm, 27*mm])
+        at.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY]),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(at)
+
+    # ── Risks ──────────────────────────────────────────────────────────
+    risks = analysis.get("risks", [])
+    if risks:
+        story.append(Spacer(1, 4*mm))
+        story.append(section_header("Risks & Concerns", bg=colors.HexColor("#7F1D1D")))
+        story.append(Spacer(1, 2*mm))
+        for r in risks:
+            sev = r.get("severity", "").upper()
+            sev_color = {"HIGH": "#DC2626", "MEDIUM": "#D97706", "LOW": "#6B7280"}.get(sev, "#6B7280")
+            story.append(Paragraph(f'<font color="{sev_color}"><b>[{sev}]</b></font> {r.get("text", "")}', body_style))
+
+    # ── CQC Evidence ──────────────────────────────────────────────────────
+    cqc_maps = analysis.get("cqc_mappings", [])
+    if cqc_maps:
+        story.append(Spacer(1, 4*mm))
+        story.append(section_header("CQC Regulatory Evidence", bg=colors.HexColor("#4C1D95")))
+        story.append(Spacer(1, 2*mm))
+        for m in cqc_maps:
+            kq = ", ".join(m.get("key_questions", []))
+            badge = f"Key Questions: {kq}" if kq else ""
+            story.append(evidence_card(m.get("regulation_ref", ""), m.get("regulation_name", ""), badge, m.get("evidence_summary", ""), m.get("transcript_excerpt", ""), m.get("confidence", ""), PURPLE_BG))
+            story.append(Spacer(1, 2*mm))
+
+    # ── Care Certificate Evidence ─────────────────────────────────────────
+    cc_maps = analysis.get("care_cert_mappings", [])
+    if cc_maps:
+        story.append(Spacer(1, 4*mm))
+        story.append(section_header("Care Certificate Evidence", bg=colors.HexColor("#1E40AF")))
+        story.append(Spacer(1, 2*mm))
+        for m in cc_maps:
+            badge = f"Outcome {m['outcome_ref']}: {m['outcome_name']}" if m.get("outcome_ref") else ""
+            story.append(evidence_card(m.get("standard_ref", ""), m.get("standard_name", ""), badge, m.get("evidence_summary", ""), m.get("transcript_excerpt", ""), m.get("confidence", ""), BLUE_BG))
+            story.append(Spacer(1, 2*mm))
+
+    # ── Custom / Organisational Evidence ─────────────────────────────────
+    custom_maps = analysis.get("custom_mappings", [])
+    if custom_maps:
+        story.append(Spacer(1, 4*mm))
+        story.append(section_header("Organisational Standards Evidence", bg=colors.HexColor("#065F46")))
+        story.append(Spacer(1, 2*mm))
+        for m in custom_maps:
+            badge = m.get("document_name", "")
+            story.append(evidence_card(m.get("criterion_ref", ""), m.get("criterion_name", ""), badge, m.get("evidence_summary", ""), m.get("transcript_excerpt", ""), m.get("confidence", ""), TEAL_BG))
+            story.append(Spacer(1, 2*mm))
+
+    # ── Transcript (optional) ─────────────────────────────────────────────
+    if transcript_text:
+        story.append(Spacer(1, 4*mm))
+        story.append(section_header("Meeting Transcript (Anonymised)", bg=colors.HexColor("#374151")))
+        story.append(Spacer(1, 2*mm))
+        story.append(Paragraph("Names in this transcript have been replaced with initials.", small_style))
+        # Split transcript into paragraphs to avoid huge single text block
+        for chunk in transcript_text.split("\n"):
+            if chunk.strip():
+                story.append(Paragraph(chunk.strip(), mono_style))
+
+    # ── Footer note ───────────────────────────────────────────────────────
+    story.append(Spacer(1, 8*mm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GRAY))
+    from datetime import datetime as _dt
+    story.append(Paragraph(f"Generated by Supervision 2.0 on {_dt.now().strftime('%d %b %Y %H:%M')} UTC. This document is confidential.", small_style))
+
+    doc.build(story)
+    return buf.getvalue()

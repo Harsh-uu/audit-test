@@ -52,9 +52,15 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         cqc_standards = await db.standards_entries.find({"type": "cqc", "is_active": True}).to_list(50)
         care_cert_standards = await db.standards_entries.find({"type": "care_cert", "is_active": True}).to_list(20)
 
+        # Load active parsed library documents
+        custom_standards = []
+        async for doc in db.standards_documents.find({"is_active": True, "parse_status": "parsed"}):
+            doc["id"] = str(doc["_id"])
+            custom_standards.append(doc)
+
         # Analyze
-        logger.info(f"Starting AI analysis for meeting {meeting_id}")
-        analysis_result = await analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods)
+        logger.info(f"Starting AI analysis for meeting {meeting_id} with {len(custom_standards)} custom docs")
+        analysis_result = await analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards)
 
         # Add status field to each mapping and enrich CQC with key_questions
         cqc_kq_map = {s["reference"]: s.get("key_questions", []) for s in cqc_standards}
@@ -65,6 +71,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
             if not item.get("key_questions"):
                 item["key_questions"] = cqc_kq_map.get(item.get("regulation_ref", ""), [])
         for item in analysis_result.get("care_cert_mappings", []):
+            item.setdefault("status", "pending")
+            item.setdefault("edited_evidence_summary", None)
+            item.setdefault("notes", "")
+        for item in analysis_result.get("custom_mappings", []):
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")

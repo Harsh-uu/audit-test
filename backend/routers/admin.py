@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Form
 from pydantic import BaseModel, EmailStr
 from bson import ObjectId
 from datetime import datetime, timezone
@@ -128,8 +128,8 @@ async def delete_standard(standard_id: str, db=Depends(get_db), current_user=Dep
 
 @router.get("/standards/documents")
 async def list_documents(db=Depends(get_db), current_user=Depends(get_current_user)):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
     docs = []
     async for doc in db.standards_documents.find({}).sort("created_at", -1):
         docs.append(doc_to_dict(doc))
@@ -138,41 +138,112 @@ async def list_documents(db=Depends(get_db), current_user=Depends(get_current_us
 
 @router.post("/standards/upload")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    label: str = Form(""),
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
 
     file_data = await file.read()
     if len(file_data) == 0:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    file_ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "pdf"
-    storage_path = f"standards/docs/{uuid.uuid4()}.{file_ext}"
+    allowed_ext = {"pdf", "docx", "txt", "md", "csv"}
+    file_ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "txt"
+    if file_ext not in allowed_ext:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: .{file_ext}. Allowed: {', '.join(allowed_ext)}")
 
+    storage_path = f"standards/docs/{uuid.uuid4()}.{file_ext}"
     try:
-        result = put_object(storage_path, file_data, file.content_type or "application/pdf")
+        result = put_object(storage_path, file_data, file.content_type or "application/octet-stream")
         actual_path = result.get("path", storage_path)
     except Exception as e:
-        logger.error(f"Document upload failed: {e}")
+        logger.error(f"Document storage failed: {e}")
         actual_path = storage_path
 
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "filename": file.filename,
+        "label": label or file.filename,
         "storage_path": actual_path,
-        "content_type": file.content_type or "application/pdf",
+        "content_type": file.content_type or "application/octet-stream",
         "size_bytes": len(file_data),
-        "parse_status": "uploaded",
+        "parse_status": "parsing",
+        "is_active": True,
         "uploaded_by": current_user["id"],
+        "uploaded_by_name": current_user.get("name", ""),
         "created_at": now,
     }
     result = await db.standards_documents.insert_one(doc)
-    doc["id"] = str(result.inserted_id)
+    doc_id = str(result.inserted_id)
+    doc["id"] = doc_id
+
+    # Background: extract text + AI criteria extraction
+    background_tasks.add_task(parse_document_background, doc_id, file_data, file.filename, label or file.filename, db)
+
     del doc["_id"]
     return doc
+
+
+async def parse_document_background(doc_id: str, file_data: bytes, filename: str, label: str, db):
+    """Extract text and run AI criteria extraction in background."""
+    try:
+        from utils.document_parser import extract_text
+        from utils.ai import extract_document_criteria
+
+        text = extract_text(file_data, filename)
+        if not text.strip():
+            await db.standards_documents.update_one(
+                {"_id": ObjectId(doc_id)},
+                {"$set": {"parse_status": "failed", "parse_error": "No text could be extracted"}}
+            )
+            return
+
+        criteria_result = await extract_document_criteria(text, label)
+        criteria = criteria_result.get("criteria", [])
+        doc_summary = criteria_result.get("document_summary", "")
+
+        await db.standards_documents.update_one(
+            {"_id": ObjectId(doc_id)},
+            {"$set": {
+                "parse_status": "parsed",
+                "extracted_text": text[:5000],  # Store a preview only
+                "document_summary": doc_summary,
+                "extracted_criteria": criteria,
+                "criteria_count": len(criteria),
+                "parsed_at": datetime.now(timezone.utc).isoformat(),
+            }}
+        )
+        logger.info(f"Document {doc_id} parsed: {len(criteria)} criteria extracted")
+    except Exception as e:
+        logger.error(f"Document parse failed for {doc_id}: {e}")
+        await db.standards_documents.update_one(
+            {"_id": ObjectId(doc_id)},
+            {"$set": {"parse_status": "failed", "parse_error": str(e)}}
+        )
+
+
+@router.patch("/standards/documents/{doc_id}")
+async def update_document(doc_id: str, data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
+    allowed = {"is_active", "label"}
+    update = {k: v for k, v in data.items() if k in allowed}
+    if not update:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    await db.standards_documents.update_one({"_id": ObjectId(doc_id)}, {"$set": update})
+    return {"message": "Updated"}
+
+
+@router.delete("/standards/documents/{doc_id}")
+async def delete_document(doc_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
+    await db.standards_documents.delete_one({"_id": ObjectId(doc_id)})
+    return {"message": "Deleted"}
 
 
 @router.get("/stats")

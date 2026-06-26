@@ -6,8 +6,7 @@ import Layout from "@/components/Layout";
 import {
   FileText, CheckCircle, Clock, Edit3, Check, X, Flag, ChevronDown, ChevronUp,
   Send, MessageSquare, ArrowLeft, AlertTriangle, Loader, Shield, Award, Pause, Plus, Trash2, History
-} from "lucide-react";
-import { anonymiseTranscript } from "@/utils/anonymise";
+} from "lucide-react";import { anonymiseTranscript } from "@/utils/anonymise";
 
 const CONFIDENCE_CONFIG = {
   likely_evidence: { label: "Likely Evidence", color: "bg-emerald-100 text-emerald-800 border-emerald-200", dot: "bg-emerald-500" },
@@ -54,9 +53,17 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(mapping.edited_evidence_summary || mapping.evidence_summary);
 
-  const refLabel = type === "cqc" ? mapping.regulation_ref : mapping.standard_ref;
-  const refName = type === "cqc" ? mapping.regulation_name : mapping.standard_name;
+  const refLabel = type === "cqc" ? mapping.regulation_ref : type === "custom" ? mapping.criterion_ref : mapping.standard_ref;
+  const refName = type === "cqc" ? mapping.regulation_name : type === "custom" ? mapping.criterion_name : mapping.standard_name;
   const statusCfg = EVIDENCE_STATUS_CONFIG[mapping.status] || EVIDENCE_STATUS_CONFIG.pending;
+
+  const cardBg = type === "cqc" ? "bg-purple-50 border-b border-purple-100" : type === "custom" ? "bg-teal-50 border-b border-teal-100" : "bg-blue-50 border-b border-blue-100";
+  const typeLabel = type === "cqc" ? "CQC" : type === "custom" ? "Policy" : "Care Cert";
+  const typeIcon = type === "cqc"
+    ? <Shield className="w-3.5 h-3.5 text-[#1E3A8A] flex-shrink-0" />
+    : type === "custom"
+    ? <FileText className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
+    : <Award className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />;
 
   const handleAction = async (status) => {
     await onUpdateEvidence(mapping.id, { status });
@@ -70,15 +77,13 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
   return (
     <div className={`border rounded-lg overflow-hidden mb-3 ${mapping.status === "rejected" ? "opacity-60" : ""}`} data-testid={`evidence-card-${mapping.id}`}>
       <div
-        className={`flex items-center justify-between p-3 cursor-pointer ${type === "cqc" ? "bg-purple-50 border-b border-purple-100" : "bg-blue-50 border-b border-blue-100"}`}
+        className={`flex items-center justify-between p-3 cursor-pointer ${cardBg}`}
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex flex-col min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            {type === "cqc"
-              ? <Shield className="w-3.5 h-3.5 text-[#1E3A8A] flex-shrink-0" />
-              : <Award className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex-shrink-0">{type === "cqc" ? "CQC" : "Care Cert"}</span>
+            {typeIcon}
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex-shrink-0">{typeLabel}</span>
             <span className="text-xs font-medium text-gray-900 truncate">{refLabel} — {refName}</span>
           </div>
           {type === "care_cert" && mapping.outcome_ref && (
@@ -91,6 +96,13 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
           {type === "cqc" && mapping.key_questions?.length > 0 && (
             <div className="ml-9 mt-1 flex flex-wrap gap-1" data-testid={`key-questions-${mapping.id}`}>
               {mapping.key_questions.map(q => <KeyQuestionBadge key={q} label={q} />)}
+            </div>
+          )}
+          {type === "custom" && mapping.document_name && (
+            <div className="ml-9 mt-0.5">
+              <span className="inline-flex items-center gap-1 text-xs text-teal-700 font-medium bg-teal-100 border border-teal-200 rounded px-1.5 py-0.5">
+                {mapping.document_name}
+              </span>
             </div>
           )}
         </div>
@@ -224,6 +236,11 @@ export default function MeetingReport() {
   const [newAction, setNewAction] = useState({ text: "", assigned_to: "", due_date: "" });
   const [auditTrail, setAuditTrail] = useState(null);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [includeTranscript, setIncludeTranscript] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailMessage, setEmailMessage] = useState("");
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
   const isInReview = meeting?.status === "in_review";
@@ -265,6 +282,50 @@ export default function MeetingReport() {
       setAuditLoading(false);
     }
   }, [meetingId]);
+
+  const exportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const token = localStorage.getItem("supervision_token");
+      const resp = await fetch(`${API}/review/${meetingId}/export-pdf?include_transcript=${includeTranscript}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `supervision_report_${meetingId.slice(-6)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("PDF export failed: " + err.message);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const sendReport = async () => {
+    const attendeeEmails = (meeting?.attendees || []).map(a => a.email).filter(Boolean);
+    if (!attendeeEmails.length) {
+      alert("No attendee email addresses found on this meeting.");
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      await axios.post(`${API}/review/${meetingId}/send-email`, {
+        recipients: attendeeEmails,
+        message: emailMessage,
+      }, getAuthConfig());
+      setShowEmailModal(false);
+      setEmailMessage("");
+      setActionMessage("Report emailed to attendees.");
+    } catch (err) {
+      alert("Failed to send email: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   useEffect(() => {
     fetchMeeting();
@@ -444,6 +505,35 @@ export default function MeetingReport() {
                 <Shield className="w-4 h-4" />
                 Sign Off
               </button>
+            )}
+            {isSignedOff && canSignOff && (
+              <div className="flex items-center gap-2">
+                {/* PDF Export */}
+                <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-md shadow-sm">
+                  <button
+                    onClick={exportPdf}
+                    disabled={exportingPdf}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60 rounded-l-md"
+                    data-testid="export-pdf-btn"
+                  >
+                    <FileText className="w-4 h-4 text-gray-500" />
+                    {exportingPdf ? "Generating…" : "Export PDF"}
+                  </button>
+                  <div className="border-l border-gray-200 px-2 py-2 flex items-center gap-1.5">
+                    <input type="checkbox" id="include-transcript" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
+                    <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none">+ Transcript</label>
+                  </div>
+                </div>
+                {/* Send Report */}
+                <button
+                  onClick={() => setShowEmailModal(true)}
+                  className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors"
+                  data-testid="send-report-btn"
+                >
+                  <Send className="w-4 h-4" />
+                  Send to Attendees
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -793,7 +883,7 @@ export default function MeetingReport() {
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-semibold text-gray-900" style={{fontFamily:'Work Sans,sans-serif'}}>Compliance Evidence</h2>
                   <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>{(analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0)} items</span>
+                    <span>{(analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0)} items</span>
                   </div>
                 </div>
 
@@ -813,7 +903,7 @@ export default function MeetingReport() {
 
                 {/* Care Cert */}
                 {analysis.care_cert_mappings?.length > 0 && (
-                  <div>
+                  <div className="mb-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Award className="w-3.5 h-3.5 text-emerald-600" />
                       <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Care Certificate</h3>
@@ -825,12 +915,64 @@ export default function MeetingReport() {
                   </div>
                 )}
 
-                {(!analysis.cqc_mappings?.length && !analysis.care_cert_mappings?.length) && (
+                {/* Custom / Organisational */}
+                {analysis.custom_mappings?.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-3.5 h-3.5 text-teal-600" />
+                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Organisational Standards</h3>
+                      <span className="ml-auto text-xs text-gray-400">{analysis.custom_mappings.length}</span>
+                    </div>
+                    {analysis.custom_mappings.map(m => (
+                      <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="custom" />
+                    ))}
+                  </div>
+                )}
+
+                {(!analysis.cqc_mappings?.length && !analysis.care_cert_mappings?.length && !analysis.custom_mappings?.length) && (
                   <div className="text-center py-12 text-gray-400">
                     <Shield className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     <p className="text-sm">No evidence mappings generated</p>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Email modal */}
+        {showEmailModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900">Send Report to Attendees</h3>
+                <button onClick={() => setShowEmailModal(false)}><X className="w-4 h-4 text-gray-400" /></button>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                This will email a link to the signed-off report to all attendees who have an email address on record.
+              </p>
+              <div className="mb-3 p-3 bg-gray-50 rounded-md text-xs text-gray-500">
+                <strong>Recipients:</strong> {(meeting?.attendees || []).map(a => a.name).join(", ") || "No attendees"}
+              </div>
+              <textarea
+                value={emailMessage}
+                onChange={e => setEmailMessage(e.target.value)}
+                placeholder="Optional personal message to include in the email…"
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none mb-4"
+                data-testid="email-message-input"
+              />
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setShowEmailModal(false)} className="px-4 py-2 text-sm border border-gray-300 text-gray-600 rounded-md hover:bg-gray-50">Cancel</button>
+                <button
+                  onClick={sendReport}
+                  disabled={sendingEmail}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-600 text-white rounded-md font-medium hover:bg-emerald-700 disabled:opacity-60"
+                  data-testid="confirm-send-email-btn"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {sendingEmail ? "Sending…" : "Send Email"}
+                </button>
               </div>
             </div>
           </div>
