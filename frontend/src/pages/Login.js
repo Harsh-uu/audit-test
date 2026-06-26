@@ -45,10 +45,10 @@ export default function Login() {
       <div className="hidden lg:flex lg:w-1/2 bg-[#1E3A8A] flex-col justify-between p-12">
         <div className="flex items-center gap-3">
           <img src="/logo.svg" alt="1two.one" className="w-16 h-16" />
-          <span className="text-white text-4xl font-semibold tracking-tight" style={{fontFamily:'Work Sans,sans-serif'}}>1two.one</span>
+          <span className="text-white text-4xl font-semibold tracking-tight" style={{fontFamily:'Poppins,sans-serif'}}>1two.one</span>
         </div>
         <div>
-          <h1 className="text-4xl font-bold text-white mb-4 leading-tight" style={{fontFamily:'Work Sans,sans-serif'}}>
+          <h1 className="text-4xl font-bold text-white mb-4 leading-tight" style={{fontFamily:'Poppins,sans-serif'}}>
             Turn routine meetings into compliance evidence
           </h1>
           <p className="text-blue-200 text-lg leading-relaxed">
@@ -71,10 +71,10 @@ export default function Login() {
         <div className="w-full max-w-md fade-in">
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <img src="/logo.svg" alt="1two.one" className="w-7 h-7" />
-            <span className="text-[#1E3A8A] text-xl font-semibold" style={{fontFamily:'Work Sans,sans-serif'}}>1two.one</span>
+            <span className="text-[#1E3A8A] text-xl font-semibold" style={{fontFamily:'Poppins,sans-serif'}}>1two.one</span>
           </div>
 
-          <h2 className="text-2xl font-semibold text-gray-900 mb-1" style={{fontFamily:'Work Sans,sans-serif'}}>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-1" style={{fontFamily:'Poppins,sans-serif'}}>
             {mode === "login" ? "Sign in to your account" : "Create account"}
           </h2>
           <p className="text-gray-500 text-sm mb-8">
