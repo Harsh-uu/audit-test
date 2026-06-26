@@ -151,12 +151,51 @@ async def extract_document_criteria(text: str, doc_name: str) -> dict:
         return {"document_summary": doc_name, "criteria": []}
 
 
+async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
+    """Light GPT-4o call: map evidence from transcript against a single document's criteria only."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        return []
+    doc_id = str(doc.get("id", doc.get("_id", "")))
+    doc_name = doc.get("label") or doc.get("filename", "Unknown")
+    criteria = doc.get("extracted_criteria", [])
+    if not criteria or not transcript_text.strip():
+        return []
+
+    criteria_ctx = "\n".join([f"  - {c['ref']}: {c['name']} — {c.get('description', '')}" for c in criteria])
+    system = """Map evidence from a meeting transcript against provided criteria. Return valid JSON only:
+{"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "likely_evidence|needs_review|not_enough_evidence"}]}
+Only include criteria with actual evidence. Return empty mappings array if nothing found."""
+
+    chat = LlmChat(api_key=api_key, session_id=f"rescan_{uuid.uuid4()}", system_message=system).with_model("openai", "gpt-4o")
+    full = ""
+    async for event in chat.stream_message(UserMessage(text=f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\nTranscript:\n{transcript_text[:5000]}")):
+        from emergentintegrations.llm.chat import TextDelta, StreamDone
+        if isinstance(event, TextDelta):
+            full += event.content
+        elif isinstance(event, StreamDone):
+            break
+    try:
+        txt = full.strip()
+        if txt.startswith("```"):
+            txt = "\n".join(txt.split("\n")[1:-1])
+        result = json.loads(txt)
+        mappings = result.get("mappings", [])
+        for m in mappings:
+            m.setdefault("status", "pending")
+        return mappings
+    except Exception as e:
+        logger.error(f"analyze_custom_only parse error: {e}")
+        return []
+
+
 async def analyze_meeting(
     transcript_text: str,
     cqc_standards: list,
     care_cert_standards: list,
     paused_periods: list,
     custom_standards: list = None,
+    supervision_template: dict = None,
 ) -> dict:
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
@@ -196,6 +235,13 @@ async def analyze_meeting(
         if custom_lines:
             custom_context = "\n\nCUSTOM / ORGANISATIONAL STANDARDS TO MAP AGAINST:\n" + "\n".join(custom_lines)
 
+    # Supervision template context
+    template_context = ""
+    if supervision_template and supervision_template.get("steps"):
+        steps = supervision_template["steps"]
+        step_lines = "\n".join([f"  {s.get('order', i+1)}. {s['title']}" + (f" — {s['description']}" if s.get('description') else "") for i, s in enumerate(steps)])
+        template_context = f"\n\nORGANISATION SUPERVISION TEMPLATE (topics this session was designed to cover):\n{step_lines}\nUse these headings to contextualise your summary and action items."
+
     pause_note = ""
     if paused_periods:
         pause_note = f"\n\nNOTE: The recording was paused {len(paused_periods)} time(s) during this meeting. Paused sections are not included in the transcript."
@@ -209,7 +255,7 @@ CQC REGULATIONS TO MAP AGAINST:
 {cqc_context}
 
 CARE CERTIFICATE STANDARDS TO MAP AGAINST:
-{cc_context}{custom_context}
+{cc_context}{custom_context}{template_context}
 
 Provide your analysis as JSON. Only map regulations/standards where there is actual evidence in the transcript."""
 

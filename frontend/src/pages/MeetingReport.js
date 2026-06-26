@@ -393,6 +393,23 @@ export default function MeetingReport() {
     await saveActions(updated);
   };
 
+  const toggleActionComplete = async (actionId, completed) => {
+    try {
+      await axios.patch(`${API}/review/${meetingId}/actions/${actionId}`, { completed }, getAuthConfig());
+      setMeeting(m => ({
+        ...m,
+        analysis: {
+          ...m.analysis,
+          actions: (m.analysis?.actions || []).map(a =>
+            (a.id === actionId) ? { ...a, completed, completed_at: completed ? new Date().toISOString() : null } : a
+          ),
+        },
+      }));
+    } catch (err) {
+      console.error("Failed to update action", err);
+    }
+  };
+
   const markReviewed = async () => {
     setSubmitting(true);
     try {
@@ -647,10 +664,21 @@ export default function MeetingReport() {
 
                         <div className="space-y-2" data-testid="actions-list">
                           {(analysis.actions || []).map((action, i) => (
-                            <div key={i} className="flex items-start gap-3 p-2.5 bg-gray-50 rounded-md group">
-                              <div className="w-5 h-5 rounded-full bg-[#1E3A8A] text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</div>
+                            <div key={i} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-colors ${action.completed ? "bg-gray-50 border-gray-100 opacity-70" : action.is_rolled_over ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-transparent"}`}>
+                              {/* Completion checkbox */}
+                              <button
+                                onClick={() => toggleActionComplete(action.id || i, !action.completed)}
+                                className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${action.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-emerald-400"}`}
+                                title={action.completed ? "Mark as outstanding" : "Mark as complete"}
+                                data-testid={`complete-action-${i}`}
+                              >
+                                {action.completed && <Check className="w-3 h-3" />}
+                              </button>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-gray-800">{action.text}</p>
+                                <p className={`text-sm ${action.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{action.text}</p>
+                                {action.is_rolled_over && !action.completed && (
+                                  <p className="text-xs text-amber-600 font-medium mt-0.5">Carried over from: {action.source_meeting_title}</p>
+                                )}
                                 {(action.assigned_to || action.due_date) && (
                                   <p className="text-xs text-gray-500 mt-0.5">
                                     {action.assigned_to && `Assigned: ${action.assigned_to}`}
@@ -659,7 +687,7 @@ export default function MeetingReport() {
                                   </p>
                                 )}
                               </div>
-                              {canReview && (
+                              {canReview && !action.is_rolled_over && (
                                 <button
                                   onClick={() => removeAction(i)}
                                   className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded flex-shrink-0"

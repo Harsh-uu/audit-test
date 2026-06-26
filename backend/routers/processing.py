@@ -7,8 +7,49 @@ from deps import get_db, get_current_user
 from utils.storage import put_object
 from utils.ai import transcribe_audio, analyze_meeting
 
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from bson import ObjectId
+from datetime import datetime, timezone
+import uuid
+import logging
+from deps import get_db, get_current_user
+from utils.storage import put_object
+from utils.ai import transcribe_audio, analyze_meeting
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _get_rolled_actions(db, attendee_ids: list, current_meeting_id: str) -> list:
+    """Return incomplete actions from previous meetings for these attendees, de-duped."""
+    rolled = []
+    seen_sources = set()  # (source_meeting_id, action_id) to avoid duplicates
+    async for analysis in db.analyses.find({}):
+        aid = str(analysis["_id"])
+        prev_meeting = await db.meetings.find_one({"analysis_id": aid})
+        if not prev_meeting or str(prev_meeting["_id"]) == current_meeting_id:
+            continue
+        # Attendee overlap check
+        prev_attendees = [a.get("user_id") for a in prev_meeting.get("attendees", [])]
+        if not any(uid in attendee_ids for uid in prev_attendees):
+            continue
+        for action in analysis.get("actions", []):
+            if action.get("completed") or action.get("is_rolled_over"):
+                continue
+            key = (str(prev_meeting["_id"]), action.get("id", ""))
+            if key in seen_sources:
+                continue
+            seen_sources.add(key)
+            rolled.append({
+                **action,
+                "id": f"rolled_{str(prev_meeting['_id'])[:6]}_{action.get('id', uuid.uuid4().hex[:6])}",
+                "is_rolled_over": True,
+                "completed": False,
+                "completed_at": None,
+                "source_meeting_id": str(prev_meeting["_id"]),
+                "source_meeting_title": prev_meeting.get("title", "Previous Meeting"),
+            })
+    return rolled
 
 
 async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
@@ -58,11 +99,21 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
             doc["id"] = str(doc["_id"])
             custom_standards.append(doc)
 
+        # Load supervision template
+        supervision_template = None
+        tmpl_doc = await db.settings.find_one({"_id": "supervision_template"})
+        if tmpl_doc and tmpl_doc.get("steps"):
+            supervision_template = tmpl_doc
+
+        # Fetch rolled-over outstanding actions from previous meetings for same attendees
+        attendee_ids = [a.get("user_id") for a in meeting.get("attendees", [])]
+        rolled_actions = await _get_rolled_actions(db, attendee_ids, meeting_id)
+
         # Analyze
         logger.info(f"Starting AI analysis for meeting {meeting_id} with {len(custom_standards)} custom docs")
-        analysis_result = await analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards)
+        analysis_result = await analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template)
 
-        # Add status field to each mapping and enrich CQC with key_questions
+        # Add status/defaults to each mapping and enrich CQC with key_questions
         cqc_kq_map = {s["reference"]: s.get("key_questions", []) for s in cqc_standards}
         for item in analysis_result.get("cqc_mappings", []):
             item.setdefault("status", "pending")
@@ -78,6 +129,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
+
+        # Add completed field to new actions + prepend rolled-over actions
+        for item in analysis_result.get("actions", []):
+            item.setdefault("completed", False)
+            item.setdefault("completed_at", None)
+            item.setdefault("is_rolled_over", False)
+        analysis_result["actions"] = rolled_actions + analysis_result.get("actions", [])
 
         analysis_doc = {
             "meeting_id": meeting_id,

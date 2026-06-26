@@ -218,6 +218,8 @@ async def parse_document_background(doc_id: str, file_data: bytes, filename: str
             }}
         )
         logger.info(f"Document {doc_id} parsed: {len(criteria)} criteria extracted")
+        # Auto-rescan all existing analyses against this new document
+        await rescan_meetings_background(doc_id, db)
     except Exception as e:
         logger.error(f"Document parse failed for {doc_id}: {e}")
         await db.standards_documents.update_one(
@@ -244,6 +246,60 @@ async def delete_document(doc_id: str, db=Depends(get_db), current_user=Depends(
         raise HTTPException(status_code=403, detail="Admin/Manager only")
     await db.standards_documents.delete_one({"_id": ObjectId(doc_id)})
     return {"message": "Deleted"}
+
+
+@router.get("/template")
+async def get_template(db=Depends(get_db), current_user=Depends(get_current_user)):
+    doc = await db.settings.find_one({"_id": "supervision_template"})
+    if not doc:
+        return {"steps": [], "name": "Supervision Template", "description": ""}
+    return {"steps": doc.get("steps", []), "name": doc.get("name", "Supervision Template"), "description": doc.get("description", "")}
+
+
+@router.put("/template")
+async def save_template(data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.settings.replace_one(
+        {"_id": "supervision_template"},
+        {"_id": "supervision_template", "steps": data.get("steps", []), "name": data.get("name", "Supervision Template"), "description": data.get("description", ""), "updated_at": now, "updated_by_name": current_user.get("name", "")},
+        upsert=True,
+    )
+    return {"message": "Template saved", "steps": data.get("steps", [])}
+
+
+async def rescan_meetings_background(doc_id: str, db):
+    """After a doc is parsed, scan all analysed meetings against it for new evidence."""
+    from utils.ai import analyze_custom_only
+    try:
+        doc = await db.standards_documents.find_one({"_id": ObjectId(doc_id)})
+        if not doc or doc.get("parse_status") != "parsed":
+            return
+        doc["id"] = str(doc["_id"])
+        updated = 0
+        async for analysis in db.analyses.find({}):
+            # Skip if already mapped for this doc
+            already = any(m.get("document_id") == doc_id for m in analysis.get("custom_mappings", []))
+            if already:
+                continue
+            meeting = await db.meetings.find_one({"analysis_id": str(analysis["_id"])})
+            if not meeting or not meeting.get("transcript_id"):
+                continue
+            tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
+            if not tdoc:
+                continue
+            new_mappings = await analyze_custom_only(tdoc.get("text", ""), doc)
+            if new_mappings:
+                current = analysis.get("custom_mappings", [])
+                await db.analyses.update_one(
+                    {"_id": analysis["_id"]},
+                    {"$set": {"custom_mappings": current + new_mappings}}
+                )
+                updated += 1
+        logger.info(f"Auto-rescan complete: {updated} meeting(s) updated for doc '{doc.get('label', doc_id)}'")
+    except Exception as e:
+        logger.error(f"Auto-rescan failed for doc {doc_id}: {e}")
 
 
 @router.get("/stats")

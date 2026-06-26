@@ -288,6 +288,36 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, db=Depend
     return {"message": "Meeting signed off successfully", "signed_at": now}
 
 
+@router.patch("/{meeting_id}/actions/{action_id}")
+async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
+    """Mark an action as complete or incomplete."""
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    if not meeting or not meeting.get("analysis_id"):
+        raise HTTPException(status_code=404, detail="Meeting or analysis not found")
+    analysis = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    completed = bool(data.get("completed", False))
+    now = datetime.now(timezone.utc).isoformat()
+    actions = analysis.get("actions", [])
+    updated = False
+    for a in actions:
+        if a.get("id") == action_id:
+            a["completed"] = completed
+            a["completed_at"] = now if completed else None
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=404, detail="Action not found")
+
+    await db.analyses.update_one(
+        {"_id": analysis["_id"]},
+        {"$set": {"actions": actions}}
+    )
+    return {"message": "Updated", "completed": completed}
+
+
 @router.post("/{meeting_id}/share")
 async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
