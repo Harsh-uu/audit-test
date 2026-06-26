@@ -7,6 +7,7 @@ import {
   FileText, CheckCircle, Clock, Edit3, Check, X, Flag, ChevronDown, ChevronUp,
   Send, MessageSquare, ArrowLeft, AlertTriangle, Loader, Shield, Award, Pause, Plus, Trash2
 } from "lucide-react";
+import { anonymiseName } from "@/utils/anonymise";
 
 const CONFIDENCE_CONFIG = {
   likely_evidence: { label: "Likely Evidence", color: "bg-emerald-100 text-emerald-800 border-emerald-200", dot: "bg-emerald-500" },
@@ -570,7 +571,7 @@ export default function MeetingReport() {
                         <div className="space-y-2">
                           {meeting.attendees.map(a => (
                             <div key={a.user_id} className="flex items-center justify-between">
-                              <span className="text-sm text-gray-700">{a.name}</span>
+                              <span className="text-sm text-gray-700">{anonymiseName(a.name)}</span>
                               {a.reviewed
                                 ? <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Reviewed</span>
                                 : <span className="text-xs text-amber-600 flex items-center gap-1"><Clock className="w-3 h-3" /> Pending</span>}
@@ -585,7 +586,7 @@ export default function MeetingReport() {
                       <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                         <div className="flex items-center gap-2">
                           <Shield className="w-4 h-4 text-emerald-600" />
-                          <p className="text-sm font-medium text-emerald-800">Signed off by {meeting.sign_off_record.signed_by_name}</p>
+                          <p className="text-sm font-medium text-emerald-800">Signed off by {anonymiseName(meeting.sign_off_record.signed_by_name)}</p>
                         </div>
                         <p className="text-xs text-emerald-600 mt-1">{new Date(meeting.sign_off_record.signed_at).toLocaleString("en-GB")}</p>
                       </div>
@@ -633,7 +634,7 @@ export default function MeetingReport() {
                       {meeting.comments?.map(c => (
                         <div key={c.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-900">{c.user_name}</span>
+                            <span className="text-sm font-medium text-gray-900">{anonymiseName(c.user_name)}</span>
                             <span className="text-xs text-gray-400">{new Date(c.created_at).toLocaleString("en-GB")}</span>
                           </div>
                           <p className="text-sm text-gray-700">{c.text}</p>

@@ -6,6 +6,7 @@ import Layout from "@/components/Layout";
 import {
   Mic, MicOff, Pause, Play, Square, AlertTriangle, Clock, Info, Upload, ArrowRight, Users, ExternalLink
 } from "lucide-react";
+import { anonymiseName } from "@/utils/anonymise";
 
 function formatDuration(seconds) {
   const h = Math.floor(seconds / 3600);
@@ -264,7 +265,7 @@ export default function RecordingScreen() {
               {meeting.attendees?.length > 0 && (
                 <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{meeting.attendees.length} attendees</span>
               )}
-              {meeting.sign_off_manager_name && <span>Manager: {meeting.sign_off_manager_name}</span>}
+              {meeting.sign_off_manager_name && <span>Manager: {anonymiseName(meeting.sign_off_manager_name)}</span>}
             </div>
           </div>
         )}

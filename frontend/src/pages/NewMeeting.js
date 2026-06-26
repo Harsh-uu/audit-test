@@ -4,6 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, ChevronRight } from "lucide-react";
+import { anonymiseName } from "@/utils/anonymise";
 
 export default function NewMeeting() {
   const { getAuthConfig, API } = useAuth();
@@ -186,7 +187,7 @@ export default function NewMeeting() {
                       {user.name[0].toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                      <p className="text-sm font-medium text-gray-900">{anonymiseName(user.name)}</p>
                       <p className="text-xs text-gray-500 capitalize">{user.role} &middot; {user.email}</p>
                     </div>
                   </label>

@@ -4,6 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader } from "lucide-react";
+import { anonymiseName } from "@/utils/anonymise";
 
 const STATUS_CONFIG = {
   draft: { label: "Draft", color: "bg-gray-100 text-gray-700 border-gray-200", icon: FileText },
@@ -199,7 +200,7 @@ export default function Dashboard() {
                         </span>
                       )}
                       {meeting.sign_off_manager_name && (
-                        <span>Manager: {meeting.sign_off_manager_name}</span>
+                        <span>Manager: {anonymiseName(meeting.sign_off_manager_name)}</span>
                       )}
                     </div>
                   </div>
