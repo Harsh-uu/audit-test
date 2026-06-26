@@ -207,4 +207,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 - Code quality review applied: `useMemo` for AuthContext value, error logging on all silent catch blocks, `eslint-disable` comments for intentional `[]` deps, stable keys in lists, role-array constants in App.js
 
-*Last Updated: 2026-06-26*
+- Regression test (iteration 14) after code quality fixes: 9/9 frontend scenarios PASS, zero JS runtime errors
+
+*Last Updated: 2026-07-01*
