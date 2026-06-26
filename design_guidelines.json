@@ -1,0 +1,112 @@
+{
+  "theme": "LIGHT",
+  "archetype": "1 (Organic & Earthy - Healthcare/Compliance Variant)",
+  "reasoning": "Healthcare and compliance interfaces demand trust, calm, and absolute clarity. A light theme with deep navy and soft gray bases prevents clinical coldness while ensuring accessibility. Avoided forbidden teal colors and opted for authoritative navy and emerald.",
+  "colors": {
+    "background": "#F8F9FA",
+    "surface": "#FFFFFF",
+    "border": "#E5E7EB",
+    "primary": "#1E3A8A",
+    "primary_hover": "#1E40AF",
+    "secondary": "#F1F5F9",
+    "secondary_text": "#475569",
+    "accent_recording": "#DC2626",
+    "accent_compliance": "#059669",
+    "accent_warning": "#D97706",
+    "text_main": "#0F172A",
+    "text_muted": "#64748B",
+    "glass_bg": "rgba(255, 255, 255, 0.8)",
+    "glass_border": "rgba(0, 0, 0, 0.05)"
+  },
+  "typography": {
+    "headings": {
+      "family": "Work Sans, sans-serif",
+      "weight_default": "600",
+      "weight_emphasis": "700"
+    },
+    "body": {
+      "family": "IBM Plex Sans, sans-serif",
+      "weight_default": "400",
+      "weight_medium": "500"
+    },
+    "sizes": {
+      "h1": "text-4xl tracking-tight leading-tight",
+      "h2": "text-2xl tracking-tight leading-snug",
+      "h3": "text-xl tracking-tight",
+      "h4": "text-lg font-medium",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm",
+      "micro": "text-xs uppercase tracking-[0.1em]"
+    }
+  },
+  "spacing_and_layout": {
+    "container_padding": "p-6 md:p-8",
+    "section_gap": "gap-8",
+    "element_gap": "gap-4",
+    "border_radius": {
+      "card": "rounded-lg",
+      "button": "rounded-md",
+      "badge": "rounded-full"
+    },
+    "dashboard_grid": "grid grid-cols-1 lg:grid-cols-12 gap-6",
+    "split_view_strategy": {
+      "transcript_column": "lg:col-span-7",
+      "evidence_column": "lg:col-span-5 h-[calc(100vh-120px)] sticky top-24 overflow-y-auto"
+    }
+  },
+  "surfaces": {
+    "dashboard_cards": "bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200",
+    "header": "bg-white border-b border-gray-200 sticky top-0 z-50",
+    "evidence_card": "bg-slate-50 border border-slate-200 p-4 rounded-lg flex flex-col gap-3",
+    "recording_banner": "bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center justify-between"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#1E3A8A] text-white hover:bg-[#1E40AF] px-6 py-2 rounded-md font-medium transition-colors",
+      "secondary": "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-2 rounded-md font-medium transition-colors",
+      "danger": "bg-[#DC2626] text-white hover:bg-red-700 px-6 py-2 rounded-md font-medium transition-colors"
+    },
+    "badges": {
+      "compliance_met": "bg-emerald-100 text-emerald-800 border border-emerald-200",
+      "compliance_pending": "bg-amber-100 text-amber-800 border border-amber-200",
+      "status_recording": "bg-red-100 text-red-800 border border-red-200 animate-pulse"
+    },
+    "icons_library": "lucide-react"
+  },
+  "accessibility": {
+    "contrast_strategy": "Ensure all text meets 4.5:1 ratio. No pure gray-on-gray for vital data.",
+    "focus_states": "focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:ring-offset-2",
+    "testing": "All interactive elements MUST have data-testid attributes (e.g., data-testid='start-recording-btn')."
+  },
+  "motion_and_interactions": {
+    "hover": "Subtle transform translate-y-[-2px] for interactive cards.",
+    "transitions": "transition-all duration-200 ease-in-out",
+    "recording_state": "Soft pulsing red indicator for active recording."
+  },
+  "media_urls": [
+    {
+      "category": "logo",
+      "url": "https://images.pexels.com/photos/19825346/pexels-photo-19825346.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Compliance theme visual used for login background or empty states."
+    },
+    {
+      "category": "avatar_1",
+      "url": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDV8MHwxfHNlYXJjaHwyfHxudXJzZSUyMGNhcmUlMjB3b3JrZXIlMjBwb3J0cmFpdHxlbnwwfHx8fDE3ODI0Njk3MzF8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Nurse care worker portrait for user profile or meeting attendee avatar."
+    },
+    {
+      "category": "avatar_2",
+      "url": "https://images.pexels.com/photos/5430213/pexels-photo-5430213.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "African nurse portrait for user profile or reviewer avatar."
+    }
+  ],
+  "instructions_to_main_agent": [
+    "Use pure HTML/Tailwind for the main structural layout to ensure high customizability.",
+    "Implement the meeting view using a split layout: transcript on the left (lg:col-span-7) and evidence cards mapped to regulations on the right (lg:col-span-5).",
+    "Use Shadcn UI for complex interactive components like Dialogs, Dropdowns, and Tables, but style them to match the flat, 1px bordered, minimal-radius (8px) aesthetic.",
+    "The recording interface must feature prominent, unambiguous start/pause/stop controls using the red accent color, with a clear pulsing indicator when active.",
+    "Ensure all interactive components and vital information displays include a descriptive 'data-testid' attribute.",
+    "Apply 'Work Sans' for headings and 'IBM Plex Sans' for body text. Enforce strict typographical hierarchy.",
+    "Do not use card components excessively. Use pure divs with flat backgrounds and subtle borders to prevent visual clutter in dense data views."
+  ]
+}
