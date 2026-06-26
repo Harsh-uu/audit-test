@@ -4,7 +4,7 @@ import axios from "axios";
 const AuthContext = createContext(null);
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
-axios.defaults.withCredentials = true;
+axios.defaults.withCredentials = false;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined = loading

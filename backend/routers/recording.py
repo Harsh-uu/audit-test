@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timezone
@@ -12,6 +12,10 @@ class RecordingEventRequest(BaseModel):
     timestamp: Optional[str] = None
     pause_start: Optional[str] = None
 
+    @classmethod
+    def empty(cls):
+        return cls()
+
 
 @router.post("/{meeting_id}/notice")
 async def log_notice(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
@@ -24,7 +28,12 @@ async def log_notice(meeting_id: str, db=Depends(get_db), current_user=Depends(g
 
 
 @router.post("/{meeting_id}/start")
-async def start_recording(meeting_id: str, data: RecordingEventRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def start_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):
+    try:
+        body = await request.json()
+        data = RecordingEventRequest(**body)
+    except Exception:
+        data = RecordingEventRequest()
     ts = data.timestamp or datetime.now(timezone.utc).isoformat()
     event = {"type": "started", "timestamp": ts, "user_id": current_user["id"]}
     await db.meetings.update_one(
@@ -38,7 +47,12 @@ async def start_recording(meeting_id: str, data: RecordingEventRequest, db=Depen
 
 
 @router.post("/{meeting_id}/pause")
-async def pause_recording(meeting_id: str, data: RecordingEventRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def pause_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):
+    try:
+        body = await request.json()
+        data = RecordingEventRequest(**body)
+    except Exception:
+        data = RecordingEventRequest()
     ts = data.timestamp or datetime.now(timezone.utc).isoformat()
     event = {"type": "paused", "timestamp": ts, "user_id": current_user["id"]}
     await db.meetings.update_one(
@@ -52,7 +66,12 @@ async def pause_recording(meeting_id: str, data: RecordingEventRequest, db=Depen
 
 
 @router.post("/{meeting_id}/resume")
-async def resume_recording(meeting_id: str, data: RecordingEventRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def resume_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):
+    try:
+        body = await request.json()
+        data = RecordingEventRequest(**body)
+    except Exception:
+        data = RecordingEventRequest()
     ts = data.timestamp or datetime.now(timezone.utc).isoformat()
     event = {"type": "resumed", "timestamp": ts, "user_id": current_user["id"]}
 
@@ -78,7 +97,12 @@ async def resume_recording(meeting_id: str, data: RecordingEventRequest, db=Depe
 
 
 @router.post("/{meeting_id}/stop")
-async def stop_recording(meeting_id: str, data: RecordingEventRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def stop_recording(meeting_id: str, request: Request, db=Depends(get_db), current_user=Depends(get_current_user)):
+    try:
+        body = await request.json()
+        data = RecordingEventRequest(**body)
+    except Exception:
+        data = RecordingEventRequest()
     ts = data.timestamp or datetime.now(timezone.utc).isoformat()
     event = {"type": "stopped", "timestamp": ts, "user_id": current_user["id"]}
     await db.meetings.update_one(
