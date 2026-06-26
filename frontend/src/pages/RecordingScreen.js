@@ -1,0 +1,374 @@
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import axios from "axios";
+import { useAuth } from "@/context/AuthContext";
+import Layout from "@/components/Layout";
+import {
+  Mic, MicOff, Pause, Play, Square, AlertTriangle, Clock, Info, Upload, ArrowRight, Users
+} from "lucide-react";
+
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+const RECORDING_NOTICE = "This meeting is being recorded in line with our recording policy and requirement to gather evidence of compliance for CQC.";
+
+export default function RecordingScreen() {
+  const { meetingId } = useParams();
+  const { getAuthConfig, API } = useAuth();
+  const navigate = useNavigate();
+  const [meeting, setMeeting] = useState(null);
+  const [stage, setStage] = useState("notice"); // notice | ready | recording | paused | stopped | uploading | processing
+  const [error, setError] = useState("");
+  const [elapsed, setElapsed] = useState(0);
+  const [pausedTotal, setPausedTotal] = useState(0);
+  const [pauseStart, setPauseStart] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const timerRef = useRef(null);
+  const elapsedRef = useRef(0);
+
+  useEffect(() => {
+    axios.get(`${API}/meetings/${meetingId}`, getAuthConfig())
+      .then(r => {
+        setMeeting(r.data);
+        // If already has audio, go to report
+        if (["processing", "transcribing", "analyzing", "in_review", "reviewed", "signed_off", "shared"].includes(r.data.status)) {
+          navigate(`/meetings/${meetingId}/report`);
+        }
+      })
+      .catch(e => setError("Meeting not found"));
+  }, [meetingId]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
+
+  const logNotice = async () => {
+    try {
+      await axios.post(`${API}/recording/${meetingId}/notice`, {}, getAuthConfig());
+    } catch {}
+    setStage("ready");
+  };
+
+  const startRecording = async () => {
+    setError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0 && recorder.state !== "paused") {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        handleUpload();
+      };
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
+
+      const ts = new Date().toISOString();
+      await axios.post(`${API}/recording/${meetingId}/start`, { timestamp: ts }, getAuthConfig());
+      addEvent("Recording started", ts, "start");
+      setStage("recording");
+
+      elapsedRef.current = 0;
+      timerRef.current = setInterval(() => {
+        elapsedRef.current += 1;
+        setElapsed(elapsedRef.current);
+      }, 1000);
+    } catch (err) {
+      if (err.name === "NotAllowedError") {
+        setError("Microphone access denied. Please allow microphone access in your browser settings.");
+      } else {
+        setError(`Failed to start recording: ${err.message}`);
+      }
+    }
+  };
+
+  const pauseRecording = async () => {
+    if (!mediaRecorderRef.current) return;
+    mediaRecorderRef.current.pause();
+    clearInterval(timerRef.current);
+    const ts = new Date().toISOString();
+    setPauseStart(ts);
+    await axios.post(`${API}/recording/${meetingId}/pause`, { timestamp: ts }, getAuthConfig());
+    addEvent("Recording paused", ts, "pause");
+    setStage("paused");
+  };
+
+  const resumeRecording = async () => {
+    if (!mediaRecorderRef.current) return;
+    mediaRecorderRef.current.resume();
+    const ts = new Date().toISOString();
+    const ps = pauseStart;
+    const pauseDurationSec = ps ? Math.floor((new Date(ts) - new Date(ps)) / 1000) : 0;
+    setPausedTotal(prev => prev + pauseDurationSec);
+    setPauseStart(null);
+    await axios.post(`${API}/recording/${meetingId}/resume`, { timestamp: ts, pause_start: ps }, getAuthConfig());
+    addEvent("Recording resumed", ts, "resume");
+    setStage("recording");
+
+    timerRef.current = setInterval(() => {
+      elapsedRef.current += 1;
+      setElapsed(elapsedRef.current);
+    }, 1000);
+  };
+
+  const stopRecording = async () => {
+    if (!mediaRecorderRef.current) return;
+    clearInterval(timerRef.current);
+    const ts = new Date().toISOString();
+    await axios.post(`${API}/recording/${meetingId}/stop`, { timestamp: ts }, getAuthConfig());
+    addEvent("Recording stopped", ts, "stop");
+    setStage("stopped");
+    mediaRecorderRef.current.stop();
+  };
+
+  const handleUpload = async () => {
+    if (audioChunksRef.current.length === 0) {
+      setError("No audio data recorded");
+      setStage("stopped");
+      return;
+    }
+    setStage("uploading");
+    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+    const formData = new FormData();
+    formData.append("audio", blob, "meeting.webm");
+
+    try {
+      const token = localStorage.getItem("supervision_token");
+      await axios.post(`${API}/processing/${meetingId}/upload`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        onUploadProgress: (e) => {
+          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        },
+      });
+      setStage("processing");
+      setTimeout(() => navigate(`/meetings/${meetingId}/report`), 2000);
+    } catch (err) {
+      setError(`Upload failed: ${err.response?.data?.detail || err.message}`);
+      setStage("stopped");
+    }
+  };
+
+  const addEvent = (label, ts, type) => {
+    const timeStr = new Date(ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    setEvents(prev => [...prev, { label, time: timeStr, type }]);
+  };
+
+  const eventIcons = { start: "text-emerald-600", pause: "text-amber-600", resume: "text-blue-600", stop: "text-red-600" };
+
+  return (
+    <Layout>
+      <div className="p-6 md:p-8 max-w-3xl mx-auto fade-in">
+        {meeting && (
+          <div className="mb-6">
+            <h1 className="text-xl font-semibold text-gray-900" style={{fontFamily:'Work Sans,sans-serif'}}>{meeting.title}</h1>
+            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+              {meeting.attendees?.length > 0 && (
+                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{meeting.attendees.length} attendees</span>
+              )}
+              {meeting.sign_off_manager_name && <span>Manager: {meeting.sign_off_manager_name}</span>}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 rounded-md p-3 mb-5 text-sm" data-testid="recording-error">
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        {/* Notice stage */}
+        {stage === "notice" && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6 fade-in" data-testid="recording-notice">
+            <div className="flex items-start gap-3 mb-4">
+              <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-amber-900 mb-2" style={{fontFamily:'Work Sans,sans-serif'}}>Recording Notice</h3>
+                <p className="text-amber-800 text-sm leading-relaxed">{RECORDING_NOTICE}</p>
+              </div>
+            </div>
+            <button
+              onClick={logNotice}
+              className="w-full bg-[#1E3A8A] text-white py-2.5 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors flex items-center justify-center gap-2"
+              data-testid="acknowledge-notice-btn"
+            >
+              I understand — Proceed to Recording
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Recording controls */}
+        {["ready", "recording", "paused", "stopped"].includes(stage) && (
+          <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm fade-in">
+            {/* Timer */}
+            <div className="text-center mb-8">
+              <div className={`text-5xl font-mono font-bold tracking-tight mb-2 ${stage === "recording" ? "text-[#DC2626]" : "text-gray-400"}`} data-testid="recording-timer">
+                {formatDuration(elapsed)}
+              </div>
+              {pausedTotal > 0 && (
+                <p className="text-sm text-amber-600">
+                  <Clock className="inline w-3.5 h-3.5 mr-1" />
+                  Paused for {formatDuration(pausedTotal)} total
+                </p>
+              )}
+              {stage === "recording" && (
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  <div className="w-2 h-2 bg-[#DC2626] rounded-full recording-pulse"></div>
+                  <span className="text-sm text-[#DC2626] font-medium">Recording in progress</span>
+                </div>
+              )}
+              {stage === "paused" && (
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  <span className="text-sm text-amber-600 font-medium">Recording paused — sensitive discussion</span>
+                </div>
+              )}
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center justify-center gap-4">
+              {stage === "ready" && (
+                <button
+                  onClick={startRecording}
+                  className="flex flex-col items-center gap-2 bg-[#DC2626] text-white rounded-full w-24 h-24 flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
+                  data-testid="start-recording-btn"
+                >
+                  <Mic className="w-8 h-8" />
+                </button>
+              )}
+
+              {stage === "recording" && (
+                <>
+                  <button
+                    onClick={pauseRecording}
+                    className="flex flex-col items-center gap-1.5 px-5 py-3 border-2 border-amber-400 text-amber-700 rounded-lg hover:bg-amber-50 transition-colors"
+                    data-testid="pause-recording-btn"
+                  >
+                    <Pause className="w-6 h-6" />
+                    <span className="text-xs font-medium">Pause</span>
+                  </button>
+                  <div className="flex flex-col items-center gap-1.5 bg-[#DC2626] text-white rounded-full w-20 h-20 flex items-center justify-center recording-pulse shadow-lg cursor-default">
+                    <Mic className="w-7 h-7" />
+                    <span className="text-xs font-medium">REC</span>
+                  </div>
+                  <button
+                    onClick={stopRecording}
+                    className="flex flex-col items-center gap-1.5 px-5 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    data-testid="stop-recording-btn"
+                  >
+                    <Square className="w-6 h-6" />
+                    <span className="text-xs font-medium">Stop</span>
+                  </button>
+                </>
+              )}
+
+              {stage === "paused" && (
+                <>
+                  <button
+                    onClick={resumeRecording}
+                    className="flex flex-col items-center gap-1.5 px-5 py-3 bg-[#1E3A8A] text-white rounded-lg hover:bg-[#1E40AF] transition-colors"
+                    data-testid="resume-recording-btn"
+                  >
+                    <Play className="w-6 h-6" />
+                    <span className="text-xs font-medium">Resume</span>
+                  </button>
+                  <div className="flex flex-col items-center gap-1.5 bg-amber-100 text-amber-700 rounded-full w-20 h-20 flex items-center justify-center border-2 border-amber-300">
+                    <MicOff className="w-7 h-7" />
+                    <span className="text-xs font-medium">PAUSED</span>
+                  </div>
+                  <button
+                    onClick={stopRecording}
+                    className="flex flex-col items-center gap-1.5 px-5 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    data-testid="stop-paused-recording-btn"
+                  >
+                    <Square className="w-6 h-6" />
+                    <span className="text-xs font-medium">Stop</span>
+                  </button>
+                </>
+              )}
+
+              {stage === "stopped" && (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex items-center justify-center w-20 h-20 bg-gray-100 rounded-full">
+                    <MicOff className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <p className="text-sm text-gray-500">Recording stopped</p>
+                  <button onClick={handleUpload} className="flex items-center gap-2 bg-[#1E3A8A] text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors">
+                    <Upload className="w-4 h-4" />
+                    Upload &amp; Process
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {(stage === "ready" || stage === "recording" || stage === "paused") && (
+              <p className="text-center text-xs text-gray-400 mt-6">
+                {stage === "paused" ? "Audio is not being recorded during this pause. Sensitive discussion will not be captured." : "Use Pause for any sensitive or personal discussion — paused audio is never recorded."}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Upload/Processing stage */}
+        {stage === "uploading" && (
+          <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm text-center fade-in" data-testid="uploading-state">
+            <Upload className="w-10 h-10 text-[#1E3A8A] mx-auto mb-4" />
+            <h3 className="font-semibold text-gray-900 mb-2">Uploading audio...</h3>
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+              <div className="bg-[#1E3A8A] h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }}></div>
+            </div>
+            <p className="text-sm text-gray-500">{uploadProgress}%</p>
+          </div>
+        )}
+
+        {stage === "processing" && (
+          <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm text-center fade-in" data-testid="processing-state">
+            <div className="w-12 h-12 border-3 border-[#1E3A8A] border-t-transparent rounded-full spin mx-auto mb-4"></div>
+            <h3 className="font-semibold text-gray-900 mb-1">Processing your meeting...</h3>
+            <p className="text-sm text-gray-500">Transcribing audio and mapping compliance evidence. This may take a few minutes.</p>
+            <p className="text-xs text-gray-400 mt-3">Redirecting to report...</p>
+          </div>
+        )}
+
+        {/* Event timeline */}
+        {events.length > 0 && (
+          <div className="mt-6 bg-white border border-gray-200 rounded-lg p-4 shadow-sm" data-testid="event-timeline">
+            <h4 className="text-xs font-semibold uppercase text-gray-500 tracking-wider mb-3">Recording Timeline</h4>
+            <div className="space-y-2">
+              {events.map((ev, i) => (
+                <div key={i} className="flex items-center gap-3 text-sm">
+                  <span className={`font-mono text-xs ${eventIcons[ev.type]}`}>{ev.time}</span>
+                  <div className={`w-1.5 h-1.5 rounded-full ${ev.type === "start" ? "bg-emerald-500" : ev.type === "pause" ? "bg-amber-500" : ev.type === "resume" ? "bg-blue-500" : "bg-red-500"}`}></div>
+                  <span className="text-gray-700">{ev.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}

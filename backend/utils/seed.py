@@ -1,0 +1,57 @@
+from datetime import datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
+
+CQC_REGULATIONS = [
+    {"reference": "Regulation 9", "name": "Person-centred care", "description": "Care and treatment must be appropriate and meet the needs and preferences of service users. Providers must involve service users in planning and decision-making.", "keywords": ["person-centred", "care plan", "individual needs", "preferences", "wishes", "involvement", "choices"]},
+    {"reference": "Regulation 10", "name": "Dignity and respect", "description": "Service users must be treated with dignity and respect at all times. Workers must respect the person's right to privacy and treat them as an individual.", "keywords": ["dignity", "respect", "privacy", "independence", "choices", "equal treatment", "individuality"]},
+    {"reference": "Regulation 11", "name": "Need for consent", "description": "Care and treatment must only be provided with the consent of the relevant person. Providers must have regard to mental capacity and best interest decisions.", "keywords": ["consent", "mental capacity", "best interests", "lasting power of attorney", "advance decision", "capacity"]},
+    {"reference": "Regulation 12", "name": "Safe care and treatment", "description": "Care and treatment must be provided in a safe way. Includes medication management, nutrition, hydration, risk assessment, and infection prevention and control.", "keywords": ["safe", "risk assessment", "medications", "nutrition", "hydration", "infection prevention", "equipment", "falls", "pressure sores"]},
+    {"reference": "Regulation 13", "name": "Safeguarding service users from abuse and improper treatment", "description": "Service users must be protected from abuse and improper treatment. Providers must have safeguarding policies and act on any concerns.", "keywords": ["safeguarding", "abuse", "neglect", "improper treatment", "restraint", "deprivation of liberty", "DoLS", "MCA", "whistleblowing"]},
+    {"reference": "Regulation 14", "name": "Meeting nutritional and hydration needs", "description": "Service users must have adequate nutrition and hydration. Providers must ensure food and drink meets service users' needs and preferences.", "keywords": ["nutrition", "hydration", "meals", "diet", "weight", "fluids", "food", "malnutrition", "dehydration"]},
+    {"reference": "Regulation 15", "name": "Premises and equipment", "description": "Premises and equipment used must be clean, secure, suitable, properly used, maintained and appropriately located.", "keywords": ["premises", "equipment", "environment", "maintenance", "infection control", "cleanliness", "safety"]},
+    {"reference": "Regulation 16", "name": "Receiving and acting on complaints", "description": "Service users must be able to make complaints about care received. Providers must have an accessible complaints process and act on complaints.", "keywords": ["complaints", "concerns", "feedback", "investigation", "response", "resolution", "whistleblowing"]},
+    {"reference": "Regulation 17", "name": "Good governance", "description": "Providers must have effective governance frameworks, assess and monitor quality and safety, maintain accurate records, and seek and act on feedback.", "keywords": ["governance", "quality", "audit", "records", "risk management", "improvement", "CQC notifications", "oversight"]},
+    {"reference": "Regulation 18", "name": "Staffing", "description": "Sufficient numbers of suitably qualified, competent, skilled and experienced staff must be deployed. Staff must receive appropriate support, training, professional development, supervision and appraisal.", "keywords": ["staffing", "training", "competency", "supervision", "induction", "workforce", "sickness", "agency", "qualifications", "appraisal", "development"]},
+    {"reference": "Regulation 19", "name": "Fit and proper persons employed", "description": "Providers must only employ persons who are of good character, have the necessary qualifications, skills and experience, are able to properly perform their duties.", "keywords": ["DBS", "references", "qualifications", "fit and proper", "employment checks", "barring", "criminal record"]},
+    {"reference": "Regulation 20", "name": "Duty of candour", "description": "Providers must be open and honest with service users when something goes wrong that results in harm or could result in harm.", "keywords": ["duty of candour", "openness", "transparency", "honesty", "notification of harm", "apology", "incident"]},
+    {"reference": "Regulation 20A", "name": "Requirement as to display of performance assessments", "description": "Providers must display their CQC performance rating in a prominent place.", "keywords": ["CQC rating", "display", "performance assessment", "inspection"]},
+    {"reference": "CQC Reg 12 (Registration)", "name": "Statement of purpose", "description": "Registered persons must provide a statement of purpose covering the regulated activities they carry out.", "keywords": ["statement of purpose", "regulated activities", "registration"]},
+]
+
+CARE_CERT_STANDARDS = [
+    {"reference": "Standard 1", "name": "Understanding your role", "description": "The care worker understands their role and responsibilities, the importance of working within their scope of practice, and the impact of their role on the person they support.", "keywords": ["role", "responsibilities", "boundaries", "scope of practice", "code of conduct", "accountability"]},
+    {"reference": "Standard 2", "name": "Your personal development", "description": "The care worker is committed to their personal development, including training, learning, CPD, and reflective practice. Includes supervision and appraisal.", "keywords": ["training", "learning", "CPD", "personal development", "reflective practice", "supervision", "appraisal", "development"]},
+    {"reference": "Standard 3", "name": "Duty of care", "description": "The care worker understands their duty of care and how to balance this with an individual's rights. Includes dilemmas, complaints and incidents.", "keywords": ["duty of care", "dilemmas", "complaints", "incidents", "rights", "wellbeing", "safeguarding"]},
+    {"reference": "Standard 4", "name": "Equality and diversity", "description": "The care worker works in an inclusive way that values diversity and treats people as individuals, respecting protected characteristics and challenging discrimination.", "keywords": ["equality", "diversity", "inclusion", "discrimination", "protected characteristics", "individual needs", "culture", "religion"]},
+    {"reference": "Standard 5", "name": "Work in a person-centred way", "description": "The care worker puts the individual at the centre of care, supporting their choices, promoting their wellbeing and independence.", "keywords": ["person-centred", "choices", "independence", "wellbeing", "preferences", "self-determination", "outcomes"]},
+    {"reference": "Standard 6", "name": "Communication", "description": "The care worker communicates effectively in verbal and non-verbal ways, adapts to individuals' communication needs, and maintains accurate records.", "keywords": ["communication", "listening", "non-verbal", "language needs", "records", "handover", "reporting", "documentation"]},
+    {"reference": "Standard 7", "name": "Privacy and dignity", "description": "The care worker promotes and maintains the privacy, dignity and respect of each individual in their care.", "keywords": ["privacy", "dignity", "respect", "confidentiality", "personal information", "intimate care"]},
+    {"reference": "Standard 8", "name": "Fluids and nutrition", "description": "The care worker supports individuals to have adequate nutrition and hydration, understands signs of malnutrition and dehydration.", "keywords": ["nutrition", "hydration", "fluid intake", "malnutrition", "dehydration", "diet", "eating", "drinking", "mealtime"]},
+    {"reference": "Standard 9", "name": "Awareness of mental health, dementia and learning disability", "description": "The care worker has awareness of mental health conditions, dementia and learning disability, and how these affect individuals' wellbeing and behaviour.", "keywords": ["mental health", "dementia", "learning disability", "behaviour", "wellbeing", "cognitive impairment", "anxiety", "depression"]},
+    {"reference": "Standard 10", "name": "Safeguarding adults", "description": "The care worker understands adult safeguarding, recognises signs of abuse and neglect, and knows how to report concerns.", "keywords": ["safeguarding", "abuse", "neglect", "reporting", "whistleblowing", "protection", "harm", "exploitation", "concerns"]},
+    {"reference": "Standard 11", "name": "Safeguarding children", "description": "The care worker is aware of child safeguarding responsibilities even when primarily working with adults.", "keywords": ["safeguarding children", "child protection", "young carers", "children"]},
+    {"reference": "Standard 12", "name": "Basic life support", "description": "The care worker knows how to provide basic life support, including CPR and the use of AED, and can respond to emergency situations.", "keywords": ["first aid", "CPR", "resuscitation", "basic life support", "emergency", "AED", "choking"]},
+    {"reference": "Standard 13", "name": "Health and safety", "description": "The care worker understands health and safety legislation, risk assessment, COSHH, moving and handling, and personal protective equipment.", "keywords": ["health and safety", "risk assessment", "COSHH", "moving and handling", "manual handling", "PPE", "lone working", "fire safety"]},
+    {"reference": "Standard 14", "name": "Handling information", "description": "The care worker understands data protection, GDPR, confidentiality obligations, and maintains accurate, secure records.", "keywords": ["data protection", "GDPR", "confidentiality", "records management", "information governance", "sharing information"]},
+    {"reference": "Standard 15", "name": "Infection prevention and control", "description": "The care worker understands and applies infection prevention and control measures, including hand hygiene, PPE, and standard precautions.", "keywords": ["infection control", "PPE", "hand hygiene", "standard precautions", "cleaning", "waste disposal", "COVID", "outbreak"]},
+    {"reference": "Standard 16", "name": "Awareness of learning disability and autism", "description": "The care worker has awareness of learning disabilities and autism, including different communication styles, behaviours and support needs.", "keywords": ["learning disability", "autism", "communication", "behaviour", "support needs", "neurodivergent", "sensory"]},
+]
+
+
+async def seed_standards(db):
+    count = await db.standards_entries.count_documents({})
+    if count > 0:
+        logger.info(f"Standards already seeded ({count} entries)")
+        return
+
+    now = datetime.now(timezone.utc).isoformat()
+    entries = []
+    for reg in CQC_REGULATIONS:
+        entries.append({**reg, "type": "cqc", "is_active": True, "created_at": now, "source": "CQC Guidance - Regulations for service providers and managers"})
+    for std in CARE_CERT_STANDARDS:
+        entries.append({**std, "type": "care_cert", "is_active": True, "created_at": now, "source": "Care Certificate Standards 2025 - Skills for Care"})
+
+    await db.standards_entries.insert_many(entries)
+    logger.info(f"Seeded {len(entries)} standards entries")
