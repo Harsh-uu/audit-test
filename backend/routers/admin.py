@@ -486,15 +486,24 @@ async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current
         ref = std["ref"]
         all_subs = set(cc_sub_outcomes.get(ref, []))
         total_subs = len(all_subs)
-        # Fully covered = staff member has all sub-outcomes covered
         if total_subs > 0:
             fully_covered = sum(
                 1 for s in staff
                 if len(cc_ev[s["id"]].get(ref, {}).get("covered_refs", set()) & all_subs) == total_subs
             )
+            # Unique sub-outcomes that have evidence from at least one team member
+            all_covered_refs = set()
+            for s in staff:
+                all_covered_refs |= cc_ev[s["id"]].get(ref, {}).get("covered_refs", set())
+            union_covered = len(all_covered_refs & all_subs)
         else:
             fully_covered = sum(1 for s in staff if cc_ev[s["id"]].get(ref, {}).get("total", 0) > 0)
-        gaps.append({"ref": ref, "name": std["name"], "type": "care_cert", "covered": fully_covered, "total": len(staff)})
+            union_covered = 0
+        gaps.append({
+            "ref": ref, "name": std["name"], "type": "care_cert",
+            "covered": fully_covered, "total": len(staff),
+            "covered_sub": union_covered, "total_sub": total_subs,
+        })
     for std in cust_stds:
         ref = std["ref"]
         covered = sum(1 for s in staff if cust_ev[s["id"]].get(ref, {}).get("total", 0) > 0)

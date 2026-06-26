@@ -207,7 +207,14 @@ function MatrixView({ matrix }) {
 
 // ── Coverage Gap Bar ────────────────────────────────────────────────────────
 function GapBar({ gap }) {
-  const pct = gap.total > 0 ? Math.round((gap.covered / gap.total) * 100) : 0;
+  // For Care Cert: show sub-outcome coverage; for CQC/custom: show staff coverage
+  const isCc = gap.type === "care_cert" && (gap.total_sub ?? 0) > 0;
+  const numerator = isCc ? (gap.covered_sub ?? 0) : gap.covered;
+  const denominator = isCc ? gap.total_sub : gap.total;
+  const pct = denominator > 0 ? Math.round((numerator / denominator) * 100) : 0;
+  const label = isCc
+    ? `${numerator}/${denominator} sub-outcomes`
+    : `${numerator}/${denominator} staff`;
   const TYPE_COLOR = {
     cqc:       { badge: "bg-purple-100 text-purple-700", bar: "bg-purple-500" },
     care_cert: { badge: "bg-blue-100 text-blue-700",     bar: "bg-blue-500"   },
@@ -222,7 +229,7 @@ function GapBar({ gap }) {
           <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${c.badge}`}>{gap.ref}</span>
           <span className="text-sm text-gray-700 truncate">{gap.name}</span>
         </div>
-        <span className="text-xs text-gray-500 ml-2 flex-shrink-0">{gap.covered}/{gap.total}</span>
+        <span className="text-xs text-gray-500 ml-2 flex-shrink-0">{label}</span>
       </div>
       <div className="w-full bg-gray-100 rounded-full h-1.5">
         <div
