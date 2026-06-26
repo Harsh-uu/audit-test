@@ -50,6 +50,7 @@ export default function Dashboard() {
     fetchMeetings();
     const interval = setInterval(fetchMeetings, 15000); // poll for status updates
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchMeetings = async () => {

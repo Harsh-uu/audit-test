@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
 import axios from "axios";
 
 const AuthContext = createContext(null);
@@ -43,8 +43,14 @@ export function AuthProvider({ children }) {
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   };
 
+  const contextValue = useMemo(
+    () => ({ user, login, register, logout, getAuthConfig, API }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user]
+  );
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, getAuthConfig, API }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

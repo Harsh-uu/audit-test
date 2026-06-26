@@ -12,6 +12,9 @@ import StaffPortfolio from "@/pages/StaffPortfolio";
 import TeamInsights from "@/pages/TeamInsights";
 import "@/App.css";
 
+const ADMIN_ONLY = ["admin"];
+const ADMIN_MANAGER = ["admin", "manager"];
+
 function App() {
   return (
     <AuthProvider>

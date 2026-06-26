@@ -25,6 +25,7 @@ export default function NewMeeting() {
     axios.get(`${API}/admin/users`, getAuthConfig())
       .then(r => setUsers(r.data))
       .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const managers = users.filter(u => ["manager", "admin"].includes(u.role));

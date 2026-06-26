@@ -131,6 +131,7 @@ export default function StaffPortfolio() {
     } finally {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveUserId, API]);
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
@@ -291,7 +292,7 @@ export default function StaffPortfolio() {
                   <div data-testid="evidence-standards-list">
                     {evidenceItems[evidenceTab].map((item, i) => (
                       <EvidenceStandardCard
-                        key={i}
+                        key={item.regulation_ref || item.standard_ref || item.criterion_ref || i}
                         item={item}
                         typeColor={TYPE_COLORS[evidenceTab]}
                       />

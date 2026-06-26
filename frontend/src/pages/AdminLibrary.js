@@ -131,6 +131,7 @@ export default function AdminLibrary() {
   useEffect(() => {
     fetchAll();
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Poll for parsing status if any doc is still parsing
@@ -146,9 +147,9 @@ export default function AdminLibrary() {
             clearInterval(pollRef.current);
             pollRef.current = null;
           }
-        } catch {}
-      }, 3000);
-    } else if (!hasParsingDocs && pollRef.current) {
+        } catch (err) {
+          console.error("Poll status error:", err);
+        }
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
@@ -167,7 +168,10 @@ export default function AdminLibrary() {
       setUsers(userRes.data);
       setDocs(docRes.data);
       setTemplate(tmplRes.data || { name: "Supervision Template", description: "", steps: [] });
-    } catch {}
+    } catch (err) {
+      console.error("Admin fetchAll failed:", err);
+      setError("Failed to load admin data. Please refresh.");
+    }
     setLoading(false);
   };
 
@@ -176,7 +180,9 @@ export default function AdminLibrary() {
     try {
       const { data } = await axios.get(`${API}/admin/meetings-brief`, getAuthConfig());
       setExportMeetings(data);
-    } catch {}
+    } catch (err) {
+      console.error("Failed to load meetings for export:", err);
+    }
     setExportMeetingsLoading(false);
   };
 
@@ -242,7 +248,10 @@ export default function AdminLibrary() {
       await axios.delete(`${API}/admin/standards/${id}`, getAuthConfig());
       setMessage("Standard deactivated");
       fetchAll();
-    } catch {}
+    } catch (err) {
+      console.error("Delete standard failed:", err);
+      setError("Failed to deactivate standard.");
+    }
   };
 
   const handleCreateUser = async () => {
@@ -286,7 +295,10 @@ export default function AdminLibrary() {
     try {
       await axios.patch(`${API}/admin/standards/documents/${id}`, { is_active }, getAuthConfig());
       setDocs(docs.map(d => d.id === id ? { ...d, is_active } : d));
-    } catch {}
+    } catch (err) {
+      console.error("Toggle document failed:", err);
+      setError("Failed to update document status.");
+    }
   };
 
   const handleDeleteDoc = async (id) => {
@@ -295,7 +307,10 @@ export default function AdminLibrary() {
       await axios.delete(`${API}/admin/standards/documents/${id}`, getAuthConfig());
       setDocs(docs.filter(d => d.id !== id));
       setMessage("Document deleted");
-    } catch {}
+    } catch (err) {
+      console.error("Delete document failed:", err);
+      setError("Failed to delete document.");
+    }
   };
 
   const handleAddStep = () => {

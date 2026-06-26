@@ -238,7 +238,7 @@ function ThemesView({ themes }) {
           ) : (
             <ul className="space-y-2.5">
               {common_risks.map((r, i) => (
-                <li key={i} className="flex items-start gap-3" data-testid={`risk-item-${i}`}>
+                <li key={r.text.slice(0, 40)} className="flex items-start gap-3" data-testid={`risk-item-${i}`}>
                   <div className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center mt-0.5">
                     <span className="text-xs font-bold text-amber-700">{r.count}</span>
                   </div>
@@ -260,7 +260,7 @@ function ThemesView({ themes }) {
           ) : (
             <ul className="space-y-2.5">
               {outstanding_actions.map((a, i) => (
-                <li key={i} className="flex items-start gap-3" data-testid={`action-item-${i}`}>
+                <li key={a.text.slice(0, 40)} className="flex items-start gap-3" data-testid={`action-item-${i}`}>
                   <div className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-100 flex items-center justify-center mt-0.5">
                     <span className="text-xs font-bold text-rose-700">{a.count}</span>
                   </div>
@@ -293,6 +293,7 @@ export default function TeamInsights() {
     } finally {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
 
   useEffect(() => { load(); }, [load]);

@@ -80,7 +80,9 @@ export default function RecordingScreen() {
   const logNotice = async () => {
     try {
       await axios.post(`${API}/recording/${meetingId}/notice`, {}, getAuthConfig());
-    } catch {}
+    } catch (err) {
+      console.error("Notice log failed:", err);
+    }
     setStage("ready");
   };
 

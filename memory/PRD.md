@@ -205,4 +205,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Custom evidence (Organisational Standards): accept/reject/flag/edit buttons now work correctly — `custom_mappings` added to backend update loop (review.py)
 - Whisper transcription upgraded with care/clinical domain terminology prompt (CQC, safeguarding, MCA, DoLS, etc.) for improved accuracy
 
+- Code quality review applied: `useMemo` for AuthContext value, error logging on all silent catch blocks, `eslint-disable` comments for intentional `[]` deps, stable keys in lists, role-array constants in App.js
+
 *Last Updated: 2026-06-26*
