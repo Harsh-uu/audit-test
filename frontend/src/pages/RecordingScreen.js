@@ -4,7 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  Mic, MicOff, Pause, Play, Square, AlertTriangle, Clock, Info, Upload, ArrowRight, Users
+  Mic, MicOff, Pause, Play, Square, AlertTriangle, Clock, Info, Upload, ArrowRight, Users, ExternalLink
 } from "lucide-react";
 
 function formatDuration(seconds) {
@@ -16,6 +16,16 @@ function formatDuration(seconds) {
 }
 
 const RECORDING_NOTICE = "This meeting is being recorded in line with our recording policy and requirement to gather evidence of compliance for CQC.";
+
+// Detect if running inside an iframe (e.g. Emergent platform preview)
+function isInIframe() {
+  try { return window.self !== window.top; } catch { return true; }
+}
+
+// Check if the browser supports getUserMedia in this context
+function canUseMediaDevices() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
 
 export default function RecordingScreen() {
   const { meetingId } = useParams();
@@ -29,10 +39,15 @@ export default function RecordingScreen() {
   const [pauseStart, setPauseStart] = useState(null);
   const [events, setEvents] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [inIframe, setInIframe] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
   const elapsedRef = useRef(0);
+
+  useEffect(() => {
+    setInIframe(isInIframe());
+  }, []);
 
   useEffect(() => {
     axios.get(`${API}/meetings/${meetingId}`, getAuthConfig())
@@ -79,6 +94,16 @@ export default function RecordingScreen() {
 
   const startRecording = async () => {
     setError("");
+
+    // Check if running in an embedded iframe — browsers block mic access there
+    if (inIframe || !canUseMediaDevices()) {
+      setError(
+        "Microphone access is blocked because this page is running inside an embedded preview. " +
+        "Please open the app in a full browser tab to use recording."
+      );
+      return;
+    }
+
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -244,10 +269,47 @@ export default function RecordingScreen() {
           </div>
         )}
 
+        {/* Iframe / preview environment warning */}
+        {inIframe && (
+          <div className="bg-blue-50 border border-blue-300 rounded-lg p-4 mb-5 fade-in" data-testid="iframe-warning">
+            <div className="flex items-start gap-3">
+              <ExternalLink className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-blue-900 mb-1">Open in a full browser tab to record</p>
+                <p className="text-sm text-blue-700 mb-3">
+                  Your browser blocks microphone access inside embedded previews. To use recording, open Supervision directly in its own tab.
+                </p>
+                <a
+                  href={window.location.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                  data-testid="open-new-tab-btn"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Open in New Tab
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 rounded-md p-3 mb-5 text-sm" data-testid="recording-error">
             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            {error}
+            <div>
+              <p>{error}</p>
+              {(error.includes("blocked") || error.includes("iframe") || error.includes("embedded")) && (
+                <a
+                  href={window.location.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 mt-2 text-red-700 underline font-medium text-xs"
+                >
+                  <ExternalLink className="w-3 h-3" /> Open in new tab
+                </a>
+              )}
+            </div>
           </div>
         )}
 
