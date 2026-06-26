@@ -161,6 +161,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Audit Trail tab: chronological log of all events (recording, transcription, edits, sign-off, comments)
 - Transcript anonymization: names replaced with initials in transcript text only; full names shown throughout all UI elements
 - Care Certificate outcome references: all 16 standards seeded with specific outcome refs (1.1, 2.1, etc.), AI includes outcome_ref in evidence mappings, EvidenceCard displays "Outcome X.X: name" badge
+- CQC Five Key Questions: all 14 regulations tagged with key questions (Safe/Effective/Caring/Responsive/Well-led), coloured badges shown on CQC evidence cards, existing analyses back-filled on startup
 
 ---
 
