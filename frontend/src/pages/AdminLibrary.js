@@ -173,6 +173,16 @@ export default function AdminLibrary() {
     } catch (err) { setError(err.response?.data?.detail || "Failed to create user"); }
   };
 
+  const handleUpdateUser = async (userId, data) => {
+    try {
+      await axios.put(`${API}/admin/users/${userId}`, data, getAuthConfig());
+      setMessage("User updated");
+      fetchAll();
+    } catch (err) {
+      throw new Error(err.response?.data?.detail || "Failed to update user");
+    }
+  };
+
   const handleUploadDoc = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -345,6 +355,7 @@ export default function AdminLibrary() {
             newUser={newUser}
             setNewUser={setNewUser}
             handleCreateUser={handleCreateUser}
+            onUpdateUser={handleUpdateUser}
             navigate={navigate}
           />
         )}

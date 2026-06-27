@@ -36,6 +36,7 @@ class CreateUserRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     name: Optional[str] = None
+    email: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -90,6 +91,11 @@ async def update_user(user_id: str, data: UpdateUserRequest, db=Depends(get_db),
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No update data provided")
+    if "email" in update_data:
+        update_data["email"] = update_data["email"].lower().strip()
+        clash = await db.users.find_one({"email": update_data["email"], "_id": {"$ne": ObjectId(user_id)}})
+        if clash:
+            raise HTTPException(status_code=400, detail="Email address already in use")
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
     return {"message": "User updated"}
 
