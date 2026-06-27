@@ -224,4 +224,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 - Speaker Identification (2026-Feb): `POST /api/processing/{id}/diarize` endpoint calls GPT-4o to label each speaker turn as Manager:/Worker: (or actual names). For new meetings, diarization runs in parallel with analysis (`asyncio.gather`). For existing meetings, an "Identify Speakers" button in the Transcript tab calls the endpoint on-demand. The transcript tab now has a Full Text / Speaker View toggle; navy pills = Manager, emerald pills = Worker. PDF export now renders speaker-labeled turns as two-column tables (colored label pill | turn text) when `speaker_text` is available, falling back to plain text otherwise.
 
+- Speaker Name Correction UI (2026-Feb): Each speaker pill in Speaker View is now clickable — clicking opens an inline text input with quick-pick buttons (manager name, worker name, "Speaker"). Enter to commit, Escape to cancel. Changed pills show an amber ring. A save bar appears at the bottom with Save/Discard. Save calls `PATCH /api/review/{id}/speaker-text` and persists to DB. 403 for non-managers.
+
 *Last Updated: 2026-Feb*
