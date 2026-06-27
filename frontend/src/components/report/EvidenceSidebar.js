@@ -261,11 +261,12 @@ function CareCertDrillDown({ mappings }) {
   );
 }
 
-export function EvidenceSidebar({ analysis, canReview, updateEvidence }) {
+export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false }) {
   const totalCount = (analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0);
+  const wrapperClass = className !== undefined ? className : "lg:col-span-5 bg-[#F8F9FA] overflow-y-auto";
 
   return (
-    <div className="lg:col-span-5 bg-[#F8F9FA] overflow-y-auto" style={{ maxHeight: "calc(100vh - 80px)" }}>
+    <div className={wrapperClass} style={noMaxHeight ? {} : { maxHeight: "calc(100vh - 80px)" }}>
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-900 font-display">Compliance Evidence</h2>

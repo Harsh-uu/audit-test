@@ -268,7 +268,7 @@ export default function MeetingReport() {
   const stageCfg = PROCESSING_STAGES[meeting.status];
   const analysis = meeting.analysis;
 
-  const tabBtnCls = (t) => `text-sm font-medium pb-1 border-b-2 transition-colors ${activeTab === t ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"}`;
+  const tabBtnCls = (t) => `flex-shrink-0 text-sm font-medium pb-1 border-b-2 transition-colors ${activeTab === t ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"}`;
 
   return (
     <Layout>
@@ -380,13 +380,14 @@ export default function MeetingReport() {
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
             {/* Left: tabs */}
             <div className="lg:col-span-7 border-r border-gray-200 flex flex-col overflow-hidden">
-              <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-4">
+              <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-4 overflow-x-auto scrollbar-hide">
                 <button onClick={() => setActiveTab("evidence")} className={tabBtnCls("evidence")}>Evidence</button>
                 <button onClick={() => setActiveTab("transcript")} className={tabBtnCls("transcript")}>Transcript</button>
                 <button onClick={() => setActiveTab("comments")} className={tabBtnCls("comments")} data-testid="comments-tab">
                   Comments {meeting.comments?.length > 0 && `(${meeting.comments.length})`}
                 </button>
                 <button onClick={() => setActiveTab("audit")} className={tabBtnCls("audit")} data-testid="audit-trail-tab">Audit Trail</button>
+                <button onClick={() => setActiveTab("compliance")} className={`${tabBtnCls("compliance")} lg:hidden`} data-testid="compliance-tab">Compliance</button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6">
@@ -437,10 +438,26 @@ export default function MeetingReport() {
                     fetchAuditTrail={fetchAuditTrail}
                   />
                 )}
+                {activeTab === "compliance" && (
+                  <div className="-m-6">
+                    <EvidenceSidebar
+                      analysis={analysis}
+                      canReview={canReview}
+                      updateEvidence={updateEvidence}
+                      className="bg-[#F8F9FA]"
+                      noMaxHeight
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
-            <EvidenceSidebar analysis={analysis} canReview={canReview} updateEvidence={updateEvidence} />
+            <EvidenceSidebar
+              analysis={analysis}
+              canReview={canReview}
+              updateEvidence={updateEvidence}
+              className="hidden lg:block lg:col-span-5 bg-[#F8F9FA] overflow-y-auto"
+            />
           </div>
         )}
 

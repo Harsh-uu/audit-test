@@ -1,0 +1,32 @@
+{
+  "summary": "Tested mobile responsive layout fix for Meeting Report page - Compliance tab on mobile viewport (430px) and desktop (1280px).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A", "frontend": "100%" },
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Compliance tab mobile fix verified working. Meeting ID 6a3f92df95f60e56302d0d5e used for testing.",
+  "test_results": {
+    "mobile_430px": {
+      "compliance_tab_visible": true,
+      "tab_count": 5,
+      "tabs": ["Evidence", "Transcript", "Comments", "Audit Trail", "Compliance"],
+      "compliance_content_loads": true,
+      "content_shows_cqc_regulations": true,
+      "content_shows_organisational_standards": true
+    },
+    "desktop_1280px": {
+      "compliance_tab_visible": false,
+      "sidebar_visible": true,
+      "tab_count": 4
+    }
+  }
+}
