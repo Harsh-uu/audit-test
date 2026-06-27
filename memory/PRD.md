@@ -228,4 +228,14 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 - Typography (2026-Feb): Added Work Sans to Google Fonts (weights 400-700). Registered `font-sans` (Poppins) and `font-display` (Work Sans) in Tailwind config. Removed all 17 `style={{ fontFamily: ... }}` inline overrides and replaced with `font-display` Tailwind class. Stripped redundant Poppins inline styles from Login, ResetPassword, and Layout (they inherit from `body`).
 
-*Last Updated: 2026-Feb*
+## Multi-Tenancy / Super Admin (2026-Jun)
+- New `super_admin` role — single fixed account (`superadmin@1two.one`) seeded from SUPER_ADMIN_EMAIL/SUPER_ADMIN_PASSWORD env vars.
+- New `organisations` MongoDB collection — each org: name, slug, status (active/suspended), created_at.
+- Data isolation: `org_id` field added to `users`, `meetings`, `org_settings`, `teams`. All queries scoped by org.
+- Startup migration: existing data auto-assigned to "Test Company" org via `seed_default_org()`.
+- New router `routers/super_admin.py`: GET/POST `/api/super-admin/orgs`, PATCH `/api/super-admin/orgs/{id}`, GET/POST `/api/super-admin/orgs/{id}/users`.
+- Existing routers (meetings.py, admin.py, org.py) updated to filter by current_user.org_id.
+- New page `/super-admin` (SuperAdminDashboard.js): org grid with stats, slide-over user panel, create org/user modals.
+- Layout.js: super_admin gets a distinct dark navy sidebar with only "Organisations" nav. Login.js: redirects super_admin to /super-admin post-login.
+
+*Last Updated: 2026-Jun*
