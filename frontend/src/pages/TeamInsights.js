@@ -68,7 +68,7 @@ function MatrixCell({ cell }) {
 }
 
 // ── Evidence Matrix ─────────────────────────────────────────────────────────
-function MatrixView({ matrix }) {
+function MatrixView({ matrix, ccStandards = [], onCellClick }) {
   const [matrixTab, setMatrixTab] = useState("cqc");
 
   const tabs = [
@@ -144,7 +144,18 @@ function MatrixView({ matrix }) {
                     </td>
                     {data.standards.map(std => (
                       <td key={std.ref} className="px-2 py-2 text-center">
-                        <MatrixCell cell={row.cells[std.ref]} />
+                        {matrixTab === "care_cert" ? (
+                          <button
+                            className="hover:opacity-75 transition-opacity"
+                            onClick={() => onCellClick && onCellClick(row, std)}
+                            title={`${row.staff_name} — ${std.ref}: click to see sub-outcomes`}
+                            data-testid={`cc-cell-${row.staff_id}-${std.ref.replace(/\s/g, '-')}`}
+                          >
+                            <MatrixCell cell={row.cells[std.ref]} />
+                          </button>
+                        ) : (
+                          <MatrixCell cell={row.cells[std.ref]} />
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -201,6 +212,120 @@ function MatrixView({ matrix }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Care Cert Sub-outcome Drill-down Modal ───────────────────────────────────
+function CcDrillDownModal({ staffName, stdRef, stdName, cell, ccStandards, onClose }) {
+  const std = ccStandards.find(s => s.reference === stdRef);
+  const allSubs = std?.sub_outcomes || [];
+  const evidencedSet = new Set(cell?.evidenced_refs || []);
+  const covered = allSubs.filter(s => evidencedSet.has(s.ref));
+  const gaps = allSubs.filter(s => !evidencedSet.has(s.ref));
+  const pct = allSubs.length ? Math.round((covered.length / allSubs.length) * 100) : 0;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+      data-testid="cc-drilldown-modal"
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between p-4 border-b border-gray-200">
+          <div>
+            <p className="text-xs text-blue-600 font-medium">{staffName}</p>
+            <h2 className="text-sm font-semibold text-gray-900 mt-0.5">{stdRef} — {stdName}</h2>
+          </div>
+          <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+            <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+              covered.length === allSubs.length && allSubs.length > 0
+                ? "bg-emerald-100 text-emerald-700"
+                : covered.length > 0
+                ? "bg-amber-100 text-amber-700"
+                : "bg-gray-100 text-gray-500"
+            }`}>
+              {covered.length}/{allSubs.length} covered
+            </span>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+              data-testid="close-drilldown-btn"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {allSubs.length > 0 && (
+          <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${pct === 100 ? "bg-emerald-500" : "bg-amber-400"}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="text-xs text-gray-500 flex-shrink-0">{pct}%</span>
+            </div>
+          </div>
+        )}
+
+        {/* Sub-outcomes list */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {allSubs.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">No sub-outcomes defined for this standard</p>
+          ) : (
+            <>
+              {covered.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
+                    Evidenced ({covered.length})
+                  </p>
+                  <div className="space-y-1.5">
+                    {covered.map(sub => (
+                      <div key={sub.ref} className="flex items-start gap-2 py-1">
+                        <span className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Check className="w-2.5 h-2.5 text-emerald-600" />
+                        </span>
+                        <p className="text-xs text-gray-800 leading-relaxed">
+                          <span className="font-semibold text-emerald-700 mr-1">{sub.ref}</span>
+                          {sub.desc}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {gaps.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    Not yet evidenced ({gaps.length})
+                  </p>
+                  <div className="space-y-1.5">
+                    {gaps.map(sub => (
+                      <div key={sub.ref} className="flex items-start gap-2 py-1 opacity-60">
+                        <span className="w-4 h-4 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                        </span>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          <span className="font-medium mr-1">{sub.ref}</span>
+                          {sub.desc}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -343,6 +468,8 @@ export default function TeamInsights() {
   const [tab, setTab] = useState("matrix");
   const [orgStructure, setOrgStructure] = useState({ settings: [] });
   const [orgFilter, setOrgFilter] = useState({ setting_id: "", team_id: "" });
+  const [ccStandards, setCcStandards] = useState([]);
+  const [drillDown, setDrillDown] = useState(null);
 
   const load = useCallback(async (filter = {}) => {
     setLoading(true);
@@ -371,6 +498,22 @@ export default function TeamInsights() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    axios.get(`${API}/admin/standards`, { ...getAuthConfig(), params: { type: "care_cert" } })
+      .then(r => setCcStandards(r.data))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCellClick = (row, std) => {
+    setDrillDown({
+      staffName: row.staff_name,
+      stdRef: std.ref,
+      stdName: std.name,
+      cell: row.cells[std.ref],
+    });
+  };
 
   return (
     <Layout>
@@ -470,12 +613,25 @@ export default function TeamInsights() {
             </div>
           ) : (
             <>
-              {tab === "matrix" && <MatrixView matrix={data.matrix} />}
+              {tab === "matrix" && (
+                <MatrixView
+                  matrix={data.matrix}
+                  ccStandards={ccStandards}
+                  onCellClick={handleCellClick}
+                />
+              )}
               {tab === "themes" && <ThemesView themes={data.themes} />}
             </>
           )}
         </div>
       </div>
+      {drillDown && (
+        <CcDrillDownModal
+          {...drillDown}
+          ccStandards={ccStandards}
+          onClose={() => setDrillDown(null)}
+        />
+      )}
     </Layout>
   );
 }

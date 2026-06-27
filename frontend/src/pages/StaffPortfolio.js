@@ -107,6 +107,144 @@ const TYPE_COLORS = {
   },
 };
 
+// ── Care Certificate grouped view with sub-outcome expansion ─────────────────
+function CareCertGroupedView({ items, ccStandards }) {
+  const [openStds, setOpenStds] = useState({});
+  const [showGaps, setShowGaps] = useState({});
+
+  // Group items by standard_ref, preserve numeric order
+  const grouped = {};
+  for (const item of items) {
+    const sr = item.standard_ref;
+    if (!grouped[sr]) grouped[sr] = { standardRef: sr, standardName: item.standard_name, items: [] };
+    grouped[sr].items.push(item);
+  }
+
+  const sortedRefs = Object.keys(grouped).sort((a, b) => {
+    const numA = parseInt((a.match(/\d+/) || [0])[0]);
+    const numB = parseInt((b.match(/\d+/) || [0])[0]);
+    return numA - numB;
+  });
+
+  return (
+    <div data-testid="care-cert-grouped-view">
+      {sortedRefs.map(stdRef => {
+        const group = grouped[stdRef];
+        const stdDef = ccStandards.find(s => s.reference === stdRef);
+        const allSubs = stdDef?.sub_outcomes || [];
+        const evidencedRefs = new Set(group.items.map(i => i.outcome_ref).filter(Boolean));
+        const gapSubs = allSubs.filter(s => !evidencedRefs.has(s.ref));
+        const coveredCount = allSubs.length > 0 ? allSubs.filter(s => evidencedRefs.has(s.ref)).length : evidencedRefs.size;
+        const totalSubs = allSubs.length;
+        const isOpen = openStds[stdRef] !== false; // default open
+        const isShowingGaps = showGaps[stdRef];
+
+        return (
+          <div
+            key={stdRef}
+            className="border border-blue-100 rounded-lg overflow-hidden mb-3"
+            data-testid={`cc-group-${stdRef.replace(/\s/g, '-')}`}
+          >
+            {/* Standard header */}
+            <button
+              className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
+              onClick={() => setOpenStds(s => ({ ...s, [stdRef]: !isOpen }))}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {isOpen
+                  ? <ChevronDown className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                  : <ChevronRight className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
+                <span className="text-xs font-semibold text-blue-800 flex-shrink-0">{stdRef}</span>
+                <span className="text-xs text-gray-600 truncate">{group.standardName}</span>
+              </div>
+              <div className="flex-shrink-0 ml-2">
+                {totalSubs > 0 ? (
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    coveredCount === totalSubs ? "bg-emerald-100 text-emerald-700"
+                    : coveredCount > 0 ? "bg-amber-100 text-amber-700"
+                    : "bg-gray-100 text-gray-500"
+                  }`}>
+                    {coveredCount}/{totalSubs}
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                    {group.items.reduce((s, i) => s + i.evidence_count, 0)} items
+                  </span>
+                )}
+              </div>
+            </button>
+
+            {isOpen && (
+              <div className="bg-white px-3 py-2">
+                {/* Evidenced sub-outcomes */}
+                {group.items.map(item => (
+                  <div
+                    key={item.outcome_ref || item.standard_ref}
+                    className="flex items-start gap-2 py-2 border-b border-gray-50 last:border-0"
+                    data-testid={`cc-sub-${(item.outcome_ref || item.standard_ref).replace(/\./g, '-')}`}
+                  >
+                    <span className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check className="w-2.5 h-2.5 text-emerald-600" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-800">
+                        {item.outcome_ref && (
+                          <span className="text-emerald-700 font-semibold mr-1">{item.outcome_ref}</span>
+                        )}
+                        {item.outcome_name}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
+                        <ConfidenceDots likely={item.likely_count} review={item.needs_review_count} />
+                        <span className="text-xs text-gray-400">
+                          {item.evidence_count} evidence item{item.evidence_count !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      {item.meeting_refs?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {item.meeting_refs.slice(0, 4).map((r, i) => (
+                            <span key={i} className="text-xs bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
+                              {r.date ? r.date.slice(0, 10) : "—"}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Gap sub-outcomes (collapsible) */}
+                {gapSubs.length > 0 && (
+                  <div className="mt-1">
+                    <button
+                      className="w-full text-left text-xs text-gray-400 hover:text-gray-600 py-1.5 flex items-center gap-1"
+                      onClick={() => setShowGaps(s => ({ ...s, [stdRef]: !s[stdRef] }))}
+                    >
+                      {isShowingGaps
+                        ? <ChevronDown className="w-3 h-3" />
+                        : <ChevronRight className="w-3 h-3" />}
+                      {gapSubs.length} sub-outcome{gapSubs.length !== 1 ? "s" : ""} not yet evidenced
+                    </button>
+                    {isShowingGaps && gapSubs.map(sub => (
+                      <div key={sub.ref} className="flex items-start gap-2 py-1.5 opacity-50">
+                        <span className="w-4 h-4 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                        </span>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          <span className="font-medium mr-1">{sub.ref}</span>{sub.desc}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function StaffPortfolio() {
   const { userId } = useParams();
   const { getAuthConfig, API, user: me } = useAuth();
@@ -115,6 +253,7 @@ export default function StaffPortfolio() {
   const [loading, setLoading] = useState(true);
   const [evidenceTab, setEvidenceTab] = useState("cqc");
   const [exporting, setExporting] = useState(false);
+  const [ccStandards, setCcStandards] = useState([]);
 
   const effectiveUserId = userId || me?.id;
 
@@ -135,6 +274,13 @@ export default function StaffPortfolio() {
   }, [effectiveUserId, API]);
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
+
+  useEffect(() => {
+    axios.get(`${API}/admin/standards`, { ...getAuthConfig(), params: { type: "care_cert" } })
+      .then(r => setCcStandards(r.data))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const exportPdf = async () => {
     setExporting(true);
@@ -304,6 +450,8 @@ export default function StaffPortfolio() {
                   <div className="text-center py-12 text-gray-400">
                     <p className="text-sm">No {tabCfg.find(t => t.key === evidenceTab)?.label} evidence recorded yet</p>
                   </div>
+                ) : evidenceTab === "care_cert" ? (
+                  <CareCertGroupedView items={care_cert_summary} ccStandards={ccStandards} />
                 ) : (
                   <div data-testid="evidence-standards-list">
                     {evidenceItems[evidenceTab].map((item, i) => (
