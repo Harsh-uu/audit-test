@@ -284,7 +284,7 @@ export default function MeetingReport() {
     <Layout>
       <div className="flex flex-col h-full">
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-20 gap-2">
           <div className="flex items-center gap-4">
             <button onClick={() => navigate("/dashboard")} className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-sm">
               <ArrowLeft className="w-4 h-4" />
@@ -303,34 +303,40 @@ export default function MeetingReport() {
 
           <div className="flex items-center gap-2">
             {canReview && !hasReviewed && (
-              <button onClick={markReviewed} disabled={submitting} className="flex items-center gap-2 bg-[#059669] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60" data-testid="mark-reviewed-btn">
-                <CheckCircle className="w-4 h-4" /> Mark Reviewed
+              <button onClick={markReviewed} disabled={submitting} className="flex items-center gap-2 bg-[#059669] text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60" data-testid="mark-reviewed-btn">
+                <CheckCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">Mark Reviewed</span>
               </button>
             )}
             {hasReviewed && canReview && (
-              <span className="flex items-center gap-1.5 text-emerald-600 text-sm font-medium">
+              <span className="hidden sm:flex items-center gap-1.5 text-emerald-600 text-sm font-medium">
                 <CheckCircle className="w-4 h-4" /> You reviewed this
               </span>
             )}
             {canSignOff && (isReviewed || (isInReview && allReviewed)) && !isSignedOff && (
-              <button onClick={() => setShowSignOffConfirm(true)} disabled={submitting} className="flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60" data-testid="sign-off-btn">
-                <Shield className="w-4 h-4" /> Sign Off
+              <button onClick={() => setShowSignOffConfirm(true)} disabled={submitting} className="flex items-center gap-2 bg-[#1E3A8A] text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60" data-testid="sign-off-btn">
+                <Shield className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign Off</span>
               </button>
             )}
             {isSignedOff && canSignOff && (
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-md shadow-sm">
-                  <button onClick={exportPdf} disabled={exportingPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60 rounded-l-md" data-testid="export-pdf-btn">
+                <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-sm">
+                  {/* PDF export — icon only on mobile */}
+                  <button onClick={exportPdf} disabled={exportingPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60 rounded-l-md" data-testid="export-pdf-btn" title="Export PDF">
                     <FileText className="w-4 h-4 text-gray-500" />
-                    {exportingPdf ? "Generating…" : "Export PDF"}
+                    <span className="hidden sm:inline">{exportingPdf ? "Generating…" : "Export PDF"}</span>
                   </button>
-                  <div className="border-l border-gray-200 px-2 py-2 flex items-center gap-1.5">
+                  {/* Full text toggle — desktop only */}
+                  <div className="hidden sm:flex border-l border-gray-200 px-2 py-2 items-center gap-1.5">
                     <input type="checkbox" id="include-transcript" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
                     <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none" title="Speaker turns are always included when available. This adds the full plain-text transcript.">+ Full text</label>
                   </div>
                 </div>
-                <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn">
-                  <Send className="w-4 h-4" /> Send to Attendees
+                {/* Send — icon only on mobile */}
+                <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn" title="Send to Attendees">
+                  <Send className="w-4 h-4" />
+                  <span className="hidden sm:inline">Send to Attendees</span>
                 </button>
               </div>
             )}
