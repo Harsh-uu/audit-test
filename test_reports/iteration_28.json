@@ -1,0 +1,25 @@
+{
+  "summary": "Tested the minimise/expand toggle for the Speaker Labels panel in the TranscriptTab. All 5 acceptance criteria passed.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A", "frontend": "100%" },
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Speaker Labels panel collapse/expand toggle fully working. Meeting 6a3f92df95f60e56302d0d5e used for testing. Speakers: Oncologist (57 turns), Patient (54 turns). Toggle button data-testid='toggle-speaker-panel'. Panel data-testid='speaker-manager-panel'.",
+  "test_results": {
+    "panel_visible_expanded_by_default": "PASS",
+    "minimise_button_with_chevron_up_visible": "PASS",
+    "clicking_minimise_collapses_body": "PASS - inputs hidden, button changes to Expand",
+    "collapsed_header_shows_pills": "PASS - pills 'Oncologist' and 'Patient' visible",
+    "expand_button_restores_panel": "PASS - 2 inputs visible again",
+    "save_discard_buttons_survive_collapse_expand": "PASS - Save button still present after collapse/expand with dirty state"
+  }
+}
