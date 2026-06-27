@@ -15,6 +15,8 @@ WHISPER_MAX_BYTES = 24 * 1024 * 1024  # 24 MB — 1 MB buffer below Whisper's 25
 
 def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
     """Compress audio to 16 kHz mono 32 kbps MP3 — optimal for voice/Whisper, ~7 MB per 30 min."""
+    import imageio_ffmpeg
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
     with tempfile.NamedTemporaryFile(suffix=input_suffix, delete=False) as f:
         f.write(audio_data)
         inp = f.name
@@ -22,7 +24,7 @@ def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
     try:
         result = subprocess.run(
             [
-                "ffmpeg", "-i", inp,
+                ffmpeg_exe, "-i", inp,
                 "-vn",                 # drop any video stream
                 "-ar", "16000",        # 16 kHz — Whisper's native sample rate
                 "-ac", "1",            # mono
