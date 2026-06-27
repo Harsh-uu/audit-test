@@ -672,11 +672,14 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depen
 
     transcript_text = ""
     speaker_text = ""
-    if include_transcript and meeting.get("transcript_id"):
+    if meeting.get("transcript_id"):
         tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
         if tdoc:
-            transcript_text = tdoc.get("text", "")
+            # Speaker turns are always included — they reflect manual corrections and are key evidence
             speaker_text = tdoc.get("speaker_text", "")
+            # Full plain-text transcript only when explicitly requested
+            if include_transcript:
+                transcript_text = tdoc.get("text", "")
 
     pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text)
     safe_title = "".join(c for c in meeting.get("title", "report") if c.isalnum() or c in " _-")

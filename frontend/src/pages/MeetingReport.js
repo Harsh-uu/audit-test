@@ -318,7 +318,7 @@ export default function MeetingReport() {
                   </button>
                   <div className="border-l border-gray-200 px-2 py-2 flex items-center gap-1.5">
                     <input type="checkbox" id="include-transcript" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
-                    <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none">+ Transcript</label>
+                    <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none" title="Speaker turns are always included when available. This adds the full plain-text transcript.">+ Full text</label>
                   </div>
                 </div>
                 <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn">
