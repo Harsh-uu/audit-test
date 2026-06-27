@@ -118,7 +118,20 @@ async def logout(response: Response):
 
 
 @router.get("/me")
-async def me(current_user=Depends(get_current_user)):
+async def me(current_user=Depends(get_current_user), db=Depends(get_db)):
+    org_id = current_user.get("org_id")
+    if org_id:
+        try:
+            org = await db.organisations.find_one({"_id": ObjectId(org_id)})
+            if org:
+                b = org.get("branding") or {}
+                current_user["org_branding"] = {
+                    "has_logo": bool(b.get("logo_path")),
+                    "primary_color": b.get("primary_color"),
+                }
+                current_user["org_name"] = org.get("name", "")
+        except Exception:
+            pass
     return current_user
 
 

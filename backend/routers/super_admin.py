@@ -41,6 +41,11 @@ class UpdateOrgRequest(BaseModel):
     status: Optional[str] = None  # active | suspended
 
 
+class OrgBrandingUpdate(BaseModel):
+    primary_color: Optional[str] = None
+    logo_url: Optional[str] = None  # "" to clear logo
+
+
 class CreateOrgUserRequest(BaseModel):
     email: EmailStr
     name: str
@@ -109,6 +114,25 @@ async def update_org(org_id: str, data: UpdateOrgRequest, db=Depends(get_db), cu
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.organisations.update_one({"_id": obj_id}, {"$set": update})
     return {"message": "Organisation updated"}
+
+
+@router.put("/orgs/{org_id}/branding")
+async def update_org_branding(org_id: str, data: OrgBrandingUpdate, db=Depends(get_db), current_user=Depends(get_current_user)):
+    _require_super_admin(current_user)
+    try:
+        obj_id = ObjectId(org_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid org ID")
+    update: dict = {}
+    if data.primary_color is not None:
+        update["branding.primary_color"] = data.primary_color
+    if data.logo_url == "":
+        update["branding.logo_path"] = None
+    if not update:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.organisations.update_one({"_id": obj_id}, {"$set": update})
+    return {"message": "Branding updated"}
 
 
 @router.get("/orgs/{org_id}/users")

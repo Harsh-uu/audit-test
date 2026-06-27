@@ -13,6 +13,11 @@ export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const orgPrimary = user?.org_branding?.primary_color || "#1E3A8A";
+  const orgLogoUrl = user?.org_branding?.has_logo && user?.org_id
+    ? `${process.env.REACT_APP_BACKEND_URL}/api/org/branding/logo/${user.org_id}`
+    : null;
+
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -88,19 +93,29 @@ export default function Layout({ children }) {
   const SidebarContent = ({ onNavClick }) => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 h-16 flex-shrink-0">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 h-auto min-h-16 flex-shrink-0">
         {!collapsed && (
-          <Link to="/dashboard" onClick={onNavClick} className="flex items-center gap-2">
-            <img src="/logo.svg" alt="1two.one" className="w-8 h-8 flex-shrink-0" />
-            <span className="font-semibold text-[#1E3A8A] text-lg tracking-tight">
-              1two.one
-            </span>
-          </Link>
+          <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+            <Link to="/dashboard" onClick={onNavClick} className="flex items-center gap-2">
+              <img src="/logo.svg" alt="1two.one" className="w-8 h-8 flex-shrink-0" />
+              <span className="font-semibold text-[#1E3A8A] text-lg tracking-tight">
+                1two.one
+              </span>
+            </Link>
+            {orgLogoUrl && (
+              <img
+                src={orgLogoUrl}
+                alt="Organisation"
+                className="h-7 w-auto max-w-[120px] object-contain"
+                data-testid="org-logo-sidebar"
+              />
+            )}
+          </div>
         )}
         {collapsed && <img src="/logo.svg" alt="1two.one" className="w-7 h-7 mx-auto" />}
         <button
           onClick={() => { setCollapsed(!collapsed); }}
-          className="p-1 rounded hover:bg-gray-100 text-gray-500 hidden lg:block"
+          className="p-1 rounded hover:bg-gray-100 text-gray-500 hidden lg:block flex-shrink-0"
           data-testid="sidebar-toggle"
         >
           {collapsed ? <Menu className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -108,7 +123,7 @@ export default function Layout({ children }) {
         {/* Mobile close button */}
         <button
           onClick={() => setMobileOpen(false)}
-          className="p-1 rounded hover:bg-gray-100 text-gray-500 lg:hidden"
+          className="p-1 rounded hover:bg-gray-100 text-gray-500 lg:hidden flex-shrink-0"
           data-testid="sidebar-mobile-close"
         >
           <X className="w-4 h-4" />
@@ -117,67 +132,56 @@ export default function Layout({ children }) {
 
       {/* Nav */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map(({ path, icon: Icon, label, matchBase }) => (
-          <Link
-            key={path}
-            to={path}
-            onClick={onNavClick}
-            data-testid={`nav-${label.toLowerCase().replace(/\s/g, "-")}`}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-              isActive(matchBase || path)
-                ? "bg-[#1E3A8A] text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            <Icon className="w-4 h-4 flex-shrink-0" />
-            {!collapsed && <span>{label}</span>}
-          </Link>
-        ))}
+        {navItems.map(({ path, icon: Icon, label, matchBase }) => {
+          const active = isActive(matchBase || path);
+          return (
+            <Link
+              key={path}
+              to={path}
+              onClick={onNavClick}
+              data-testid={`nav-${label.toLowerCase().replace(/\s/g, "-")}`}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                active ? "text-white" : "text-gray-600 hover:bg-gray-100"
+              }`}
+              style={active ? { backgroundColor: orgPrimary } : {}}
+            >
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              {!collapsed && <span>{label}</span>}
+            </Link>
+          );
+        })}
 
         {(user?.role === "admin" || user?.role === "manager") && (
           <>
             {!collapsed && (
               <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Admin</div>
             )}
-            <Link
-              to="/admin/team"
-              onClick={onNavClick}
-              data-testid="nav-team-intelligence"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                isActive("/admin/team") ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <BarChart2 className="w-4 h-4 flex-shrink-0" />
-              {!collapsed && <span>Team Intelligence</span>}
-            </Link>
-            {(user?.role === "admin" || user?.role === "manager") && (
-              <Link
-                to="/organisation"
-                onClick={onNavClick}
-                data-testid="nav-organisation"
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  isActive("/organisation") ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                <Building2 className="w-4 h-4 flex-shrink-0" />
-                {!collapsed && <span>Organisation</span>}
-              </Link>
-            )}
-            {user?.role === "admin" && (
-              <>
+            {[
+              { path: "/admin/team", icon: BarChart2, label: "Team Intelligence", testId: "nav-team-intelligence" },
+              ...(user?.role === "admin" || user?.role === "manager"
+                ? [{ path: "/organisation", icon: Building2, label: "Organisation", testId: "nav-organisation" }]
+                : []),
+              ...(user?.role === "admin"
+                ? [{ path: "/admin", icon: BookOpen, label: "Standards Library", testId: "nav-standards-library", exact: true }]
+                : []),
+            ].map(({ path, icon: Icon, label, testId, exact }) => {
+              const active = exact ? location.pathname === path : isActive(path);
+              return (
                 <Link
-                  to="/admin"
+                  key={path}
+                  to={path}
                   onClick={onNavClick}
-                  data-testid="nav-standards-library"
+                  data-testid={testId}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                    location.pathname === "/admin" ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
+                    active ? "text-white" : "text-gray-600 hover:bg-gray-100"
                   }`}
+                  style={active ? { backgroundColor: orgPrimary } : {}}
                 >
-                  <BookOpen className="w-4 h-4 flex-shrink-0" />
-                  {!collapsed && <span>Standards Library</span>}
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  {!collapsed && <span>{label}</span>}
                 </Link>
-              </>
-            )}
+              );
+            })}
           </>
         )}
       </nav>
@@ -255,6 +259,14 @@ export default function Layout({ children }) {
               1two.one
             </span>
           </Link>
+          {orgLogoUrl && (
+            <img
+              src={orgLogoUrl}
+              alt="Organisation"
+              className="ml-auto h-7 w-auto max-w-[100px] object-contain"
+              data-testid="org-logo-mobile"
+            />
+          )}
         </div>
 
         <main className="flex-1 overflow-y-auto">

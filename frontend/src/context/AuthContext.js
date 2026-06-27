@@ -116,8 +116,25 @@ export function AuthProvider({ children }) {
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   };
 
+  // Mutates the in-memory user.org_branding without a round-trip to /me
+  const updateOrgBranding = (branding) => {
+    setUser(u => u ? { ...u, org_branding: branding } : u);
+  };
+
+  // Inject CSS variable whenever brand color changes
+  useEffect(() => {
+    const color = user?.org_branding?.primary_color;
+    let el = document.getElementById("org-brand-vars");
+    if (!el) {
+      el = document.createElement("style");
+      el.id = "org-brand-vars";
+      document.head.appendChild(el);
+    }
+    el.textContent = `:root { --org-primary: ${color || "#1E3A8A"}; }`;
+  }, [user?.org_branding?.primary_color]);
+
   const contextValue = useMemo(
-    () => ({ user, login, register, logout, getAuthConfig, silentRefresh, API }),
+    () => ({ user, login, register, logout, getAuthConfig, silentRefresh, API, updateOrgBranding }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user]
   );

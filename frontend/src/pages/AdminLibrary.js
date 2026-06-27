@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Shield, Award, BookOpen, FileText, Users, Download, CheckCircle, AlertCircle, X } from "lucide-react";
+import { Shield, Award, BookOpen, FileText, Users, Download, CheckCircle, AlertCircle, X, Palette } from "lucide-react";
 import { StandardsTab } from "@/components/admin/StandardsTab";
 import { DocumentsTab } from "@/components/admin/DocumentsTab";
 import { TemplateTab } from "@/components/admin/TemplateTab";
 import { UsersTab } from "@/components/admin/UsersTab";
 import { ExportTab } from "@/components/admin/ExportTab";
+import { BrandingTab } from "@/components/admin/BrandingTab";
 
 function TabBtn({ active, onClick, children }) {
   return (
@@ -287,6 +288,10 @@ export default function AdminLibrary() {
             <Download className="inline w-3.5 h-3.5 mr-1.5" />
             Evidence Export
           </TabBtn>
+          <TabBtn active={tab === "branding"} onClick={() => setTab("branding")}>
+            <Palette className="inline w-3.5 h-3.5 mr-1.5" />
+            Branding
+          </TabBtn>
         </div>
 
         {(tab === "cqc" || tab === "care_cert") && (
@@ -365,6 +370,8 @@ export default function AdminLibrary() {
             setExportStaffIds={setExportStaffIds}
           />
         )}
+
+        {tab === "branding" && <BrandingTab />}
       </div>
     </Layout>
   );
