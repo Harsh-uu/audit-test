@@ -176,11 +176,16 @@ export default function RecordingScreen() {
       return;
     }
 
-    // Build MediaRecorder with best available format
+    // Build MediaRecorder with best available format + low bitrate for voice
+    // 32 kbps keeps a 30-min recording under 8 MB, well within Cloudflare's proxy limits
     let recorder;
     try {
       const mimeType = getBestMimeType();
-      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const options = {
+        ...(mimeType ? { mimeType } : {}),
+        audioBitsPerSecond: 32000,
+      };
+      recorder = new MediaRecorder(stream, options);
     } catch (err) {
       // Fallback: try with no options at all
       try {

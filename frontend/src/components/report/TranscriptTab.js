@@ -64,25 +64,38 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise }) {
     <div data-testid="transcript-view">
       <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4 flex items-center gap-2">
         <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-amber-700 flex-1">
           {canAnonymise
             ? "Highlight any name in the transcript and click Anonymise to replace it with an initial."
             : "Transcript is read-only. Use the Evidence tab to edit summaries and evidence wording."}
         </p>
       </div>
       <div
-        className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm"
+        className="bg-white border border-gray-200 rounded-lg shadow-sm"
         onMouseUp={handleMouseUp}
         data-testid="transcript-text"
       >
         {(() => {
           const raw = anonymiseTranscript(meeting.transcript?.text, meeting.attendees || []);
-          if (!raw) return <p className="text-sm text-gray-400 italic">Transcript not available.</p>;
-          return formatTranscript(raw).map((para, i) => (
-            <p key={i} className="text-sm text-gray-700 leading-relaxed mb-3 last:mb-0">
-              {para}
-            </p>
-          ));
+          if (!raw) return <p className="p-5 text-sm text-gray-400 italic">Transcript not available.</p>;
+          const wordCount = raw.trim().split(/\s+/).filter(Boolean).length;
+          const readMins = Math.ceil(wordCount / 150);
+          return (
+            <>
+              <div className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-100 text-xs text-gray-400">
+                <span data-testid="word-count">{wordCount.toLocaleString()} words</span>
+                <span className="text-gray-200">·</span>
+                <span>~{readMins} min read</span>
+              </div>
+              <div className="p-5">
+                {formatTranscript(raw).map((para, i) => (
+                  <p key={i} className="text-sm text-gray-700 leading-relaxed mb-3 last:mb-0">
+                    {para}
+                  </p>
+                ))}
+              </div>
+            </>
+          );
         })()}
       </div>
 
