@@ -134,6 +134,7 @@ export default function NewMeeting() {
               >
                 <option value="supervision">Supervision</option>
                 <option value="appraisal">Appraisal</option>
+                <option value="observation">Observation</option>
                 <option value="team_meeting">Team Meeting</option>
                 <option value="competency_review">Competency Review</option>
                 <option value="other">Other</option>

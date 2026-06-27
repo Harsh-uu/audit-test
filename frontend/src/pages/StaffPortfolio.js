@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   ArrowLeft, Shield, Award, FileText, Download, Loader,
-  CheckCircle, Clock, ChevronRight, TrendingUp, User
+  CheckCircle, Clock, ChevronRight, ChevronDown, TrendingUp, User, Check
 } from "lucide-react";
 
 const CONF_CONFIG = {

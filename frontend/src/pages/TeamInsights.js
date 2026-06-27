@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   Grid3x3, TrendingUp, AlertTriangle, ClipboardList, Shield, Award,
-  FileText, Users, RefreshCw, ChevronRight, Building2
+  FileText, Users, RefreshCw, ChevronRight, Building2, Check, X
 } from "lucide-react";
 
 // ── Cell rendering ──────────────────────────────────────────────────────────
