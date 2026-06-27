@@ -87,7 +87,6 @@ export default function MeetingReport() {
   const hasReviewed = userAttendee?.reviewed || false;
   const allReviewed = meeting?.attendees?.length > 0 ? meeting.attendees.every(a => a.reviewed) : true;
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchMeeting = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/meetings/${meetingId}`, getAuthConfig());
@@ -100,9 +99,8 @@ export default function MeetingReport() {
     } finally {
       setLoading(false);
     }
-  }, [meetingId]);
+  }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchAuditTrail = useCallback(async () => {
     setAuditLoading(true);
     try {
@@ -114,7 +112,7 @@ export default function MeetingReport() {
     } finally {
       setAuditLoading(false);
     }
-  }, [meetingId]);
+  }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchMeeting();

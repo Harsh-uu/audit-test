@@ -52,24 +52,21 @@ export default function RecordingScreen() {
 
   useEffect(() => {
     setInIframe(isInIframe());
-    // Fetch supervision template — runs once on mount; API/getAuthConfig are stable references
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     axios.get(`${API}/admin/template`, getAuthConfig())
       .then(r => { if (r.data?.steps?.length > 0) setTemplate(r.data); })
       .catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     axios.get(`${API}/meetings/${meetingId}`, getAuthConfig())
       .then(r => {
         setMeeting(r.data);
-        // If already has audio, go to report
         if (["processing", "transcribing", "analyzing", "in_review", "reviewed", "signed_off", "shared"].includes(r.data.status)) {
           navigate(`/meetings/${meetingId}/report`);
         }
       })
       .catch(e => setError("Meeting not found"));
-  }, [meetingId]);
+  }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => {

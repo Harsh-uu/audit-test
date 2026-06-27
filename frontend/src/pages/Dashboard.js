@@ -67,7 +67,7 @@ export default function Dashboard() {
     }
     const interval = setInterval(fetchMeetings, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchMeetings = async () => {
     try {
