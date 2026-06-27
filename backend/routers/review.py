@@ -632,12 +632,14 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depen
             analysis = adoc
 
     transcript_text = ""
+    speaker_text = ""
     if include_transcript and meeting.get("transcript_id"):
         tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
         if tdoc:
             transcript_text = tdoc.get("text", "")
+            speaker_text = tdoc.get("speaker_text", "")
 
-    pdf_bytes = _generate_pdf(meeting, analysis, transcript_text)
+    pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text)
     safe_title = "".join(c for c in meeting.get("title", "report") if c.isalnum() or c in " _-")
     filename = f"supervision_{safe_title[:40].strip().replace(' ', '_')}.pdf"
     return Response(
@@ -647,7 +649,7 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depen
     )
 
 
-def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str) -> bytes:
+def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_text: str = "") -> bytes:
     from io import BytesIO
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
@@ -798,15 +800,64 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str) -> bytes:
             story.append(Spacer(1, 2*mm))
 
     # ── Transcript (optional) ─────────────────────────────────────────────
-    if transcript_text:
+    if transcript_text or speaker_text:
+        import re as _re
         story.append(Spacer(1, 4*mm))
         story.append(section_header("Meeting Transcript (Anonymised)", bg=colors.HexColor("#374151")))
         story.append(Spacer(1, 2*mm))
-        story.append(Paragraph("Names in this transcript have been replaced with initials.", small_style))
-        # Split transcript into paragraphs to avoid huge single text block
-        for chunk in transcript_text.split("\n"):
-            if chunk.strip():
-                story.append(Paragraph(chunk.strip(), mono_style))
+
+        MGMT_NAVY = colors.HexColor("#1E3A8A")
+        WORKER_GREEN = colors.HexColor("#065F46")
+        label_text_style = ParagraphStyle("LabelTxt", fontName="Helvetica-Bold", fontSize=7, textColor=colors.white, leading=9)
+        turn_text_style = ParagraphStyle("TurnTxt", fontName="Helvetica", fontSize=8, textColor=colors.HexColor("#374151"), leading=12)
+
+        if speaker_text:
+            story.append(Paragraph("Speaker turns identified by AI. Names replaced with initials where anonymised.", small_style))
+            story.append(Spacer(1, 2*mm))
+
+            manager_name = meeting.get("sign_off_manager_name", "")
+            manager_words = [w.lower() for w in manager_name.split() if len(w) > 2] if manager_name else []
+
+            # Parse "SPEAKER: text" lines
+            turns = []
+            for line in speaker_text.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                m = _re.match(r'^([^:]{1,50}):\s*(.+)', line)
+                if m:
+                    turns.append([m.group(1).strip(), m.group(2).strip()])
+                elif turns:
+                    turns[-1][1] += " " + line
+                else:
+                    turns.append(["Speaker", line])
+
+            for speaker, text in turns:
+                sl = speaker.lower()
+                is_manager = (sl in ("manager", "supervisor") or
+                              any(w in sl for w in manager_words))
+                label_color = MGMT_NAVY if is_manager else WORKER_GREEN
+                row = [[Paragraph(speaker.upper(), label_text_style), Paragraph(text, turn_text_style)]]
+                t = Table(row, colWidths=[22*mm, 148*mm])
+                t.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (0, 0), label_color),
+                    ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#F9FAFB")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (0, 0), 4),
+                    ("RIGHTPADDING", (0, 0), (0, 0), 4),
+                    ("LEFTPADDING", (1, 0), (1, 0), 6),
+                    ("RIGHTPADDING", (1, 0), (1, 0), 6),
+                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+                ]))
+                story.append(t)
+                story.append(Spacer(1, 1*mm))
+        else:
+            story.append(Paragraph("Names in this transcript have been replaced with initials.", small_style))
+            for chunk in transcript_text.split("\n"):
+                if chunk.strip():
+                    story.append(Paragraph(chunk.strip(), mono_style))
 
     # ── Footer note ───────────────────────────────────────────────────────
     story.append(Spacer(1, 8*mm))
