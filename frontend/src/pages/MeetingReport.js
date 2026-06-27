@@ -47,7 +47,7 @@ function RetryButton({ meetingId, onRetry, API, getAuthConfig }) {
 
 const PROCESSING_STAGES = {
   processing:        { label: "Uploading audio...", pct: 20 },
-  transcribing:      { label: "Transcribing audio with Whisper...", pct: 50 },
+  transcribing:      { label: "Transcribing Audio...", pct: 50 },
   analyzing:         { label: "Mapping compliance evidence with AI...", pct: 80 },
   processing_failed: { label: "Processing failed", pct: 0, error: true },
 };
