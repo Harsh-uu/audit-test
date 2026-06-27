@@ -53,8 +53,10 @@ class CreateStandardRequest(BaseModel):
 async def list_users(db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
+    org_id = current_user.get("org_id")
+    query = {"org_id": org_id} if org_id else {}
     users = []
-    async for doc in db.users.find({}, {"password_hash": 0}).sort("name", 1):
+    async for doc in db.users.find(query, {"password_hash": 0}).sort("name", 1):
         users.append(doc_to_dict(doc))
     return users
 
@@ -73,6 +75,7 @@ async def create_user(data: CreateUserRequest, db=Depends(get_db), current_user=
         "password_hash": hash_password(data.password),
         "name": data.name,
         "role": role,
+        "org_id": current_user.get("org_id"),
         "is_active": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }

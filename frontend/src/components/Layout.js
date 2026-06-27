@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
-  TrendingUp, Download, BarChart2, X, Building2
+  TrendingUp, Download, BarChart2, X, Building2, ShieldCheck
 } from "lucide-react";
 
 export default function Layout({ children }) {
@@ -21,6 +21,64 @@ export default function Layout({ children }) {
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
+  // ── Super Admin Layout ───────────────────────────────────────────────────
+  if (user?.role === "super_admin") {
+    return (
+      <div className="flex h-screen bg-[#F8F9FA] overflow-hidden">
+        <aside className="hidden lg:flex flex-col w-56 bg-[#1E3A8A] flex-shrink-0">
+          <div className="p-4 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <img src="/logo.svg" alt="1two.one" className="w-7 h-7 flex-shrink-0" />
+              <span className="font-semibold text-white text-base tracking-tight">1two.one</span>
+            </div>
+            <p className="text-xs text-blue-300 mt-1 font-medium">Super Admin</p>
+          </div>
+          <nav className="flex-1 p-3 space-y-1">
+            <Link
+              to="/super-admin"
+              data-testid="nav-organisations"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                isActive("/super-admin") ? "bg-white/20 text-white" : "text-blue-200 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              <Building2 className="w-4 h-4 flex-shrink-0" />
+              <span>Organisations</span>
+            </Link>
+          </nav>
+          <div className="p-3 border-t border-white/10">
+            <div className="mb-2 px-3 py-2 bg-white/10 rounded-md">
+              <p className="text-sm font-medium text-white truncate">{user?.name}</p>
+              <p className="text-xs text-blue-300">Super Admin</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              data-testid="logout-btn"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-blue-200 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <LogOut className="w-4 h-4 flex-shrink-0" />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </aside>
+
+        {/* Mobile top bar for super admin */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-[#1E3A8A] flex-shrink-0">
+            <img src="/logo.svg" alt="1two.one" className="w-6 h-6" />
+            <span className="font-semibold text-white text-sm">1two.one — Super Admin</span>
+            <button onClick={handleLogout} className="ml-auto text-blue-200 hover:text-white">
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
+          <main className="flex-1 overflow-y-auto">
+            {children}
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Regular User Layout ──────────────────────────────────────────────────
   const navItems = [
     { path: "/dashboard",                 icon: LayoutDashboard, label: "Dashboard"    },
     { path: "/meetings/new",              icon: Mic,             label: "New Meeting"  },

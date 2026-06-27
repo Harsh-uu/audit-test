@@ -22,7 +22,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to={user.role === "super_admin" ? "/super-admin" : "/dashboard"} replace />;
 
   const handle = async (e) => {
     e.preventDefault();
@@ -31,8 +31,8 @@ export default function Login() {
     setSuccess("");
     try {
       if (mode === "login") {
-        await login(form.email, form.password);
-        navigate("/dashboard");
+        const userData = await login(form.email, form.password);
+        navigate(userData.role === "super_admin" ? "/super-admin" : "/dashboard");
       } else if (mode === "register") {
         await register(form.email, form.password, form.name, form.role);
         navigate("/dashboard");

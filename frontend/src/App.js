@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
 import ResetPassword from "@/pages/ResetPassword";
@@ -12,10 +13,14 @@ import AdminLibrary from "@/pages/AdminLibrary";
 import StaffPortfolio from "@/pages/StaffPortfolio";
 import TeamInsights from "@/pages/TeamInsights";
 import OrgStructure from "@/pages/OrgStructure";
+import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
 import "@/App.css";
 
-const ADMIN_ONLY = ["admin"];
-const ADMIN_MANAGER = ["admin", "manager"];
+function RootRedirect() {
+  const { user } = useAuth();
+  if (user?.role === "super_admin") return <Navigate to="/super-admin" replace />;
+  return <Navigate to="/dashboard" replace />;
+}
 
 function App() {
   return (
@@ -24,7 +29,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
+          <Route path="/super-admin" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/meetings/new" element={<ProtectedRoute><NewMeeting /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/record" element={<ProtectedRoute><RecordingScreen /></ProtectedRoute>} />

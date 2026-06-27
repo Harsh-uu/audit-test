@@ -39,8 +39,11 @@ class MemberAssign(BaseModel):
 @router.get("/structure")
 async def get_structure(db=Depends(get_db), current_user=Depends(get_current_user)):
     """Full nested org structure for the UI."""
+    org_id = current_user.get("org_id")
+    org_filter = {"org_id": org_id} if org_id else {}
+
     settings = []
-    async for s in db.org_settings.find({}).sort("name", 1):
+    async for s in db.org_settings.find(org_filter).sort("name", 1):
         sd = _to(s)
         if sd.get("manager_user_id"):
             mgr = await db.users.find_one({"_id": ObjectId(sd["manager_user_id"])})
@@ -68,13 +71,15 @@ async def get_structure(db=Depends(get_db), current_user=Depends(get_current_use
 
         settings.append(sd)
 
-    unassigned = []
-    async for u in db.users.find({
+    unassigned_query = {
+        **org_filter,
         "$and": [
             {"is_active": {"$ne": False}},
             {"$or": [{"team_id": {"$exists": False}}, {"team_id": None}]},
         ]
-    }).sort("name", 1):
+    }
+    unassigned = []
+    async for u in db.users.find(unassigned_query).sort("name", 1):
         unassigned.append({
             "id": str(u["_id"]),
             "name": u["name"],
@@ -87,8 +92,10 @@ async def get_structure(db=Depends(get_db), current_user=Depends(get_current_use
 
 @router.get("/settings")
 async def list_settings(db=Depends(get_db), current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id")
+    org_filter = {"org_id": org_id} if org_id else {}
     result = []
-    async for s in db.org_settings.find({}).sort("name", 1):
+    async for s in db.org_settings.find(org_filter).sort("name", 1):
         result.append(_to(s))
     return result
 
@@ -98,7 +105,14 @@ async def create_setting(data: SettingCreate, db=Depends(get_db), current_user=D
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     now = datetime.now(timezone.utc).isoformat()
-    doc = {"name": data.name, "description": data.description or "", "manager_user_id": data.manager_user_id or None, "created_at": now, "updated_at": now}
+    doc = {
+        "name": data.name,
+        "description": data.description or "",
+        "manager_user_id": data.manager_user_id or None,
+        "org_id": current_user.get("org_id"),
+        "created_at": now,
+        "updated_at": now,
+    }
     result = await db.org_settings.insert_one(doc)
     # Update manager's setting_id and org_scope
     if data.manager_user_id:
@@ -155,7 +169,15 @@ async def create_team(setting_id: str, data: TeamCreate, db=Depends(get_db), cur
     if not await db.org_settings.find_one({"_id": ObjectId(setting_id)}):
         raise HTTPException(status_code=404, detail="Setting not found")
     now = datetime.now(timezone.utc).isoformat()
-    doc = {"name": data.name, "description": data.description or "", "setting_id": setting_id, "supervisor_user_id": data.supervisor_user_id or None, "created_at": now, "updated_at": now}
+    doc = {
+        "name": data.name,
+        "description": data.description or "",
+        "setting_id": setting_id,
+        "supervisor_user_id": data.supervisor_user_id or None,
+        "org_id": current_user.get("org_id"),
+        "created_at": now,
+        "updated_at": now,
+    }
     result = await db.teams.insert_one(doc)
     team_id = str(result.inserted_id)
     doc["id"] = team_id

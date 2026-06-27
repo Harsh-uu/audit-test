@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -524,3 +525,69 @@ async def migrate_analyses_key_questions(db):
             updated += 1
     if updated:
         logger.info(f"Back-filled key_questions on {updated} existing analysis documents")
+
+
+async def seed_super_admin(db):
+    """Create the single super admin account from environment variables."""
+    from routers.auth import hash_password
+    email = os.environ.get("SUPER_ADMIN_EMAIL", "superadmin@1two.one")
+    password = os.environ.get("SUPER_ADMIN_PASSWORD", "SuperAdmin123!")
+    existing = await db.users.find_one({"email": email})
+    if existing is None:
+        await db.users.insert_one({
+            "email": email,
+            "password_hash": hash_password(password),
+            "name": "Super Admin",
+            "role": "super_admin",
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        logger.info(f"Super admin seeded: {email}")
+    elif existing.get("role") != "super_admin":
+        await db.users.update_one({"email": email}, {"$set": {"role": "super_admin"}})
+        logger.info(f"Updated {email} to super_admin role")
+
+
+async def seed_default_org(db):
+    """Create 'Test Company' org if not exists and migrate all unscoped data into it."""
+    org = await db.organisations.find_one({"slug": "test-company"})
+    if not org:
+        now = datetime.now(timezone.utc).isoformat()
+        result = await db.organisations.insert_one({
+            "name": "Test Company",
+            "slug": "test-company",
+            "status": "active",
+            "created_at": now,
+        })
+        org_id = str(result.inserted_id)
+        logger.info(f"Default org 'Test Company' created: {org_id}")
+    else:
+        org_id = str(org["_id"])
+
+    # Migrate unscoped users (exclude super_admin)
+    r1 = await db.users.update_many(
+        {"org_id": {"$exists": False}, "role": {"$ne": "super_admin"}},
+        {"$set": {"org_id": org_id}}
+    )
+    # Migrate unscoped meetings
+    r2 = await db.meetings.update_many(
+        {"org_id": {"$exists": False}},
+        {"$set": {"org_id": org_id}}
+    )
+    # Migrate org_settings
+    r3 = await db.org_settings.update_many(
+        {"org_id": {"$exists": False}},
+        {"$set": {"org_id": org_id}}
+    )
+    # Migrate teams
+    r4 = await db.teams.update_many(
+        {"org_id": {"$exists": False}},
+        {"$set": {"org_id": org_id}}
+    )
+    migrated = r1.modified_count + r2.modified_count + r3.modified_count + r4.modified_count
+    if migrated:
+        logger.info(
+            f"Migrated to 'Test Company' org: {r1.modified_count} users, "
+            f"{r2.modified_count} meetings, {r3.modified_count} settings, {r4.modified_count} teams"
+        )
+    return org_id

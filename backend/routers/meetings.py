@@ -74,6 +74,7 @@ async def create_meeting(data: CreateMeetingRequest, db=Depends(get_db), current
         "date": data.date,
         "location": data.location,
         "meeting_type": data.meeting_type,
+        "org_id": current_user.get("org_id"),
         "created_by": current_user["id"],
         "created_by_name": current_user["name"],
         "sign_off_manager_id": data.sign_off_manager_id,
@@ -107,8 +108,15 @@ async def list_meetings(db=Depends(get_db), current_user=Depends(get_current_use
     user_id = current_user["id"]
     role = current_user["role"]
 
+    # Super admin has no org scope — return empty from regular dashboard
+    if role == "super_admin":
+        return []
+
+    org_id = current_user.get("org_id")
+    org_filter = {"org_id": org_id} if org_id else {}
+
     if role == "admin":
-        cursor = db.meetings.find({}).sort("created_at", -1).limit(500)
+        cursor = db.meetings.find(org_filter).sort("created_at", -1).limit(500)
     elif role == "manager":
         or_conditions = [
             {"created_by": user_id},
@@ -119,14 +127,17 @@ async def list_meetings(db=Depends(get_db), current_user=Depends(get_current_use
             or_conditions.append({"team_id": current_user["team_id"]})
         if current_user.get("setting_id"):
             or_conditions.append({"setting_id": current_user["setting_id"]})
-        cursor = db.meetings.find({"$or": or_conditions}).sort("created_at", -1).limit(500)
+        query = {**org_filter, "$or": or_conditions}
+        cursor = db.meetings.find(query).sort("created_at", -1).limit(500)
     else:
-        cursor = db.meetings.find({
+        query = {
+            **org_filter,
             "$or": [
                 {"created_by": user_id},
                 {"attendees.user_id": user_id},
             ]
-        }).sort("created_at", -1).limit(500)
+        }
+        cursor = db.meetings.find(query).sort("created_at", -1).limit(500)
 
     meetings = []
     async for doc in cursor:

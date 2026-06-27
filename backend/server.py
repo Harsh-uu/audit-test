@@ -15,8 +15,9 @@ from routers.review import router as review_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
 from routers.portfolio import router as portfolio_router  # noqa: E402
 from routers.org import router as org_router  # noqa: E402
+from routers.super_admin import router as super_admin_router  # noqa: E402
 from utils.storage import init_storage  # noqa: E402
-from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions  # noqa: E402,E501
+from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions, seed_super_admin, seed_default_org  # noqa: E402,E501
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ api_router.include_router(review_router, prefix="/review", tags=["review"])
 api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(portfolio_router, prefix="/portfolio", tags=["portfolio"])
 api_router.include_router(org_router, prefix="/org", tags=["org"])
+api_router.include_router(super_admin_router, prefix="/super-admin", tags=["super-admin"])
 app.include_router(api_router)
 
 
@@ -63,10 +65,12 @@ async def startup():
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
 
     await seed_admin(db)
+    await seed_super_admin(db)
     await seed_standards(db)
     await migrate_standard_outcomes(db)
     await migrate_cqc_key_questions(db)
     await migrate_analyses_key_questions(db)
+    await seed_default_org(db)
 
     try:
         init_storage()
