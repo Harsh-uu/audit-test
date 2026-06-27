@@ -316,14 +316,29 @@ async def rescan_meetings_background(doc_id: str, db):
 
 
 @router.get("/team-insights")
-async def get_team_insights(db=Depends(get_db), current_user=Depends(get_current_user)):
-    """Returns evidence matrix + team themes for all staff."""
+async def get_team_insights(
+    team_id: Optional[str] = None,
+    setting_id: Optional[str] = None,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Returns evidence matrix + team themes for all staff (or a specific team/setting)."""
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     # ── Staff ──────────────────────────────────────────────────────────────
+    staff_query: dict = {"role": {"$in": ["attendee", "manager"]}, "is_active": {"$ne": False}}
+    if team_id:
+        staff_query["team_id"] = team_id
+    elif setting_id:
+        staff_query["setting_id"] = setting_id
+    elif current_user["role"] == "manager" and current_user.get("team_id"):
+        staff_query["team_id"] = current_user["team_id"]
+    elif current_user["role"] == "manager" and current_user.get("setting_id"):
+        staff_query["setting_id"] = current_user["setting_id"]
+
     staff = []
-    async for u in db.users.find({"role": {"$in": ["attendee", "manager"]}, "is_active": {"$ne": False}}):
+    async for u in db.users.find(staff_query):
         staff.append({"id": str(u["_id"]), "name": u.get("name", ""), "role": u.get("role", "")})
 
     if not staff:

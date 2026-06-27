@@ -14,6 +14,7 @@ from routers.processing import router as processing_router  # noqa: E402
 from routers.review import router as review_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
 from routers.portfolio import router as portfolio_router  # noqa: E402
+from routers.org import router as org_router  # noqa: E402
 from utils.storage import init_storage  # noqa: E402
 from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions  # noqa: E402,E501
 
@@ -43,6 +44,7 @@ api_router.include_router(processing_router, prefix="/processing", tags=["proces
 api_router.include_router(review_router, prefix="/review", tags=["review"])
 api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(portfolio_router, prefix="/portfolio", tags=["portfolio"])
+api_router.include_router(org_router, prefix="/org", tags=["org"])
 app.include_router(api_router)
 
 

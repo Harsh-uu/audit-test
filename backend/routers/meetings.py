@@ -74,6 +74,8 @@ async def create_meeting(data: CreateMeetingRequest, db=Depends(get_db), current
         "sign_off_manager_id": data.sign_off_manager_id,
         "sign_off_manager_name": manager_name,
         "attendees": attendees,
+        "team_id": current_user.get("team_id") or None,
+        "setting_id": current_user.get("setting_id") or None,
         "status": "draft",
         "recording_events": [],
         "paused_periods": [],
@@ -103,13 +105,16 @@ async def list_meetings(db=Depends(get_db), current_user=Depends(get_current_use
     if role == "admin":
         cursor = db.meetings.find({}).sort("created_at", -1)
     elif role == "manager":
-        cursor = db.meetings.find({
-            "$or": [
-                {"created_by": user_id},
-                {"sign_off_manager_id": user_id},
-                {"attendees.user_id": user_id},
-            ]
-        }).sort("created_at", -1)
+        or_conditions = [
+            {"created_by": user_id},
+            {"sign_off_manager_id": user_id},
+            {"attendees.user_id": user_id},
+        ]
+        if current_user.get("team_id"):
+            or_conditions.append({"team_id": current_user["team_id"]})
+        if current_user.get("setting_id"):
+            or_conditions.append({"setting_id": current_user["setting_id"]})
+        cursor = db.meetings.find({"$or": or_conditions}).sort("created_at", -1)
     else:
         cursor = db.meetings.find({
             "$or": [

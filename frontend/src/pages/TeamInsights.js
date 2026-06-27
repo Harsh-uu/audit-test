@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   Grid3x3, TrendingUp, AlertTriangle, ClipboardList, Shield, Award,
-  FileText, Users, RefreshCw, ChevronRight
+  FileText, Users, RefreshCw, ChevronRight, Building2
 } from "lucide-react";
 
 // ── Cell rendering ──────────────────────────────────────────────────────────
@@ -336,16 +336,21 @@ function ThemesView({ themes }) {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function TeamInsights() {
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, user } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("matrix");
+  const [orgStructure, setOrgStructure] = useState({ settings: [] });
+  const [orgFilter, setOrgFilter] = useState({ setting_id: "", team_id: "" });
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (filter = {}) => {
     setLoading(true);
     try {
-      const { data: d } = await axios.get(`${API}/admin/team-insights`, getAuthConfig());
+      const params = {};
+      if (filter.team_id) params.team_id = filter.team_id;
+      else if (filter.setting_id) params.setting_id = filter.setting_id;
+      const { data: d } = await axios.get(`${API}/admin/team-insights`, { ...getAuthConfig(), params });
       setData(d);
     } catch (err) {
       console.error("Team insights error", err);
@@ -355,7 +360,17 @@ export default function TeamInsights() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load(orgFilter);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgFilter]);
+
+  useEffect(() => {
+    if (user?.role === "admin" || user?.role === "manager") {
+      axios.get(`${API}/org/structure`, getAuthConfig()).then(r => setOrgStructure(r.data)).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Layout>
@@ -372,15 +387,44 @@ export default function TeamInsights() {
               </p>
             )}
           </div>
-          <button
-            onClick={load}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
-            data-testid="refresh-insights-btn"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {orgStructure.settings?.length > 0 && (
+              <div className="flex items-center gap-2" data-testid="org-filter">
+                <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                <select
+                  value={orgFilter.setting_id}
+                  onChange={e => setOrgFilter({ setting_id: e.target.value, team_id: "" })}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                  data-testid="insights-setting-filter"
+                >
+                  <option value="">All Settings</option>
+                  {orgStructure.settings.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                {orgFilter.setting_id && (
+                  <select
+                    value={orgFilter.team_id}
+                    onChange={e => setOrgFilter(f => ({ ...f, team_id: e.target.value }))}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                    data-testid="insights-team-filter"
+                  >
+                    <option value="">All Teams</option>
+                    {(orgStructure.settings.find(s => s.id === orgFilter.setting_id)?.teams || []).map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => load(orgFilter)}
+              disabled={loading}
+              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+              data-testid="refresh-insights-btn"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Main tabs */}

@@ -24,7 +24,28 @@ async def _build_portfolio_data(user_id: str, db):
         "name": user_doc.get("name", ""),
         "email": user_doc.get("email", ""),
         "role": user_doc.get("role", ""),
+        "team_id": user_doc.get("team_id"),
+        "setting_id": user_doc.get("setting_id"),
     }
+
+    # Enrich with team/setting names
+    if user_data.get("team_id"):
+        try:
+            team_doc = await db.teams.find_one({"_id": ObjectId(user_data["team_id"])})
+            user_data["team_name"] = team_doc.get("name", "") if team_doc else None
+        except Exception:
+            user_data["team_name"] = None
+    else:
+        user_data["team_name"] = None
+
+    if user_data.get("setting_id"):
+        try:
+            setting_doc = await db.org_settings.find_one({"_id": ObjectId(user_data["setting_id"])})
+            user_data["setting_name"] = setting_doc.get("name", "") if setting_doc else None
+        except Exception:
+            user_data["setting_name"] = None
+    else:
+        user_data["setting_name"] = None
 
     # Signed-off meetings where this user is an attendee
     raw_meetings = []

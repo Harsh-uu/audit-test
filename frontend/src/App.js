@@ -11,6 +11,7 @@ import MeetingReport from "@/pages/MeetingReport";
 import AdminLibrary from "@/pages/AdminLibrary";
 import StaffPortfolio from "@/pages/StaffPortfolio";
 import TeamInsights from "@/pages/TeamInsights";
+import OrgStructure from "@/pages/OrgStructure";
 import "@/App.css";
 
 const ADMIN_ONLY = ["admin"];
@@ -30,6 +31,7 @@ function App() {
           <Route path="/meetings/:meetingId/report" element={<ProtectedRoute><MeetingReport /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><AdminLibrary /></ProtectedRoute>} />
           <Route path="/admin/team" element={<ProtectedRoute roles={["admin", "manager"]}><TeamInsights /></ProtectedRoute>} />
+          <Route path="/organisation" element={<ProtectedRoute roles={["admin", "manager"]}><OrgStructure /></ProtectedRoute>} />
           <Route path="/portfolio" element={<ProtectedRoute><StaffPortfolio /></ProtectedRoute>} />
           <Route path="/portfolio/:userId" element={<ProtectedRoute><StaffPortfolio /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

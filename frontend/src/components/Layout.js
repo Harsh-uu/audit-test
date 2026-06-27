@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
-  TrendingUp, Download, BarChart2, X
+  TrendingUp, Download, BarChart2, X, Building2
 } from "lucide-react";
 
 export default function Layout({ children }) {
@@ -92,6 +92,19 @@ export default function Layout({ children }) {
               <BarChart2 className="w-4 h-4 flex-shrink-0" />
               {!collapsed && <span>Team Intelligence</span>}
             </Link>
+            {(user?.role === "admin" || user?.role === "manager") && (
+              <Link
+                to="/organisation"
+                onClick={onNavClick}
+                data-testid="nav-organisation"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  isActive("/organisation") ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <Building2 className="w-4 h-4 flex-shrink-0" />
+                {!collapsed && <span>Organisation</span>}
+              </Link>
+            )}
             {user?.role === "admin" && (
               <>
                 <Link

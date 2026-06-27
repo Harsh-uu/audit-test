@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar, Building2 } from "lucide-react";
 
 const STATUS_CONFIG = {
   draft:             { label: "Draft",        color: "bg-gray-100 text-gray-700 border-gray-200",       icon: FileText },
@@ -46,7 +46,7 @@ function formatDate(dateStr) {
 }
 
 export default function Dashboard() {
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, user } = useAuth();
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,10 +56,15 @@ export default function Dashboard() {
   const [dateTo, setDateTo] = useState("");
   const [sortOrder, setSortOrder] = useState("desc"); // "desc" = newest first
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [orgFilter, setOrgFilter] = useState({ setting_id: "", team_id: "" });
+  const [orgStructure, setOrgStructure] = useState({ settings: [], unassigned_users: [] });
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchMeetings();
+    if (user?.role === "admin" || user?.role === "manager") {
+      axios.get(`${API}/org/structure`, getAuthConfig()).then(r => setOrgStructure(r.data)).catch(() => {});
+    }
     const interval = setInterval(fetchMeetings, 15000);
     return () => clearInterval(interval);
   }, []);
@@ -95,6 +100,8 @@ export default function Dashboard() {
           const mDate = new Date(m.date || m.created_at || 0);
           if (mDate > new Date(dateTo + "T23:59:59")) return false;
         }
+        if (orgFilter.team_id && m.team_id !== orgFilter.team_id) return false;
+        if (!orgFilter.team_id && orgFilter.setting_id && m.setting_id !== orgFilter.setting_id) return false;
         return true;
       })
       .sort((a, b) => {
@@ -102,15 +109,16 @@ export default function Dashboard() {
         const db = new Date(b.date || b.created_at || 0).getTime();
         return sortOrder === "desc" ? db - da : da - db;
       });
-  }, [meetings, search, statusFilter, dateFrom, dateTo, sortOrder]);
+  }, [meetings, search, statusFilter, dateFrom, dateTo, sortOrder, orgFilter]);
 
-  const hasActiveFilters = search || statusFilter !== "all" || dateFrom || dateTo;
+  const hasActiveFilters = search || statusFilter !== "all" || dateFrom || dateTo || orgFilter.setting_id || orgFilter.team_id;
 
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("all");
     setDateFrom("");
     setDateTo("");
+    setOrgFilter({ setting_id: "", team_id: "" });
   };
 
   const stats = {
@@ -241,6 +249,36 @@ export default function Dashboard() {
                 <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs text-gray-400 hover:text-gray-600">
                   <X className="w-3.5 h-3.5" />
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* Org filter (admin/manager only, when org has settings) */}
+          {orgStructure.settings?.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap" data-testid="org-filter-bar">
+              <Building2 className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-xs text-gray-500 font-medium">Filter:</span>
+              <select
+                value={orgFilter.setting_id}
+                onChange={e => setOrgFilter({ setting_id: e.target.value, team_id: "" })}
+                className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] bg-white"
+                data-testid="setting-filter-select"
+              >
+                <option value="">All Settings</option>
+                {orgStructure.settings.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              {orgFilter.setting_id && (
+                <select
+                  value={orgFilter.team_id}
+                  onChange={e => setOrgFilter(f => ({ ...f, team_id: e.target.value }))}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] bg-white"
+                  data-testid="team-filter-select"
+                >
+                  <option value="">All Teams</option>
+                  {(orgStructure.settings.find(s => s.id === orgFilter.setting_id)?.teams || []).map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
               )}
             </div>
           )}
