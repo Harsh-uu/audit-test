@@ -268,7 +268,7 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence }) {
     <div className="lg:col-span-5 bg-[#F8F9FA] overflow-y-auto" style={{ maxHeight: "calc(100vh - 80px)" }}>
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-900" style={{ fontFamily: "Work Sans,sans-serif" }}>Compliance Evidence</h2>
+          <h2 className="text-sm font-semibold text-gray-900 font-display">Compliance Evidence</h2>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span>{totalCount} items</span>
           </div>

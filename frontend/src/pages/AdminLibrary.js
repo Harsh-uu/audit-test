@@ -243,7 +243,7 @@ export default function AdminLibrary() {
     <Layout>
       <div className="p-6 md:p-8 fade-in">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900" style={{ fontFamily: "Work Sans,sans-serif" }}>Admin Panel</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 font-display">Admin Panel</h1>
           <p className="text-sm text-gray-500 mt-0.5">Manage standards library and users</p>
         </div>
 

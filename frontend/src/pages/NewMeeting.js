@@ -61,7 +61,7 @@ export default function NewMeeting() {
           Back to Dashboard
         </button>
 
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1" style={{fontFamily:'Work Sans,sans-serif'}}>New Meeting</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-1 font-display">New Meeting</h1>
         <p className="text-sm text-gray-500 mb-6">Set up your supervision meeting before recording</p>
 
         {/* Step indicator */}
@@ -162,7 +162,7 @@ export default function NewMeeting() {
             <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <Users className="w-4 h-4 text-[#1E3A8A]" />
-                <h3 className="font-medium text-gray-900" style={{fontFamily:'Work Sans,sans-serif'}}>Meeting Attendees</h3>
+                <h3 className="font-medium text-gray-900 font-display">Meeting Attendees</h3>
                 {form.attendee_ids.length > 0 && (
                   <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{form.attendee_ids.length} selected</span>
                 )}
@@ -203,7 +203,7 @@ export default function NewMeeting() {
             <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <UserCheck className="w-4 h-4 text-[#1E3A8A]" />
-                <h3 className="font-medium text-gray-900" style={{fontFamily:'Work Sans,sans-serif'}}>Sign-off Manager</h3>
+                <h3 className="font-medium text-gray-900 font-display">Sign-off Manager</h3>
               </div>
               <select
                 value={form.sign_off_manager_id}

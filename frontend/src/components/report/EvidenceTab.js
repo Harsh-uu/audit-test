@@ -26,7 +26,7 @@ export function EvidenceTab({
       {/* Summary */}
       <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-900 text-sm" style={{ fontFamily: "Work Sans,sans-serif" }}>Meeting Summary</h3>
+          <h3 className="font-semibold text-gray-900 text-sm font-display">Meeting Summary</h3>
           {canReview && !editingSummary && (
             <button onClick={() => setEditingSummary(true)} className="text-xs text-[#1E3A8A] flex items-center gap-1 hover:underline" data-testid="edit-summary-btn">
               <Edit3 className="w-3 h-3" /> Edit
@@ -68,7 +68,7 @@ export function EvidenceTab({
       {(analysis.actions?.length > 0 || canReview) && (
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900 text-sm" style={{ fontFamily: "Work Sans,sans-serif" }}>
+            <h3 className="font-semibold text-gray-900 text-sm font-display">
               Action Items
               {analysis.actions?.length > 0 && (
                 <span className="ml-2 text-xs font-normal text-gray-400">({analysis.actions.length})</span>
@@ -150,7 +150,7 @@ export function EvidenceTab({
       {/* Risks */}
       {analysis.risks?.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-          <h3 className="font-semibold text-gray-900 text-sm mb-3" style={{ fontFamily: "Work Sans,sans-serif" }}>Risks &amp; Concerns</h3>
+          <h3 className="font-semibold text-gray-900 text-sm mb-3 font-display">Risks &amp; Concerns</h3>
           <div className="space-y-2" data-testid="risks-list">
             {analysis.risks.map((risk, i) => (
               <div key={risk.text?.slice(0, 40) || i} className={`flex items-start gap-2 p-2.5 rounded-md border ${risk.severity === "high" ? "bg-red-50 border-red-200" : risk.severity === "medium" ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-gray-200"}`}>
@@ -165,7 +165,7 @@ export function EvidenceTab({
       {/* Attendees review status */}
       {meeting.attendees?.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-          <h3 className="font-semibold text-gray-900 text-sm mb-3" style={{ fontFamily: "Work Sans,sans-serif" }}>Review Status</h3>
+          <h3 className="font-semibold text-gray-900 text-sm mb-3 font-display">Review Status</h3>
           <div className="space-y-2">
             {meeting.attendees.map(a => (
               <div key={a.user_id} className="flex items-center justify-between">

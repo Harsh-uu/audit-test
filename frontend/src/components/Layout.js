@@ -34,7 +34,7 @@ export default function Layout({ children }) {
         {!collapsed && (
           <Link to="/dashboard" onClick={onNavClick} className="flex items-center gap-2">
             <img src="/logo.svg" alt="1two.one" className="w-8 h-8 flex-shrink-0" />
-            <span className="font-semibold text-[#1E3A8A] text-lg tracking-tight" style={{ fontFamily: "Poppins,sans-serif" }}>
+            <span className="font-semibold text-[#1E3A8A] text-lg tracking-tight">
               1two.one
             </span>
           </Link>
@@ -193,7 +193,7 @@ export default function Layout({ children }) {
           </button>
           <Link to="/dashboard" className="flex items-center gap-2">
             <img src="/logo.svg" alt="1two.one" className="w-7 h-7 flex-shrink-0" />
-            <span className="font-semibold text-[#1E3A8A] text-base tracking-tight" style={{ fontFamily: "Poppins,sans-serif" }}>
+            <span className="font-semibold text-[#1E3A8A] text-base tracking-tight">
               1two.one
             </span>
           </Link>

@@ -348,7 +348,7 @@ export default function StaffPortfolio() {
                 {initials}
               </div>
               <div>
-                <h1 className="text-base font-semibold text-gray-900" style={{fontFamily: "Work Sans,sans-serif"}}>
+                <h1 className="text-base font-semibold text-gray-900 font-display">
                   {user.name}
                 </h1>
                 <p className="text-xs text-gray-500 capitalize">{user.role} · {user.email}</p>
@@ -469,7 +469,7 @@ export default function StaffPortfolio() {
             {/* Right: Meeting History */}
             <div className="lg:col-span-5 bg-[#F8F9FA] overflow-y-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
               <div className="p-4">
-                <h2 className="text-sm font-semibold text-gray-900 mb-3" style={{fontFamily: "Work Sans,sans-serif"}}>
+                <h2 className="text-sm font-semibold text-gray-900 mb-3 font-display">
                   Supervision History
                 </h2>
                 <div className="space-y-2" data-testid="meeting-history-list">

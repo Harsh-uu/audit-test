@@ -282,7 +282,7 @@ export default function MeetingReport() {
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
-              <h1 className="text-base font-semibold text-gray-900 leading-tight" style={{ fontFamily: "Work Sans,sans-serif" }}>{meeting.title}</h1>
+              <h1 className="text-base font-semibold text-gray-900 leading-tight font-display">{meeting.title}</h1>
               <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
                 <span>{new Date(meeting.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
                 {meeting.location && <span>{meeting.location}</span>}

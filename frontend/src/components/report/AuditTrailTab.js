@@ -44,7 +44,7 @@ export function AuditTrailTab({ auditLoading, auditTrail, fetchAuditTrail }) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <History className="w-4 h-4 text-gray-500" />
-          <h3 className="text-sm font-semibold text-gray-700" style={{ fontFamily: "Work Sans,sans-serif" }}>Audit Trail</h3>
+          <h3 className="text-sm font-semibold text-gray-700 font-display">Audit Trail</h3>
         </div>
         <button onClick={fetchAuditTrail} className="text-xs text-[#1E3A8A] hover:underline" data-testid="refresh-audit-btn">Refresh</button>
       </div>

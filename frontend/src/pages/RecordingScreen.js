@@ -330,7 +330,7 @@ export default function RecordingScreen() {
       <div className="p-4 sm:p-6 md:p-8 max-w-2xl mx-auto w-full fade-in">
         {meeting && (
           <div className="mb-5">
-            <h1 className="text-lg sm:text-xl font-semibold text-gray-900 leading-snug" style={{fontFamily:'Work Sans,sans-serif'}}>{meeting.title}</h1>
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900 leading-snug font-display">{meeting.title}</h1>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-sm text-gray-500">
               {meeting.attendees?.length > 0 && (
                 <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{meeting.attendees.length} attendee{meeting.attendees.length !== 1 ? "s" : ""}</span>
@@ -430,7 +430,7 @@ export default function RecordingScreen() {
             <div className="flex items-start gap-3 mb-4">
               <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-amber-900 mb-2" style={{fontFamily:'Work Sans,sans-serif'}}>Recording Notice</h3>
+                <h3 className="font-semibold text-amber-900 mb-2 font-display">Recording Notice</h3>
                 <p className="text-amber-800 text-sm leading-relaxed">{RECORDING_NOTICE}</p>
               </div>
             </div>

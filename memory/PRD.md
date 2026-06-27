@@ -226,4 +226,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 - Speaker Name Correction (2026-Feb v2): Replaced per-turn pencil editing with a global `SpeakerManagerPanel` above the transcript. Shows all unique detected speakers with turn counts and rename input fields. Renaming any field immediately relabels ALL turns with that speaker. "Swap all" button swaps the two main speakers in one click (only shown when exactly 2 unique speakers). Save/Discard appear only when changes are pending. Save calls `PATCH /api/review/{id}/speaker-text`.
 
+- Typography (2026-Feb): Added Work Sans to Google Fonts (weights 400-700). Registered `font-sans` (Poppins) and `font-display` (Work Sans) in Tailwind config. Removed all 17 `style={{ fontFamily: ... }}` inline overrides and replaced with `font-display` Tailwind class. Stripped redundant Poppins inline styles from Login, ResetPassword, and Layout (they inherit from `body`).
+
 *Last Updated: 2026-Feb*
