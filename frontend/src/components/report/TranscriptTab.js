@@ -376,7 +376,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     <div data-testid="transcript-view">
       {/* Header row */}
       <div className="flex items-start gap-2 mb-4">
-        <div className="flex-1 bg-amber-50 border border-amber-200 rounded-md p-3 flex items-center gap-2">
+        <div className="flex-1 bg-amber-50 border border-amber-200 rounded-md p-3 hidden sm:flex items-center gap-2">
           <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <p className="text-xs text-amber-700 flex-1">
             {viewMode === "speaker"
