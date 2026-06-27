@@ -251,3 +251,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Full speaker state refactored to `localTurns` mutable array — single source of truth replacing `speakerMap + turnOverrides` layered state.
 
 *Last Updated: 2026-Jun*
+
+## Changelog (Continued)
+- **2026-Jun** — Mobile responsive fix: Added "Compliance" as a 5th mobile-only tab on Meeting Report page (`MeetingReport.js` + `EvidenceSidebar.js`). Desktop sidebar layout unchanged. `scrollbar-hide` utility added to `index.css`.
+
