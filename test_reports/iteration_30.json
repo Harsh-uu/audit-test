@@ -1,0 +1,34 @@
+{
+  "summary": "Tested mobile header responsive changes on MeetingReport page at 430px (mobile) and 1280px (desktop) viewports.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A", "frontend": "100%" },
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mobile header responsive fix verified working. Meeting 6a3f92df95f60e56302d0d5e is the signed-off meeting used for testing. Meeting 6a3f88c620362dc4abb4f53d is in_review. All data-testid attributes (export-pdf-btn, send-report-btn, include-transcript-toggle, mark-reviewed-btn) present and correct.",
+  "test_results": {
+    "mobile_430px": {
+      "export_pdf_text_span_visible": false,
+      "send_to_attendees_text_span_visible": false,
+      "full_text_toggle_visible": false,
+      "mark_reviewed_text_span_visible": false,
+      "result": "PASS - all text spans hidden, icon-only buttons shown"
+    },
+    "desktop_1280px": {
+      "export_pdf_text_visible": true,
+      "export_pdf_text": "Export PDF",
+      "send_to_attendees_text_visible": true,
+      "full_text_toggle_visible": true,
+      "result": "PASS - all labels and toggle visible at desktop"
+    }
+  }
+}
