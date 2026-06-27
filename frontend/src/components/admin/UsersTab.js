@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { UserPlus, TrendingUp, Pencil, Check, X } from "lucide-react";
+import { UserPlus, TrendingUp, Pencil, Check, X, KeyRound, ChevronDown } from "lucide-react";
 
 const ROLES = [
   { value: "attendee", label: "Care Worker / Attendee" },
@@ -8,29 +8,45 @@ const ROLES = [
   { value: "admin", label: "Admin" },
 ];
 
-export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUser, handleCreateUser, onUpdateUser, navigate }) {
+export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUser, handleCreateUser, onUpdateUser, onResetPassword, navigate }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editError, setEditError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showPwdReset, setShowPwdReset] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   const startEdit = (u) => {
     setEditingId(u.id);
     setEditForm({ name: u.name, email: u.email, role: u.role, is_active: u.is_active });
     setEditError("");
+    setShowPwdReset(false);
+    setNewPassword("");
   };
 
-  const cancelEdit = () => { setEditingId(null); setEditForm({}); setEditError(""); };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
+    setEditError("");
+    setShowPwdReset(false);
+    setNewPassword("");
+  };
 
   const saveEdit = async () => {
     if (!editForm.name?.trim()) return setEditError("Name is required");
     if (!editForm.email?.trim()) return setEditError("Email is required");
+    if (showPwdReset && newPassword && newPassword.length < 8) return setEditError("Password must be at least 8 characters");
     setSaving(true);
     setEditError("");
     try {
       await onUpdateUser(editingId, editForm);
+      if (showPwdReset && newPassword.trim()) {
+        await onResetPassword(editingId, newPassword);
+      }
       setEditingId(null);
       setEditForm({});
+      setShowPwdReset(false);
+      setNewPassword("");
     } catch (err) {
       setEditError(err.message || "Save failed");
     }
@@ -141,6 +157,33 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
                       </label>
                     </div>
                   </div>
+                  {/* Password reset toggle */}
+                  <div className="mt-3 pt-3 border-t border-blue-200">
+                    <button
+                      type="button"
+                      onClick={() => { setShowPwdReset(p => !p); setNewPassword(""); }}
+                      className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors"
+                      data-testid="toggle-reset-password"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      {showPwdReset ? "Cancel password change" : "Reset password"}
+                      <ChevronDown className={`w-3 h-3 transition-transform ${showPwdReset ? "rotate-180" : ""}`} />
+                    </button>
+                    {showPwdReset && (
+                      <div className="mt-2 max-w-xs">
+                        <label className="block text-xs font-medium text-gray-500 mb-1">New password</label>
+                        <input
+                          type="password"
+                          value={newPassword}
+                          onChange={e => setNewPassword(e.target.value)}
+                          placeholder="Min. 8 characters"
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                          data-testid="new-password-input"
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   {editError && (
                     <p className="text-xs text-red-600 mt-2" data-testid="edit-user-error">{editError}</p>
                   )}

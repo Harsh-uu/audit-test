@@ -41,6 +41,10 @@ class UpdateUserRequest(BaseModel):
     is_active: Optional[bool] = None
 
 
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+
 class CreateStandardRequest(BaseModel):
     type: str  # cqc | care_cert
     reference: str
@@ -98,6 +102,20 @@ async def update_user(user_id: str, data: UpdateUserRequest, db=Depends(get_db),
             raise HTTPException(status_code=400, detail="Email address already in use")
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
     return {"message": "User updated"}
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(user_id: str, data: ResetPasswordRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    from routers.auth import hash_password
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"password_hash": hash_password(data.new_password)}}
+    )
+    return {"message": "Password reset successfully"}
 
 
 @router.get("/standards")

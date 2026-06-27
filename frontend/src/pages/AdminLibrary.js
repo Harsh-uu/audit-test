@@ -183,6 +183,15 @@ export default function AdminLibrary() {
     }
   };
 
+  const handleResetPassword = async (userId, newPassword) => {
+    try {
+      await axios.post(`${API}/admin/users/${userId}/reset-password`, { new_password: newPassword }, getAuthConfig());
+      setMessage("Password reset successfully");
+    } catch (err) {
+      throw new Error(err.response?.data?.detail || "Failed to reset password");
+    }
+  };
+
   const handleUploadDoc = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -356,6 +365,7 @@ export default function AdminLibrary() {
             setNewUser={setNewUser}
             handleCreateUser={handleCreateUser}
             onUpdateUser={handleUpdateUser}
+            onResetPassword={handleResetPassword}
             navigate={navigate}
           />
         )}
