@@ -47,14 +47,28 @@ async def _build_portfolio_data(user_id: str, db):
     else:
         user_data["setting_name"] = None
 
-    # Signed-off meetings where this user is an attendee
-    raw_meetings = []
-    async for meeting in db.meetings.find(
+    # Signed-off meetings where this user is an attendee — bulk-fetch analyses
+    meetings_list = await db.meetings.find(
         {"attendees.user_id": user_id, "status": {"$in": ["signed_off", "shared"]}, "analysis_id": {"$exists": True}}
-    ).sort("date", -1):
-        if not meeting.get("analysis_id"):
+    ).sort("date", -1).limit(500).to_list(length=500)
+
+    analysis_ids = []
+    for m in meetings_list:
+        aid = m.get("analysis_id")
+        if aid:
+            try:
+                analysis_ids.append(ObjectId(aid))
+            except Exception:
+                pass
+
+    analyses_map = {str(a["_id"]): a async for a in db.analyses.find({"_id": {"$in": analysis_ids}})}
+
+    raw_meetings = []
+    for meeting in meetings_list:
+        aid = meeting.get("analysis_id")
+        if not aid:
             continue
-        adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+        adoc = analyses_map.get(aid)
         if adoc:
             raw_meetings.append({"meeting": meeting, "analysis": adoc})
 

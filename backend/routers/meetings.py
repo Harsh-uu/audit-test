@@ -36,11 +36,18 @@ class UpdateManagerRequest(BaseModel):
 
 @router.post("/")
 async def create_meeting(data: CreateMeetingRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    # Resolve attendees
+    # Resolve attendees in a single bulk query
     attendees = []
-    for uid in data.attendee_ids:
-        try:
-            user = await db.users.find_one({"_id": ObjectId(uid)})
+    if data.attendee_ids:
+        valid_ids = []
+        for uid in data.attendee_ids:
+            try:
+                valid_ids.append(ObjectId(uid))
+            except Exception:
+                pass
+        users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": valid_ids}})}
+        for uid in data.attendee_ids:
+            user = users_map.get(uid)
             if user:
                 attendees.append({
                     "user_id": str(user["_id"]),
@@ -51,8 +58,6 @@ async def create_meeting(data: CreateMeetingRequest, db=Depends(get_db), current
                     "reviewed": False,
                     "reviewed_at": None,
                 })
-        except Exception:
-            pass
 
     manager_name = None
     if data.sign_off_manager_id:
@@ -103,7 +108,7 @@ async def list_meetings(db=Depends(get_db), current_user=Depends(get_current_use
     role = current_user["role"]
 
     if role == "admin":
-        cursor = db.meetings.find({}).sort("created_at", -1)
+        cursor = db.meetings.find({}).sort("created_at", -1).limit(500)
     elif role == "manager":
         or_conditions = [
             {"created_by": user_id},
@@ -114,14 +119,14 @@ async def list_meetings(db=Depends(get_db), current_user=Depends(get_current_use
             or_conditions.append({"team_id": current_user["team_id"]})
         if current_user.get("setting_id"):
             or_conditions.append({"setting_id": current_user["setting_id"]})
-        cursor = db.meetings.find({"$or": or_conditions}).sort("created_at", -1)
+        cursor = db.meetings.find({"$or": or_conditions}).sort("created_at", -1).limit(500)
     else:
         cursor = db.meetings.find({
             "$or": [
                 {"created_by": user_id},
                 {"attendees.user_id": user_id},
             ]
-        }).sort("created_at", -1)
+        }).sort("created_at", -1).limit(500)
 
     meetings = []
     async for doc in cursor:
@@ -168,9 +173,16 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
 @router.put("/{meeting_id}/attendees")
 async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
     attendees = []
-    for uid in data.attendee_ids:
-        try:
-            user = await db.users.find_one({"_id": ObjectId(uid)})
+    if data.attendee_ids:
+        valid_ids = []
+        for uid in data.attendee_ids:
+            try:
+                valid_ids.append(ObjectId(uid))
+            except Exception:
+                pass
+        users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": valid_ids}})}
+        for uid in data.attendee_ids:
+            user = users_map.get(uid)
             if user:
                 attendees.append({
                     "user_id": str(user["_id"]),
@@ -181,8 +193,6 @@ async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Dep
                     "reviewed": False,
                     "reviewed_at": None,
                 })
-        except Exception:
-            pass
     await db.meetings.update_one(
         {"_id": ObjectId(meeting_id)},
         {"$set": {"attendees": attendees, "updated_at": datetime.now(timezone.utc).isoformat()}}
