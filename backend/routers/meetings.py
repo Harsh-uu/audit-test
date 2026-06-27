@@ -178,6 +178,16 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
     async for c in db.reviewer_comments.find({"meeting_id": str(meeting["id"])}).sort("created_at", 1):
         meeting["comments"].append(doc_to_dict(c))
 
+    # Enrich with creator email for email-fallback when no attendees
+    if meeting.get("created_by"):
+        try:
+            creator = await db.users.find_one({"_id": ObjectId(meeting["created_by"])}, {"email": 1, "name": 1})
+            if creator:
+                meeting["created_by_email"] = creator.get("email", "")
+                meeting["created_by_name"] = meeting.get("created_by_name") or creator.get("name", "")
+        except Exception:
+            pass
+
     return meeting
 
 

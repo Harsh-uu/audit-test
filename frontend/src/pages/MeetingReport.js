@@ -240,13 +240,22 @@ export default function MeetingReport() {
 
   const sendReport = async () => {
     const attendeeEmails = (meeting?.attendees || []).map(a => a.email).filter(Boolean);
-    if (!attendeeEmails.length) { alert("No attendee email addresses found on this meeting."); return; }
+    // Fall back to the meeting creator if no attendees have email addresses
+    const recipients = attendeeEmails.length
+      ? attendeeEmails
+      : meeting?.created_by_email
+        ? [meeting.created_by_email]
+        : [];
+    if (!recipients.length) {
+      alert("No recipients found — please add attendees or ensure the meeting creator has an email address.");
+      return;
+    }
     setSendingEmail(true);
     try {
-      await axios.post(`${API}/review/${meetingId}/send-email`, { recipients: attendeeEmails, message: emailMessage }, getAuthConfig());
+      await axios.post(`${API}/review/${meetingId}/send-email`, { recipients, message: emailMessage }, getAuthConfig());
       setShowEmailModal(false);
       setEmailMessage("");
-      setActionMessage("Report emailed to attendees.");
+      setActionMessage("Report emailed successfully.");
     } catch (err) { alert("Failed to send email: " + (err.response?.data?.detail || err.message)); }
     finally { setSendingEmail(false); }
   };

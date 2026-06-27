@@ -1,21 +1,38 @@
 import React from "react";
-import { X, Send } from "lucide-react";
+import { X, Send, UserCircle } from "lucide-react";
 
 export function EmailModal({ show, onClose, meeting, sendingEmail, emailMessage, setEmailMessage, sendReport }) {
   if (!show) return null;
+
+  const attendeeEmails = (meeting?.attendees || []).map(a => a.email).filter(Boolean);
+  const usingFallback = attendeeEmails.length === 0 && !!meeting?.created_by_email;
+
+  const recipientLabel = usingFallback
+    ? `${meeting.created_by_name || "Meeting Creator"} (${meeting.created_by_email})`
+    : (meeting?.attendees || []).map(a => a.name).join(", ") || "No attendees";
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">Send Report to Attendees</h3>
+          <h3 className="font-semibold text-gray-900">Send Report</h3>
           <button onClick={onClose}><X className="w-4 h-4 text-gray-400" /></button>
         </div>
+
         <p className="text-sm text-gray-600 mb-3">
-          This will email a link to the signed-off report to all attendees who have an email address on record.
+          {usingFallback
+            ? "No attendees are on record for this session. The report will be sent to the meeting creator instead."
+            : "This will email a link to the signed-off report to all attendees who have an email address on record."}
         </p>
-        <div className="mb-3 p-3 bg-gray-50 rounded-md text-xs text-gray-500">
-          <strong>Recipients:</strong> {(meeting?.attendees || []).map(a => a.name).join(", ") || "No attendees"}
+
+        <div className={`mb-4 p-3 rounded-md text-xs ${usingFallback ? "bg-amber-50 border border-amber-200 text-amber-800" : "bg-gray-50 text-gray-500"}`}>
+          <div className="flex items-center gap-1.5 font-semibold mb-0.5">
+            {usingFallback && <UserCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+            {usingFallback ? "Sending to (creator):" : "Recipients:"}
+          </div>
+          <span>{recipientLabel}</span>
         </div>
+
         <textarea
           value={emailMessage}
           onChange={e => setEmailMessage(e.target.value)}
