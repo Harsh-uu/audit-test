@@ -187,7 +187,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     if (!speakerMap) return;
     setSaving(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("supervision_token");
       const newText = serializeTurns(
         originalTurns.map(t => ({ ...t, speaker: speakerMap[t.speaker] ?? t.speaker }))
       );
@@ -208,7 +208,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
   const generateSpeakerView = async () => {
     setGenerating(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("supervision_token");
       const res = await axios.post(
         `${API}/api/processing/${meeting.id}/diarize`,
         {},
