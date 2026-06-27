@@ -412,7 +412,17 @@ export default function MeetingReport() {
                     actionMessage={actionMessage}
                   />
                 )}
-                {activeTab === "transcript" && <TranscriptTab meeting={meeting} onAnonymise={handleAnonymise} canAnonymise={canAnonymise} />}
+                {activeTab === "transcript" && (
+                  <TranscriptTab
+                    meeting={meeting}
+                    onAnonymise={handleAnonymise}
+                    canAnonymise={canAnonymise}
+                    onSpeakerTextGenerated={(spText) => setMeeting(m => ({
+                      ...m,
+                      transcript: { ...m.transcript, speaker_text: spText }
+                    }))}
+                  />
+                )}
                 {activeTab === "comments" && (
                   <CommentsTab
                     meeting={meeting}

@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 from bson import ObjectId
 from datetime import datetime, timezone
+import asyncio
 import uuid
 import logging
 from deps import get_db, get_current_user
 from utils.storage import put_object
-from utils.ai import transcribe_audio, analyze_meeting
+from utils.ai import transcribe_audio, analyze_meeting, diarize_transcript
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -100,9 +101,32 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         attendee_ids = [a.get("user_id") for a in meeting.get("attendees", [])]
         rolled_actions = await _get_rolled_actions(db, attendee_ids, meeting_id)
 
-        # Analyze
-        logger.info(f"Starting AI analysis for meeting {meeting_id} with {len(custom_standards)} custom docs")
-        analysis_result = await analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template)  # noqa: E501
+        # Run analysis + speaker diarization in parallel
+        manager_name = meeting.get("sign_off_manager_name") or "Manager"
+        attendees = meeting.get("attendees", [])
+        worker_name = attendees[0].get("name", "Worker") if len(attendees) == 1 else "Worker"
+        meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
+
+        logger.info(f"Starting AI analysis + diarization for meeting {meeting_id}")
+        results = await asyncio.gather(
+            analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template),
+            diarize_transcript(transcript_text, manager_name, worker_name, meeting_type),
+            return_exceptions=True,
+        )
+        analysis_result = results[0]
+        speaker_text = results[1]
+
+        if isinstance(analysis_result, Exception):
+            raise analysis_result
+        if isinstance(speaker_text, Exception) or not speaker_text:
+            logger.warning(f"Diarization non-fatal failure for meeting {meeting_id}: {speaker_text}")
+            speaker_text = None
+        else:
+            await db.transcripts.update_one(
+                {"_id": t_result.inserted_id},
+                {"$set": {"speaker_text": speaker_text}}
+            )
+            logger.info(f"Speaker diarization saved for meeting {meeting_id}")
 
         # Add status/defaults to each mapping and enrich CQC with key_questions
         cqc_kq_map = {s["reference"]: s.get("key_questions", []) for s in cqc_standards}
@@ -263,6 +287,48 @@ async def retry_processing(
     background_tasks.add_task(run_transcription_and_analysis, meeting_id, storage_path, db)
 
     return {"message": "Retry started. Processing will resume shortly."}
+
+
+@router.post("/{meeting_id}/diarize")
+async def diarize_meeting_transcript(
+    meeting_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Generate (or regenerate) speaker labels for an existing transcript."""
+    try:
+        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid meeting ID")
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcript_id = meeting.get("transcript_id")
+    if not transcript_id:
+        raise HTTPException(status_code=400, detail="No transcript found for this meeting")
+
+    transcript = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    transcript_text = transcript.get("text", "")
+    if not transcript_text:
+        raise HTTPException(status_code=400, detail="Transcript text is empty")
+
+    manager_name = meeting.get("sign_off_manager_name") or "Manager"
+    attendees = meeting.get("attendees", [])
+    worker_name = attendees[0].get("name", "Worker") if len(attendees) == 1 else "Worker"
+    meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
+
+    speaker_text = await diarize_transcript(transcript_text, manager_name, worker_name, meeting_type)
+    if not speaker_text:
+        raise HTTPException(status_code=500, detail="Speaker identification failed — please try again")
+
+    await db.transcripts.update_one(
+        {"_id": ObjectId(transcript_id)},
+        {"$set": {"speaker_text": speaker_text}}
+    )
+    return {"message": "Speaker view generated successfully", "speaker_text": speaker_text}
 
 
 @router.get("/{meeting_id}/status")

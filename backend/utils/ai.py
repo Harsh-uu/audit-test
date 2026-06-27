@@ -137,6 +137,63 @@ CARE_TRANSCRIPTION_PROMPT = (
     "mental health, dementia, learning disability, autism, care worker, key worker"
 )
 
+DIARIZATION_SYSTEM_PROMPT = """You are a transcript formatter for supervision meetings in adult social care.
+Your task is to add speaker labels to a raw speech-to-text transcript.
+
+Format each speaker turn as:
+LABEL: spoken words
+
+Rules:
+- Use the manager/supervisor name (or "Manager" if unknown) for the person conducting the supervision
+- Use the worker/supervisee name (or "Worker" if unknown) for the staff member being supervised
+- Start a new line for each speaker turn
+- Preserve ALL original words exactly as transcribed — do not paraphrase, correct, or add words
+- Use contextual clues: who asks questions vs who reports on their work, name mentions, role references
+- When a new speaker starts, always begin on a fresh line with their label
+- If you cannot confidently determine who is speaking, use "Speaker:" as a fallback
+- Output ONLY the formatted transcript — no preamble, explanation, or markdown"""
+
+
+async def diarize_transcript(
+    transcript_text: str,
+    manager_name: str = "Manager",
+    worker_name: str = "Worker",
+    meeting_type: str = "Supervision",
+) -> str:
+    """Use GPT-4o to add speaker labels to a Whisper transcript. Returns None on failure."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key or not transcript_text.strip():
+        return None
+
+    user_prompt = (
+        f"Meeting type: {meeting_type}\n"
+        f"Manager/Supervisor: {manager_name}\n"
+        f"Staff member/Supervisee: {worker_name}\n\n"
+        f"RAW TRANSCRIPT:\n{transcript_text[:12000]}\n\n"
+        f"Reformat this transcript adding speaker labels ({manager_name}: / {worker_name}:) for each turn."
+    )
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"diarize_{uuid.uuid4()}",
+            system_message=DIARIZATION_SYSTEM_PROMPT,
+        ).with_model("openai", "gpt-4o")
+
+        full_response = ""
+        async for event in chat.stream_message(UserMessage(text=user_prompt)):
+            from emergentintegrations.llm.chat import TextDelta, StreamDone
+            if isinstance(event, TextDelta):
+                full_response += event.content
+            elif isinstance(event, StreamDone):
+                break
+
+        result = full_response.strip()
+        return result if result else None
+    except Exception as e:
+        logger.error(f"Speaker diarization failed: {e}")
+        return None
+
 
 async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> str:
     api_key = os.environ.get("EMERGENT_LLM_KEY")
