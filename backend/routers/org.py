@@ -1,9 +1,15 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi.responses import Response as _Response
 from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional
+import uuid
+import logging
 from deps import get_db, get_current_user
+from utils.storage import put_object, get_object
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -244,3 +250,97 @@ async def remove_member(team_id: str, user_id: str, db=Depends(get_db), current_
         {"$unset": {"team_id": "", "setting_id": "", "org_scope": ""}}
     )
     return {"message": "Member removed"}
+
+
+
+# ── Branding ──────────────────────────────────────────────────────────────────
+
+class BrandingUpdate(BaseModel):
+    logo_url: Optional[str] = None
+    primary_color: Optional[str] = None
+
+
+@router.get("/branding")
+async def get_branding(db=Depends(get_db), current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id")
+    if not org_id:
+        return {"has_logo": False, "primary_color": None}
+    org = await db.organisations.find_one({"_id": ObjectId(org_id)})
+    if not org:
+        return {"has_logo": False, "primary_color": None}
+    b = org.get("branding") or {}
+    return {"has_logo": bool(b.get("logo_path")), "primary_color": b.get("primary_color")}
+
+
+@router.put("/branding")
+async def update_branding(data: BrandingUpdate, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    org_id = current_user.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=400, detail="No organisation assigned")
+    update: dict = {}
+    if data.primary_color is not None:
+        update["branding.primary_color"] = data.primary_color
+    # logo_url used to clear logo
+    if data.logo_url == "":
+        update["branding.logo_path"] = None
+    await db.organisations.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {**update, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"message": "Branding updated"}
+
+
+@router.post("/branding/logo")
+async def upload_logo(
+    file: UploadFile = File(...),
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 2 MB)")
+    allowed_ext = {"png", "jpg", "jpeg", "svg", "webp"}
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "png"
+    if ext not in allowed_ext:
+        raise HTTPException(status_code=400, detail=f"Unsupported type. Allowed: {', '.join(sorted(allowed_ext))}")
+    org_id = current_user.get("org_id") or "shared"
+    path = f"branding/{org_id}/{uuid.uuid4()}.{ext}"
+    try:
+        put_object(path, data, file.content_type or "image/png")
+    except Exception as e:
+        logger.error(f"Logo upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Storage upload failed")
+    await db.organisations.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {"branding.logo_path": path, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"logo_path": path, "has_logo": True}
+
+
+@router.get("/branding/logo/{org_id}")
+async def get_org_logo(org_id: str, db=Depends(get_db)):
+    """Public endpoint — no auth needed — serves org logo for <img> tags."""
+    try:
+        org = await db.organisations.find_one({"_id": ObjectId(org_id)})
+        if not org:
+            raise HTTPException(status_code=404, detail="Not found")
+        path = (org.get("branding") or {}).get("logo_path")
+        if not path:
+            raise HTTPException(status_code=404, detail="No logo")
+        content, content_type = get_object(path)
+        return _Response(
+            content=content,
+            media_type=content_type,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Logo serve failed: {e}")
+        raise HTTPException(status_code=404, detail="Logo not available")
