@@ -227,13 +227,13 @@ export default function Dashboard() {
 
           {/* Date range picker */}
           {showDateFilter && (
-            <div className="flex gap-3 items-center p-3 bg-gray-50 border border-gray-200 rounded-md" data-testid="date-range-picker">
+            <div className="flex flex-wrap gap-2 items-center p-3 bg-gray-50 border border-gray-200 rounded-md" data-testid="date-range-picker">
               <label className="text-xs font-medium text-gray-500 whitespace-nowrap">From</label>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={e => setDateFrom(e.target.value)}
-                className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                className="flex-1 min-w-0 max-w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                 data-testid="date-from-input"
               />
               <label className="text-xs font-medium text-gray-500">To</label>
@@ -242,7 +242,7 @@ export default function Dashboard() {
                 value={dateTo}
                 onChange={e => setDateTo(e.target.value)}
                 min={dateFrom}
-                className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                className="flex-1 min-w-0 max-w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                 data-testid="date-to-input"
               />
               {(dateFrom || dateTo) && (

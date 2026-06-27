@@ -102,13 +102,15 @@ export default function NewMeeting() {
                 <Calendar className="inline w-3.5 h-3.5 mr-1 text-gray-400" />
                 Date &amp; Time
               </label>
-              <input
-                type="datetime-local"
-                value={form.date}
-                onChange={e => setForm(f => ({...f, date: e.target.value}))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
-                data-testid="meeting-date-input"
-              />
+              <div className="w-full overflow-hidden">
+                <input
+                  type="datetime-local"
+                  value={form.date}
+                  onChange={e => setForm(f => ({...f, date: e.target.value}))}
+                  className="w-full min-w-0 max-w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                  data-testid="meeting-date-input"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
