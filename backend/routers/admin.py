@@ -514,6 +514,7 @@ async def get_team_insights(
                     "covered_sub": covered_count,
                     "total_sub": total_subs,
                     "pct": pct,
+                    "evidenced_refs": sorted(list(covered_refs & all_subs)),
                 }
             rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
         return {"standards": stds, "rows": rows}
