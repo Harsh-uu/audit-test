@@ -14,17 +14,35 @@ logger = logging.getLogger(__name__)
 
 async def _get_rolled_actions(db, attendee_ids: list, current_meeting_id: str) -> list:
     """Return incomplete actions from previous meetings for these attendees, de-duped."""
+    if not attendee_ids:
+        return []
+
     rolled = []
-    seen_sources = set()  # (source_meeting_id, action_id) to avoid duplicates
-    async for analysis in db.analyses.find({}):
-        aid = str(analysis["_id"])
-        prev_meeting = await db.meetings.find_one({"analysis_id": aid})
-        if not prev_meeting or str(prev_meeting["_id"]) == current_meeting_id:
+    seen_sources = set()
+
+    # Query meetings with attendee overlap directly — avoids unbounded analyses scan
+    prev_meetings_cursor = db.meetings.find(
+        {
+            "attendees.user_id": {"$in": attendee_ids},
+            "analysis_id": {"$exists": True, "$ne": None},
+        },
+        {"_id": 1, "attendees": 1, "analysis_id": 1, "title": 1}
+    ).limit(50)
+
+    async for prev_meeting in prev_meetings_cursor:
+        if str(prev_meeting["_id"]) == current_meeting_id:
             continue
-        # Attendee overlap check
-        prev_attendees = [a.get("user_id") for a in prev_meeting.get("attendees", [])]
-        if not any(uid in attendee_ids for uid in prev_attendees):
+        analysis_id = prev_meeting.get("analysis_id")
+        if not analysis_id:
             continue
+
+        analysis = await db.analyses.find_one(
+            {"_id": ObjectId(analysis_id)},
+            {"actions": 1}
+        )
+        if not analysis:
+            continue
+
         for action in analysis.get("actions", []):
             if action.get("completed") or action.get("is_rolled_over"):
                 continue
