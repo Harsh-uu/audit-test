@@ -177,7 +177,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - None outstanding
 
 ### P1 (Important)
-- Meeting search and filtering on the Dashboard
+- None outstanding
 
 ### P2 (Future/Backlog)
 - CQC inspection preparation summary view
@@ -219,5 +219,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Refactored `AdminLibrary.js` (825 → 371 lines) and `MeetingReport.js` (1015 → 382 lines) to reduce cyclomatic complexity (2026-Feb). Extracted 5 admin tab components under `src/components/admin/` (StandardsTab, DocumentsTab, TemplateTab, UsersTab, ExportTab) and 6 report sub-components under `src/components/report/` (EvidenceTab, TranscriptTab, CommentsTab, AuditTrailTab, EvidenceSidebar, EmailModal). 14/14 frontend regression tests passed.
 
 - Manual transcript anonymisation (2026-Feb): managers/admins highlight any name in the transcript, a floating navy pill button "Anonymise" appears — clicking it calls `PATCH /api/review/{meeting_id}/anonymise` which replaces all occurrences of the phrase with first initial (e.g. "Robert Smith" → "R."), persists to `db.transcripts`, and logs to `review_edits` audit trail. Frontend: `formatTranscript()` splits blob transcripts into readable paragraphs (3 sentences each). 10/10 tests passed (iteration_17).
+
+- Care Certificate sub-outcome drill-down (2026-Feb): Three-part feature — (A) EvidenceSidebar: `CareCertDrillDown` groups CC evidence by standard with per-sub-outcome covered/gap expansion. (B) Team Intelligence Matrix: all 16 CC cells are clickable, opening `CcDrillDownModal` with staff × standard view, progress bar, evidenced sub-outcomes (green check) and gaps (dimmed). (C) Staff Portfolio: Care Cert tab replaced with `CareCertGroupedView`, grouped by standard with sub-outcome expansion and gap toggle. Also fixed a duplicate-declaration build error in `EvidenceSidebar.js`. "Observation" added to New Meeting type dropdown.
 
 *Last Updated: 2026-Feb*
