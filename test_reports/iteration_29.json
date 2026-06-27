@@ -1,0 +1,28 @@
+{
+  "summary": "Tested email fallback feature: EmailModal shows amber notice with creator details when no attendees, and normal Recipients box when attendees exist. All 6 backend tests passed. All 5 frontend acceptance criteria passed.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_email_fallback.py",
+    "/app/test_reports/pytest/pytest_results_29.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Meeting 6a3f92df95f60e56302d0d5e used for testing. Attendee (Test Manager / manager@supervision.com / ID=6a3e5728bb3b2159b3c93f62) was temporarily removed and restored. Email fallback fully working. data-testid: send-report-btn, email-message-input, confirm-send-email-btn.",
+  "test_results": {
+    "get_meeting_returns_created_by_email": "PASS - manager@supervision.com",
+    "get_meeting_returns_created_by_name": "PASS - Test Manager",
+    "email_modal_with_attendees_shows_recipients": "PASS - 'Recipients:' label, 'Test Manager' shown, no amber notice",
+    "email_modal_no_attendees_shows_amber_fallback": "PASS - amber bg, 'No attendees are on record' notice, 'Sending to (creator):' label, creator name+email shown",
+    "send_email_to_attendees_api": "PASS - 200 OK",
+    "send_email_to_creator_fallback_api": "PASS - 200 OK"
+  }
+}
