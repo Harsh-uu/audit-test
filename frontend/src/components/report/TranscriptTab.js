@@ -137,6 +137,8 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
   const [generating, setGenerating] = useState(false);
   const [speakerMap, setSpeakerMap] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [turnOverrides, setTurnOverrides] = useState({}); // { [turnIndex]: speakerName }
+  const [openTurnMenu, setOpenTurnMenu] = useState(null); // turn index with open menu
 
   const hasSpeakerText = Boolean(meeting.transcript?.speaker_text);
   const originalTurns = useMemo(
@@ -154,6 +156,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
         if (!(t.speaker in map)) map[t.speaker] = t.speaker;
       }
       setSpeakerMap(map);
+      setTurnOverrides({});
     }
   }, [meeting.transcript?.speaker_text]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -162,8 +165,33 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     if (hasSpeakerText) setViewMode("speaker");
   }, [hasSpeakerText]);
 
-  const hasChanges = speakerMap !== null &&
-    Object.entries(speakerMap).some(([orig, renamed]) => orig !== renamed);
+  // Close turn menu when clicking outside
+  useEffect(() => {
+    if (openTurnMenu === null) return;
+    const close = () => setOpenTurnMenu(null);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [openTurnMenu]);
+
+  // Compute display speaker for a given turn index (overrides win over global map)
+  const getDisplaySpeaker = useCallback((turn, index) => {
+    return turnOverrides[index] ?? speakerMap?.[turn.speaker] ?? turn.speaker;
+  }, [turnOverrides, speakerMap]);
+
+  // All unique display speakers (used for per-turn dropdown options)
+  const uniqueDisplaySpeakers = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (let i = 0; i < originalTurns.length; i++) {
+      const ds = turnOverrides[i] ?? speakerMap?.[originalTurns[i].speaker] ?? originalTurns[i].speaker;
+      if (!seen.has(ds)) { seen.add(ds); result.push(ds); }
+    }
+    return result;
+  }, [originalTurns, turnOverrides, speakerMap]);
+
+  const hasChanges = (
+    speakerMap !== null && Object.entries(speakerMap).some(([orig, renamed]) => orig !== renamed)
+  ) || Object.keys(turnOverrides).length > 0;
 
   const handleRename = (original, newLabel) =>
     setSpeakerMap(prev => ({ ...prev, [original]: newLabel }));
@@ -181,6 +209,25 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
       if (!(t.speaker in map)) map[t.speaker] = t.speaker;
     }
     setSpeakerMap(map);
+    setTurnOverrides({});
+  };
+
+  // Reassign a single turn to a different speaker
+  const handleTurnAssign = (index, newSpeaker) => {
+    setTurnOverrides(prev => ({ ...prev, [index]: newSpeaker }));
+    setOpenTurnMenu(null);
+  };
+
+  // Flip speakers from a given turn index to the end (fixes cascade misattribution)
+  const handleFlipFromHere = (fromIndex) => {
+    if (uniqueDisplaySpeakers.length !== 2) return;
+    const newOverrides = { ...turnOverrides };
+    for (let j = fromIndex; j < originalTurns.length; j++) {
+      const current = newOverrides[j] ?? speakerMap?.[originalTurns[j].speaker] ?? originalTurns[j].speaker;
+      newOverrides[j] = uniqueDisplaySpeakers.find(s => s !== current) ?? current;
+    }
+    setTurnOverrides(newOverrides);
+    setOpenTurnMenu(null);
   };
 
   const handleSave = async () => {
@@ -188,16 +235,18 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     setSaving(true);
     try {
       const token = localStorage.getItem("supervision_token");
-      const newText = serializeTurns(
-        originalTurns.map(t => ({ ...t, speaker: speakerMap[t.speaker] ?? t.speaker }))
-      );
+      const finalTurns = originalTurns.map((t, i) => ({
+        speaker: turnOverrides[i] ?? speakerMap[t.speaker] ?? t.speaker,
+        text: t.text,
+      }));
+      const newText = serializeTurns(finalTurns);
       await axios.patch(
         `${API}/api/review/${meeting.id}/speaker-text`,
         { speaker_text: newText },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText);
-      // speakerMap resets via the useEffect above when speaker_text prop updates
+      // speakerMap + turnOverrides reset via the useEffect above when speaker_text prop updates
     } catch (e) {
       alert(e?.response?.data?.detail || "Failed to save speaker labels. Please try again.");
     } finally {
@@ -262,7 +311,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
           <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <p className="text-xs text-amber-700 flex-1">
             {viewMode === "speaker"
-              ? "Rename or swap speakers above the transcript, then Save. Switch to Full Text to anonymise names."
+              ? "Rename speakers globally above, or click any speaker pill to reassign that turn. Use \"Flip from here\" to fix cascading misattributions."
               : canAnonymise
               ? "Highlight any name and click Anonymise to replace it with an initial."
               : "Transcript is read-only. Use the Evidence tab to edit summaries and evidence wording."}
@@ -341,16 +390,64 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
             {/* Turns */}
             <div className="divide-y divide-gray-100" data-testid="speaker-view">
               {originalTurns.map((turn, i) => {
-                const displaySpeaker = speakerMap?.[turn.speaker] ?? turn.speaker;
+                const displaySpeaker = getDisplaySpeaker(turn, i);
                 const style = getSpeakerStyle(displaySpeaker, managerName);
+                const isMenuOpen = openTurnMenu === i;
                 return (
                   <div key={i} className={`flex gap-3 px-5 py-3.5 ${style.row}`}>
-                    <span
-                      className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 h-fit ${style.pill}`}
-                      data-testid={`speaker-pill-${i}`}
-                    >
-                      {displaySpeaker}
-                    </span>
+                    <div className="relative flex-shrink-0 mt-0.5">
+                      <button
+                        data-testid={`speaker-pill-${i}`}
+                        onMouseDown={e => { e.stopPropagation(); setOpenTurnMenu(isMenuOpen ? null : i); }}
+                        className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${style.pill} ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
+                        title="Click to reassign this speaker turn"
+                      >
+                        {displaySpeaker}
+                        <svg className="w-2.5 h-2.5 opacity-70" viewBox="0 0 10 6" fill="none">
+                          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+
+                      {isMenuOpen && (
+                        <div
+                          onMouseDown={e => e.stopPropagation()}
+                          data-testid={`turn-menu-${i}`}
+                          className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg w-48 py-1 text-xs"
+                        >
+                          <p className="px-3 pt-1 pb-1.5 text-gray-400 font-semibold uppercase tracking-wide" style={{ fontSize: "10px" }}>
+                            Assign turn {i + 1} to
+                          </p>
+                          {uniqueDisplaySpeakers.map(s => (
+                            <button
+                              key={s}
+                              onMouseDown={() => handleTurnAssign(i, s)}
+                              data-testid={`assign-turn-${i}-${s}`}
+                              className={`w-full text-left px-3 py-1.5 hover:bg-blue-50 flex items-center gap-2 transition-colors ${
+                                displaySpeaker === s ? "text-[#1E3A8A] font-semibold bg-blue-50/50" : "text-gray-700"
+                              }`}
+                            >
+                              <span className={`w-2 h-2 rounded-full ${displaySpeaker === s ? "bg-[#1E3A8A]" : "bg-gray-300"}`} />
+                              {s}
+                              {displaySpeaker === s && <span className="ml-auto text-[10px] text-gray-400">current</span>}
+                            </button>
+                          ))}
+                          {uniqueDisplaySpeakers.length === 2 && (
+                            <>
+                              <div className="my-1 border-t border-gray-100" />
+                              <button
+                                onMouseDown={() => handleFlipFromHere(i)}
+                                data-testid={`flip-from-here-${i}`}
+                                className="w-full text-left px-3 py-1.5 hover:bg-amber-50 text-amber-700 font-medium transition-colors flex items-center gap-2"
+                                title="Swaps all speaker assignments from this turn to the end of the transcript"
+                              >
+                                <ArrowLeftRight className="w-3 h-3 flex-shrink-0" />
+                                Flip speakers from here
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-800 leading-relaxed">{turn.text}</p>
                   </div>
                 );
