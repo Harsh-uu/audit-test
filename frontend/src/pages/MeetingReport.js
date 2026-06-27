@@ -49,6 +49,7 @@ export default function MeetingReport() {
   const canReview = isInReview || isReviewed;
   const canSignOff = user?.role === "manager" || user?.role === "admin";
   const canAddComment = isSignedOff || ["admin", "manager"].includes(user?.role);
+  const canAnonymise = ["manager", "admin"].includes(user?.role) && !!meeting?.transcript?.text;
 
   const userAttendee = meeting?.attendees?.find(a => a.user_id === user?.id);
   const hasReviewed = userAttendee?.reviewed || false;
@@ -175,6 +176,16 @@ export default function MeetingReport() {
       setNewComment("");
       fetchMeeting();
     } catch (err) { setActionMessage(err.response?.data?.detail || "Failed to add comment"); }
+  };
+
+  const handleAnonymise = async (phrase) => {
+    try {
+      await axios.patch(`${API}/review/${meetingId}/anonymise`, { phrase }, getAuthConfig());
+      setActionMessage(`"${phrase}" anonymised successfully`);
+      fetchMeeting();
+    } catch (err) {
+      setActionMessage(err.response?.data?.detail || "Failed to anonymise");
+    }
   };
 
   const exportPdf = async () => {
@@ -343,7 +354,7 @@ export default function MeetingReport() {
                     actionMessage={actionMessage}
                   />
                 )}
-                {activeTab === "transcript" && <TranscriptTab meeting={meeting} />}
+                {activeTab === "transcript" && <TranscriptTab meeting={meeting} onAnonymise={handleAnonymise} canAnonymise={canAnonymise} />}
                 {activeTab === "comments" && (
                   <CommentsTab
                     meeting={meeting}

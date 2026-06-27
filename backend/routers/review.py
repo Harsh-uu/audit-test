@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 import asyncio
 import logging
+import re
 from deps import get_db, get_current_user
 
 router = APIRouter()
@@ -322,6 +323,56 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, db
     return {"message": "Updated", "completed": completed}
 
 
+@router.patch("/{meeting_id}/anonymise")
+async def anonymise_transcript(
+    meeting_id: str,
+    data: AnonymiseRequest,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Replace a phrase in the stored transcript with the speaker's first initial."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can anonymise transcripts")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcript_id = meeting.get("transcript_id")
+    if not transcript_id:
+        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
+
+    transcript = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    phrase = data.phrase.strip()
+    if not phrase:
+        raise HTTPException(status_code=400, detail="Phrase cannot be empty")
+
+    initial = phrase[0].upper() + "."
+    original_text = transcript.get("text", "")
+    updated_text = re.sub(re.escape(phrase), initial, original_text, flags=re.IGNORECASE)
+
+    if updated_text == original_text:
+        return {"message": "Phrase not found in transcript", "replaced": False}
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.transcripts.update_one(
+        {"_id": ObjectId(transcript_id)},
+        {"$set": {"text": updated_text, "updated_at": now}},
+    )
+    await db.review_edits.insert_one({
+        "meeting_id": meeting_id,
+        "editor_id": current_user["id"],
+        "editor_name": current_user["name"],
+        "edit_type": "transcript_anonymise",
+        "content": f"Anonymised '{phrase}' → '{initial}'",
+        "created_at": now,
+    })
+    return {"message": f"'{phrase}' replaced with '{initial}'", "replaced": True}
+
+
 @router.post("/{meeting_id}/share")
 async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
@@ -457,6 +508,7 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
         "summary": "Summary edited",
         "actions": "Action items updated",
         "evidence": "Evidence item updated",
+        "transcript_anonymise": "Transcript anonymised (manual)",
     }
     async for edit in db.review_edits.find({"meeting_id": meeting_id}).sort("created_at", 1):
         edit_type = edit.get("edit_type", "unknown")
