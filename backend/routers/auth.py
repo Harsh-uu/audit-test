@@ -26,7 +26,7 @@ def create_access_token(user_id: str, email: str) -> str:
     payload = {
         "sub": user_id,
         "email": email,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=8),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
         "type": "access",
     }
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
@@ -78,7 +78,7 @@ async def register(data: RegisterRequest, response: Response, db=Depends(get_db)
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     set_auth_cookies(response, access_token, refresh_token)
-    return {"id": user_id, "email": email, "name": data.name, "role": role, "token": access_token}
+    return {"id": user_id, "email": email, "name": data.name, "role": role, "token": access_token, "refresh_token": refresh_token}
 
 
 @router.post("/login")
@@ -107,7 +107,7 @@ async def login(data: LoginRequest, response: Response, request: Request, db=Dep
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     set_auth_cookies(response, access_token, refresh_token)
-    return {"id": user_id, "email": email, "name": user["name"], "role": user["role"], "token": access_token}
+    return {"id": user_id, "email": email, "name": user["name"], "role": user["role"], "token": access_token, "refresh_token": refresh_token}
 
 
 @router.post("/logout")
@@ -124,7 +124,12 @@ async def me(current_user=Depends(get_current_user)):
 
 @router.post("/refresh")
 async def refresh_token(request: Request, response: Response, db=Depends(get_db)):
+    # Accept refresh token from cookie OR Authorization header (for non-cookie clients)
     token = request.cookies.get("refresh_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
     if not token:
         raise HTTPException(status_code=401, detail="No refresh token")
     try:
@@ -136,8 +141,10 @@ async def refresh_token(request: Request, response: Response, db=Depends(get_db)
             raise HTTPException(status_code=401, detail="User not found")
         user_id = str(user["_id"])
         new_access = create_access_token(user_id, user["email"])
-        response.set_cookie("access_token", new_access, httponly=True, secure=False, samesite="lax", max_age=28800, path="/")  # noqa: E501
-        return {"message": "Token refreshed"}
+        new_refresh = create_refresh_token(user_id)
+        response.set_cookie("access_token", new_access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")  # noqa: E501
+        response.set_cookie("refresh_token", new_refresh, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")  # noqa: E501
+        return {"access_token": new_access, "refresh_token": new_refresh, "message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 

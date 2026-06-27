@@ -29,7 +29,7 @@ function canUseMediaDevices() {
 
 export default function RecordingScreen() {
   const { meetingId } = useParams();
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, silentRefresh } = useAuth();
   const navigate = useNavigate();
   const [meeting, setMeeting] = useState(null);
   const [stage, setStage] = useState("notice"); // notice | ready | recording | paused | stopped | uploading | processing
@@ -286,6 +286,9 @@ export default function RecordingScreen() {
     formData.append("audio", blob, "meeting.webm");
 
     try {
+      // Proactively refresh the token before a potentially long upload
+      try { await silentRefresh(); } catch {}
+
       const token = localStorage.getItem("supervision_token");
       await axios.post(`${API}/processing/${meetingId}/upload`, formData, {
         headers: {
@@ -299,7 +302,13 @@ export default function RecordingScreen() {
       setStage("processing");
       setTimeout(() => navigate(`/meetings/${meetingId}/report`), 2000);
     } catch (err) {
-      setError(`Upload failed: ${err.response?.data?.detail || err.message}`);
+      const detail = err.response?.data?.detail || err.message;
+      const isAuthError = err.response?.status === 401;
+      setError(
+        isAuthError
+          ? "Your session has expired. Your recording is still saved in this tab — please refresh the page, log in again, then return here to re-upload."
+          : `Upload failed: ${detail}`
+      );
       setStage("stopped");
     }
   };
