@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { FileText, Users, Loader } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { FileText, Users, Loader, Pencil } from "lucide-react";
 import axios from "axios";
 import { anonymiseTranscript } from "@/utils/anonymise";
 
@@ -36,6 +36,10 @@ function parseSpeakerText(text) {
   return turns;
 }
 
+function serializeTurns(turns) {
+  return turns.map(t => `${t.speaker}: ${t.text}`).join("\n");
+}
+
 function getSpeakerStyle(speaker, managerName) {
   const s = speaker.toLowerCase();
   const mn = (managerName || "").toLowerCase();
@@ -54,12 +58,81 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
   const [popupPos, setPopupPos] = useState(null);
   const [generating, setGenerating] = useState(false);
 
+  // Speaker correction state
+  const [editedTurns, setEditedTurns] = useState(null); // null = no edits yet
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+
   const hasSpeakerText = Boolean(meeting.transcript?.speaker_text);
+  const originalTurns = hasSpeakerText ? parseSpeakerText(meeting.transcript.speaker_text) : [];
+  const workingTurns = editedTurns || originalTurns;
+  const hasChanges = editedTurns !== null &&
+    serializeTurns(editedTurns) !== meeting.transcript?.speaker_text;
+
+  const managerName = meeting.sign_off_manager_name || "";
+  const workerName = meeting.attendees?.length === 1 ? meeting.attendees[0].name : "";
+
+  // Quick-pick labels for the inline editor
+  const quickLabels = [
+    managerName || "Manager",
+    workerName || "Worker",
+    "Speaker",
+  ].filter((v, i, a) => a.indexOf(v) === i);
 
   // Default to speaker view when available
   useEffect(() => {
     if (hasSpeakerText) setViewMode("speaker");
   }, [hasSpeakerText]);
+
+  // Focus the input when entering edit mode
+  useEffect(() => {
+    if (editingIdx !== null && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingIdx]);
+
+  const startEditing = (idx) => {
+    if (!editedTurns) setEditedTurns(originalTurns.map(t => ({ ...t })));
+    setEditingIdx(idx);
+  };
+
+  const commitEdit = () => setEditingIdx(null);
+
+  const updateSpeakerLabel = (idx, newLabel) => {
+    setEditedTurns(prev =>
+      (prev || originalTurns.map(t => ({ ...t }))).map((t, j) =>
+        j === idx ? { ...t, speaker: newLabel } : t
+      )
+    );
+  };
+
+  const discardChanges = () => {
+    setEditedTurns(null);
+    setEditingIdx(null);
+  };
+
+  const saveSpeakerCorrections = async () => {
+    if (!editedTurns) return;
+    setSaving(true);
+    try {
+      const token = localStorage.getItem("token");
+      const newText = serializeTurns(editedTurns);
+      await axios.patch(
+        `${API}/api/review/${meeting.id}/speaker-text`,
+        { speaker_text: newText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText);
+      setEditedTurns(null);
+      setEditingIdx(null);
+    } catch (e) {
+      alert(e?.response?.data?.detail || "Failed to save corrections. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const generateSpeakerView = async () => {
     setGenerating(true);
@@ -71,6 +144,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (onSpeakerTextGenerated) onSpeakerTextGenerated(res.data.speaker_text);
+      setEditedTurns(null);
       setViewMode("speaker");
     } catch (e) {
       alert(e?.response?.data?.detail || "Failed to generate speaker view. Please try again.");
@@ -83,11 +157,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     if (!canAnonymise || viewMode !== "full") return;
     const sel = window.getSelection();
     const text = sel?.toString().trim();
-    if (!text || text.length < 2) {
-      setSelectionText("");
-      setPopupPos(null);
-      return;
-    }
+    if (!text || text.length < 2) { setSelectionText(""); setPopupPos(null); return; }
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     setSelectionText(text);
@@ -97,8 +167,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
   useEffect(() => {
     const clearPopup = (e) => {
       if (e.target.closest("[data-anonymise-btn]")) return;
-      setSelectionText("");
-      setPopupPos(null);
+      setSelectionText(""); setPopupPos(null);
     };
     document.addEventListener("mousedown", clearPopup);
     return () => document.removeEventListener("mousedown", clearPopup);
@@ -107,25 +176,23 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
   const handleAnonymise = () => {
     if (!selectionText || !onAnonymise) return;
     onAnonymise(selectionText);
-    setSelectionText("");
-    setPopupPos(null);
+    setSelectionText(""); setPopupPos(null);
     window.getSelection()?.removeAllRanges();
   };
 
   const raw = anonymiseTranscript(meeting.transcript?.text, meeting.attendees || []);
   const wordCount = raw ? raw.trim().split(/\s+/).filter(Boolean).length : 0;
   const readMins = Math.ceil(wordCount / 150);
-  const managerName = meeting.sign_off_manager_name || "";
 
   return (
     <div data-testid="transcript-view">
-      {/* Header row: info banner + view toggle / generate button */}
+      {/* Header row */}
       <div className="flex items-start gap-2 mb-4">
         <div className="flex-1 bg-amber-50 border border-amber-200 rounded-md p-3 flex items-center gap-2">
           <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <p className="text-xs text-amber-700 flex-1">
             {viewMode === "speaker"
-              ? "Speaker view shows AI-identified turns. Switch to Full Text to anonymise."
+              ? "Click any speaker label to correct it. Switch to Full Text to anonymise names."
               : canAnonymise
               ? "Highlight any name and click Anonymise to replace it with an initial."
               : "Transcript is read-only. Use the Evidence tab to edit summaries and evidence wording."}
@@ -164,7 +231,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
 
       {/* Transcript body */}
       <div
-        className="bg-white border border-gray-200 rounded-lg shadow-sm"
+        className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden"
         onMouseUp={handleMouseUp}
         data-testid="transcript-text"
       >
@@ -185,23 +252,94 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
 
         {!raw ? (
           <p className="p-5 text-sm text-gray-400 italic">Transcript not available.</p>
-        ) : viewMode === "speaker" && meeting.transcript?.speaker_text ? (
-          // ── Speaker view ────────────────────────────────────────────────────
-          <div className="divide-y divide-gray-100" data-testid="speaker-view">
-            {parseSpeakerText(meeting.transcript.speaker_text).map((turn, i) => {
-              const style = getSpeakerStyle(turn.speaker, managerName);
-              return (
-                <div key={i} className={`flex gap-3 px-5 py-3.5 ${style.row}`}>
-                  <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 h-fit ${style.pill}`}>
-                    {turn.speaker}
-                  </span>
-                  <p className="text-sm text-gray-800 leading-relaxed">{turn.text}</p>
+        ) : viewMode === "speaker" && hasSpeakerText ? (
+          // ── Speaker view with inline label editing ───────────────────────────
+          <>
+            <div className="divide-y divide-gray-100" data-testid="speaker-view">
+              {workingTurns.map((turn, i) => {
+                const style = getSpeakerStyle(turn.speaker, managerName);
+                const isEditing = editingIdx === i;
+                const isChanged = editedTurns && editedTurns[i]?.speaker !== originalTurns[i]?.speaker;
+
+                return (
+                  <div key={i} className={`flex gap-3 px-5 py-3.5 ${style.row}`}>
+                    {isEditing ? (
+                      // ── Inline edit mode ────────────────────────────────────
+                      <div className="flex-shrink-0 flex flex-col gap-1.5 mt-0.5 w-32" data-testid={`speaker-edit-${i}`}>
+                        <input
+                          ref={inputRef}
+                          className="text-xs font-semibold px-2 py-1 rounded border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 w-full"
+                          value={(editedTurns || originalTurns)[i]?.speaker || ""}
+                          onChange={e => updateSpeakerLabel(i, e.target.value)}
+                          onBlur={commitEdit}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") commitEdit();
+                            if (e.key === "Escape") { discardChanges(); setEditingIdx(null); }
+                          }}
+                          data-testid={`speaker-input-${i}`}
+                        />
+                        <div className="flex flex-wrap gap-1">
+                          {quickLabels.map(label => (
+                            <button
+                              key={label}
+                              className="text-xs px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 rounded transition-colors leading-none"
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                updateSpeakerLabel(i, label);
+                                setEditingIdx(null);
+                              }}
+                              data-testid={`quick-label-${label.replace(/\s/g,"-")}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      // ── Display mode (clickable pill) ───────────────────────
+                      <button
+                        className={`group inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 h-fit transition-opacity hover:opacity-80 ${style.pill} ${isChanged ? "ring-2 ring-offset-1 ring-amber-400" : ""}`}
+                        onClick={() => startEditing(i)}
+                        title="Click to edit speaker label"
+                        data-testid={`speaker-pill-${i}`}
+                      >
+                        {turn.speaker}
+                        <Pencil className="w-2.5 h-2.5 opacity-50 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    )}
+                    <p className="text-sm text-gray-800 leading-relaxed">{turn.text}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Save / discard bar */}
+            {hasChanges && (
+              <div className="flex items-center justify-between px-5 py-3 bg-amber-50 border-t border-amber-200" data-testid="speaker-save-bar">
+                <span className="text-xs text-amber-700 font-medium">Unsaved speaker corrections</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={discardChanges}
+                    className="text-xs px-3 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+                    data-testid="discard-corrections-btn"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={saveSpeakerCorrections}
+                    disabled={saving}
+                    className="text-xs px-3 py-1.5 rounded bg-[#1E3A8A] text-white hover:bg-[#1E40AF] transition-colors disabled:opacity-60 flex items-center gap-1.5"
+                    data-testid="save-corrections-btn"
+                  >
+                    {saving && <Loader className="w-3 h-3 animate-spin" />}
+                    Save corrections
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            )}
+          </>
         ) : (
-          // ── Full text view ───────────────────────────────────────────────────
+          // ── Full text view ────────────────────────────────────────────────
           <div className="p-5">
             {formatTranscript(raw).map((para, i) => (
               <p key={i} className="text-sm text-gray-700 leading-relaxed mb-3 last:mb-0">
@@ -216,13 +354,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
       {popupPos && selectionText && viewMode === "full" && (
         <div
           data-anonymise-btn="true"
-          style={{
-            position: "fixed",
-            top: popupPos.top,
-            left: popupPos.left,
-            transform: "translateX(-50%)",
-            zIndex: 9999,
-          }}
+          style={{ position: "fixed", top: popupPos.top, left: popupPos.left, transform: "translateX(-50%)", zIndex: 9999 }}
           className="bg-[#1E3A8A] text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg cursor-pointer hover:bg-[#1E40AF] transition-colors select-none flex items-center gap-1.5"
           onMouseDown={(e) => { e.preventDefault(); handleAnonymise(); }}
           data-testid="anonymise-popup-btn"

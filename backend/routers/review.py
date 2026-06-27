@@ -46,6 +46,9 @@ class CommentRequest(BaseModel):
 class AnonymiseRequest(BaseModel):
     phrase: str
 
+class SpeakerTextUpdateRequest(BaseModel):
+    speaker_text: str
+
 
 class EmailRequest(BaseModel):
     recipients: List[str]
@@ -423,6 +426,42 @@ async def add_comment(meeting_id: str, data: CommentRequest, db=Depends(get_db),
     comment_doc["id"] = str(result.inserted_id)
     del comment_doc["_id"]
     return comment_doc
+
+
+@router.patch("/{meeting_id}/speaker-text")
+async def update_speaker_text(
+    meeting_id: str,
+    data: SpeakerTextUpdateRequest,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Save corrected speaker turn labels back to the transcript document."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can edit speaker labels")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcript_id = meeting.get("transcript_id")
+    if not transcript_id:
+        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
+
+    await db.transcripts.update_one(
+        {"_id": ObjectId(transcript_id)},
+        {"$set": {"speaker_text": data.speaker_text}}
+    )
+
+    await db.audit_logs.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": current_user["id"],
+        "user_name": current_user.get("name", ""),
+        "action": "speaker_correction",
+        "edit_type": "speaker_correction",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"message": "Speaker labels updated", "speaker_text": data.speaker_text}
 
 
 @router.get("/{meeting_id}/audit-trail")
