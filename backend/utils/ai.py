@@ -2,10 +2,44 @@ import os
 import json
 import logging
 import uuid
+import asyncio
+import subprocess
+import tempfile
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.llm.openai import OpenAISpeechToText
 
 logger = logging.getLogger(__name__)
+
+WHISPER_MAX_BYTES = 24 * 1024 * 1024  # 24 MB — 1 MB buffer below Whisper's 25 MB hard limit
+
+
+def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
+    """Compress audio to 16 kHz mono 32 kbps MP3 — optimal for voice/Whisper, ~7 MB per 30 min."""
+    with tempfile.NamedTemporaryFile(suffix=input_suffix, delete=False) as f:
+        f.write(audio_data)
+        inp = f.name
+    out = inp + ".mp3"
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg", "-i", inp,
+                "-vn",                 # drop any video stream
+                "-ar", "16000",        # 16 kHz — Whisper's native sample rate
+                "-ac", "1",            # mono
+                "-b:a", "32k",         # 32 kbps bitrate
+                out, "-y", "-loglevel", "error",
+            ],
+            capture_output=True,
+            timeout=180,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg compression failed: {result.stderr.decode()}")
+        with open(out, "rb") as f:
+            return f.read()
+    finally:
+        os.unlink(inp)
+        if os.path.exists(out):
+            os.unlink(out)
 
 ANALYSIS_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers.
 Analyze meeting transcripts to identify evidence of compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
@@ -107,9 +141,21 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> s
     if not api_key:
         raise ValueError("EMERGENT_LLM_KEY not set")
 
-    import tempfile
-    import os as _os
-    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+    # Compress large files to avoid Whisper's 25 MB limit.
+    # 30 min WebM ≈ 28 MB → 32 kbps mono MP3 ≈ 7 MB.
+    if len(audio_data) > WHISPER_MAX_BYTES:
+        suffix = os.path.splitext(filename)[1] or ".webm"
+        logger.info(
+            "Audio is %d MB — compressing to 16 kHz/32 kbps MP3 for Whisper",
+            len(audio_data) // (1024 * 1024),
+        )
+        loop = asyncio.get_running_loop()
+        audio_data = await loop.run_in_executor(None, _compress_to_mp3, audio_data, suffix)
+        filename = "audio.mp3"
+        logger.info("Compressed to %d MB", len(audio_data) // (1024 * 1024))
+
+    suffix = os.path.splitext(filename)[1] or ".webm"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(audio_data)
         tmp_path = tmp.name
 
@@ -127,7 +173,7 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> s
             return response.text
         return str(response)
     finally:
-        _os.unlink(tmp_path)
+        os.unlink(tmp_path)
 
 
 async def extract_document_criteria(text: str, doc_name: str) -> dict:

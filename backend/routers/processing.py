@@ -226,6 +226,45 @@ async def upload_audio(
     }
 
 
+@router.post("/{meeting_id}/retry")
+async def retry_processing(
+    meeting_id: str,
+    background_tasks: BackgroundTasks,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Re-trigger transcription + analysis for a processing_failed meeting using stored audio."""
+    try:
+        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid meeting ID")
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if meeting.get("status") not in ("processing_failed", "processing"):
+        raise HTTPException(status_code=400, detail="Only processing_failed meetings can be retried")
+
+    audio_file_id = meeting.get("audio_file_id")
+    if not audio_file_id:
+        raise HTTPException(status_code=400, detail="No audio file found for this meeting — please re-upload the recording")
+
+    audio_file = await db.audio_files.find_one({"_id": ObjectId(audio_file_id)})
+    if not audio_file:
+        raise HTTPException(status_code=404, detail="Audio file record not found")
+
+    storage_path = audio_file.get("storage_path")
+    if not storage_path:
+        raise HTTPException(status_code=400, detail="Audio storage path missing")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id)},
+        {"$set": {"status": "processing", "updated_at": now}}
+    )
+    background_tasks.add_task(run_transcription_and_analysis, meeting_id, storage_path, db)
+
+    return {"message": "Retry started. Processing will resume shortly."}
+
+
 @router.get("/{meeting_id}/status")
 async def get_processing_status(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     try:

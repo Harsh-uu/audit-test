@@ -4,7 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader, Shield, Send,
+  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader, Shield, Send, RefreshCw,
 } from "lucide-react";
 import { EvidenceTab } from "@/components/report/EvidenceTab";
 import { TranscriptTab } from "@/components/report/TranscriptTab";
@@ -12,6 +12,38 @@ import { CommentsTab } from "@/components/report/CommentsTab";
 import { AuditTrailTab } from "@/components/report/AuditTrailTab";
 import { EvidenceSidebar } from "@/components/report/EvidenceSidebar";
 import { EmailModal } from "@/components/report/EmailModal";
+
+function RetryButton({ meetingId, onRetry, API, getAuthConfig }) {
+  const [retrying, setRetrying] = useState(false);
+  const [msg, setMsg] = useState("");
+  const handleRetry = async () => {
+    setRetrying(true);
+    setMsg("");
+    try {
+      await axios.post(`${API}/processing/${meetingId}/retry`, {}, getAuthConfig());
+      setMsg("Retry started — the page will update automatically.");
+      setTimeout(onRetry, 3000);
+    } catch (err) {
+      setMsg(err.response?.data?.detail || "Retry failed");
+    } finally {
+      setRetrying(false);
+    }
+  };
+  return (
+    <div>
+      <button
+        onClick={handleRetry}
+        disabled={retrying}
+        data-testid="retry-processing-btn"
+        className="inline-flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-50"
+      >
+        <RefreshCw className={`w-4 h-4 ${retrying ? "animate-spin" : ""}`} />
+        {retrying ? "Retrying…" : "Retry Processing"}
+      </button>
+      {msg && <p className="text-xs text-gray-500 mt-2">{msg}</p>}
+    </div>
+  );
+}
 
 const PROCESSING_STAGES = {
   processing:        { label: "Uploading audio...", pct: 20 },
@@ -304,7 +336,8 @@ export default function MeetingReport() {
               <div className="text-center">
                 <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
                 <h3 className="font-semibold text-gray-900 mb-1">Processing failed</h3>
-                <p className="text-sm text-gray-500">Please try re-uploading the recording.</p>
+                <p className="text-sm text-gray-500 mb-4">Please try re-uploading the recording.</p>
+                <RetryButton meetingId={meetingId} onRetry={fetchMeeting} API={API} getAuthConfig={getAuthConfig} />
               </div>
             ) : (
               <div className="text-center max-w-md">
