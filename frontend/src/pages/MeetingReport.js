@@ -319,6 +319,31 @@ export default function MeetingReport() {
           </div>
         )}
 
+        {/* Not yet processed — recording/draft/stopped state */}
+        {!stageCfg && !analysis && (
+          <div className="flex-1 flex items-center justify-center p-12">
+            <div className="text-center max-w-sm">
+              <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Loader className="w-7 h-7 text-gray-400" />
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">
+                {meeting?.status === "recording" ? "Recording in progress" : "No report yet"}
+              </h3>
+              <p className="text-sm text-gray-500 mb-5">
+                {meeting?.status === "recording"
+                  ? "This meeting is still being recorded. Go to the recording screen to stop and upload the audio."
+                  : "This meeting hasn't been recorded and processed yet. Start a recording to generate a report."}
+              </p>
+              <button
+                onClick={() => navigate(`/meetings/${meetingId}/record`)}
+                className="bg-[#1E3A8A] text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors"
+              >
+                Go to Recording Screen
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         {!stageCfg && analysis && (
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
