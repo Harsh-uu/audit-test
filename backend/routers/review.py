@@ -42,6 +42,10 @@ class CommentRequest(BaseModel):
     text: str
 
 
+class AnonymiseRequest(BaseModel):
+    phrase: str
+
+
 class EmailRequest(BaseModel):
     recipients: List[str]
     message: Optional[str] = None
