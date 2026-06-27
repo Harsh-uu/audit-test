@@ -222,4 +222,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 
 - Care Certificate sub-outcome drill-down (2026-Feb): Three-part feature — (A) EvidenceSidebar: `CareCertDrillDown` groups CC evidence by standard with per-sub-outcome covered/gap expansion. (B) Team Intelligence Matrix: all 16 CC cells are clickable, opening `CcDrillDownModal` with staff × standard view, progress bar, evidenced sub-outcomes (green check) and gaps (dimmed). (C) Staff Portfolio: Care Cert tab replaced with `CareCertGroupedView`, grouped by standard with sub-outcome expansion and gap toggle. Also fixed a duplicate-declaration build error in `EvidenceSidebar.js`. "Observation" added to New Meeting type dropdown.
 
+- Speaker Identification (2026-Feb): `POST /api/processing/{id}/diarize` endpoint calls GPT-4o to label each speaker turn as Manager:/Worker: (or actual names). For new meetings, diarization runs in parallel with analysis (`asyncio.gather`). For existing meetings, an "Identify Speakers" button in the Transcript tab calls the endpoint on-demand. The transcript tab now has a Full Text / Speaker View toggle; navy pills = Manager, emerald pills = Worker.
+
 *Last Updated: 2026-Feb*
