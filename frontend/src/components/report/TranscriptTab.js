@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { FileText, Users, Loader, ArrowLeftRight } from "lucide-react";
+import { FileText, Users, Loader, ArrowLeftRight, Scissors } from "lucide-react";
 import axios from "axios";
 import { anonymiseTranscript } from "@/utils/anonymise";
 
@@ -52,39 +52,49 @@ function getSpeakerStyle(speaker, managerName) {
 }
 
 // ── Speaker Manager Panel ────────────────────────────────────────────────────
-function SpeakerManagerPanel({ turns, speakerMap, onChange, onSwap, onSave, onDiscard, saving, hasChanges }) {
+function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, saving, isDirty }) {
   const speakerCounts = useMemo(() => {
     const counts = {};
-    for (const t of turns) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
+    for (const t of localTurns) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
     return counts;
-  }, [turns]);
+  }, [localTurns]);
 
   const uniqueSpeakers = Object.keys(speakerCounts);
   const canSwap = uniqueSpeakers.length === 2;
+
+  // Staging: temporary rename values before committing to localTurns
+  const [staged, setStaged] = useState({});
+  useEffect(() => { setStaged({}); }, [localTurns.length]);
+
+  const applyRename = (original) => {
+    const newName = (staged[original] || "").trim();
+    if (newName && newName !== original) {
+      onRenameAll(original, newName);
+      setStaged(prev => { const n = { ...prev }; delete n[original]; return n; });
+    } else {
+      setStaged(prev => { const n = { ...prev }; delete n[original]; return n; });
+    }
+  };
 
   return (
     <div className="px-5 py-4 bg-gray-50 border-b border-gray-200" data-testid="speaker-manager-panel">
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-            Detected Speakers
-          </p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Speaker Labels</p>
           <div className="flex flex-col gap-2.5">
-            {uniqueSpeakers.map(original => (
-              <div key={original} className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-400 font-mono w-24 truncate" title={original}>
-                  {original}
-                </span>
-                <span className="text-gray-300 text-xs">→</span>
+            {uniqueSpeakers.map(speaker => (
+              <div key={speaker} className="flex items-center gap-2 flex-wrap">
                 <input
-                  className="text-xs font-semibold px-2.5 py-1.5 rounded border border-gray-200 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 focus:outline-none w-40 bg-white"
-                  value={speakerMap[original] ?? original}
-                  onChange={e => onChange(original, e.target.value)}
+                  className="text-xs font-semibold px-2.5 py-1.5 rounded border border-gray-200 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 focus:outline-none w-44 bg-white"
+                  value={staged[speaker] ?? speaker}
+                  onChange={e => setStaged(prev => ({ ...prev, [speaker]: e.target.value }))}
+                  onBlur={() => applyRename(speaker)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.target.blur(); } }}
                   placeholder="Enter label…"
-                  data-testid={`speaker-rename-${original.replace(/\s/g, "-")}`}
+                  data-testid={`speaker-rename-${speaker.replace(/\s/g, "-")}`}
                 />
                 <span className="text-xs text-gray-400">
-                  {speakerCounts[original]} turn{speakerCounts[original] !== 1 ? "s" : ""}
+                  {speakerCounts[speaker]} turn{speakerCounts[speaker] !== 1 ? "s" : ""}
                 </span>
               </div>
             ))}
@@ -94,16 +104,16 @@ function SpeakerManagerPanel({ turns, speakerMap, onChange, onSwap, onSave, onDi
         <div className="flex flex-col gap-2 flex-shrink-0 mt-6">
           {canSwap && (
             <button
-              onClick={onSwap}
+              onClick={onSwapAll}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 transition-colors"
               data-testid="swap-speakers-btn"
-              title="Swap all labels between the two speakers"
+              title="Swap all speaker labels"
             >
               <ArrowLeftRight className="w-3.5 h-3.5" />
               Swap all
             </button>
           )}
-          {hasChanges && (
+          {isDirty && (
             <>
               <button
                 onClick={onSave}
@@ -132,13 +142,21 @@ function SpeakerManagerPanel({ turns, speakerMap, onChange, onSwap, onSave, onDi
 // ── Main component ───────────────────────────────────────────────────────────
 export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTextGenerated }) {
   const [viewMode, setViewMode] = useState("full");
+
+  // ── Speaker editing state ─────────────────────────────────────────────────
+  const [localTurns, setLocalTurns] = useState([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [openTurnMenu, setOpenTurnMenu] = useState(null);
+
+  // ── Full-text anonymise popup ─────────────────────────────────────────────
   const [selectionText, setSelectionText] = useState("");
   const [popupPos, setPopupPos] = useState(null);
-  const [generating, setGenerating] = useState(false);
-  const [speakerMap, setSpeakerMap] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [turnOverrides, setTurnOverrides] = useState({}); // { [turnIndex]: speakerName }
-  const [openTurnMenu, setOpenTurnMenu] = useState(null); // turn index with open menu
+
+  // ── Split turn popup (Speaker View) ──────────────────────────────────────
+  const [splitPopup, setSplitPopup] = useState(null);
+  // { turnIndex, selStart, selEnd, selectedText, top, left }
 
   const hasSpeakerText = Boolean(meeting.transcript?.speaker_text);
   const originalTurns = useMemo(
@@ -148,16 +166,10 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
 
   const managerName = meeting.sign_off_manager_name || "";
 
-  // Build identity speakerMap whenever speaker_text changes
+  // Initialise / reset localTurns when speaker_text changes
   useEffect(() => {
-    if (originalTurns.length) {
-      const map = {};
-      for (const t of originalTurns) {
-        if (!(t.speaker in map)) map[t.speaker] = t.speaker;
-      }
-      setSpeakerMap(map);
-      setTurnOverrides({});
-    }
+    setLocalTurns(originalTurns.map(t => ({ ...t })));
+    setIsDirty(false);
   }, [meeting.transcript?.speaker_text]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Default to speaker view when speaker_text is present
@@ -173,82 +185,101 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     return () => document.removeEventListener("mousedown", close);
   }, [openTurnMenu]);
 
-  // Compute display speaker for a given turn index (overrides win over global map)
-  const getDisplaySpeaker = useCallback((turn, index) => {
-    return turnOverrides[index] ?? speakerMap?.[turn.speaker] ?? turn.speaker;
-  }, [turnOverrides, speakerMap]);
+  // Close split popup when clicking outside
+  useEffect(() => {
+    if (!splitPopup) return;
+    const close = () => setSplitPopup(null);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [splitPopup]);
 
-  // All unique display speakers (used for per-turn dropdown options)
-  const uniqueDisplaySpeakers = useMemo(() => {
+  // Unique display speakers (for per-turn dropdown and flip-from-here)
+  const uniqueSpeakers = useMemo(() => {
     const seen = new Set();
-    const result = [];
-    for (let i = 0; i < originalTurns.length; i++) {
-      const ds = turnOverrides[i] ?? speakerMap?.[originalTurns[i].speaker] ?? originalTurns[i].speaker;
-      if (!seen.has(ds)) { seen.add(ds); result.push(ds); }
-    }
-    return result;
-  }, [originalTurns, turnOverrides, speakerMap]);
+    return localTurns.map(t => t.speaker).filter(s => { if (seen.has(s)) return false; seen.add(s); return true; });
+  }, [localTurns]);
 
-  const hasChanges = (
-    speakerMap !== null && Object.entries(speakerMap).some(([orig, renamed]) => orig !== renamed)
-  ) || Object.keys(turnOverrides).length > 0;
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleRename = (original, newLabel) =>
-    setSpeakerMap(prev => ({ ...prev, [original]: newLabel }));
+  const handleRenameAll = useCallback((original, newName) => {
+    setLocalTurns(prev => prev.map(t => t.speaker === original ? { ...t, speaker: newName } : t));
+    setIsDirty(true);
+  }, []);
 
-  const handleSwap = () => {
-    if (!speakerMap) return;
-    const keys = Object.keys(speakerMap);
-    if (keys.length !== 2) return;
-    setSpeakerMap({ [keys[0]]: speakerMap[keys[1]], [keys[1]]: speakerMap[keys[0]] });
-  };
+  const handleSwapAll = useCallback(() => {
+    if (uniqueSpeakers.length !== 2) return;
+    const [a, b] = uniqueSpeakers;
+    setLocalTurns(prev => prev.map(t => ({ ...t, speaker: t.speaker === a ? b : a })));
+    setIsDirty(true);
+  }, [uniqueSpeakers]);
 
-  const handleDiscard = () => {
-    const map = {};
-    for (const t of originalTurns) {
-      if (!(t.speaker in map)) map[t.speaker] = t.speaker;
-    }
-    setSpeakerMap(map);
-    setTurnOverrides({});
-  };
-
-  // Reassign a single turn to a different speaker
-  const handleTurnAssign = (index, newSpeaker) => {
-    setTurnOverrides(prev => ({ ...prev, [index]: newSpeaker }));
+  const handleTurnAssign = useCallback((index, newSpeaker) => {
+    setLocalTurns(prev => prev.map((t, i) => i === index ? { ...t, speaker: newSpeaker } : t));
+    setIsDirty(true);
     setOpenTurnMenu(null);
-  };
+  }, []);
 
-  // Flip speakers from a given turn index to the end (fixes cascade misattribution)
-  const handleFlipFromHere = (fromIndex) => {
-    if (uniqueDisplaySpeakers.length !== 2) return;
-    const newOverrides = { ...turnOverrides };
-    for (let j = fromIndex; j < originalTurns.length; j++) {
-      const current = newOverrides[j] ?? speakerMap?.[originalTurns[j].speaker] ?? originalTurns[j].speaker;
-      newOverrides[j] = uniqueDisplaySpeakers.find(s => s !== current) ?? current;
-    }
-    setTurnOverrides(newOverrides);
+  const handleFlipFromHere = useCallback((fromIndex) => {
+    if (uniqueSpeakers.length !== 2) return;
+    setLocalTurns(prev => {
+      const next = [...prev];
+      for (let j = fromIndex; j < next.length; j++) {
+        const other = uniqueSpeakers.find(s => s !== next[j].speaker) ?? next[j].speaker;
+        next[j] = { ...next[j], speaker: other };
+      }
+      return next;
+    });
+    setIsDirty(true);
     setOpenTurnMenu(null);
-  };
+  }, [uniqueSpeakers]);
+
+  // Split a turn at the text selection boundaries
+  const handleSplitTurn = useCallback(() => {
+    if (!splitPopup) return;
+    const { turnIndex, selStart, selEnd } = splitPopup;
+    const turn = localTurns[turnIndex];
+    if (!turn) return;
+
+    const before = turn.text.slice(0, selStart).trim();
+    const selected = turn.text.slice(selStart, selEnd).trim();
+    const after = turn.text.slice(selEnd).trim();
+
+    const parts = [
+      before ? { speaker: turn.speaker, text: before } : null,
+      selected ? { speaker: turn.speaker, text: selected } : null,
+      after ? { speaker: turn.speaker, text: after } : null,
+    ].filter(Boolean);
+
+    if (parts.length <= 1) { setSplitPopup(null); return; }
+
+    setLocalTurns(prev => {
+      const next = [...prev];
+      next.splice(turnIndex, 1, ...parts);
+      return next;
+    });
+    setIsDirty(true);
+    setSplitPopup(null);
+    window.getSelection()?.removeAllRanges();
+  }, [splitPopup, localTurns]);
+
+  const handleDiscard = useCallback(() => {
+    setLocalTurns(originalTurns.map(t => ({ ...t })));
+    setIsDirty(false);
+  }, [originalTurns]);
 
   const handleSave = async () => {
-    if (!speakerMap) return;
     setSaving(true);
     try {
       const token = localStorage.getItem("supervision_token");
-      const finalTurns = originalTurns.map((t, i) => ({
-        speaker: turnOverrides[i] ?? speakerMap[t.speaker] ?? t.speaker,
-        text: t.text,
-      }));
-      const newText = serializeTurns(finalTurns);
+      const newText = serializeTurns(localTurns);
       await axios.patch(
         `${API}/api/review/${meeting.id}/speaker-text`,
         { speaker_text: newText },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText);
-      // speakerMap + turnOverrides reset via the useEffect above when speaker_text prop updates
     } catch (e) {
-      alert(e?.response?.data?.detail || "Failed to save speaker labels. Please try again.");
+      alert(e?.response?.data?.detail || "Failed to save. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -272,8 +303,9 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     }
   };
 
-  const handleMouseUp = useCallback(() => {
-    if (!canAnonymise || viewMode !== "full") return;
+  // ── Anonymise selection (Full Text only) ──────────────────────────────────
+  const handleFullTextMouseUp = useCallback(() => {
+    if (!canAnonymise) return;
     const sel = window.getSelection();
     const text = sel?.toString().trim();
     if (!text || text.length < 2) { setSelectionText(""); setPopupPos(null); return; }
@@ -281,7 +313,14 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     const rect = range.getBoundingClientRect();
     setSelectionText(text);
     setPopupPos({ top: Math.max(10, rect.top - 44), left: rect.left + rect.width / 2 });
-  }, [canAnonymise, viewMode]);
+  }, [canAnonymise]);
+
+  const handleAnonymise = () => {
+    if (!selectionText || !onAnonymise) return;
+    onAnonymise(selectionText);
+    setSelectionText(""); setPopupPos(null);
+    window.getSelection()?.removeAllRanges();
+  };
 
   useEffect(() => {
     const clear = (e) => {
@@ -292,12 +331,42 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     return () => document.removeEventListener("mousedown", clear);
   }, []);
 
-  const handleAnonymise = () => {
-    if (!selectionText || !onAnonymise) return;
-    onAnonymise(selectionText);
-    setSelectionText(""); setPopupPos(null);
-    window.getSelection()?.removeAllRanges();
-  };
+  // ── Split turn: detect selection within a specific turn ───────────────────
+  const handleSpeakerViewMouseUp = useCallback(() => {
+    const sel = window.getSelection();
+    const selectedText = sel?.toString().trim();
+    if (!selectedText || selectedText.length < 2) { setSplitPopup(null); return; }
+
+    const range = sel.getRangeAt(0);
+
+    // Walk up from the selection's start node to find the turn container
+    let startNode = range.startContainer;
+    while (startNode && startNode.nodeType !== 1) startNode = startNode.parentNode;
+    const startTurnEl = startNode?.closest("[data-turn-index]");
+
+    // Walk up from the selection's end node
+    let endNode = range.endContainer;
+    while (endNode && endNode.nodeType !== 1) endNode = endNode.parentNode;
+    const endTurnEl = endNode?.closest("[data-turn-index]");
+
+    // Only proceed if selection is entirely within one turn
+    if (!startTurnEl || !endTurnEl || startTurnEl !== endTurnEl) {
+      setSplitPopup(null);
+      return;
+    }
+
+    const turnIndex = parseInt(startTurnEl.dataset.turnIndex, 10);
+    const rect = range.getBoundingClientRect();
+
+    setSplitPopup({
+      turnIndex,
+      selStart: range.startOffset,
+      selEnd: range.endOffset,
+      selectedText,
+      top: Math.max(10, rect.top - 50),
+      left: rect.left + rect.width / 2,
+    });
+  }, []);
 
   const raw = anonymiseTranscript(meeting.transcript?.text, meeting.attendees || []);
   const wordCount = raw ? raw.trim().split(/\s+/).filter(Boolean).length : 0;
@@ -311,7 +380,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
           <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <p className="text-xs text-amber-700 flex-1">
             {viewMode === "speaker"
-              ? "Rename speakers globally above, or click any speaker pill to reassign that turn. Use \"Flip from here\" to fix cascading misattributions."
+              ? "Rename speakers in the panel. Click any pill to reassign a turn. Select text within a turn to split it into separate turns."
               : canAnonymise
               ? "Highlight any name and click Anonymise to replace it with an initial."
               : "Transcript is read-only. Use the Evidence tab to edit summaries and evidence wording."}
@@ -349,11 +418,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
       </div>
 
       {/* Transcript body */}
-      <div
-        className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden"
-        onMouseUp={handleMouseUp}
-        data-testid="transcript-text"
-      >
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         {/* Word count bar */}
         {raw && (
           <div className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-100 text-xs text-gray-400">
@@ -363,7 +428,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
             {hasSpeakerText && viewMode === "speaker" && (
               <>
                 <span className="text-gray-200">·</span>
-                <span className="text-blue-500">Speaker identified</span>
+                <span className="text-blue-500">{localTurns.length} turns</span>
               </>
             )}
           </div>
@@ -374,35 +439,36 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
         ) : viewMode === "speaker" && hasSpeakerText ? (
           <>
             {/* Speaker manager panel */}
-            {speakerMap && (
-              <SpeakerManagerPanel
-                turns={originalTurns}
-                speakerMap={speakerMap}
-                onChange={handleRename}
-                onSwap={handleSwap}
-                onSave={handleSave}
-                onDiscard={handleDiscard}
-                saving={saving}
-                hasChanges={hasChanges}
-              />
-            )}
+            <SpeakerManagerPanel
+              localTurns={localTurns}
+              onRenameAll={handleRenameAll}
+              onSwapAll={handleSwapAll}
+              onSave={handleSave}
+              onDiscard={handleDiscard}
+              saving={saving}
+              isDirty={isDirty}
+            />
 
             {/* Turns */}
-            <div className="divide-y divide-gray-100" data-testid="speaker-view">
-              {originalTurns.map((turn, i) => {
-                const displaySpeaker = getDisplaySpeaker(turn, i);
-                const style = getSpeakerStyle(displaySpeaker, managerName);
+            <div
+              className="divide-y divide-gray-100"
+              data-testid="speaker-view"
+              onMouseUp={handleSpeakerViewMouseUp}
+            >
+              {localTurns.map((turn, i) => {
+                const style = getSpeakerStyle(turn.speaker, managerName);
                 const isMenuOpen = openTurnMenu === i;
                 return (
                   <div key={i} className={`flex gap-3 px-5 py-3.5 ${style.row}`}>
+                    {/* Speaker pill — clickable to reassign */}
                     <div className="relative flex-shrink-0 mt-0.5">
                       <button
                         data-testid={`speaker-pill-${i}`}
-                        onMouseDown={e => { e.stopPropagation(); setOpenTurnMenu(isMenuOpen ? null : i); }}
+                        onMouseDown={e => { e.stopPropagation(); setOpenTurnMenu(isMenuOpen ? null : i); setSplitPopup(null); }}
                         className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${style.pill} ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
                         title="Click to reassign this speaker turn"
                       >
-                        {displaySpeaker}
+                        {turn.speaker}
                         <svg className="w-2.5 h-2.5 opacity-70" viewBox="0 0 10 6" fill="none">
                           <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                         </svg>
@@ -412,33 +478,33 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
                         <div
                           onMouseDown={e => e.stopPropagation()}
                           data-testid={`turn-menu-${i}`}
-                          className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg w-48 py-1 text-xs"
+                          className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg w-52 py-1 text-xs"
                         >
-                          <p className="px-3 pt-1 pb-1.5 text-gray-400 font-semibold uppercase tracking-wide" style={{ fontSize: "10px" }}>
+                          <p className="px-3 pt-1.5 pb-1 text-gray-400 font-semibold uppercase tracking-wide" style={{ fontSize: "10px" }}>
                             Assign turn {i + 1} to
                           </p>
-                          {uniqueDisplaySpeakers.map(s => (
+                          {uniqueSpeakers.map(s => (
                             <button
                               key={s}
                               onMouseDown={() => handleTurnAssign(i, s)}
                               data-testid={`assign-turn-${i}-${s}`}
                               className={`w-full text-left px-3 py-1.5 hover:bg-blue-50 flex items-center gap-2 transition-colors ${
-                                displaySpeaker === s ? "text-[#1E3A8A] font-semibold bg-blue-50/50" : "text-gray-700"
+                                turn.speaker === s ? "text-[#1E3A8A] font-semibold bg-blue-50/60" : "text-gray-700"
                               }`}
                             >
-                              <span className={`w-2 h-2 rounded-full ${displaySpeaker === s ? "bg-[#1E3A8A]" : "bg-gray-300"}`} />
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${turn.speaker === s ? "bg-[#1E3A8A]" : "bg-gray-300"}`} />
                               {s}
-                              {displaySpeaker === s && <span className="ml-auto text-[10px] text-gray-400">current</span>}
+                              {turn.speaker === s && <span className="ml-auto text-[10px] text-gray-400">current</span>}
                             </button>
                           ))}
-                          {uniqueDisplaySpeakers.length === 2 && (
+                          {uniqueSpeakers.length === 2 && (
                             <>
                               <div className="my-1 border-t border-gray-100" />
                               <button
                                 onMouseDown={() => handleFlipFromHere(i)}
                                 data-testid={`flip-from-here-${i}`}
                                 className="w-full text-left px-3 py-1.5 hover:bg-amber-50 text-amber-700 font-medium transition-colors flex items-center gap-2"
-                                title="Swaps all speaker assignments from this turn to the end of the transcript"
+                                title="Swap all speakers from this turn to the end"
                               >
                                 <ArrowLeftRight className="w-3 h-3 flex-shrink-0" />
                                 Flip speakers from here
@@ -448,16 +514,23 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
                         </div>
                       )}
                     </div>
-                    <p className="text-sm text-gray-800 leading-relaxed">{turn.text}</p>
+
+                    {/* Turn text — selectable for splitting */}
+                    <p
+                      data-turn-index={i}
+                      className="text-sm text-gray-800 leading-relaxed select-text cursor-text"
+                    >
+                      {turn.text}
+                    </p>
                   </div>
                 );
               })}
             </div>
           </>
         ) : (
-          <div className="p-5">
-            {formatTranscript(raw).map((para, i) => (
-              <p key={i} className="text-sm text-gray-700 leading-relaxed mb-3 last:mb-0">
+          <div className="p-5" onMouseUp={handleFullTextMouseUp}>
+            {formatTranscript(raw).map((para, idx) => (
+              <p key={idx} className="text-sm text-gray-700 leading-relaxed mb-3 last:mb-0">
                 {para}
               </p>
             ))}
@@ -465,7 +538,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
         )}
       </div>
 
-      {/* Anonymise popup */}
+      {/* ── Anonymise popup (Full Text only) ──────────────────────────────── */}
       {popupPos && selectionText && viewMode === "full" && (
         <div
           data-anonymise-btn="true"
@@ -478,6 +551,33 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
           <span className="opacity-75 max-w-[120px] truncate">
             &ldquo;{selectionText.length > 20 ? selectionText.slice(0, 20) + "…" : selectionText}&rdquo;
           </span>
+        </div>
+      )}
+
+      {/* ── Split turn popup (Speaker View only) ──────────────────────────── */}
+      {splitPopup && viewMode === "speaker" && (
+        <div
+          data-testid="split-turn-popup"
+          onMouseDown={e => e.stopPropagation()}
+          style={{
+            position: "fixed",
+            top: splitPopup.top,
+            left: splitPopup.left,
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+          }}
+          className="bg-white border border-gray-200 rounded-lg shadow-xl text-xs flex items-stretch overflow-hidden"
+        >
+          <button
+            onMouseDown={(e) => { e.preventDefault(); handleSplitTurn(); }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#1E3A8A] text-white font-semibold hover:bg-[#1E40AF] transition-colors"
+          >
+            <Scissors className="w-3.5 h-3.5" />
+            Split turn here
+          </button>
+          <div className="px-2.5 py-2 text-gray-500 max-w-[160px] truncate border-l border-gray-200 bg-gray-50 flex items-center">
+            &ldquo;{splitPopup.selectedText.length > 24 ? splitPopup.selectedText.slice(0, 24) + "…" : splitPopup.selectedText}&rdquo;
+          </div>
         </div>
       )}
     </div>
