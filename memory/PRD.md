@@ -238,7 +238,13 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - New page `/super-admin` (SuperAdminDashboard.js): org grid with stats, slide-over user panel, create org/user modals.
 - Layout.js: super_admin gets a distinct dark navy sidebar with only "Organisations" nav. Login.js: redirects super_admin to /super-admin post-login.
 
-## Bug Fixes & Speaker Improvements (2026-Jun v2)
+## Invite Admin Flow (2026-Jun)
+- Super admin can invite a new org admin via email: `POST /api/super-admin/orgs/{id}/invite` creates an inactive user + 72-hour single-use token stored in `invitations` collection.
+- Branded HTML invite email sent via Resend with an "Accept Invitation →" button linking to `/accept-invite?token=xxx`.
+- If email fails, the invite link is returned in the API response so super admin can share it manually (with copy button in UI).
+- New public page `AcceptInvite.js` at `/accept-invite`: validates token (GET /api/auth/invite/{token}), shows org name + email, collects name + password, POST /api/auth/accept-invite activates user + returns JWT (auto-login).
+- SuperAdminDashboard org management panel: "Invite Admin" (email flow) + "Add User" (direct password) buttons side by side.
+
 - Mobile date input overflow (NewMeeting.js + Dashboard.js): added `min-w-0 max-w-full` + `overflow-hidden` wrapper on `datetime-local` input; dashboard date filter made `flex-wrap`.
 - Speaker per-turn reassignment: clickable speaker pills open inline dropdown to reassign any turn; "Flip speakers from here" swaps all turns from that index to end (fixes cascade mis-sync).
 - Speaker turn splitting: select any text within a turn in Speaker View → "Split turn here ✂" popup extracts it as a new standalone turn; user can then reassign each part. Uses browser `range.startOffset`/`endOffset` for character-accurate splitting.

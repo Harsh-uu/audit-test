@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy } from "lucide-react";
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
@@ -44,8 +44,11 @@ export default function SuperAdminDashboard() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
+  const [showInviteAdmin, setShowInviteAdmin] = useState(false);
   const [orgForm, setOrgForm] = useState({ name: "" });
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "manager" });
+  const [inviteForm, setInviteForm] = useState({ name: "", email: "" });
+  const [inviteResult, setInviteResult] = useState(null); // { message, invite_link?, email_failed? }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -121,6 +124,27 @@ export default function SuperAdminDashboard() {
       await loadOrgs();
     } catch {
       setError("Failed to update status");
+    }
+  };
+
+  const handleInviteAdmin = async (e) => {
+    e.preventDefault();
+    if (!inviteForm.name.trim() || !inviteForm.email.trim()) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const { data } = await axios.post(
+        `${API}/super-admin/orgs/${selectedOrg.id}/invite`,
+        inviteForm,
+        getAuthConfig()
+      );
+      setInviteResult(data);
+      setInviteForm({ name: "", email: "" });
+      await loadOrgs();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to send invitation");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -248,14 +272,25 @@ export default function SuperAdminDashboard() {
               {/* Users */}
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-700">Users</h3>
-                <button
-                  data-testid="add-user-btn"
-                  onClick={() => { setShowCreateUser(true); setError(""); }}
-                  className="flex items-center gap-1.5 text-xs text-[#1E3A8A] font-semibold hover:underline"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add User
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    data-testid="invite-admin-btn"
+                    onClick={() => { setShowInviteAdmin(true); setInviteResult(null); setError(""); }}
+                    className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold hover:underline"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    Invite Admin
+                  </button>
+                  <span className="text-gray-200 text-xs">|</span>
+                  <button
+                    data-testid="add-user-btn"
+                    onClick={() => { setShowCreateUser(true); setError(""); }}
+                    className="flex items-center gap-1.5 text-xs text-[#1E3A8A] font-semibold hover:underline"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add User
+                  </button>
+                </div>
               </div>
 
               {usersLoading ? (
@@ -341,8 +376,7 @@ export default function SuperAdminDashboard() {
       )}
 
       {/* ── Create User Modal ─────────────────────────────────────────── */}
-      {showCreateUser && selectedOrg && (
-        <>
+      {showCreateUser && selectedOrg && (        <>
           <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setShowCreateUser(false)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
@@ -426,6 +460,112 @@ export default function SuperAdminDashboard() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Invite Admin Modal ────────────────────────────────────────── */}
+      {showInviteAdmin && selectedOrg && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => { setShowInviteAdmin(false); setInviteResult(null); }} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-bold font-display text-[#1E3A8A] text-lg">Invite Admin</h2>
+                <button onClick={() => { setShowInviteAdmin(false); setInviteResult(null); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mb-5">
+                For: <span className="font-medium text-gray-600">{selectedOrg.name}</span>
+                <span className="ml-2 text-gray-300">·</span>
+                <span className="ml-2">A welcome email with a one-time activation link will be sent</span>
+              </p>
+
+              {inviteResult ? (
+                <div className="space-y-4">
+                  <div className={`flex items-start gap-3 p-4 rounded-lg ${inviteResult.email_failed ? "bg-amber-50 border border-amber-200" : "bg-emerald-50 border border-emerald-200"}`}>
+                    {inviteResult.email_failed
+                      ? <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      : <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold ${inviteResult.email_failed ? "text-amber-700" : "text-emerald-700"}`}>
+                        {inviteResult.email_failed ? "User created — email failed to send" : "Invitation sent!"}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">{inviteResult.message}</p>
+                      {inviteResult.invite_link && (
+                        <div className="mt-3">
+                          <p className="text-xs font-semibold text-gray-600 mb-1">Share this link manually:</p>
+                          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                            <span className="text-xs text-gray-500 truncate flex-1">{inviteResult.invite_link}</span>
+                            <button
+                              onClick={() => navigator.clipboard.writeText(inviteResult.invite_link)}
+                              className="text-[#1E3A8A] hover:text-[#1e40af] flex-shrink-0"
+                              title="Copy link"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setShowInviteAdmin(false); setInviteResult(null); loadOrgUsers(selectedOrg); }}
+                    className="w-full py-2 bg-[#1E3A8A] text-white rounded-lg text-sm font-semibold hover:bg-[#1e40af]"
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleInviteAdmin} className="space-y-3">
+                  {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
+                    <input
+                      data-testid="invite-name-input"
+                      type="text"
+                      required
+                      autoFocus
+                      value={inviteForm.name}
+                      onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Jane Smith"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      data-testid="invite-email-input"
+                      type="email"
+                      required
+                      value={inviteForm.email}
+                      onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="admin@organisation.com"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                    They will receive an email with a link to set their own password
+                  </p>
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" onClick={() => setShowInviteAdmin(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+                      Cancel
+                    </button>
+                    <button
+                      data-testid="send-invite-submit"
+                      type="submit"
+                      disabled={submitting || !inviteForm.name.trim() || !inviteForm.email.trim()}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-semibold hover:bg-emerald-800 disabled:opacity-50"
+                    >
+                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                      Send Invite
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </>

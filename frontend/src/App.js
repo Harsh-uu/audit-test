@@ -14,6 +14,7 @@ import StaffPortfolio from "@/pages/StaffPortfolio";
 import TeamInsights from "@/pages/TeamInsights";
 import OrgStructure from "@/pages/OrgStructure";
 import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
+import AcceptInvite from "@/pages/AcceptInvite";
 import "@/App.css";
 
 function RootRedirect() {
@@ -29,6 +30,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
           <Route path="/super-admin" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

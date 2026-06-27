@@ -258,3 +258,81 @@ async def seed_admin(db):
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
+
+
+
+# ── Invite acceptance (public endpoints) ─────────────────────────────────────
+
+@router.get("/invite/{token}")
+async def validate_invite(token: str, db=Depends(get_db)):
+    """Check if an invite token is valid and return the associated user/org info."""
+    now = datetime.now(timezone.utc).isoformat()
+    invite = await db.invitations.find_one({"token": token, "used_at": {"$exists": False}})
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invitation not found or already used")
+    if invite.get("expires_at", "") < now:
+        raise HTTPException(status_code=410, detail="Invitation link has expired")
+
+    user = await db.users.find_one({"_id": ObjectId(invite["user_id"])})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    org = await db.organisations.find_one({"_id": ObjectId(invite["org_id"])})
+    return {
+        "email": user["email"],
+        "name": user["name"],
+        "org_name": org["name"] if org else "Your Organisation",
+    }
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    name: str
+    password: str
+
+
+@router.post("/accept-invite")
+async def accept_invite(data: AcceptInviteRequest, response: Response, db=Depends(get_db)):
+    """Claim an invite: set password, activate the user, return a JWT session."""
+    if len(data.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    now = datetime.now(timezone.utc).isoformat()
+    invite = await db.invitations.find_one({"token": data.token, "used_at": {"$exists": False}})
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invitation not found or already used")
+    if invite.get("expires_at", "") < now:
+        raise HTTPException(status_code=410, detail="Invitation link has expired")
+
+    user = await db.users.find_one({"_id": ObjectId(invite["user_id"])})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Activate user with the chosen password
+    name = data.name.strip() or user["name"]
+    await db.users.update_one(
+        {"_id": ObjectId(invite["user_id"])},
+        {"$set": {
+            "password_hash": hash_password(data.password),
+            "name": name,
+            "is_active": True,
+        }}
+    )
+
+    # Mark invite as used (single-use)
+    await db.invitations.update_one({"token": data.token}, {"$set": {"used_at": now}})
+
+    # Return the same shape as /login so the frontend can log in immediately
+    user_id = invite["user_id"]
+    email = user["email"]
+    access_token = create_access_token(user_id, email)
+    refresh_token_val = create_refresh_token(user_id)
+    set_auth_cookies(response, access_token, refresh_token_val)
+    return {
+        "id": user_id,
+        "email": email,
+        "name": name,
+        "role": user["role"],
+        "token": access_token,
+        "refresh_token": refresh_token_val,
+    }
