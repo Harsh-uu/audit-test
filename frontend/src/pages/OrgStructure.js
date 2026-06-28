@@ -4,8 +4,15 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   Building2, Users, ChevronRight, Plus, Edit2, Trash2, X, Check,
-  MapPin, UserCog, Loader, AlertCircle, CheckCircle,
+  MapPin, UserCog, Loader, AlertCircle, CheckCircle, Pencil, KeyRound, ChevronDown,
 } from "lucide-react";
+
+const ROLES = [
+  { value: "attendee", label: "Care Worker / Attendee" },
+  { value: "manager", label: "Manager" },
+  { value: "shared_reviewer", label: "Shared Reviewer" },
+  { value: "admin", label: "Admin" },
+];
 
 function Modal({ title, onClose, children }) {
   return (
@@ -55,6 +62,14 @@ export default function OrgStructure() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  // User editing
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUserForm, setEditUserForm] = useState({});
+  const [editUserError, setEditUserError] = useState("");
+  const [savingUser, setSavingUser] = useState(false);
+  const [showPwdReset, setShowPwdReset] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
@@ -161,9 +176,37 @@ export default function OrgStructure() {
     } catch (err) { flash(err.response?.data?.detail || "Failed to add member", true); }
   };
 
-  const removeMember = async (userId, userName) => {
-    if (!window.confirm(`Remove ${userName} from this team?`)) return;
+  const openEditUser = (u) => {
+    setEditingUser(u);
+    setEditUserForm({ name: u.name, email: u.email, role: u.role, is_active: u.is_active !== false });
+    setEditUserError("");
+    setShowPwdReset(false);
+    setNewPassword("");
+  };
+
+  const saveEditUser = async () => {
+    if (!editUserForm.name?.trim()) return setEditUserError("Name is required");
+    if (!editUserForm.email?.trim()) return setEditUserError("Email is required");
+    if (showPwdReset && newPassword && newPassword.length < 8) return setEditUserError("Password must be at least 8 characters");
+    setSavingUser(true);
+    setEditUserError("");
     try {
+      await axios.put(`${API}/admin/users/${editingUser.id}`, editUserForm, getAuthConfig());
+      if (showPwdReset && newPassword.trim()) {
+        await axios.post(`${API}/admin/users/${editingUser.id}/reset-password`, { new_password: newPassword }, getAuthConfig());
+      }
+      setMessage("User updated");
+      setEditingUser(null);
+      fetchData();
+      setTimeout(() => setMessage(""), 3000);
+    } catch (err) {
+      setEditUserError(err.response?.data?.detail || "Failed to save");
+    }
+    setSavingUser(false);
+  };
+
+  const removeMember = async (userId, userName) => {
+    if (!window.confirm(`Remove ${userName} from this team?`)) return;    try {
       await axios.delete(`${API}/org/teams/${selectedTeam.id}/members/${userId}`, getAuthConfig());
       flash("Member removed");
       fetchData();
@@ -369,17 +412,25 @@ export default function OrgStructure() {
 
                 <div className="flex-1 overflow-y-auto">
                   {/* Supervisor badge */}
-                  {selectedTeam.supervisor_name && (
-                    <div className="flex items-center gap-2 px-4 py-3 bg-indigo-50 border-b border-indigo-100">
-                      <div className="w-7 h-7 rounded-full bg-[#1E3A8A] flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
-                        {selectedTeam.supervisor_name.split(" ").map(w => w[0]).join("").slice(0, 2)}
+                  {selectedTeam.supervisor_name && (() => {
+                    const supUser = allUsers.find(u => u.id === selectedTeam.supervisor_user_id);
+                    return (
+                      <div className="flex items-center gap-2 px-4 py-3 bg-indigo-50 border-b border-indigo-100 group">
+                        <div className="w-7 h-7 rounded-full bg-[#1E3A8A] flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+                          {selectedTeam.supervisor_name.split(" ").map(w => w[0]).join("").slice(0, 2)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-[#1E3A8A]">{selectedTeam.supervisor_name}</p>
+                          <p className="text-xs text-indigo-400">Supervisor</p>
+                        </div>
+                        {supUser && (
+                          <button onClick={() => openEditUser(supUser)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-[#1E3A8A] transition-all" title="Edit user" data-testid={`edit-user-${supUser.id}`}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold text-[#1E3A8A]">{selectedTeam.supervisor_name}</p>
-                        <p className="text-xs text-indigo-400">Supervisor</p>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {currentTeamMembers.filter(m => m.id !== selectedTeam.supervisor_user_id).length === 0 && (
                     <div className="text-center py-8 text-gray-400"><p className="text-xs">No members yet — add people using the button above</p></div>
@@ -396,9 +447,14 @@ export default function OrgStructure() {
                           <p className="text-xs text-gray-400 capitalize truncate">{m.role}</p>
                         </div>
                       </div>
-                      <button onClick={() => removeMember(m.id, m.name)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-400 transition-all" data-testid={`remove-member-${m.id}`}>
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={() => openEditUser(m)} className="p-1 text-gray-300 hover:text-[#1E3A8A]" title="Edit user" data-testid={`edit-user-${m.id}`}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => removeMember(m.id, m.name)} className="p-1 text-gray-300 hover:text-red-400" data-testid={`remove-member-${m.id}`}>
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -444,6 +500,55 @@ export default function OrgStructure() {
             </div>
           )}
           <p className="text-xs text-gray-400 mt-3">Need to add a new user? Create them first in <strong>Admin → Users</strong>, then assign here.</p>
+        </Modal>
+      )}
+      {/* Edit User Modal */}
+      {editingUser && (
+        <Modal title={`Edit — ${editingUser.name}`} onClose={() => setEditingUser(null)}>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Full name</label>
+              <input value={editUserForm.name} onChange={e => setEditUserForm(f => ({ ...f, name: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="edit-user-name" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Email address</label>
+              <input type="email" value={editUserForm.email} onChange={e => setEditUserForm(f => ({ ...f, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="edit-user-email" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
+              <select value={editUserForm.role} onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="edit-user-role">
+                {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="edit-user-active" checked={editUserForm.is_active} onChange={e => setEditUserForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4 accent-[#1E3A8A]" data-testid="edit-user-active" />
+              <label htmlFor="edit-user-active" className="text-sm text-gray-700 cursor-pointer">{editUserForm.is_active ? "Active" : "Inactive"}</label>
+            </div>
+
+            {/* Password reset */}
+            <div className="pt-2 border-t border-gray-100">
+              <button type="button" onClick={() => { setShowPwdReset(p => !p); setNewPassword(""); }} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors" data-testid="toggle-reset-password">
+                <KeyRound className="w-3.5 h-3.5" />
+                {showPwdReset ? "Cancel password change" : "Reset password"}
+                <ChevronDown className={`w-3 h-3 transition-transform ${showPwdReset ? "rotate-180" : ""}`} />
+              </button>
+              {showPwdReset && (
+                <div className="mt-2">
+                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Min. 8 characters" className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-password-input" />
+                </div>
+              )}
+            </div>
+
+            {editUserError && <p className="text-xs text-red-600" data-testid="edit-user-error">{editUserError}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveEditUser} disabled={savingUser} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-edit-user-btn">
+                <Check className="w-3.5 h-3.5" />
+                {savingUser ? "Saving…" : "Save"}
+              </button>
+              <button onClick={() => setEditingUser(null)} className="border border-gray-300 text-gray-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
         </Modal>
       )}
     </Layout>
