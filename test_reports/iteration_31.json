@@ -1,0 +1,21 @@
+{
+  "summary": "Tested the edit user feature in /organisation page. All 7 test scenarios from the review request passed. Pencil icon appears on hover for team members, edit modal opens with correct fields, save works with success banner, duplicate email shows inline error, short password shows inline error, supervisor row also has edit button, cancel closes modal without changes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_31.json"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "seed_data_creation": "None - restored 'Staff Member' name after testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Edit user feature on /organisation is fully working. data-testid attributes: edit-user-{id}, edit-user-name, edit-user-email, edit-user-role, edit-user-active, toggle-reset-password, new-password-input, save-edit-user-btn, edit-user-error. Test data: Sunflower House > Team A > Staff Member (staff@supervision.com). Supervisor row also shows pencil on hover."
+}
