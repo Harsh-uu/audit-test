@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.llm.openai import OpenAISpeechToText
+from deepgram import DeepgramClient
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +157,116 @@ Rules:
 - Preserve ALL original words exactly as transcribed — do not paraphrase, correct, or add any words
 - If a turn cannot be confidently attributed to any named participant, use "Speaker:" as a fallback
 - Output ONLY the formatted transcript — no preamble, explanation, commentary or markdown"""
+
+
+# ── Deepgram speaker-number → real name mapping prompt ────────────────────
+SPEAKER_MAPPING_SYSTEM_PROMPT = """You are a transcript editor for supervision meetings in UK adult social care.
+Deepgram has already identified distinct speakers as Speaker 0, Speaker 1, Speaker 2 etc. using audio fingerprinting.
+Your task is to replace those generic labels with the real participant names provided.
+
+Rules:
+- Identify which numbered speaker corresponds to which named participant by reading the conversation
+- The manager/supervisor steers the agenda, asks questions about the worker's practice, and conducts the meeting
+- The worker/supervisee reports on their own work and development
+- Do NOT change any spoken words — only replace the speaker label at the start of each line
+- If there are more numbered speakers than named participants (e.g. crosstalk artefacts), assign them to the closest matching participant
+- Output ONLY the reformatted transcript — no preamble, explanation, or markdown"""
+
+
+async def transcribe_and_diarize_deepgram(audio_data: bytes) -> tuple:
+    """
+    Transcribe audio with Deepgram Nova-3 + built-in speaker diarisation.
+    Returns (plain_transcript_text, numbered_speaker_text) or raises on failure.
+    numbered_speaker_text uses "Speaker 0:", "Speaker 1:" labels.
+    """
+    api_key = os.environ.get("DEEPGRAM_API_KEY")
+    if not api_key:
+        raise ValueError("DEEPGRAM_API_KEY not configured")
+
+    client = DeepgramClient(api_key=api_key)
+    loop = asyncio.get_event_loop()
+
+    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to Deepgram Nova-3 with diarization")
+
+    response = await loop.run_in_executor(
+        None,
+        lambda: client.listen.v1.media.transcribe_file(
+            request=audio_data,
+            model="nova-3",
+            diarize=True,
+            utterances=True,
+            smart_format=True,
+            punctuate=True,
+        ),
+    )
+
+    if not response or not response.results:
+        raise ValueError("Deepgram returned empty results")
+
+    # Plain transcript (for analysis)
+    plain_text = response.results.channels[0].alternatives[0].transcript if response.results.channels else ""
+
+    # Numbered speaker text (from utterances)
+    if response.results.utterances:
+        lines = [f"Speaker {u.speaker}: {u.transcript}" for u in response.results.utterances]
+        numbered_speaker_text = "\n".join(lines)
+        speaker_count = len({u.speaker for u in response.results.utterances})
+        logger.info(f"Deepgram identified {speaker_count} speaker(s), {len(response.results.utterances)} utterances")
+    else:
+        numbered_speaker_text = plain_text
+
+    return plain_text, numbered_speaker_text
+
+
+async def map_speaker_numbers_to_names(
+    numbered_speaker_text: str,
+    manager_name: str = "Manager",
+    attendee_names: list = None,
+    meeting_type: str = "Supervision",
+) -> str:
+    """Use GPT-4o to replace 'Speaker 0/1/2' labels with real participant names."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key or not numbered_speaker_text.strip():
+        return numbered_speaker_text
+
+    participants = []
+    manager_label = manager_name or "Manager"
+    participants.append(f"- {manager_label} (Manager/Supervisor — conducts the meeting, asks questions)")
+    if attendee_names:
+        for name in attendee_names:
+            if name and name.lower() != manager_label.lower():
+                participants.append(f"- {name} (Worker/Attendee)")
+    else:
+        participants.append("- Worker (Worker/Attendee)")
+
+    participants_block = "\n".join(participants)
+
+    user_prompt = (
+        f"Meeting type: {meeting_type}\n\n"
+        f"PARTICIPANTS:\n{participants_block}\n\n"
+        f"NUMBERED TRANSCRIPT (replace Speaker 0/1/2 with real names):\n{numbered_speaker_text[:14000]}"
+    )
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"mapspk_{uuid.uuid4()}",
+            system_message=SPEAKER_MAPPING_SYSTEM_PROMPT,
+        ).with_model("openai", "gpt-4o")
+
+        full_response = ""
+        async for event in chat.stream_message(UserMessage(text=user_prompt)):
+            from emergentintegrations.llm.chat import TextDelta, StreamDone
+            if isinstance(event, TextDelta):
+                full_response += event.content
+            elif isinstance(event, StreamDone):
+                break
+
+        result = full_response.strip()
+        return result if result else numbered_speaker_text
+    except Exception as e:
+        logger.error(f"Speaker name mapping failed: {e}")
+        return numbered_speaker_text  # Fall back to numbered labels
 
 
 async def diarize_transcript(
