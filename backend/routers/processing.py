@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from bson import ObjectId
 from datetime import datetime, timezone
 import asyncio
@@ -223,7 +223,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
 async def upload_audio(
     meeting_id: str,
     background_tasks: BackgroundTasks,
-    audio: UploadFile = File(...),
+    request: Request,
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -235,31 +235,29 @@ async def upload_audio(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    # Read audio data
-    audio_data = await audio.read()
-    if len(audio_data) == 0:
-        raise HTTPException(status_code=400, detail="Empty audio file")
+    # Read raw audio bytes (sent as application/octet-stream)
+    audio_data = await request.body()
+    if not audio_data:
+        raise HTTPException(status_code=400, detail="Empty audio body")
 
+    content_type = request.headers.get("content-type", "audio/webm").split(";")[0].strip()
     file_ext = "webm"
-    if audio.filename and "." in audio.filename:
-        file_ext = audio.filename.split(".")[-1]
 
     # Upload to object storage
     storage_path = f"{meeting_id}/audio_{uuid.uuid4()}.{file_ext}"
     try:
-        result = put_object(storage_path, audio_data, audio.content_type or "audio/webm")
+        result = put_object(storage_path, audio_data, content_type)
         actual_path = result.get("path", storage_path)
     except Exception as e:
         logger.error(f"Storage upload failed: {e}")
-        # Continue with local path reference
         actual_path = storage_path
 
     now = datetime.now(timezone.utc).isoformat()
     audio_doc = {
         "meeting_id": meeting_id,
         "storage_path": actual_path,
-        "original_filename": audio.filename or "meeting.webm",
-        "content_type": audio.content_type or "audio/webm",
+        "original_filename": "meeting.webm",
+        "content_type": content_type,
         "size_bytes": len(audio_data),
         "upload_status": "uploaded",
         "processing_status": "pending",

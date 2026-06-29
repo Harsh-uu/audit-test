@@ -289,18 +289,15 @@ export default function RecordingScreen() {
     setUploadProgress(0);
 
     const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-    const formData = new FormData();
-    formData.append("audio", blob, "meeting.webm");
 
     try {
-      // Proactively refresh the token before a potentially long upload
       try { await silentRefresh(); } catch {}
-
       const token = localStorage.getItem("supervision_token");
-      // Do NOT set Content-Type manually — axios auto-sets multipart/form-data
-      // with the correct boundary when the body is FormData.
-      await axios.post(`${API}/processing/${meetingId}/upload`, formData, {
+      // Send audio as raw binary (application/octet-stream) to avoid proxy
+      // issues with multipart/form-data that some WAF rules trigger on.
+      await axios.post(`${API}/processing/${meetingId}/upload`, blob, {
         headers: {
+          "Content-Type": "application/octet-stream",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         onUploadProgress: (e) => {
