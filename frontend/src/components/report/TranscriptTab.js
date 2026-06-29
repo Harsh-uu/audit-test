@@ -263,18 +263,35 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
   }, []);
 
   const handleFlipFromHere = useCallback((fromIndex) => {
-    if (uniqueSpeakers.length !== 2) return;
+    if (uniqueSpeakers.length < 2) return;
+    const currentSpeaker = localTurns[fromIndex]?.speaker;
+    if (!currentSpeaker) return;
+
+    // With exactly 2 speakers use the only other one; with 3+ pick the most-common non-current speaker
+    let otherSpeaker;
+    if (uniqueSpeakers.length === 2) {
+      otherSpeaker = uniqueSpeakers.find(s => s !== currentSpeaker);
+    } else {
+      const counts = {};
+      for (const t of localTurns) {
+        if (t.speaker !== currentSpeaker) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
+      }
+      otherSpeaker = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+    }
+    if (!otherSpeaker) return;
+
     setLocalTurns(prev => {
       const next = [...prev];
       for (let j = fromIndex; j < next.length; j++) {
-        const other = uniqueSpeakers.find(s => s !== next[j].speaker) ?? next[j].speaker;
-        next[j] = { ...next[j], speaker: other };
+        if (next[j].speaker === currentSpeaker) next[j] = { ...next[j], speaker: otherSpeaker };
+        else if (next[j].speaker === otherSpeaker) next[j] = { ...next[j], speaker: currentSpeaker };
+        // third-speaker turns are left unchanged
       }
       return next;
     });
     setIsDirty(true);
     setOpenTurnMenu(null);
-  }, [uniqueSpeakers]);
+  }, [uniqueSpeakers, localTurns]);
 
   // Split a turn at the text selection boundaries
   const handleSplitTurn = useCallback(() => {
@@ -548,7 +565,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
                               {turn.speaker === s && <span className="ml-auto text-[10px] text-gray-400">current</span>}
                             </button>
                           ))}
-                          {uniqueSpeakers.length === 2 && (
+                          {uniqueSpeakers.length >= 2 && (
                             <>
                               <div className="my-1 border-t border-gray-100" />
                               <button

@@ -242,9 +242,19 @@ async def delete_meeting(meeting_id: str, db=Depends(get_db), current_user=Depen
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     try:
-        result = await db.meetings.delete_one({"_id": ObjectId(meeting_id)})
-        if result.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Meeting not found")
+        oid = ObjectId(meeting_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid meeting ID")
+
+    result = await db.meetings.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Cascade-delete all related records
+    await db.transcripts.delete_many({"meeting_id": meeting_id})
+    await db.analyses.delete_many({"meeting_id": meeting_id})
+    await db.audio_files.delete_many({"meeting_id": meeting_id})
+    await db.reviewer_comments.delete_many({"meeting_id": meeting_id})
+    await db.review_edits.delete_many({"meeting_id": meeting_id})
+
     return {"message": "Meeting deleted"}

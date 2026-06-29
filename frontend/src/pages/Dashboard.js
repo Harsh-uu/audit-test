@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar, Building2 } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar, Building2, Trash2 } from "lucide-react";
 
 const STATUS_CONFIG = {
   draft:             { label: "Draft",        color: "bg-gray-100 text-gray-700 border-gray-200",       icon: FileText },
@@ -50,6 +50,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);   // meeting id currently pending confirm
+  const [deleteLoadingId, setDeleteLoadingId] = useState(null); // in-flight delete
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -130,6 +132,23 @@ export default function Dashboard() {
   const getMeetingAction = (meeting) => {
     if (["draft", "stopped"].includes(meeting.status)) return () => navigate(`/meetings/${meeting.id}/record`);
     return () => navigate(`/meetings/${meeting.id}/report`);
+  };
+
+  const canDelete = user?.role === "admin" || user?.role === "manager";
+
+  const handleDelete = async (e, meetingId) => {
+    e.stopPropagation();
+    if (deletingId !== meetingId) { setDeletingId(meetingId); return; }
+    setDeleteLoadingId(meetingId);
+    try {
+      await axios.delete(`${API}/meetings/${meetingId}`, getAuthConfig());
+      setMeetings(prev => prev.filter(m => m.id !== meetingId));
+    } catch (err) {
+      alert(err.response?.data?.detail || "Delete failed");
+    } finally {
+      setDeleteLoadingId(null);
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -345,7 +364,7 @@ export default function Dashboard() {
             {filteredMeetings.map(meeting => (
               <div
                 key={meeting.id}
-                onClick={getMeetingAction(meeting)}
+                onClick={deletingId === meeting.id ? undefined : getMeetingAction(meeting)}
                 className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
                 data-testid={`meeting-item-${meeting.id}`}
               >
@@ -369,7 +388,40 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {canDelete && (
+                      deletingId === meeting.id ? (
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          <span className="text-xs text-red-600 font-medium">Delete?</span>
+                          <button
+                            onClick={e => handleDelete(e, meeting.id)}
+                            disabled={deleteLoadingId === meeting.id}
+                            className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-60"
+                            data-testid={`delete-confirm-btn-${meeting.id}`}
+                          >
+                            {deleteLoadingId === meeting.id ? "..." : "Yes"}
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); setDeletingId(null); }}
+                            className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+                            data-testid={`delete-cancel-btn-${meeting.id}`}
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={e => handleDelete(e, meeting.id)}
+                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                          title="Delete meeting"
+                          data-testid={`delete-meeting-btn-${meeting.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )
+                    )}
+                    <ChevronRight className="w-4 h-4 text-gray-400 mt-0.5" />
+                  </div>
                 </div>
               </div>
             ))}
