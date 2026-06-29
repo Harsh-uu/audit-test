@@ -382,7 +382,7 @@ async def map_speaker_numbers_to_names(
     user_prompt = (
         f"Meeting type: {meeting_type}\n\n"
         f"PARTICIPANTS:\n{participants_block}\n\n"
-        f"NUMBERED TRANSCRIPT (replace Speaker 0/1/2 with real names):\n{numbered_speaker_text[:14000]}"
+        f"NUMBERED TRANSCRIPT (replace generic labels with real names):\n{numbered_speaker_text}"
     )
 
     try:
@@ -439,7 +439,7 @@ async def diarize_transcript(
     user_prompt = (
         f"Meeting type: {meeting_type}\n\n"
         f"PARTICIPANTS ({len(participants)} people):\n{participants_block}\n\n"
-        f"RAW TRANSCRIPT:\n{transcript_text[:14000]}\n\n"
+        f"RAW TRANSCRIPT:\n{transcript_text}\n\n"
         f"Reformat the transcript above, labelling every turn with the correct speaker "
         f"({label_hint} or Speaker: if unsure). "
         f"There are {len(participants)} distinct participants — assign turns to all of them as appropriate."
