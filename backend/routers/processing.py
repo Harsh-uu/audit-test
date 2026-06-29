@@ -7,7 +7,7 @@ import logging
 import os
 from deps import get_db, get_current_user
 from utils.storage import put_object
-from utils.ai import transcribe_audio, analyze_meeting, diarize_transcript, transcribe_with_deepgram
+from utils.ai import transcribe_audio, analyze_meeting, diarize_transcript, transcribe_with_deepgram, map_speaker_numbers_to_names
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -76,20 +76,22 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         from utils.storage import get_object
         audio_data, _ = get_object(audio_path)
 
-        # ── Transcription: Deepgram (STT only) if key present, else Whisper ───
-        # NOTE: Deepgram audio-based diarization is disabled — browser MediaRecorder
-        # captures mono audio which defeats acoustic fingerprinting (all turns → 1 speaker).
-        # GPT-4o performs speaker identification from the plain text transcript instead.
+        # ── Transcription + diarization attempt ─────────────────────────────
+        # nova-3-medical used for care vocabulary accuracy + keyterm prompting.
+        # Deepgram diarization is requested; if it finds > 1 speaker, GPT-4o
+        # just maps names. If mono audio collapses to 1 speaker, GPT-4o does
+        # full text-based diarization instead.
         logger.info(f"Starting transcription for meeting {meeting_id}")
         deepgram_key = os.environ.get("DEEPGRAM_API_KEY")
+        numbered_speaker_text = None
 
         if deepgram_key:
             try:
-                logger.info("Using Deepgram Nova-3 (transcription only; GPT-4o will diarise)")
-                transcript_text = await transcribe_with_deepgram(audio_data)
+                transcript_text, numbered_speaker_text = await transcribe_with_deepgram(audio_data)
             except Exception as dg_err:
                 logger.warning(f"Deepgram failed ({dg_err}), falling back to Whisper")
                 transcript_text = await transcribe_audio(audio_data)
+                numbered_speaker_text = None
         else:
             transcript_text = await transcribe_audio(audio_data)
 
@@ -142,9 +144,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
 
         logger.info(f"Starting AI analysis + speaker labelling for meeting {meeting_id}")
 
-        # Always use GPT-4o text-based diarization (Deepgram audio diarization is disabled
-        # because browser MediaRecorder mono audio causes it to collapse all turns to 1 speaker)
-        diarize_coro = diarize_transcript(transcript_text, manager_name, attendee_names, meeting_type)
+        # Route diarization: if Deepgram found multiple speakers acoustically, GPT-4o
+        # only needs to map Speaker 0/1/2 → real names (easier, more reliable).
+        # Otherwise GPT-4o reads the full text and infers speaker turns itself.
+        if numbered_speaker_text:
+            diarize_coro = map_speaker_numbers_to_names(numbered_speaker_text, manager_name, attendee_names, meeting_type)
+        else:
+            diarize_coro = diarize_transcript(transcript_text, manager_name, attendee_names, meeting_type)
 
         results = await asyncio.gather(
             analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template),

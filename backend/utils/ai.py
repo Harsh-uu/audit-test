@@ -198,12 +198,17 @@ Rules:
 - Output ONLY the reformatted transcript — no preamble, explanation, or markdown"""
 
 
-async def transcribe_with_deepgram(audio_data: bytes) -> str:
+async def transcribe_with_deepgram(audio_data: bytes) -> tuple:
     """
-    Transcribe audio with Deepgram nova-3-medical (transcription only — no diarization).
-    GPT-4o handles speaker identification from the plain text afterwards.
-    Uses keyterm prompting for UK adult social care vocabulary accuracy.
-    Returns the plain transcript string, or raises on failure.
+    Transcribe with Deepgram nova-3-medical + diarization attempt.
+    Returns (plain_text, numbered_speaker_text_or_none).
+
+    Hybrid strategy:
+    - Deepgram acoustic diarization is requested for every call.
+    - If Deepgram finds > 1 unique speaker, numbered_speaker_text is returned
+      (e.g. "Speaker 0: ...\nSpeaker 1: ...") and GPT-4o only maps names.
+    - If Deepgram collapses to 1 speaker (common on mono/browser MediaRecorder
+      audio), numbered_speaker_text is None and GPT-4o does full text diarization.
     """
     api_key = os.environ.get("DEEPGRAM_API_KEY")
     if not api_key:
@@ -212,7 +217,7 @@ async def transcribe_with_deepgram(audio_data: bytes) -> str:
     client = DeepgramClient(api_key=api_key)
     loop = asyncio.get_event_loop()
 
-    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to Deepgram nova-3-medical for transcription")
+    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to Deepgram nova-3-medical (diarize=True)")
 
     response = await loop.run_in_executor(
         None,
@@ -221,6 +226,8 @@ async def transcribe_with_deepgram(audio_data: bytes) -> str:
             model="nova-3-medical",
             smart_format=True,
             punctuate=True,
+            diarize=True,
+            utterances=True,
             keyterm=CARE_KEYTERMS,
         ),
     )
@@ -228,9 +235,30 @@ async def transcribe_with_deepgram(audio_data: bytes) -> str:
     if not response or not response.results:
         raise ValueError("Deepgram returned empty results")
 
-    plain_text = response.results.channels[0].alternatives[0].transcript if response.results.channels else ""
-    logger.info(f"Deepgram nova-3-medical transcription complete: {len(plain_text)} chars")
-    return plain_text
+    plain_text = (
+        response.results.channels[0].alternatives[0].transcript
+        if response.results.channels else ""
+    )
+
+    # Check whether Deepgram acoustically found multiple speakers
+    utterances = getattr(response.results, "utterances", None) or []
+    if utterances:
+        unique_speakers = {u.speaker for u in utterances}
+        speaker_count = len(unique_speakers)
+        logger.info(f"Deepgram found {speaker_count} speaker(s) across {len(utterances)} utterances")
+
+        if speaker_count > 1:
+            lines = [f"Speaker {u.speaker}: {u.transcript}" for u in utterances]
+            numbered_speaker_text = "\n".join(lines)
+            logger.info("Deepgram diarization usable — GPT-4o will map names only")
+        else:
+            numbered_speaker_text = None
+            logger.info("Deepgram found only 1 speaker (likely mono audio) — GPT-4o will diarise from text")
+    else:
+        numbered_speaker_text = None
+        logger.info("Deepgram returned no utterances — GPT-4o will diarise from text")
+
+    return plain_text, numbered_speaker_text
 
 
 # Keep the old combined function for potential future use (e.g. multi-channel audio)
