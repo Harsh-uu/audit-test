@@ -122,13 +122,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         # Run analysis + speaker diarization in parallel
         manager_name = meeting.get("sign_off_manager_name") or "Manager"
         attendees = meeting.get("attendees", [])
-        worker_name = attendees[0].get("name", "Worker") if len(attendees) == 1 else "Worker"
+        attendee_names = [a.get("name") for a in attendees if a.get("name")]
         meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
 
         logger.info(f"Starting AI analysis + diarization for meeting {meeting_id}")
         results = await asyncio.gather(
             analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template),
-            diarize_transcript(transcript_text, manager_name, worker_name, meeting_type),
+            diarize_transcript(transcript_text, manager_name, attendee_names, meeting_type),
             return_exceptions=True,
         )
         analysis_result = results[0]
@@ -335,10 +335,10 @@ async def diarize_meeting_transcript(
 
     manager_name = meeting.get("sign_off_manager_name") or "Manager"
     attendees = meeting.get("attendees", [])
-    worker_name = attendees[0].get("name", "Worker") if len(attendees) == 1 else "Worker"
+    attendee_names = [a.get("name") for a in attendees if a.get("name")]
     meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
 
-    speaker_text = await diarize_transcript(transcript_text, manager_name, worker_name, meeting_type)
+    speaker_text = await diarize_transcript(transcript_text, manager_name, attendee_names, meeting_type)
     if not speaker_text:
         raise HTTPException(status_code=500, detail="Speaker identification failed — please try again")
 

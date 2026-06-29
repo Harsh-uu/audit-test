@@ -137,27 +137,31 @@ CARE_TRANSCRIPTION_PROMPT = (
     "mental health, dementia, learning disability, autism, care worker, key worker"
 )
 
-DIARIZATION_SYSTEM_PROMPT = """You are a transcript formatter for supervision meetings in adult social care.
+DIARIZATION_SYSTEM_PROMPT = """You are a transcript formatter for supervision meetings in UK adult social care.
 Your task is to add speaker labels to a raw speech-to-text transcript.
 
-Format each speaker turn as:
-LABEL: spoken words
+Format each speaker turn on its own line as:
+SPEAKER_LABEL: spoken words
 
 Rules:
-- Use the manager/supervisor name (or "Manager" if unknown) for the person conducting the supervision
-- Use the worker/supervisee name (or "Worker" if unknown) for the staff member being supervised
-- Start a new line for each speaker turn
-- Preserve ALL original words exactly as transcribed — do not paraphrase, correct, or add words
-- Use contextual clues: who asks questions vs who reports on their work, name mentions, role references
-- When a new speaker starts, always begin on a fresh line with their label
-- If you cannot confidently determine who is speaking, use "Speaker:" as a fallback
-- Output ONLY the formatted transcript — no preamble, explanation, or markdown"""
+- Use ONLY the exact names/labels supplied in the participant list
+- Match speakers using all available contextual clues:
+    * Who asks supervisory questions vs who discusses their own practice
+    * Direct address (e.g. "So, Sarah, how has your week been?")
+    * Name mentions and self-references
+    * Topic ownership — the supervisor steers the agenda; supervisees report on their work
+    * Changes in register, formality or topic signal a speaker change
+- When there are 3 or more participants, give each person their own label — do NOT merge a third person into one of the other two
+- Start each new speaker turn on a fresh line
+- Preserve ALL original words exactly as transcribed — do not paraphrase, correct, or add any words
+- If a turn cannot be confidently attributed to any named participant, use "Speaker:" as a fallback
+- Output ONLY the formatted transcript — no preamble, explanation, commentary or markdown"""
 
 
 async def diarize_transcript(
     transcript_text: str,
     manager_name: str = "Manager",
-    worker_name: str = "Worker",
+    attendee_names: list = None,
     meeting_type: str = "Supervision",
 ) -> str:
     """Use GPT-4o to add speaker labels to a Whisper transcript. Returns None on failure."""
@@ -165,12 +169,31 @@ async def diarize_transcript(
     if not api_key or not transcript_text.strip():
         return None
 
+    # Build a named participant list for the prompt
+    participants = []
+    manager_label = manager_name or "Manager"
+    participants.append(f"- {manager_label} (Manager/Supervisor — conducts the meeting, asks questions, steers the agenda)")
+
+    if attendee_names:
+        for name in attendee_names:
+            if name and name.lower() != manager_label.lower():
+                participants.append(f"- {name} (Attendee/Worker — discusses their own practice and development)")
+    else:
+        participants.append("- Worker (Attendee/Worker — discusses their own practice and development)")
+
+    participants_block = "\n".join(participants)
+
+    # Build comma-separated label hint for the instruction line
+    all_labels = [manager_label] + [n for n in (attendee_names or []) if n and n.lower() != manager_label.lower()]
+    label_hint = " / ".join(f"{l}:" for l in all_labels)
+
     user_prompt = (
-        f"Meeting type: {meeting_type}\n"
-        f"Manager/Supervisor: {manager_name}\n"
-        f"Staff member/Supervisee: {worker_name}\n\n"
-        f"RAW TRANSCRIPT:\n{transcript_text[:12000]}\n\n"
-        f"Reformat this transcript adding speaker labels ({manager_name}: / {worker_name}:) for each turn."
+        f"Meeting type: {meeting_type}\n\n"
+        f"PARTICIPANTS ({len(participants)} people):\n{participants_block}\n\n"
+        f"RAW TRANSCRIPT:\n{transcript_text[:14000]}\n\n"
+        f"Reformat the transcript above, labelling every turn with the correct speaker "
+        f"({label_hint} or Speaker: if unsure). "
+        f"There are {len(participants)} distinct participants — assign turns to all of them as appropriate."
     )
 
     try:
