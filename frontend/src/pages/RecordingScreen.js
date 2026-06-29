@@ -108,6 +108,7 @@ export default function RecordingScreen() {
   const timerRef = useRef(null);
   const elapsedRef = useRef(0);
   const wakeLockRef = useRef(null);
+  const chunkSaveIntervalRef = useRef(null);
   const [wakeLockActive, setWakeLockActive] = useState(false);
 
   useEffect(() => {
@@ -142,6 +143,7 @@ export default function RecordingScreen() {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (chunkSaveIntervalRef.current) clearInterval(chunkSaveIntervalRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
       }
@@ -292,6 +294,15 @@ export default function RecordingScreen() {
 
     mediaRecorderRef.current = recorder;
 
+    // Save progress to IndexedDB every 3 minutes so at most 3 min is at risk
+    // if the session is interrupted (pod restart, page refresh, tab close).
+    chunkSaveIntervalRef.current = setInterval(async () => {
+      if (audioChunksRef.current.length > 0) {
+        const progressBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        await saveAudioBackup(meetingId, progressBlob);
+      }
+    }, 3 * 60 * 1000);
+
     // Log start event (non-blocking — don't let API failures break recording)
     const ts = new Date().toISOString();
     axios.post(`${API}/recording/${meetingId}/start`, { timestamp: ts }, getAuthConfig())
@@ -340,6 +351,7 @@ export default function RecordingScreen() {
   const stopRecording = async () => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") return;
     clearInterval(timerRef.current);
+    clearInterval(chunkSaveIntervalRef.current);
     await releaseWakeLock();
     const ts = new Date().toISOString();
     setStage("stopped");
