@@ -13,6 +13,31 @@ logger = logging.getLogger(__name__)
 
 WHISPER_MAX_BYTES = 24 * 1024 * 1024  # 24 MB — 1 MB buffer below Whisper's 25 MB hard limit
 
+# UK adult social care terminology — fed to Deepgram nova-3-medical keyterm prompting
+# to reduce misrecognitions on domain-specific language (up to 100 terms supported)
+CARE_KEYTERMS = [
+    "CQC", "Care Quality Commission", "Care Certificate", "safeguarding",
+    "Mental Capacity Act", "MCA", "deprivation of liberty", "DoLS",
+    "Liberty Protection Safeguards", "LPS", "Lasting Power of Attorney", "LPA",
+    "duty of candour", "Regulation 9", "Regulation 12", "Regulation 17",
+    "Regulation 18", "Regulation 20", "Person-centred care", "best interests",
+    "risk assessment", "care plan", "pressure ulcer", "tissue viability",
+    "dysphagia", "DNACPR", "advance care plan", "catheter", "stoma",
+    "moving and handling", "manual handling", "medication management",
+    "controlled drugs", "MUST score", "malnutrition", "nutrition and hydration",
+    "fluid balance", "falls prevention", "dementia", "learning disability",
+    "autism", "positive behaviour support", "restrictive practice",
+    "least restrictive", "safeguarding adult review", "SAR", "whistleblowing",
+    "registered manager", "nominated individual", "quality assurance",
+    "mock inspection", "provider information return", "statement of purpose",
+    "supervision", "appraisal", "competency", "mandatory training",
+    "Skills for Care", "CPD", "NVQ", "QCF diploma", "reablement",
+    "domiciliary care", "supported living", "extra care", "palliative care",
+    "end of life", "SBAR", "incident report", "near miss", "RIDDOR",
+    "keyworker", "named worker", "social worker", "occupational therapist",
+    "district nurse", "integrated care board", "continuing healthcare",
+]
+
 
 def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
     """Compress audio to 16 kHz mono 32 kbps MP3 — optimal for voice/Whisper, ~7 MB per 30 min."""
@@ -175,8 +200,9 @@ Rules:
 
 async def transcribe_with_deepgram(audio_data: bytes) -> str:
     """
-    Transcribe audio with Deepgram Nova-3 (transcription only — no diarization).
+    Transcribe audio with Deepgram nova-3-medical (transcription only — no diarization).
     GPT-4o handles speaker identification from the plain text afterwards.
+    Uses keyterm prompting for UK adult social care vocabulary accuracy.
     Returns the plain transcript string, or raises on failure.
     """
     api_key = os.environ.get("DEEPGRAM_API_KEY")
@@ -186,15 +212,16 @@ async def transcribe_with_deepgram(audio_data: bytes) -> str:
     client = DeepgramClient(api_key=api_key)
     loop = asyncio.get_event_loop()
 
-    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to Deepgram Nova-3 for transcription")
+    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to Deepgram nova-3-medical for transcription")
 
     response = await loop.run_in_executor(
         None,
         lambda: client.listen.v1.media.transcribe_file(
             request=audio_data,
-            model="nova-3",
+            model="nova-3-medical",
             smart_format=True,
             punctuate=True,
+            keyterm=CARE_KEYTERMS,
         ),
     )
 
@@ -202,7 +229,7 @@ async def transcribe_with_deepgram(audio_data: bytes) -> str:
         raise ValueError("Deepgram returned empty results")
 
     plain_text = response.results.channels[0].alternatives[0].transcript if response.results.channels else ""
-    logger.info(f"Deepgram transcription complete: {len(plain_text)} chars")
+    logger.info(f"Deepgram nova-3-medical transcription complete: {len(plain_text)} chars")
     return plain_text
 
 
