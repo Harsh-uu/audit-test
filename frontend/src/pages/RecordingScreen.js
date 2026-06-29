@@ -98,6 +98,7 @@ export default function RecordingScreen() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadFailed, setUploadFailed] = useState(false);
   const [savedBlob, setSavedBlob] = useState(null);
+  const [checkingBackup, setCheckingBackup] = useState(false);
   const [inIframe, setInIframe] = useState(false);
   const [template, setTemplate] = useState(null);
   const [completedSteps, setCompletedSteps] = useState({});
@@ -125,12 +126,14 @@ export default function RecordingScreen() {
         }
         // Check IndexedDB for a saved blob (e.g. upload failed due to server restart)
         if (["recording", "stopped", "draft"].includes(r.data.status)) {
+          setCheckingBackup(true);
           loadAudioBackup(meetingId).then(blob => {
+            setCheckingBackup(false);
             if (blob) {
               setSavedBlob(blob);
               setStage("stopped");
             }
-          });
+          }).catch(() => setCheckingBackup(false));
         }
       })
       .catch(e => setError("Meeting not found"));
@@ -347,8 +350,8 @@ export default function RecordingScreen() {
   };
 
   const handleUpload = async (retryAttempt = 0) => {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 5000;
+    const MAX_RETRIES = 8;
+    const RETRY_DELAY_MS = 8000;
 
     // Resolve the blob — prefer in-memory chunks, fall back to IndexedDB backup
     let blob;
@@ -370,8 +373,6 @@ export default function RecordingScreen() {
     try {
       try { await silentRefresh(); } catch {}
       const token = localStorage.getItem("supervision_token");
-      // Send audio as raw binary (application/octet-stream) to avoid proxy
-      // issues with multipart/form-data that some WAF rules trigger on.
       await axios.post(`${API}/processing/${meetingId}/upload`, blob, {
         headers: {
           "Content-Type": "application/octet-stream",
@@ -393,27 +394,22 @@ export default function RecordingScreen() {
       const isServerDown = !status || status === 404 || status === 503 || status === 502;
 
       console.error("[Upload failed]", {
-        meetingId,
-        url: `${API}/processing/${meetingId}/upload`,
-        httpStatus: status,
-        responseData: err.response?.data,
-        message: err.message,
-        retryAttempt,
-        hasToken: !!localStorage.getItem("supervision_token"),
+        meetingId, httpStatus: status, message: err.message, retryAttempt,
       });
 
-      // Auto-retry on server-down errors (pod restart, proxy hiccup)
+      // Auto-retry on server-down errors — pod restart takes up to 60s
       if (isServerDown && !isAuthError && retryAttempt < MAX_RETRIES) {
+        const remaining = MAX_RETRIES - retryAttempt;
         setStage("stopped");
-        setError(`Server temporarily unavailable — retrying in ${RETRY_DELAY_MS / 1000}s (attempt ${retryAttempt + 1}/${MAX_RETRIES})...`);
+        setError(`Server restarting — retrying automatically in ${RETRY_DELAY_MS / 1000}s (${remaining} attempt${remaining !== 1 ? "s" : ""} left). Your recording is safe.`);
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         return handleUpload(retryAttempt + 1);
       }
 
       setError(
         isAuthError
-          ? "Your session has expired. Your recording is still saved in this tab — please refresh the page, log in again, then return here to re-upload."
-          : `Upload failed (HTTP ${status || "network error"}): ${detail}. Meeting ID: ${meetingId}`
+          ? "Session expired — your recording is saved in this browser. Refresh the page, log back in, then return here to upload."
+          : `Upload failed after ${MAX_RETRIES} attempts. Your recording is saved — click Retry Upload to try again.`
       );
       setUploadFailed(true);
       setStage("stopped");
@@ -527,7 +523,7 @@ export default function RecordingScreen() {
         )}
 
         {/* Stuck recording — audio lost, no IndexedDB backup */}
-        {meeting && meeting.status === "recording" && stage === "notice" && !savedBlob && (
+        {meeting && meeting.status === "recording" && stage === "notice" && !savedBlob && !checkingBackup && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-5 mb-5 fade-in">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -564,6 +560,13 @@ export default function RecordingScreen() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Checking IndexedDB for saved audio */}
+        {checkingBackup && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-5 text-sm text-blue-800 fade-in">
+            Checking for saved recording...
           </div>
         )}
 
