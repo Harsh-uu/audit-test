@@ -140,7 +140,7 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
               {isDirty && (
                 <>
                   <button
-                    onClick={onSave}
+                    onClick={() => onSave(staged)}
                     disabled={saving}
                     className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded bg-[#1E3A8A] text-white hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
                     data-testid="save-speaker-map-btn"
@@ -293,11 +293,19 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
     setIsDirty(false);
   }, [originalTurns]);
 
-  const handleSave = async () => {
+  const handleSave = async (stagedOverrides = {}) => {
     setSaving(true);
     try {
       const token = localStorage.getItem("supervision_token");
-      const newText = serializeTurns(localTurns);
+      // Apply any renames still pending in the panel's staged map (user clicked
+      // Save without blurring the input first, so localTurns may be stale).
+      const finalTurns = Object.keys(stagedOverrides).length
+        ? localTurns.map(t => {
+            const pending = (stagedOverrides[t.speaker] || "").trim();
+            return pending && pending !== t.speaker ? { ...t, speaker: pending } : t;
+          })
+        : localTurns;
+      const newText = serializeTurns(finalTurns);
       await axios.patch(
         `${API}/api/review/${meeting.id}/speaker-text`,
         { speaker_text: newText },
