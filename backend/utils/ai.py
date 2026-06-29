@@ -214,7 +214,20 @@ async def transcribe_with_assemblyai(audio_data: bytes) -> tuple:
         raise ValueError("ASSEMBLYAI_API_KEY not configured")
 
     aai.settings.api_key = api_key
-    config = aai.TranscriptionConfig(speaker_labels=True, speech_model="medical")
+    config = aai.TranscriptionConfig(
+        speaker_labels=True,
+        speech_model=aai.SpeechModel.slam_1,   # Most accurate AssemblyAI model
+        word_boost=[                            # Boost UK adult social care vocabulary
+            "CQC", "safeguarding", "MCA", "DoLS", "LPS", "Care Certificate",
+            "duty of candour", "deprivation of liberty", "best interests",
+            "risk assessment", "care plan", "pressure ulcer", "dysphagia",
+            "DNACPR", "mental capacity", "lasting power of attorney",
+            "medication management", "moving and handling", "tissue viability",
+            "registered manager", "nominated individual", "Skills for Care",
+            "mandatory training", "supervision", "appraisal", "competency",
+            "safeguarding lead", "whistleblowing", "quality assurance",
+        ],
+    )
     transcriber = aai.Transcriber()
 
     loop = asyncio.get_event_loop()
