@@ -214,7 +214,7 @@ async def transcribe_with_assemblyai(audio_data: bytes) -> tuple:
         raise ValueError("ASSEMBLYAI_API_KEY not configured")
 
     aai.settings.api_key = api_key
-    config = aai.TranscriptionConfig(speaker_labels=True)
+    config = aai.TranscriptionConfig(speaker_labels=True, speech_model="medical")
     transcriber = aai.Transcriber()
 
     loop = asyncio.get_event_loop()
