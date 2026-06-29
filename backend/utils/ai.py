@@ -173,6 +173,40 @@ Rules:
 - Output ONLY the reformatted transcript — no preamble, explanation, or markdown"""
 
 
+async def transcribe_with_deepgram(audio_data: bytes) -> str:
+    """
+    Transcribe audio with Deepgram Nova-3 (transcription only — no diarization).
+    GPT-4o handles speaker identification from the plain text afterwards.
+    Returns the plain transcript string, or raises on failure.
+    """
+    api_key = os.environ.get("DEEPGRAM_API_KEY")
+    if not api_key:
+        raise ValueError("DEEPGRAM_API_KEY not configured")
+
+    client = DeepgramClient(api_key=api_key)
+    loop = asyncio.get_event_loop()
+
+    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to Deepgram Nova-3 for transcription")
+
+    response = await loop.run_in_executor(
+        None,
+        lambda: client.listen.v1.media.transcribe_file(
+            request=audio_data,
+            model="nova-3",
+            smart_format=True,
+            punctuate=True,
+        ),
+    )
+
+    if not response or not response.results:
+        raise ValueError("Deepgram returned empty results")
+
+    plain_text = response.results.channels[0].alternatives[0].transcript if response.results.channels else ""
+    logger.info(f"Deepgram transcription complete: {len(plain_text)} chars")
+    return plain_text
+
+
+# Keep the old combined function for potential future use (e.g. multi-channel audio)
 async def transcribe_and_diarize_deepgram(audio_data: bytes) -> tuple:
     """
     Transcribe audio with Deepgram Nova-3 + built-in speaker diarisation.
