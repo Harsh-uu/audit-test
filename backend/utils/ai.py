@@ -213,7 +213,9 @@ async def transcribe_and_diarize_deepgram(audio_data: bytes) -> tuple:
         speaker_count = len({u.speaker for u in response.results.utterances})
         logger.info(f"Deepgram identified {speaker_count} speaker(s), {len(response.results.utterances)} utterances")
     else:
-        numbered_speaker_text = plain_text
+        # No utterances — return None so the caller falls back to GPT-4o text diarization
+        logger.warning("Deepgram returned no utterances; will fall back to GPT-4o diarization")
+        numbered_speaker_text = None
 
     return plain_text, numbered_speaker_text
 
