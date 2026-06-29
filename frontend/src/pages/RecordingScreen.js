@@ -313,10 +313,19 @@ export default function RecordingScreen() {
       const status = err.response?.status;
       const detail = err.response?.data?.detail || err.message;
       const isAuthError = status === 401;
+      // Log full diagnostic info to browser console for debugging
+      console.error("[Upload failed]", {
+        meetingId,
+        url: `${API}/processing/${meetingId}/upload`,
+        httpStatus: status,
+        responseData: err.response?.data,
+        message: err.message,
+        hasToken: !!localStorage.getItem("supervision_token"),
+      });
       setError(
         isAuthError
           ? "Your session has expired. Your recording is still saved in this tab — please refresh the page, log in again, then return here to re-upload."
-          : `Upload failed (${status || "network error"}): ${detail}`
+          : `Upload failed (HTTP ${status || "network error"}): ${detail}. Meeting ID: ${meetingId}`
       );
       setUploadFailed(true);
       setStage("stopped");
@@ -560,11 +569,17 @@ export default function RecordingScreen() {
                   <p className="text-sm text-gray-500">Recording stopped</p>
                   <button
                     onClick={handleUpload}
-                    className="flex items-center gap-2 bg-[#1E3A8A] text-white px-6 py-3 rounded-lg text-sm font-medium hover:bg-[#1E40AF] active:scale-95 transition-all touch-manipulation"
+                    className={`flex items-center gap-2 ${uploadFailed ? "bg-red-600 hover:bg-red-700" : "bg-[#1E3A8A] hover:bg-[#1E40AF]"} text-white px-6 py-3 rounded-lg text-sm font-medium active:scale-95 transition-all touch-manipulation`}
+                    data-testid="upload-process-btn"
                   >
                     <Upload className="w-4 h-4" />
-                    Upload &amp; Process
+                    {uploadFailed ? "Retry Upload" : "Upload & Process"}
                   </button>
+                  {uploadFailed && (
+                    <p className="text-xs text-red-500 text-center max-w-xs">
+                      Upload failed — your audio is still in this tab. Check the error above, then click Retry.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
