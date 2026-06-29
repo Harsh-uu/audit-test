@@ -130,7 +130,7 @@ export default function Dashboard() {
   };
 
   const getMeetingAction = (meeting) => {
-    if (["draft", "stopped"].includes(meeting.status)) return () => navigate(`/meetings/${meeting.id}/record`);
+    if (["draft", "stopped", "recording"].includes(meeting.status)) return () => navigate(`/meetings/${meeting.id}/record`);
     return () => navigate(`/meetings/${meeting.id}/report`);
   };
 
