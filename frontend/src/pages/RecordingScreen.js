@@ -27,6 +27,63 @@ function canUseMediaDevices() {
   return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 }
 
+// ── IndexedDB audio backup helpers ──────────────────────────────────────────
+// Keeps the recorded audio blob alive across page refreshes so uploads can
+// be retried even after the browser tab is reloaded.
+
+function openAudioDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("supervision_audio", 1);
+    req.onupgradeneeded = (e) => {
+      e.target.result.createObjectStore("recordings", { keyPath: "meetingId" });
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function saveAudioBackup(meetingId, blob) {
+  try {
+    const db = await openAudioDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("recordings", "readwrite");
+      tx.objectStore("recordings").put({ meetingId, blob, savedAt: Date.now() });
+      tx.oncomplete = resolve;
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    console.warn("IndexedDB save failed:", e);
+  }
+}
+
+async function loadAudioBackup(meetingId) {
+  try {
+    const db = await openAudioDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction("recordings", "readonly");
+      const req = tx.objectStore("recordings").get(meetingId);
+      req.onsuccess = (e) => resolve(e.target.result?.blob || null);
+      req.onerror = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+async function clearAudioBackup(meetingId) {
+  try {
+    const db = await openAudioDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("recordings", "readwrite");
+      tx.objectStore("recordings").delete(meetingId);
+      tx.oncomplete = resolve;
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    console.warn("IndexedDB clear failed:", e);
+  }
+}
+
 export default function RecordingScreen() {
   const { meetingId } = useParams();
   const { getAuthConfig, API, silentRefresh } = useAuth();
@@ -40,6 +97,7 @@ export default function RecordingScreen() {
   const [events, setEvents] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadFailed, setUploadFailed] = useState(false);
+  const [savedBlob, setSavedBlob] = useState(null);
   const [inIframe, setInIframe] = useState(false);
   const [template, setTemplate] = useState(null);
   const [completedSteps, setCompletedSteps] = useState({});
@@ -64,6 +122,15 @@ export default function RecordingScreen() {
         setMeeting(r.data);
         if (["processing", "transcribing", "analyzing", "in_review", "reviewed", "signed_off", "shared"].includes(r.data.status)) {
           navigate(`/meetings/${meetingId}/report`);
+        }
+        // Check IndexedDB for a saved blob (e.g. upload failed due to server restart)
+        if (["recording", "stopped", "draft"].includes(r.data.status)) {
+          loadAudioBackup(meetingId).then(blob => {
+            if (blob) {
+              setSavedBlob(blob);
+              setStage("stopped");
+            }
+          });
         }
       })
       .catch(e => setError("Meeting not found"));
@@ -203,7 +270,9 @@ export default function RecordingScreen() {
     };
     recorder.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
-      handleUpload();
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      // Persist to IndexedDB so the upload can be retried after a page refresh
+      saveAudioBackup(meetingId, blob).then(() => handleUpload());
     };
     recorder.onerror = (e) => {
       setError(`Recording error: ${e.error?.message || "unknown error"}`);
@@ -277,18 +346,26 @@ export default function RecordingScreen() {
     mediaRecorderRef.current.stop();
   };
 
-  const handleUpload = async () => {
-    if (audioChunksRef.current.length === 0) {
-      setError("No audio data recorded. Please re-record the meeting.");
+  const handleUpload = async (retryAttempt = 0) => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 5000;
+
+    // Resolve the blob — prefer in-memory chunks, fall back to IndexedDB backup
+    let blob;
+    if (audioChunksRef.current.length > 0) {
+      blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+    } else if (savedBlob) {
+      blob = savedBlob;
+    } else {
+      setError("No audio data found. Please re-record the meeting.");
       setStage("stopped");
       return;
     }
+
     setStage("uploading");
     setUploadFailed(false);
     setError("");
     setUploadProgress(0);
-
-    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
 
     try {
       try { await silentRefresh(); } catch {}
@@ -304,21 +381,35 @@ export default function RecordingScreen() {
           if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));
         },
       });
+      // Success — clear the IndexedDB backup
+      await clearAudioBackup(meetingId);
+      setSavedBlob(null);
       setStage("processing");
       setTimeout(() => navigate(`/meetings/${meetingId}/report`), 2000);
     } catch (err) {
       const status = err.response?.status;
       const detail = err.response?.data?.detail || err.message;
       const isAuthError = status === 401;
-      // Log full diagnostic info to browser console for debugging
+      const isServerDown = !status || status === 404 || status === 503 || status === 502;
+
       console.error("[Upload failed]", {
         meetingId,
         url: `${API}/processing/${meetingId}/upload`,
         httpStatus: status,
         responseData: err.response?.data,
         message: err.message,
+        retryAttempt,
         hasToken: !!localStorage.getItem("supervision_token"),
       });
+
+      // Auto-retry on server-down errors (pod restart, proxy hiccup)
+      if (isServerDown && !isAuthError && retryAttempt < MAX_RETRIES) {
+        setStage("stopped");
+        setError(`Server temporarily unavailable — retrying in ${RETRY_DELAY_MS / 1000}s (attempt ${retryAttempt + 1}/${MAX_RETRIES})...`);
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        return handleUpload(retryAttempt + 1);
+      }
+
       setError(
         isAuthError
           ? "Your session has expired. Your recording is still saved in this tab — please refresh the page, log in again, then return here to re-upload."
@@ -564,17 +655,23 @@ export default function RecordingScreen() {
                     <MicOff className="w-10 h-10 text-gray-400" />
                   </div>
                   <p className="text-sm text-gray-500">Recording stopped</p>
+                  {savedBlob && !uploadFailed && (
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-xs text-xs text-amber-800">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <span>A saved recording was found for this meeting — your audio was preserved. Click Upload to process it.</span>
+                    </div>
+                  )}
                   <button
                     onClick={handleUpload}
                     className={`flex items-center gap-2 ${uploadFailed ? "bg-red-600 hover:bg-red-700" : "bg-[#1E3A8A] hover:bg-[#1E40AF]"} text-white px-6 py-3 rounded-lg text-sm font-medium active:scale-95 transition-all touch-manipulation`}
                     data-testid="upload-process-btn"
                   >
                     <Upload className="w-4 h-4" />
-                    {uploadFailed ? "Retry Upload" : "Upload & Process"}
+                    {uploadFailed ? "Retry Upload" : savedBlob ? "Upload Saved Recording" : "Upload & Process"}
                   </button>
                   {uploadFailed && (
                     <p className="text-xs text-red-500 text-center max-w-xs">
-                      Upload failed — your audio is still in this tab. Check the error above, then click Retry.
+                      Upload failed — your audio is still saved in this browser. Check the error above, then click Retry.
                     </p>
                   )}
                 </div>
