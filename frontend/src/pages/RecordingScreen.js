@@ -526,6 +526,47 @@ export default function RecordingScreen() {
           </div>
         )}
 
+        {/* Stuck recording — audio lost, no IndexedDB backup */}
+        {meeting && meeting.status === "recording" && stage === "notice" && !savedBlob && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-5 mb-5 fade-in">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-red-900 mb-1">Recording not completed</p>
+                <p className="text-sm text-red-700 mb-3">
+                  This meeting was being recorded but the audio was not uploaded — it may have been interrupted by a server restart or page refresh. The audio data is no longer available.
+                </p>
+                <p className="text-sm text-red-700 mb-4">
+                  Please delete this meeting and start a new recording.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm("Delete this meeting and all its data?")) return;
+                      try {
+                        await axios.delete(`${API}/meetings/${meetingId}`, getAuthConfig());
+                        navigate("/dashboard");
+                      } catch (e) {
+                        setError("Delete failed: " + (e.response?.data?.detail || e.message));
+                      }
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                    data-testid="delete-stuck-meeting-btn"
+                  >
+                    Delete Meeting
+                  </button>
+                  <button
+                    onClick={() => navigate("/dashboard")}
+                    className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Back to Dashboard
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Notice stage */}
         {stage === "notice" && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6 fade-in" data-testid="recording-notice">
