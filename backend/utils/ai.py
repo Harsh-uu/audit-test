@@ -186,16 +186,63 @@ Rules:
 
 # ── Deepgram speaker-number → real name mapping prompt ────────────────────
 SPEAKER_MAPPING_SYSTEM_PROMPT = """You are a transcript editor for supervision meetings in UK adult social care.
-Deepgram has already identified distinct speakers as Speaker 0, Speaker 1, Speaker 2 etc. using audio fingerprinting.
+The audio has already been diarized — speakers are labelled generically (e.g. Speaker A, Speaker B, Speaker 0, Speaker 1).
 Your task is to replace those generic labels with the real participant names provided.
 
 Rules:
-- Identify which numbered speaker corresponds to which named participant by reading the conversation
+- Identify which labelled speaker corresponds to which named participant by reading the conversation
 - The manager/supervisor steers the agenda, asks questions about the worker's practice, and conducts the meeting
 - The worker/supervisee reports on their own work and development
 - Do NOT change any spoken words — only replace the speaker label at the start of each line
-- If there are more numbered speakers than named participants (e.g. crosstalk artefacts), assign them to the closest matching participant
+- If there are more labelled speakers than named participants (e.g. crosstalk artefacts), assign them to the closest matching participant
 - Output ONLY the reformatted transcript — no preamble, explanation, or markdown"""
+
+
+async def transcribe_with_assemblyai(audio_data: bytes) -> tuple:
+    """
+    Transcribe + diarise with AssemblyAI (Universal model, speaker_labels=True).
+    Works reliably on mono audio from browser MediaRecorder.
+    Returns (plain_text, speaker_labeled_text_or_none).
+    speaker_labeled_text uses "Speaker A:", "Speaker B:" labels.
+    Falls back to None if only 1 speaker found (GPT-4o will diarise from text).
+    """
+    import io
+    import assemblyai as aai
+
+    api_key = os.environ.get("ASSEMBLYAI_API_KEY")
+    if not api_key:
+        raise ValueError("ASSEMBLYAI_API_KEY not configured")
+
+    aai.settings.api_key = api_key
+    config = aai.TranscriptionConfig(speaker_labels=True)
+    transcriber = aai.Transcriber()
+
+    loop = asyncio.get_event_loop()
+    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to AssemblyAI (speaker_labels=True)")
+
+    transcript = await loop.run_in_executor(
+        None,
+        lambda: transcriber.transcribe(io.BytesIO(audio_data), config=config),
+    )
+
+    if transcript.status == aai.TranscriptStatus.error:
+        raise ValueError(f"AssemblyAI transcription failed: {transcript.error}")
+
+    plain_text = transcript.text or ""
+    logger.info(f"AssemblyAI transcription complete: {len(plain_text)} chars")
+
+    if transcript.utterances:
+        unique_speakers = {u.speaker for u in transcript.utterances}
+        logger.info(f"AssemblyAI found {len(unique_speakers)} speaker(s): {sorted(unique_speakers)}")
+
+        if len(unique_speakers) > 1:
+            lines = [f"Speaker {u.speaker}: {u.text}" for u in transcript.utterances]
+            speaker_text = "\n".join(lines)
+            logger.info("AssemblyAI diarization usable — GPT-4o will map names only")
+            return plain_text, speaker_text
+
+    logger.info("AssemblyAI found only 1 speaker — GPT-4o will diarise from text")
+    return plain_text, None
 
 
 async def transcribe_with_deepgram(audio_data: bytes) -> tuple:

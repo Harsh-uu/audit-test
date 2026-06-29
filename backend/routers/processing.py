@@ -7,7 +7,7 @@ import logging
 import os
 from deps import get_db, get_current_user
 from utils.storage import put_object
-from utils.ai import transcribe_audio, analyze_meeting, diarize_transcript, transcribe_with_deepgram, map_speaker_numbers_to_names
+from utils.ai import transcribe_audio, analyze_meeting, diarize_transcript, transcribe_with_deepgram, transcribe_with_assemblyai, map_speaker_numbers_to_names
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -76,17 +76,40 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         from utils.storage import get_object
         audio_data, _ = get_object(audio_path)
 
-        # ── Transcription + diarization attempt ─────────────────────────────
-        # nova-3-medical used for care vocabulary accuracy + keyterm prompting.
-        # Deepgram diarization is requested; if it finds > 1 speaker, GPT-4o
-        # just maps names. If mono audio collapses to 1 speaker, GPT-4o does
-        # full text-based diarization instead.
+        # ── Transcription + diarization ─────────────────────────────────────
+        # Priority: AssemblyAI (best mono diarization) → Deepgram nova-3-medical
+        # (fast STT + care keyterms) → Whisper (final fallback).
+        # If a provider finds > 1 speaker, numbered_speaker_text is set and
+        # GPT-4o only maps generic labels → real names (easier, more reliable).
+        # If only 1 speaker found or provider fails, GPT-4o diarises from text.
         logger.info(f"Starting transcription for meeting {meeting_id}")
+        assemblyai_key = os.environ.get("ASSEMBLYAI_API_KEY")
         deepgram_key = os.environ.get("DEEPGRAM_API_KEY")
         numbered_speaker_text = None
 
-        if deepgram_key:
+        if assemblyai_key:
             try:
+                logger.info("Attempting AssemblyAI transcription + diarization")
+                transcript_text, numbered_speaker_text = await transcribe_with_assemblyai(audio_data)
+            except Exception as aai_err:
+                logger.warning(f"AssemblyAI failed ({aai_err}), falling back to Deepgram/Whisper")
+                transcript_text = None
+
+            if transcript_text is None and deepgram_key:
+                try:
+                    logger.info("Falling back to Deepgram nova-3-medical")
+                    transcript_text, numbered_speaker_text = await transcribe_with_deepgram(audio_data)
+                except Exception as dg_err:
+                    logger.warning(f"Deepgram also failed ({dg_err}), falling back to Whisper")
+                    transcript_text = await transcribe_audio(audio_data)
+                    numbered_speaker_text = None
+            elif transcript_text is None:
+                transcript_text = await transcribe_audio(audio_data)
+                numbered_speaker_text = None
+
+        elif deepgram_key:
+            try:
+                logger.info("Using Deepgram nova-3-medical (no AssemblyAI key)")
                 transcript_text, numbered_speaker_text = await transcribe_with_deepgram(audio_data)
             except Exception as dg_err:
                 logger.warning(f"Deepgram failed ({dg_err}), falling back to Whisper")
