@@ -216,8 +216,9 @@ async def transcribe_with_assemblyai(audio_data: bytes) -> tuple:
     aai.settings.api_key = api_key
     config = aai.TranscriptionConfig(
         speaker_labels=True,
-        speech_model=aai.SpeechModel.slam_1,   # Most accurate AssemblyAI model
-        word_boost=[                            # Boost UK adult social care vocabulary
+        speech_models=["universal-3-pro"],  # AssemblyAI medical-capable model
+        domain="medical-v1",               # Activates medical mode (care/clinical vocab)
+        word_boost=[                        # Reinforce UK adult social care terminology
             "CQC", "safeguarding", "MCA", "DoLS", "LPS", "Care Certificate",
             "duty of candour", "deprivation of liberty", "best interests",
             "risk assessment", "care plan", "pressure ulcer", "dysphagia",

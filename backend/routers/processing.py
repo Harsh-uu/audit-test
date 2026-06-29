@@ -329,7 +329,7 @@ async def retry_processing(
         raise HTTPException(status_code=400, detail="Invalid meeting ID")
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") not in ("processing_failed", "processing"):
+    if meeting.get("status") not in ("processing_failed", "processing", "in_review", "reviewed"):
         raise HTTPException(status_code=400, detail="Only processing_failed meetings can be retried")
 
     audio_file_id = meeting.get("audio_file_id")
