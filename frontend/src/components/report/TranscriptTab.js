@@ -40,13 +40,17 @@ function serializeTurns(turns) {
   return turns.map(t => `${t.speaker}: ${t.text}`).join("\n");
 }
 
-function getSpeakerStyle(speaker, managerName) {
+function getSpeakerRole(speaker, managerName) {
   const s = speaker.toLowerCase();
   const mn = (managerName || "").toLowerCase();
   const isManager =
     s === "manager" || s === "supervisor" ||
     (mn && mn.split(" ").filter(w => w.length > 2).some(w => s.includes(w)));
-  return isManager
+  return isManager ? "manager" : "worker";
+}
+
+function roleToStyle(role) {
+  return role === "manager"
     ? { pill: "bg-[#1E3A8A] text-white", row: "bg-blue-50/40" }
     : { pill: "bg-emerald-700 text-white", row: "bg-emerald-50/40" };
 }
@@ -171,6 +175,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
 
   // ── Speaker editing state ─────────────────────────────────────────────────
   const [localTurns, setLocalTurns] = useState([]);
+  const [speakerRoleMap, setSpeakerRoleMap] = useState({}); // name → "manager"|"worker"
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -192,8 +197,15 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
 
   const managerName = meeting.sign_off_manager_name || "";
 
-  // Initialise / reset localTurns when speaker_text changes
+  // Initialise / reset localTurns + role map when speaker_text changes
   useEffect(() => {
+    const map = {};
+    for (const t of originalTurns) {
+      if (!(t.speaker in map)) {
+        map[t.speaker] = getSpeakerRole(t.speaker, managerName);
+      }
+    }
+    setSpeakerRoleMap(map);
     setLocalTurns(originalTurns.map(t => ({ ...t })));
     setIsDirty(false);
   }, [meeting.transcript?.speaker_text]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -229,6 +241,11 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
 
   const handleRenameAll = useCallback((original, newName) => {
     setLocalTurns(prev => prev.map(t => t.speaker === original ? { ...t, speaker: newName } : t));
+    setSpeakerRoleMap(prev => {
+      if (!(original in prev)) return prev;
+      const { [original]: role, ...rest } = prev;
+      return { ...rest, [newName]: role };
+    });
     setIsDirty(true);
   }, []);
 
@@ -490,7 +507,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
               onMouseUp={handleSpeakerViewMouseUp}
             >
               {localTurns.map((turn, i) => {
-                const style = getSpeakerStyle(turn.speaker, managerName);
+                const style = roleToStyle(speakerRoleMap[turn.speaker] || getSpeakerRole(turn.speaker, managerName));
                 const isMenuOpen = openTurnMenu === i;
                 return (
                   <div key={i} className={`flex gap-3 px-5 py-3.5 ${style.row}`}>

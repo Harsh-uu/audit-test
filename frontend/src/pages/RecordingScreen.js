@@ -39,6 +39,7 @@ export default function RecordingScreen() {
   const [pauseStart, setPauseStart] = useState(null);
   const [events, setEvents] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFailed, setUploadFailed] = useState(false);
   const [inIframe, setInIframe] = useState(false);
   const [template, setTemplate] = useState(null);
   const [completedSteps, setCompletedSteps] = useState({});
@@ -278,11 +279,15 @@ export default function RecordingScreen() {
 
   const handleUpload = async () => {
     if (audioChunksRef.current.length === 0) {
-      setError("No audio data recorded");
+      setError("No audio data recorded. Please re-record the meeting.");
       setStage("stopped");
       return;
     }
     setStage("uploading");
+    setUploadFailed(false);
+    setError("");
+    setUploadProgress(0);
+
     const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
     const formData = new FormData();
     formData.append("audio", blob, "meeting.webm");
@@ -292,9 +297,10 @@ export default function RecordingScreen() {
       try { await silentRefresh(); } catch {}
 
       const token = localStorage.getItem("supervision_token");
+      // Do NOT set Content-Type manually — axios auto-sets multipart/form-data
+      // with the correct boundary when the body is FormData.
       await axios.post(`${API}/processing/${meetingId}/upload`, formData, {
         headers: {
-          "Content-Type": "multipart/form-data",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         onUploadProgress: (e) => {
@@ -304,13 +310,15 @@ export default function RecordingScreen() {
       setStage("processing");
       setTimeout(() => navigate(`/meetings/${meetingId}/report`), 2000);
     } catch (err) {
+      const status = err.response?.status;
       const detail = err.response?.data?.detail || err.message;
-      const isAuthError = err.response?.status === 401;
+      const isAuthError = status === 401;
       setError(
         isAuthError
           ? "Your session has expired. Your recording is still saved in this tab — please refresh the page, log in again, then return here to re-upload."
-          : `Upload failed: ${detail}`
+          : `Upload failed (${status || "network error"}): ${detail}`
       );
+      setUploadFailed(true);
       setStage("stopped");
     }
   };
