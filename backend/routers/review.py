@@ -543,9 +543,14 @@ async def update_speaker_text(
     if not transcript_id:
         raise HTTPException(status_code=404, detail="No transcript found for this meeting")
 
+    now = datetime.now(timezone.utc).isoformat()
     await db.transcripts.update_one(
         {"_id": ObjectId(transcript_id)},
-        {"$set": {"speaker_text": data.speaker_text}}
+        {"$set": {
+            "speaker_text": data.speaker_text,
+            "speaker_text_edited_by_name": current_user.get("name", ""),
+            "speaker_text_edited_at": now,
+        }}
     )
 
     await db.audit_logs.insert_one({
@@ -554,10 +559,15 @@ async def update_speaker_text(
         "user_name": current_user.get("name", ""),
         "action": "speaker_correction",
         "edit_type": "speaker_correction",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": now,
     })
 
-    return {"message": "Speaker labels updated", "speaker_text": data.speaker_text}
+    return {
+        "message": "Speaker labels updated",
+        "speaker_text": data.speaker_text,
+        "edited_by_name": current_user.get("name", ""),
+        "edited_at": now,
+    }
 
 
 @router.get("/{meeting_id}/audit-trail")

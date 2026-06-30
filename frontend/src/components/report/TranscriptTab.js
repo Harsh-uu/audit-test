@@ -57,7 +57,7 @@ function roleToStyle(role) {
 }
 
 // ── Speaker Manager Panel ────────────────────────────────────────────────────
-function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, saving, isDirty }) {
+function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, saving, isDirty, lastEditedBy, lastEditedAt }) {
   const speakerCounts = useMemo(() => {
     const counts = {};
     for (const t of localTurns) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
@@ -93,6 +93,12 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
               {staged[s] ?? s}
             </span>
           ))}
+          {lastEditedBy && !isDirty && (
+            <span className="text-xs text-gray-400 italic" data-testid="speaker-last-edited-badge">
+              Last saved by {lastEditedBy}
+              {lastEditedAt ? ` · ${new Date(lastEditedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
+            </span>
+          )}
         </div>
         <button
           onClick={() => setCollapsed(c => !c)}
@@ -360,7 +366,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
           })
         : localTurns;
       const newText = serializeTurns(finalTurns);
-      await axios.patch(
+      const res = await axios.patch(
         `${API}/api/review/${meeting.id}/speaker-text`,
         { speaker_text: newText },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -370,7 +376,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       setLocalTurns(finalTurns.map(t => ({ ...t })));
       setDirty(false);
       toast.success("Speaker labels saved");
-      if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText);
+      if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText, res.data.edited_by_name, res.data.edited_at);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to save speaker labels. Please try again.");
     } finally {
@@ -558,6 +564,8 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                 onDiscard={handleDiscard}
                 saving={saving}
                 isDirty={isDirty}
+                lastEditedBy={meeting.transcript?.speaker_text_edited_by_name}
+                lastEditedAt={meeting.transcript?.speaker_text_edited_at}
               />
             ) : (
               <div className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 border-b border-amber-100 text-xs text-amber-700">

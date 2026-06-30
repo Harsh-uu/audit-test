@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
@@ -26,6 +26,47 @@ const QUICK_FILTERS = [
   { value: "reviewed",  label: "Reviewed" },
   { value: "signed_off",label: "Signed Off" },
 ];
+
+function DueCard({ s, navigate }) {
+  const isOverdue = s.is_overdue;
+  const daysAbs = Math.abs(s.days_until_due);
+  return (
+    <div
+      className={`flex-shrink-0 w-52 rounded-lg border p-3.5 shadow-sm flex flex-col gap-2 ${
+        isOverdue ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"
+      }`}
+      data-testid={`due-card-${s.id}`}
+    >
+      <div className="flex items-start gap-2">
+        <div className="w-2 h-2 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: s.meeting_type_color }} />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-gray-900 truncate">{s.meeting_type_name}</p>
+          <p className="text-xs text-gray-500 truncate">{s.staff_name}</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between mt-auto gap-2">
+        <span className={`text-xs font-medium ${isOverdue ? "text-red-600" : "text-blue-700"}`}>
+          {isOverdue ? `${daysAbs}d overdue` : `Due ${formatDate(s.next_due)}`}
+        </span>
+        <button
+          onClick={() => navigate(
+            `/meetings/new?schedule_id=${s.id}` +
+            `&title=${encodeURIComponent(s.meeting_type_name + " — " + s.staff_name)}` +
+            `&attendee_id=${s.staff_user_id}`
+          )}
+          className={`text-xs font-medium px-2 py-1 rounded flex-shrink-0 transition-colors ${
+            isOverdue
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "bg-[#1E3A8A] text-white hover:bg-[#1E40AF]"
+          }`}
+          data-testid={`due-card-start-${s.id}`}
+        >
+          Start
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.draft;
@@ -193,6 +234,48 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
+        {/* Due This Month Widget — admin/manager only */}
+        {(user?.role === "admin" || user?.role === "manager") && (dueMeetings.length > 0 || dueLoading) && (
+          <div className="mb-6" data-testid="due-this-month-widget">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Calendar className="w-4 h-4 text-[#1E3A8A]" />
+                <h2 className="text-sm font-semibold text-gray-700">Due This Month</h2>
+                {!dueLoading && dueMeetings.filter(s => s.is_overdue).length > 0 && (
+                  <span className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                    {dueMeetings.filter(s => s.is_overdue).length} overdue
+                  </span>
+                )}
+                {!dueLoading && dueMeetings.filter(s => !s.is_overdue).length > 0 && (
+                  <span className="text-xs text-gray-400">
+                    {dueMeetings.filter(s => !s.is_overdue).length} upcoming
+                  </span>
+                )}
+              </div>
+              <Link
+                to="/admin/schedules"
+                className="text-xs text-[#1E3A8A] hover:underline flex items-center gap-0.5"
+                data-testid="due-view-all-link"
+              >
+                View all <ChevronRight className="w-3 h-3" />
+              </Link>
+            </div>
+            {dueLoading ? (
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex-shrink-0 w-52 h-20 bg-gray-100 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {dueMeetings.map(s => (
+                  <DueCard key={s.id} s={s} navigate={navigate} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Search & filter bar */}
         <div className="space-y-3 mb-5">
