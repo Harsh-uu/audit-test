@@ -272,3 +272,6 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
   - MEDIUM: Token refresh also checks `is_active` before issuing new tokens.
   - DEPLOYMENT: Removed `.env` / `.env.*` / `*.env` lines from root `.gitignore` so `.env` files are tracked and available for Emergent deployment.
 
+
+- **2026-Jun** — Meeting Schedules feature: Managers/admins can create recurring schedule templates per staff member (Monthly Supervision, Quarterly Appraisal, etc.) and bulk-assign them to all staff or a specific team. Due schedules appear on the Dashboard as compact colour-coded cards (red=overdue, blue=due-this-month) with a "Start" button that pre-fills NewMeeting with schedule_id, title, and attendee. Meeting types are fully configurable per org (name, frequency, colour). New pages: /admin/schedules (Schedules.js). New backend router: schedules.py. New DB collections: schedules, meeting_types.
+- **2026-Jun** — Speaker panel "Last saved by" badge: After saving speaker labels via `PATCH /api/review/{id}/speaker-text`, the Speaker Manager Panel shows "Last saved by [name] · [datetime]" in the panel header. Badge hides when there are unsaved changes (isDirty=true) and reappears after save with the updated timestamp.
