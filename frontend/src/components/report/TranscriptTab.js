@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown } from "lucide-react";
 import axios from "axios";
+import { toast } from "sonner";
 import { anonymiseTranscript } from "@/utils/anonymise";
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -199,6 +200,10 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
 
   // Initialise / reset localTurns + role map when speaker_text changes
   useEffect(() => {
+    // Don't overwrite the user's unsaved edits when a background fetchMeeting
+    // updates meeting.transcript.speaker_text with the old DB value.
+    // isDirty=false means either initial load or post-save, which are safe to reset.
+    if (isDirty) return;
     const map = {};
     for (const t of originalTurns) {
       if (!(t.speaker in map)) {
@@ -207,7 +212,6 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     }
     setSpeakerRoleMap(map);
     setLocalTurns(originalTurns.map(t => ({ ...t })));
-    setIsDirty(false);
   }, [meeting.transcript?.speaker_text]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Default to speaker view when speaker_text is present
@@ -345,9 +349,14 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
         { speaker_text: newText },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      // Immediately commit the saved state — must happen before onSpeakerTextGenerated
+      // so the isDirty guard in the useEffect doesn't skip the reset
+      setLocalTurns(finalTurns.map(t => ({ ...t })));
+      setIsDirty(false);
+      toast.success("Speaker labels saved");
       if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText);
     } catch (e) {
-      alert(e?.response?.data?.detail || "Failed to save. Please try again.");
+      toast.error(e?.response?.data?.detail || "Failed to save speaker labels. Please try again.");
     } finally {
       setSaving(false);
     }
