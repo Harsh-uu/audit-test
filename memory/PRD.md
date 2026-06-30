@@ -260,4 +260,12 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - **2026-Jun** — Fixed ALL toast notifications being silently swallowed: `<Toaster richColors position="top-right" />` was never mounted in `App.js`. Added it to the root. Now sign-off success/error, speaker save confirmation, action toggle errors, and mark-reviewed all show visible notifications regardless of which tab the user is on. (triggered by Sign Off, Mark Reviewed, etc.) because the `useEffect([meeting.transcript?.speaker_text])` had no `isDirty` guard. Fix: added `if (isDirty) return` guard so `fetchMeeting` never overwrites in-progress edits; `handleSave` now explicitly calls `setLocalTurns(finalTurns)` + `setIsDirty(false)` after a successful PATCH so the post-save reset path is clean. Added `toast.success("Speaker labels saved")` and `toast.error(...)` for user feedback.
 - **2026-Jun** — Action toggle error surfaced: `toggleActionComplete` now shows `toast.error()` instead of silently swallowing failures.
 - **2026-Jun** — Org-level custom branding: logo upload + brand colour. Applied to sidebar active nav items + mobile top bar. Branding tab added to Admin Panel. `GET /api/auth/me` enriched with `org_branding`. Public logo proxy endpoint added.
+- **2026-Jun (Security Hardening)** — Pre-deployment security fixes:
+  - CRITICAL: `POST /api/auth/register` now hardcodes `role="attendee"` regardless of client input. Elevated roles (admin/manager) can only be assigned by authenticated admins via `POST /api/admin/users`.
+  - HIGH: All meeting-scoped endpoints (`meetings.py`, `review.py`, `recording.py`, `processing.py`) now enforce `org_id == current_user.org_id` in every `find_one`/`update_one`/`delete_one` query — cross-tenant meeting access returns 404.
+  - HIGH: Admin user-mutation endpoints (`update_user`, `reset_user_password`) now scoped by `org_id`. Analytics/export/stats queries (`team-insights`, `meetings-brief`, `export-evidence`, `stats`) also filtered by `org_id`.
+  - HIGH: `list_meetings` now returns `[]` for users with no `org_id` instead of leaking all meetings.
+  - MEDIUM: `get_current_user` (deps.py) now checks `is_active` on every authenticated request. Deactivated users receive 401 immediately.
+  - MEDIUM: Token refresh also checks `is_active` before issuing new tokens.
+  - DEPLOYMENT: Removed `.env` / `.env.*` / `*.env` lines from root `.gitignore` so `.env` files are tracked and available for Emergent deployment.
 
