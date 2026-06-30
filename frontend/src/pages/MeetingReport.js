@@ -4,8 +4,9 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader, Shield, Send, RefreshCw,
+  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader, Shield, Send, RefreshCw, Lock, Info,
 } from "lucide-react";
+import { toast } from "sonner";
 import { EvidenceTab } from "@/components/report/EvidenceTab";
 import { TranscriptTab } from "@/components/report/TranscriptTab";
 import { CommentsTab } from "@/components/report/CommentsTab";
@@ -81,6 +82,7 @@ export default function MeetingReport() {
   const isSignedOff = ["signed_off", "shared"].includes(meeting?.status);
   const canReview = isInReview || isReviewed;
   const canSignOff = user?.role === "manager" || user?.role === "admin";
+  const canEditSpeakers = user?.role === "manager" || user?.role === "admin";
   const canAddComment = isSignedOff || ["admin", "manager"].includes(user?.role);
   const canAnonymise = ["manager", "admin"].includes(user?.role) && !!meeting?.transcript?.text;
 
@@ -319,22 +321,32 @@ export default function MeetingReport() {
                 <span className="hidden sm:inline">Sign Off</span>
               </button>
             )}
-            {(canReview || canSignOff) && (
+            {canSignOff && (
               <div className="flex items-center gap-2">
-                <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-sm">
-                  {/* PDF export — icon only on mobile */}
-                  <button onClick={exportPdf} disabled={exportingPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60 rounded-l-md" data-testid="export-pdf-btn" title="Export PDF">
-                    <FileText className="w-4 h-4 text-gray-500" />
-                    <span className="hidden sm:inline">{exportingPdf ? "Generating…" : "Export PDF"}</span>
-                  </button>
-                  {/* Full text toggle — desktop only */}
-                  <div className="hidden sm:flex border-l border-gray-200 px-2 py-2 items-center gap-1.5">
-                    <input type="checkbox" id="include-transcript" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
-                    <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none" title="Speaker turns are always included when available. This adds the full plain-text transcript.">+ Full text</label>
+                {isSignedOff ? (
+                  <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-sm">
+                    <button onClick={exportPdf} disabled={exportingPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60 rounded-l-md" data-testid="export-pdf-btn" title="Export PDF">
+                      <FileText className="w-4 h-4 text-gray-500" />
+                      <span className="hidden sm:inline">{exportingPdf ? "Generating…" : "Export PDF"}</span>
+                    </button>
+                    <div className="hidden sm:flex border-l border-gray-200 px-2 py-2 items-center gap-1.5">
+                      <input type="checkbox" id="include-transcript" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
+                      <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none">+ Full text</label>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <button
+                    onClick={() => toast.info("Sign off the meeting first to unlock PDF export and email sharing.")}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-400 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50 transition-colors"
+                    data-testid="export-pdf-locked-btn"
+                    title="Sign off required to export"
+                  >
+                    <Lock className="w-4 h-4" />
+                    <span className="hidden sm:inline">Export PDF</span>
+                  </button>
+                )}
                 {isSignedOff && (
-                  <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn" title="Send to Attendees">
+                  <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn">
                     <Send className="w-4 h-4" />
                     <span className="hidden sm:inline">Send to Attendees</span>
                   </button>
@@ -435,6 +447,7 @@ export default function MeetingReport() {
                     meeting={meeting}
                     onAnonymise={handleAnonymise}
                     canAnonymise={canAnonymise}
+                    canEditSpeakers={canEditSpeakers}
                     onSpeakerTextGenerated={(spText) => setMeeting(m => ({
                       ...m,
                       transcript: { ...m.transcript, speaker_text: spText }

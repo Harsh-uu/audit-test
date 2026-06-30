@@ -170,7 +170,7 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTextGenerated }) {
+export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated }) {
   const [viewMode, setViewMode] = useState("full");
 
   // ── Speaker editing state ─────────────────────────────────────────────────
@@ -506,16 +506,23 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
           <p className="p-5 text-sm text-gray-400 italic">Transcript not available.</p>
         ) : viewMode === "speaker" && hasSpeakerText ? (
           <>
-            {/* Speaker manager panel */}
-            <SpeakerManagerPanel
-              localTurns={localTurns}
-              onRenameAll={handleRenameAll}
-              onSwapAll={handleSwapAll}
-              onSave={handleSave}
-              onDiscard={handleDiscard}
-              saving={saving}
-              isDirty={isDirty}
-            />
+            {/* Speaker manager panel — managers/admins only */}
+            {canEditSpeakers ? (
+              <SpeakerManagerPanel
+                localTurns={localTurns}
+                onRenameAll={handleRenameAll}
+                onSwapAll={handleSwapAll}
+                onSave={handleSave}
+                onDiscard={handleDiscard}
+                saving={saving}
+                isDirty={isDirty}
+              />
+            ) : (
+              <div className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 border-b border-amber-100 text-xs text-amber-700">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                Speaker labels are view-only. Only managers can edit speaker assignments.
+              </div>
+            )}
 
             {/* Turns */}
             <div
@@ -528,21 +535,27 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, onSpeakerTex
                 const isMenuOpen = openTurnMenu === i;
                 return (
                   <div key={i} className={`flex gap-3 px-5 py-3.5 ${style.row}`}>
-                    {/* Speaker pill — clickable to reassign */}
+                    {/* Speaker pill — clickable to reassign (managers/admins only) */}
                     <div className="relative flex-shrink-0 mt-0.5">
-                      <button
-                        data-testid={`speaker-pill-${i}`}
-                        onMouseDown={e => { e.stopPropagation(); setOpenTurnMenu(isMenuOpen ? null : i); setSplitPopup(null); }}
-                        className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${style.pill} ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
-                        title="Click to reassign this speaker turn"
-                      >
-                        {turn.speaker}
-                        <svg className="w-2.5 h-2.5 opacity-70" viewBox="0 0 10 6" fill="none">
-                          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                        </svg>
-                      </button>
+                      {canEditSpeakers ? (
+                        <button
+                          data-testid={`speaker-pill-${i}`}
+                          onMouseDown={e => { e.stopPropagation(); setOpenTurnMenu(isMenuOpen ? null : i); setSplitPopup(null); }}
+                          className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${style.pill} ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
+                          title="Click to reassign this speaker turn"
+                        >
+                          {turn.speaker}
+                          <svg className="w-2.5 h-2.5 opacity-70" viewBox="0 0 10 6" fill="none">
+                            <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          </svg>
+                        </button>
+                      ) : (
+                        <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full h-fit ${style.pill}`}>
+                          {turn.speaker}
+                        </span>
+                      )}
 
-                      {isMenuOpen && (
+                      {canEditSpeakers && isMenuOpen && (
                         <div
                           onMouseDown={e => e.stopPropagation()}
                           data-testid={`turn-menu-${i}`}
