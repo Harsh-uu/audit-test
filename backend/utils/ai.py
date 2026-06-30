@@ -571,7 +571,7 @@ async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
 {"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "likely_evidence|needs_review|not_enough_evidence"}]}
 Only include criteria with actual evidence. Return empty mappings array if nothing found."""
 
-    chat = LlmChat(api_key=api_key, session_id=f"rescan_{uuid.uuid4()}", system_message=system).with_model("openai", "gpt-4o")
+    chat = LlmChat(api_key=api_key, session_id=f"rescan_{uuid.uuid4()}", system_message=system).with_model("openai", "o4-mini").with_params(reasoning_effort="high")
     full = ""
     async for event in chat.stream_message(UserMessage(text=f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\nTranscript:\n{transcript_text[:5000]}")):
         from emergentintegrations.llm.chat import TextDelta, StreamDone
@@ -673,7 +673,7 @@ Provide your analysis as JSON. Only map regulations/standards where there is act
         api_key=api_key,
         session_id=f"analysis_{uuid.uuid4()}",
         system_message=ANALYSIS_SYSTEM_PROMPT,
-    ).with_model("openai", "gpt-4o")
+    ).with_model("openai", "o4-mini").with_params(reasoning_effort="high")
 
     full_response = ""
     async for event in chat.stream_message(UserMessage(text=user_prompt)):
