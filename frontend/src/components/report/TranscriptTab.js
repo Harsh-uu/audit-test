@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown } from "lucide-react";
+import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { anonymiseTranscript } from "@/utils/anonymise";
@@ -193,6 +193,8 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [openTurnMenu, setOpenTurnMenu] = useState(null);
+  const [editingTurnIndex, setEditingTurnIndex] = useState(null);
+  const [editingTurnText, setEditingTurnText] = useState("");
 
   // ── Full-text anonymise popup ─────────────────────────────────────────────
   const [selectionText, setSelectionText] = useState("");
@@ -341,6 +343,8 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   const handleDiscard = useCallback(() => {
     setLocalTurns(originalTurns.map(t => ({ ...t })));
     setDirty(false);
+    setEditingTurnIndex(null);
+    setEditingTurnText("");
   }, [originalTurns]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async (stagedOverrides = {}) => {
@@ -392,6 +396,22 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     }
   };
 
+  // ── Turn text inline editing ───────────────────────────────────────────────
+  const handleTurnTextSave = useCallback((index) => {
+    const trimmed = editingTurnText.trim();
+    if (trimmed) {
+      setLocalTurns(prev => prev.map((t, i) => i === index ? { ...t, text: trimmed } : t));
+      setDirty(true);
+    }
+    setEditingTurnIndex(null);
+    setEditingTurnText("");
+  }, [editingTurnText, setDirty]);
+
+  const handleTurnTextCancel = useCallback(() => {
+    setEditingTurnIndex(null);
+    setEditingTurnText("");
+  }, []);
+
   // ── Anonymise selection (Full Text only) ──────────────────────────────────
   const handleFullTextMouseUp = useCallback(() => {
     if (!canAnonymise) return;
@@ -422,6 +442,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
 
   // ── Split turn: detect selection within a specific turn ───────────────────
   const handleSpeakerViewMouseUp = useCallback(() => {
+    if (editingTurnIndex !== null) return; // Don't activate split popup while editing turn text
     const sel = window.getSelection();
     const selectedText = sel?.toString().trim();
     if (!selectedText || selectedText.length < 2) { setSplitPopup(null); return; }
@@ -455,7 +476,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       top: Math.max(10, rect.top - 50),
       left: rect.left + rect.width / 2,
     });
-  }, []);
+  }, [editingTurnIndex]);
 
   const raw = anonymiseTranscript(meeting.transcript?.text, meeting.attendees || []);
   const wordCount = raw ? raw.trim().split(/\s+/).filter(Boolean).length : 0;
@@ -469,7 +490,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
           <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <p className="text-xs text-amber-700 flex-1">
             {viewMode === "speaker"
-              ? "Rename speakers in the panel. Click any pill to reassign a turn. Select text within a turn to split it into separate turns."
+              ? "Rename speakers in the panel. Click any pill to reassign a turn. Click the pencil icon to edit turn text. Select text within a turn to split it."
               : canAnonymise
               ? "Highlight any name and click Anonymise to replace it with an initial."
               : "Transcript is read-only. Use the Evidence tab to edit summaries and evidence wording."}
@@ -617,13 +638,67 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                       )}
                     </div>
 
-                    {/* Turn text — selectable for splitting */}
-                    <p
-                      data-turn-index={i}
-                      className="text-sm text-gray-800 leading-relaxed select-text cursor-text"
-                    >
-                      {turn.text}
-                    </p>
+                    {/* Turn text — editable by managers, selectable for splitting */}
+                    <div className="flex-1 min-w-0 relative group/turntext">
+                      {canEditSpeakers && editingTurnIndex === i ? (
+                        <div onMouseDown={e => e.stopPropagation()}>
+                          <textarea
+                            autoFocus
+                            value={editingTurnText}
+                            onChange={e => setEditingTurnText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Escape") handleTurnTextCancel();
+                              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") handleTurnTextSave(i);
+                            }}
+                            className="w-full text-sm text-gray-800 leading-relaxed border border-blue-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none bg-white"
+                            rows={Math.max(2, Math.ceil(editingTurnText.length / 80))}
+                            data-testid={`turn-text-edit-${i}`}
+                          />
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            <button
+                              onMouseDown={e => { e.preventDefault(); handleTurnTextSave(i); }}
+                              className="flex items-center gap-1 text-xs px-2.5 py-1 bg-[#1E3A8A] text-white rounded hover:bg-[#1E40AF] transition-colors"
+                              data-testid={`turn-text-save-${i}`}
+                            >
+                              <Check className="w-3 h-3" /> Save
+                            </button>
+                            <button
+                              onMouseDown={e => { e.preventDefault(); handleTurnTextCancel(); }}
+                              className="text-xs px-2.5 py-1 border border-gray-200 text-gray-600 rounded hover:bg-gray-50 transition-colors"
+                              data-testid={`turn-text-cancel-${i}`}
+                            >
+                              Cancel
+                            </button>
+                            <span className="text-xs text-gray-400 hidden sm:inline">Ctrl+Enter · Esc to cancel</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <p
+                            data-turn-index={i}
+                            className="text-sm text-gray-800 leading-relaxed select-text cursor-text pr-5"
+                          >
+                            {turn.text}
+                          </p>
+                          {canEditSpeakers && (
+                            <button
+                              onMouseDown={e => {
+                                e.stopPropagation();
+                                setSplitPopup(null);
+                                setOpenTurnMenu(null);
+                                setEditingTurnIndex(i);
+                                setEditingTurnText(turn.text);
+                              }}
+                              className="absolute top-0 right-0 opacity-0 group-hover/turntext:opacity-100 transition-opacity text-gray-400 hover:text-gray-700 p-0.5 rounded hover:bg-white/80"
+                              data-testid={`turn-text-edit-btn-${i}`}
+                              title="Edit turn text"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}

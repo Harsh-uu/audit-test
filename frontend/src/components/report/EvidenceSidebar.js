@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
-  FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award,
+  FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award, RefreshCw, Loader,
 } from "lucide-react";
 
 const CONFIDENCE_CONFIG = {
@@ -261,17 +261,42 @@ function CareCertDrillDown({ mappings }) {
   );
 }
 
-export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false }) {
+export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence }) {
   const totalCount = (analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0);
   const wrapperClass = className !== undefined ? className : "lg:col-span-5 bg-[#F8F9FA] overflow-y-auto";
+  const [rescanning, setRescanning] = useState(false);
+
+  const handleRescan = async () => {
+    if (!onRescanEvidence) return;
+    setRescanning(true);
+    try {
+      await onRescanEvidence();
+    } finally {
+      setRescanning(false);
+    }
+  };
 
   return (
     <div className={wrapperClass} style={noMaxHeight ? {} : { maxHeight: "calc(100vh - 80px)" }}>
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-900 font-display">Compliance Evidence</h2>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>{totalCount} items</span>
+          <div className="flex items-center gap-2">
+            {canRescan && (
+              <button
+                onClick={handleRescan}
+                disabled={rescanning}
+                data-testid="rescan-evidence-btn"
+                title="Re-scan compliance evidence using the current transcript"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors disabled:opacity-60"
+              >
+                {rescanning
+                  ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                  : <RefreshCw className="w-3.5 h-3.5" />}
+                {rescanning ? "Re-scanning…" : "Re-scan"}
+              </button>
+            )}
+            <span className="text-xs text-gray-500">{totalCount} items</span>
           </div>
         </div>
 

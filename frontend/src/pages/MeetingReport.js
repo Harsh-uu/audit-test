@@ -239,6 +239,23 @@ export default function MeetingReport() {
     }
   };
 
+  const rescanEvidence = async () => {
+    if (speakersDirty) {
+      toast.error("You have unsaved transcript changes. Save them in the Transcript tab first, then re-scan.");
+      return;
+    }
+    try {
+      const { data } = await axios.post(`${API}/review/${meetingId}/rescan-evidence`, {}, getAuthConfig());
+      setMeeting(m => ({ ...m, analysis: data.analysis }));
+      if (data.analysis?.edited_summary || data.analysis?.summary) {
+        setSummaryText(data.analysis?.edited_summary || data.analysis?.summary || "");
+      }
+      toast.success("Compliance evidence re-scanned successfully");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Re-scan failed. Please try again.");
+    }
+  };
+
   const exportPdf = async () => {
     setExportingPdf(true);
     try {
@@ -495,6 +512,8 @@ export default function MeetingReport() {
                       analysis={analysis}
                       canReview={canReview}
                       updateEvidence={updateEvidence}
+                      canRescan={canEditSpeakers && !!meeting?.transcript_id}
+                      onRescanEvidence={rescanEvidence}
                       className="bg-[#F8F9FA]"
                       noMaxHeight
                     />
@@ -507,6 +526,8 @@ export default function MeetingReport() {
               analysis={analysis}
               canReview={canReview}
               updateEvidence={updateEvidence}
+              canRescan={canEditSpeakers && !!meeting?.transcript_id}
+              onRescanEvidence={rescanEvidence}
               className="hidden lg:block lg:col-span-5 bg-[#F8F9FA] overflow-y-auto"
             />
           </div>
