@@ -75,6 +75,7 @@ export default function MeetingReport() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailMessage, setEmailMessage] = useState("");
   const [showSignOffConfirm, setShowSignOffConfirm] = useState(false);
+  const [speakersDirty, setSpeakersDirty] = useState(false);
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
   const isInReview = meeting?.status === "in_review";
@@ -93,7 +94,12 @@ export default function MeetingReport() {
   const fetchMeeting = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/meetings/${meetingId}`, getAuthConfig());
-      setMeeting(data);
+      // Guard: never wipe an existing transcript if the API response omitted it
+      // (can happen on K8s pod restart when the transcript DB query transiently fails).
+      setMeeting(prev => ({
+        ...data,
+        transcript: data.transcript || prev?.transcript,
+      }));
       if (data.analysis?.edited_summary || data.analysis?.summary) {
         setSummaryText(data.analysis?.edited_summary || data.analysis?.summary || "");
       }
@@ -185,6 +191,10 @@ export default function MeetingReport() {
   };
 
   const markReviewed = async () => {
+    if (speakersDirty) {
+      toast.error("You have unsaved speaker label changes. Please save them in the Transcript tab before marking reviewed.");
+      return;
+    }
     setSubmitting(true);
     try {
       const { data } = await axios.post(`${API}/review/${meetingId}/mark-reviewed`, {}, getAuthConfig());
@@ -196,6 +206,10 @@ export default function MeetingReport() {
 
   const signOff = async () => {
     setShowSignOffConfirm(false);
+    if (speakersDirty) {
+      toast.error("You have unsaved speaker label changes. Please save them in the Transcript tab first.");
+      return;
+    }
     setSubmitting(true);
     try {
       await axios.post(`${API}/review/${meetingId}/signoff`, {}, getAuthConfig());
@@ -452,6 +466,7 @@ export default function MeetingReport() {
                     onAnonymise={handleAnonymise}
                     canAnonymise={canAnonymise}
                     canEditSpeakers={canEditSpeakers}
+                    onDirtyChange={(dirty) => setSpeakersDirty(dirty)}
                     onSpeakerTextGenerated={(spText) => setMeeting(m => ({
                       ...m,
                       transcript: { ...m.transcript, speaker_text: spText }

@@ -171,13 +171,21 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated }) {
+export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange }) {
   const [viewMode, setViewMode] = useState("full");
 
   // ── Speaker editing state ─────────────────────────────────────────────────
   const [localTurns, setLocalTurns] = useState([]);
   const [speakerRoleMap, setSpeakerRoleMap] = useState({}); // name → "manager"|"worker"
   const [isDirty, setIsDirty] = useState(false);
+  // Ref mirrors isDirty so the useEffect always reads the latest value
+  // even if a concurrent render has not yet committed the state update.
+  const isDirtyRef = React.useRef(false);
+  const setDirty = React.useCallback((val) => {
+    isDirtyRef.current = val;
+    setIsDirty(val);
+    if (onDirtyChange) onDirtyChange(val);
+  }, [onDirtyChange]); // eslint-disable-line react-hooks/exhaustive-deps
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [openTurnMenu, setOpenTurnMenu] = useState(null);
@@ -200,10 +208,10 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
 
   // Initialise / reset localTurns + role map when speaker_text changes
   useEffect(() => {
-    // Don't overwrite the user's unsaved edits when a background fetchMeeting
-    // updates meeting.transcript.speaker_text with the old DB value.
-    // isDirty=false means either initial load or post-save, which are safe to reset.
-    if (isDirty) return;
+    // Use the ref (not state) to read isDirty — avoids stale-closure issues in
+    // React 19 Concurrent Mode where the committed render may differ from the
+    // render that enqueued setIsDirty(false) earlier in the same flush.
+    if (isDirtyRef.current) return;
     const map = {};
     for (const t of originalTurns) {
       if (!(t.speaker in map)) {
@@ -250,19 +258,19 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       const { [original]: role, ...rest } = prev;
       return { ...rest, [newName]: role };
     });
-    setIsDirty(true);
+    setDirty(true);
   }, []);
 
   const handleSwapAll = useCallback(() => {
     if (uniqueSpeakers.length !== 2) return;
     const [a, b] = uniqueSpeakers;
     setLocalTurns(prev => prev.map(t => ({ ...t, speaker: t.speaker === a ? b : a })));
-    setIsDirty(true);
+    setDirty(true);
   }, [uniqueSpeakers]);
 
   const handleTurnAssign = useCallback((index, newSpeaker) => {
     setLocalTurns(prev => prev.map((t, i) => i === index ? { ...t, speaker: newSpeaker } : t));
-    setIsDirty(true);
+    setDirty(true);
     setOpenTurnMenu(null);
   }, []);
 
@@ -293,7 +301,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       }
       return next;
     });
-    setIsDirty(true);
+    setDirty(true);
     setOpenTurnMenu(null);
   }, [uniqueSpeakers, localTurns]);
 
@@ -321,15 +329,15 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       next.splice(turnIndex, 1, ...parts);
       return next;
     });
-    setIsDirty(true);
+    setDirty(true);
     setSplitPopup(null);
     window.getSelection()?.removeAllRanges();
   }, [splitPopup, localTurns]);
 
   const handleDiscard = useCallback(() => {
     setLocalTurns(originalTurns.map(t => ({ ...t })));
-    setIsDirty(false);
-  }, [originalTurns]);
+    setDirty(false);
+  }, [originalTurns, setDirty]);
 
   const handleSave = async (stagedOverrides = {}) => {
     setSaving(true);
@@ -352,7 +360,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       // Immediately commit the saved state — must happen before onSpeakerTextGenerated
       // so the isDirty guard in the useEffect doesn't skip the reset
       setLocalTurns(finalTurns.map(t => ({ ...t })));
-      setIsDirty(false);
+      setDirty(false);
       toast.success("Speaker labels saved");
       if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText);
     } catch (e) {
