@@ -38,6 +38,10 @@ class TeamCreate(BaseModel):
     supervisor_user_id: Optional[str] = None
 
 
+class OrgNameUpdate(BaseModel):
+    name: str
+
+
 class MemberAssign(BaseModel):
     user_id: str
 
@@ -51,6 +55,26 @@ class InviteUserRequest(BaseModel):
     email: EmailStr
     role: str
     password: str
+
+
+@router.patch("/name")
+async def update_org_name(
+    data: OrgNameUpdate,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Rename the organisation. Available to admins and managers."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+    org_id = current_user.get("org_id")
+    await db.organisations.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {"name": name, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"ok": True, "name": name}
 
 
 @router.get("/structure")

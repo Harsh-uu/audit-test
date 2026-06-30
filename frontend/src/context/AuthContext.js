@@ -121,6 +121,11 @@ export function AuthProvider({ children }) {
     setUser(u => u ? { ...u, org_branding: branding } : u);
   };
 
+  // Mutates the in-memory user.org_name without a round-trip to /me
+  const updateOrgName = (name) => {
+    setUser(u => u ? { ...u, org_name: name } : u);
+  };
+
   // Inject CSS variable whenever brand color changes
   useEffect(() => {
     const color = user?.org_branding?.primary_color;
@@ -134,7 +139,7 @@ export function AuthProvider({ children }) {
   }, [user?.org_branding?.primary_color]);
 
   const contextValue = useMemo(
-    () => ({ user, login, register, logout, getAuthConfig, silentRefresh, API, updateOrgBranding }),
+    () => ({ user, login, register, logout, getAuthConfig, silentRefresh, API, updateOrgBranding, updateOrgName }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user]
   );
