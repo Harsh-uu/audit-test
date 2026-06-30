@@ -345,7 +345,7 @@ export default function OrgStructure() {
               Drag staff between teams to reassign · {assignedCount}/{totalUsers} staff assigned
             </p>
           </div>
-          {isAdmin && (
+          {canManage && (
             <button
               onClick={() => { setShowAddSetting(true); setSettingForm({ name: "", description: "", manager_user_id: "" }); }}
               className="flex items-center gap-1.5 bg-[#1E3A8A] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#1E40AF] transition-colors"
@@ -386,7 +386,7 @@ export default function OrgStructure() {
                   <div className="text-center py-16 text-gray-400">
                     <Building2 className="w-10 h-10 mx-auto mb-3 opacity-20" />
                     <p className="text-sm font-medium">No settings yet</p>
-                    {isAdmin && <p className="text-xs mt-1">Use "Add Setting" to get started</p>}
+                    {canManage && <p className="text-xs mt-1">Use "Add Setting" to get started</p>}
                   </div>
                 )}
 
