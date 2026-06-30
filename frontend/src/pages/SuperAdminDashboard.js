@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy } from "lucide-react";
+import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy, Pencil, Trash2, Check } from "lucide-react";
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
@@ -44,6 +44,8 @@ export default function SuperAdminDashboard() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
+  const [editingUserId, setEditingUserId] = useState(null);
+  const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "", password: "" });
   const [showInviteAdmin, setShowInviteAdmin] = useState(false);
   const [orgForm, setOrgForm] = useState({ name: "" });
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "manager" });
@@ -113,6 +115,34 @@ export default function SuperAdminDashboard() {
       setError(err.response?.data?.detail || "Failed to create user");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleUpdateUser = async (userId) => {
+    setSubmitting(true); setError("");
+    try {
+      const payload = {};
+      if (editUserForm.name.trim()) payload.name = editUserForm.name.trim();
+      if (editUserForm.email.trim()) payload.email = editUserForm.email.trim();
+      if (editUserForm.role) payload.role = editUserForm.role;
+      if (editUserForm.password) payload.password = editUserForm.password;
+      await axios.patch(`${API}/super-admin/orgs/${selectedOrg.id}/users/${userId}`, payload, getAuthConfig());
+      setEditingUserId(null);
+      await loadOrgUsers(selectedOrg);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to update user");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm("Delete this user? This cannot be undone.")) return;
+    try {
+      await axios.delete(`${API}/super-admin/orgs/${selectedOrg.id}/users/${userId}`, getAuthConfig());
+      await loadOrgUsers(selectedOrg);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to delete user");
     }
   };
 
@@ -302,17 +332,95 @@ export default function SuperAdminDashboard() {
               ) : (
                 <div className="space-y-2">
                   {orgUsers.map(u => (
-                    <div key={u.id} className="flex items-center gap-3 p-3 bg-[#F8F9FA] rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-[#1E3A8A]/10 flex items-center justify-center flex-shrink-0">
-                        <span className="text-xs font-bold text-[#1E3A8A]">
-                          {u.name?.charAt(0)?.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                        <p className="text-xs text-gray-400 truncate">{u.email}</p>
-                      </div>
-                      <RoleBadge role={u.role} />
+                    <div key={u.id} className="border border-gray-100 rounded-lg bg-[#F8F9FA] overflow-hidden">
+                      {/* View row */}
+                      {editingUserId !== u.id ? (
+                        <div className="flex items-center gap-3 p-3">
+                          <div className="w-8 h-8 rounded-full bg-[#1E3A8A]/10 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-[#1E3A8A]">{u.name?.charAt(0)?.toUpperCase()}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
+                            <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                          </div>
+                          <RoleBadge role={u.role} />
+                          <button
+                            onClick={() => { setEditingUserId(u.id); setEditUserForm({ name: u.name, email: u.email, role: u.role, password: "" }); setError(""); }}
+                            className="p-1.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                            title="Edit user"
+                            data-testid={`edit-user-btn-${u.id}`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(u.id)}
+                            className="p-1.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
+                            title="Delete user"
+                            data-testid={`delete-user-btn-${u.id}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        /* Edit row */
+                        <div className="p-3 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              value={editUserForm.name}
+                              onChange={e => setEditUserForm(f => ({ ...f, name: e.target.value }))}
+                              placeholder="Full name"
+                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                              data-testid="edit-user-name"
+                            />
+                            <input
+                              type="email"
+                              value={editUserForm.email}
+                              onChange={e => setEditUserForm(f => ({ ...f, email: e.target.value }))}
+                              placeholder="Email"
+                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                              data-testid="edit-user-email"
+                            />
+                            <select
+                              value={editUserForm.role}
+                              onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))}
+                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                              data-testid="edit-user-role"
+                            >
+                              <option value="admin">Admin</option>
+                              <option value="manager">Manager</option>
+                              <option value="attendee">Attendee</option>
+                              <option value="shared_reviewer">Shared Reviewer</option>
+                            </select>
+                            <input
+                              type="password"
+                              value={editUserForm.password}
+                              onChange={e => setEditUserForm(f => ({ ...f, password: e.target.value }))}
+                              placeholder="New password (optional)"
+                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                              data-testid="edit-user-password"
+                            />
+                          </div>
+                          {error && <p className="text-xs text-red-600">{error}</p>}
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => handleUpdateUser(u.id)}
+                              disabled={submitting}
+                              className="flex items-center gap-1 bg-[#1E3A8A] text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-[#1E40AF] disabled:opacity-60 transition-colors"
+                              data-testid="save-user-btn"
+                            >
+                              <Check className="w-3 h-3" /> Save
+                            </button>
+                            <button
+                              onClick={() => { setEditingUserId(null); setError(""); }}
+                              className="px-3 py-1.5 rounded text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+                              data-testid="cancel-edit-user-btn"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -53,6 +53,13 @@ class CreateOrgUserRequest(BaseModel):
     role: str = "manager"
 
 
+class UpdateOrgUserRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role: Optional[str] = None
+    password: Optional[str] = None   # only updated if provided
+
+
 @router.get("/orgs")
 async def list_orgs(db=Depends(get_db), current_user=Depends(get_current_user)):
     _require_super_admin(current_user)
@@ -181,6 +188,72 @@ async def create_org_user(
         "role": doc["role"],
         "org_id": org_id,
     }
+
+
+@router.patch("/orgs/{org_id}/users/{user_id}")
+async def update_org_user(
+    org_id: str,
+    user_id: str,
+    data: UpdateOrgUserRequest,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_super_admin(current_user)
+    try:
+        uid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    user = await db.users.find_one({"_id": uid, "org_id": org_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found in this organisation")
+
+    updates: dict = {}
+    if data.name is not None:
+        updates["name"] = data.name.strip()
+    if data.email is not None:
+        email_lower = data.email.lower()
+        clash = await db.users.find_one({"email": email_lower, "_id": {"$ne": uid}})
+        if clash:
+            raise HTTPException(status_code=400, detail="Email already in use by another account")
+        updates["email"] = email_lower
+    if data.role is not None:
+        valid_roles = {"admin", "manager", "attendee", "shared_reviewer"}
+        if data.role not in valid_roles:
+            raise HTTPException(status_code=400, detail=f"Role must be one of {valid_roles}")
+        updates["role"] = data.role
+    if data.password:
+        from routers.auth import hash_password
+        updates["password_hash"] = hash_password(data.password)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"_id": uid}, {"$set": updates})
+
+    updated = await db.users.find_one({"_id": uid}, {"password_hash": 0})
+    return _to(updated)
+
+
+@router.delete("/orgs/{org_id}/users/{user_id}", status_code=204)
+async def delete_org_user(
+    org_id: str,
+    user_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_super_admin(current_user)
+    try:
+        uid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    user = await db.users.find_one({"_id": uid, "org_id": org_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found in this organisation")
+
+    await db.users.delete_one({"_id": uid})
 
 
 # ── Invite Admin ──────────────────────────────────────────────────────────────
