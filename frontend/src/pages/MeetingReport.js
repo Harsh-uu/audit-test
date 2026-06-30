@@ -188,9 +188,9 @@ export default function MeetingReport() {
     setSubmitting(true);
     try {
       const { data } = await axios.post(`${API}/review/${meetingId}/mark-reviewed`, {}, getAuthConfig());
-      setActionMessage(data.message || "Marked as reviewed");
-      fetchMeeting();
-    } catch (err) { setActionMessage(err.response?.data?.detail || "Failed to mark reviewed"); }
+      toast.success(data.message || "Session marked as reviewed");
+      await fetchMeeting();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to mark reviewed"); }
     finally { setSubmitting(false); }
   };
 
@@ -199,10 +199,11 @@ export default function MeetingReport() {
     setSubmitting(true);
     try {
       await axios.post(`${API}/review/${meetingId}/signoff`, {}, getAuthConfig());
-      setActionMessage("Meeting signed off successfully");
-      fetchMeeting();
-    } catch (err) { setActionMessage(err.response?.data?.detail || "Failed to sign off"); }
-    finally { setSubmitting(false); }
+      await fetchMeeting();
+      toast.success("Meeting signed off. PDF export is now available.");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to sign off. Please try again.");
+    } finally { setSubmitting(false); }
   };
 
   const addComment = async () => {
