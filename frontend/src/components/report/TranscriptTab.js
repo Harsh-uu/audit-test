@@ -184,8 +184,12 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   const setDirty = React.useCallback((val) => {
     isDirtyRef.current = val;
     setIsDirty(val);
-    if (onDirtyChange) onDirtyChange(val);
-  }, [onDirtyChange]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Propagate dirty state to parent (MeetingReport) via effect — the React way
+  useEffect(() => {
+    if (onDirtyChange) onDirtyChange(isDirty);
+  }, [isDirty]); // eslint-disable-line react-hooks/exhaustive-deps
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [openTurnMenu, setOpenTurnMenu] = useState(null);
@@ -337,7 +341,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   const handleDiscard = useCallback(() => {
     setLocalTurns(originalTurns.map(t => ({ ...t })));
     setDirty(false);
-  }, [originalTurns, setDirty]);
+  }, [originalTurns]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async (stagedOverrides = {}) => {
     setSaving(true);
