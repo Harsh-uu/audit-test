@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
@@ -8,17 +8,25 @@ import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, ChevronRigh
 export default function NewMeeting() {
   const { getAuthConfig, API } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState(1); // 1: details, 2: attendees + manager
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Read pre-fill params from URL (set by schedule "Start Meeting" button)
+  const prefillTitle = searchParams.get("title") || "";
+  const prefillAttendeeId = searchParams.get("attendee_id") || "";
+  const prefillScheduleId = searchParams.get("schedule_id") || "";
+
   const [form, setForm] = useState({
-    title: "",
+    title: prefillTitle,
     date: new Date().toISOString().slice(0, 16),
     location: "",
     meeting_type: "supervision",
-    attendee_ids: [],
+    attendee_ids: prefillAttendeeId ? [prefillAttendeeId] : [],
     sign_off_manager_id: "",
+    schedule_id: prefillScheduleId || undefined,
   });
 
   useEffect(() => {

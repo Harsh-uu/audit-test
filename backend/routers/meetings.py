@@ -24,6 +24,7 @@ class CreateMeetingRequest(BaseModel):
     meeting_type: str = "supervision"
     attendee_ids: List[str] = []
     sign_off_manager_id: Optional[str] = None
+    schedule_id: Optional[str] = None
 
 
 class UpdateAttendeesRequest(BaseModel):
@@ -82,6 +83,7 @@ async def create_meeting(data: CreateMeetingRequest, db=Depends(get_db), current
         "attendees": attendees,
         "team_id": current_user.get("team_id") or None,
         "setting_id": current_user.get("setting_id") or None,
+        "schedule_id": data.schedule_id or None,
         "status": "draft",
         "recording_events": [],
         "paused_periods": [],

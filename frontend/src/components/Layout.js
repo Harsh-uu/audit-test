@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
-  TrendingUp, Download, BarChart2, X, Building2, ShieldCheck
+  TrendingUp, Download, BarChart2, X, Building2, ShieldCheck, Calendar
 } from "lucide-react";
 
 export default function Layout({ children }) {
@@ -159,7 +159,10 @@ export default function Layout({ children }) {
             {[
               { path: "/admin/team", icon: BarChart2, label: "Team Intelligence", testId: "nav-team-intelligence" },
               ...(user?.role === "admin" || user?.role === "manager"
-                ? [{ path: "/organisation", icon: Building2, label: "Organisation", testId: "nav-organisation" }]
+                ? [
+                    { path: "/organisation", icon: Building2, label: "Organisation", testId: "nav-organisation" },
+                    { path: "/admin/schedules", icon: Calendar, label: "Schedules", testId: "nav-schedules" },
+                  ]
                 : []),
               ...(user?.role === "admin"
                 ? [{ path: "/admin", icon: BookOpen, label: "Standards Library", testId: "nav-standards-library", exact: true }]

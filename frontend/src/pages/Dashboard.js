@@ -60,12 +60,19 @@ export default function Dashboard() {
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [orgFilter, setOrgFilter] = useState({ setting_id: "", team_id: "" });
   const [orgStructure, setOrgStructure] = useState({ settings: [], unassigned_users: [] });
+  const [dueMeetings, setDueMeetings] = useState([]);
+  const [dueLoading, setDueLoading] = useState(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchMeetings();
     if (user?.role === "admin" || user?.role === "manager") {
       axios.get(`${API}/org/structure`, getAuthConfig()).then(r => setOrgStructure(r.data)).catch(() => {});
+      setDueLoading(true);
+      axios.get(`${API}/schedules/due`, getAuthConfig())
+        .then(r => setDueMeetings(r.data))
+        .catch(() => {})
+        .finally(() => setDueLoading(false));
     }
     const interval = setInterval(fetchMeetings, 15000);
     return () => clearInterval(interval);
