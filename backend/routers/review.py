@@ -264,16 +264,9 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, db=Depend
     if meeting.get("status") not in ["reviewed", "in_review"]:
         raise HTTPException(status_code=400, detail="Meeting must be reviewed before sign-off")
 
-    # Check all attendees reviewed (allow sign-off anyway if no attendees)
-    attendees = meeting.get("attendees", [])
-    unreviewed = [a for a in attendees if not a.get("reviewed", False)]
-    if unreviewed:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{len(unreviewed)} attendee(s) have not yet reviewed: {', '.join([a['name'] for a in unreviewed])}"
-        )
-
     now = datetime.now(timezone.utc).isoformat()
+    attendees = meeting.get("attendees", [])
+    unreviewed_names = [a["name"] for a in attendees if not a.get("reviewed", False)]
     sign_off_record = {
         "signed_by": current_user["id"],
         "signed_by_name": current_user["name"],
@@ -293,7 +286,7 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, db=Depend
     # Schedule audio deletion after 5 minutes
     background_tasks.add_task(delete_audio_after_grace, meeting_id, db)
 
-    return {"message": "Meeting signed off successfully", "signed_at": now}
+    return {"message": "Meeting signed off successfully", "signed_at": now, "unreviewed_attendees": unreviewed_names}
 
 
 @router.patch("/{meeting_id}/actions/{action_id}")

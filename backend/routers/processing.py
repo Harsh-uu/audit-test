@@ -190,8 +190,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
 
-        # Add completed field to new actions + prepend rolled-over actions
+        # Add id + completed field to new actions + prepend rolled-over actions
         for item in analysis_result.get("actions", []):
+            if not item.get("id"):
+                item["id"] = f"action_{uuid.uuid4().hex[:12]}"
             item.setdefault("completed", False)
             item.setdefault("completed_at", None)
             item.setdefault("is_rolled_over", False)

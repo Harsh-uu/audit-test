@@ -175,7 +175,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 ## Prioritized Backlog
 
 ### P0 (Critical)
-- None outstanding
+- None — all resolved
 
 ### P1 (Important)
 - None outstanding
@@ -256,6 +256,8 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 ## Changelog (Continued)
 - **2026-Jun** — Mobile responsive fix: Added "Compliance" as a 5th mobile-only tab on Meeting Report page.
 - **2026-Jun** — Hidden mobile instruction box (yellow/amber) on TranscriptTab on small screens (`hidden sm:flex`).
-- **2026-Jun** — Sign-off confirmation modal with outstanding actions warning added to MeetingReport.js.
+- **2026-Jun** — Action toggle bug fixed: all AI-generated actions now assigned a unique `id` (`action_{uuid}`) at analysis creation time in `processing.py`; previously only rolled-over actions had IDs, causing regular actions to fail with 404 on toggle.
+- **2026-Jun** — Sign-off unblocked: removed hard "all attendees must review" block from backend `POST /review/{id}/signoff`. Managers can now sign off at any time. Confirmation modal upgraded to show two separate informational warnings — blue box for unreviewed attendees, amber box for outstanding actions — both non-blocking.
+- **2026-Jun** — Action toggle error surfaced: `toggleActionComplete` now shows `toast.error()` instead of silently swallowing failures.
 - **2026-Jun** — Org-level custom branding: logo upload + brand colour. Applied to sidebar active nav items + mobile top bar. Branding tab added to Admin Panel. `GET /api/auth/me` enriched with `org_branding`. Public logo proxy endpoint added.
 
