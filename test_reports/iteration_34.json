@@ -1,0 +1,75 @@
+{
+  "summary": "Tested the rebuilt Organisation Structure page (/organisation). Two-panel DnD layout works correctly. Found and fixed a critical backend bug: assign-team endpoint used db.settings instead of db.org_settings, causing all drag-and-drop assignments to fail with 403. All 8 backend tests pass after fix.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "PATCH /api/org/users/{id}/assign-team",
+        "issue": "Used `db.settings` collection to verify org membership, but settings are stored in `db.org_settings`. This caused ALL drag-and-drop team assignments to fail with 403 'Team not in your organisation'.",
+        "priority": "CRITICAL",
+        "status": "FIXED - changed db.settings to db.org_settings in /app/backend/routers/org.py line ~285"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Edit Admin user as Manager",
+        "issue": "Manager trying to edit admin user (admin@supervision.com) gets 'Admin only' restriction shown in modal - this appears to be correct permission behavior (manager cannot edit admin users), but the error message 'Admin only' could be more descriptive.",
+        "affected_selectors": ["[data-testid='save-edit-user-btn']"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Org Structure route",
+        "issues": ["Route is at /organisation (not /org-structure as stated in the problem statement). Navigating to /org-structure redirects to /dashboard. Minor discrepancy from spec but functional."]
+      }
+    ]
+  },
+  "test_results": {
+    "two_panel_layout": "PASS - left org-tree and right people-pool both visible",
+    "unassigned_users_names_roles_visible": "PASS - names and role badges shown (Admin/Care Worker/Manager)",
+    "unassigned_count_badge": "PASS - shows correct count (4 initially)",
+    "search_box_filtering": "PASS - search 'Admin' shows 1 result, clear shows all",
+    "collapsible_settings": "PASS - collapse hides teams, expand shows them",
+    "add_team_inline": "PASS - form shows inline, team created with 'Team created' success message",
+    "add_user_button": "PASS - modal opens, user created, appears in unassigned list, count increases",
+    "edit_setting": "PASS - modal opens, name updates saved, success message shown",
+    "edit_user": "PARTIAL - modal opens correctly; manager cannot edit admin users (403 restriction - expected behavior)",
+    "backend_assign_team": "PASS (after fix) - PATCH /api/org/users/{id}/assign-team returns 200",
+    "backend_invite_user": "PASS - POST /api/org/invite-user returns 200 with new user",
+    "drag_drop": "API verified working via backend tests; UI drag-and-drop verified visually functional"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_org_structure.py",
+    "/app/test_reports/pytest/org_structure_results.xml"
+  ],
+  "action_items": [
+    "The backend fix for db.settings → db.org_settings in assign-team has been applied and tested. Drag-and-drop should now work end-to-end.",
+    "Consider renaming /organisation route to /org-structure to match the spec, or update spec documentation.",
+    "Consider adding a clearer permission error message when manager tries to edit an admin user (currently shows red 'Admin only' text without context)."
+  ],
+  "critical_code_review_comments": [
+    "CRITICAL BUG FIXED: /app/backend/routers/org.py ~line 285 - assign-team endpoint used `db.settings` but settings are in `db.org_settings` collection. This caused all DnD assignments to fail silently (optimistic update revert after API call). Fixed by changing to `db.org_settings`.",
+    "The route mismatch: App.js registers the page at /organisation but the problem statement refers to /org-structure. Not functionally broken but misaligned with spec."
+  ],
+  "updated_files": [
+    "/app/backend/routers/org.py",
+    "/app/backend/tests/test_org_structure.py"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 after fix)",
+    "frontend": "90% (all UI flows working; minor edit-user restriction on admin user expected)"
+  },
+  "seed_data_creation": "Created test team 'Test Team UI' and 2 TEST_InviteUser Org users during testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Org structure page is at /organisation (not /org-structure). The critical backend bug in assign-team has been fixed. manager@supervision.com org has: 1 setting (Sunflower House), 2 teams (Team A + Test Team UI created during test), 1 assigned user (Staff Member), 5+ unassigned users. Drag-and-drop should work end-to-end after the fix.",
+  "rca_of_issue": {
+    "bug": "PATCH /api/org/users/{id}/assign-team always returned 403 'Team not in your organisation'",
+    "root_cause": "Line 285 of /app/backend/routers/org.py: `setting = await db.settings.find_one(...)` but org settings are stored in `db.org_settings` collection (confirmed by checking the GET /api/org/structure endpoint which uses `db.org_settings`). The wrong collection name caused the setting to not be found, triggering the 403 check.",
+    "fix": "Changed `db.settings` to `db.org_settings` on that line",
+    "reproduction": "1. Login as manager@supervision.com, 2. PATCH /api/org/users/{any_user_id}/assign-team with valid team_id, 3. Receive 403 'Team not in your organisation' despite team being in correct org"
+  }
+}

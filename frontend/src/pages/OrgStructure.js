@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  Building2, Users, ChevronRight, Plus, Edit2, Trash2, X, Check,
-  MapPin, UserCog, Loader, AlertCircle, CheckCircle, Pencil, KeyRound, ChevronDown,
+  Building2, Users, ChevronRight, ChevronDown, Plus, Edit2, Trash2, X, Check,
+  MapPin, UserCog, Loader, AlertCircle, CheckCircle, Pencil, KeyRound,
+  GripVertical, UserPlus, Search, UserCheck, Layers,
 } from "lucide-react";
+
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const ROLES = [
   { value: "attendee", label: "Care Worker / Attendee" },
@@ -13,6 +17,72 @@ const ROLES = [
   { value: "shared_reviewer", label: "Shared Reviewer" },
   { value: "admin", label: "Admin" },
 ];
+
+const ROLE_COLORS = {
+  admin: "bg-purple-100 text-purple-700",
+  manager: "bg-blue-100 text-blue-700",
+  shared_reviewer: "bg-indigo-100 text-indigo-700",
+  attendee: "bg-gray-100 text-gray-600",
+};
+
+const ROLE_LABELS = {
+  admin: "Admin",
+  manager: "Manager",
+  shared_reviewer: "Reviewer",
+  attendee: "Care Worker",
+};
+
+// ── Pure helpers ─────────────────────────────────────────────────────────────
+
+function findUser(userId, structure) {
+  const u = structure.unassigned_users.find(u => u.id === userId);
+  if (u) return u;
+  for (const s of structure.settings) {
+    for (const t of (s.teams || [])) {
+      const m = (t.members || []).find(m => m.id === userId);
+      if (m) return m;
+    }
+  }
+  return null;
+}
+
+function moveUserInStructure(prev, movedUser, fromTeamId, toTeamId) {
+  const newSettings = prev.settings.map(s => ({
+    ...s,
+    teams: (s.teams || []).map(t => {
+      if (fromTeamId && t.id === fromTeamId) {
+        return { ...t, members: (t.members || []).filter(m => m.id !== movedUser.id) };
+      }
+      if (toTeamId && t.id === toTeamId) {
+        return { ...t, members: [...(t.members || []), movedUser] };
+      }
+      return t;
+    }),
+  }));
+  let newUnassigned = prev.unassigned_users;
+  if (!fromTeamId) newUnassigned = newUnassigned.filter(u => u.id !== movedUser.id);
+  if (!toTeamId) newUnassigned = [...newUnassigned, movedUser];
+  return { ...prev, settings: newSettings, unassigned_users: newUnassigned };
+}
+
+// ── Small UI atoms ─────────────────────────────────────────────────────────
+
+function Avatar({ name, color = "bg-gray-100 text-gray-600" }) {
+  const initials = (name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${color}`}>
+      {initials}
+    </div>
+  );
+}
+
+function RoleBadge({ role }) {
+  return (
+    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${ROLE_COLORS[role] || ROLE_COLORS.attendee}`}>
+      {ROLE_LABELS[role] || role}
+    </span>
+  );
+}
 
 function Modal({ title, onClose, children }) {
   return (
@@ -28,49 +98,62 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-function ColumnHeader({ icon: Icon, label, count, onAdd, addLabel }) {
+function FormField({ label, children }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
-      <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-gray-500" />
-        <span className="text-sm font-semibold text-gray-700">{label}</span>
-        {count !== undefined && <span className="text-xs text-gray-400">({count})</span>}
-      </div>
-      {onAdd && (
-        <button onClick={onAdd} className="flex items-center gap-1 text-xs text-[#1E3A8A] font-medium hover:underline" data-testid={`add-${addLabel?.toLowerCase().replace(/\s/g, "-")}`}>
-          <Plus className="w-3.5 h-3.5" /> {addLabel}
-        </button>
-      )}
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      {children}
     </div>
   );
 }
 
+const inputCls = "w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]";
+const selectCls = `${inputCls} bg-white`;
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function OrgStructure() {
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
+  const canManage = ["admin", "manager"].includes(currentUser?.role);
+
   const [structure, setStructure] = useState({ settings: [], unassigned_users: [] });
   const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSetting, setSelectedSetting] = useState(null);
-  const [selectedTeam, setSelectedTeam] = useState(null);
-  const [showEditSetting, setShowEditSetting] = useState(null);
-  const [showEditTeam, setShowEditTeam] = useState(null);
-  const [showAddSetting, setShowAddSetting] = useState(false);
-  const [showAddTeam, setShowAddTeam] = useState(false);
-  const [showAddMember, setShowAddMember] = useState(false);
-  const [settingForm, setSettingForm] = useState({ name: "", description: "", manager_user_id: "" });
-  const [teamForm, setTeamForm] = useState({ name: "", description: "", supervisor_user_id: "" });
-  const [saving, setSaving] = useState(false);
+  const [expandedSettings, setExpandedSettings] = useState(new Set());
+  const isFirstLoad = useRef(true);
+
+  // Flash
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  // User editing
-  const [editingUser, setEditingUser] = useState(null);
-  const [editUserForm, setEditUserForm] = useState({});
-  const [editUserError, setEditUserError] = useState("");
+  // Saving states
+  const [saving, setSaving] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
+  const [savingInvite, setSavingInvite] = useState(false);
+
+  // People pool search
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Modals
+  const [showAddSetting, setShowAddSetting] = useState(false);
+  const [editingSetting, setEditingSetting] = useState(null);
+  const [showAddTeamFor, setShowAddTeamFor] = useState(null); // settingId
+  const [editingTeam, setEditingTeam] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
+  const [showInviteUser, setShowInviteUser] = useState(false);
   const [showPwdReset, setShowPwdReset] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
+  // Forms
+  const [settingForm, setSettingForm] = useState({ name: "", description: "", manager_user_id: "" });
+  const [teamForm, setTeamForm] = useState({ name: "", description: "", supervisor_user_id: "" });
+  const [editUserForm, setEditUserForm] = useState({});
+  const [editUserError, setEditUserError] = useState("");
+  const [inviteForm, setInviteForm] = useState({ name: "", email: "", password: "", role: "attendee" });
+  const [inviteError, setInviteError] = useState("");
+
+  // ── Data fetching ────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
       const [structRes, usersRes] = await Promise.all([
@@ -79,18 +162,13 @@ export default function OrgStructure() {
       ]);
       setStructure(structRes.data);
       setAllUsers(usersRes.data);
-      // Refresh selected objects from new data
-      if (selectedSetting) {
-        const refreshed = structRes.data.settings.find(s => s.id === selectedSetting.id);
-        setSelectedSetting(refreshed || null);
-        if (selectedTeam && refreshed) {
-          const rTeam = refreshed.teams?.find(t => t.id === selectedTeam.id);
-          setSelectedTeam(rTeam || null);
-        }
+      if (isFirstLoad.current) {
+        setExpandedSettings(new Set(structRes.data.settings.map(s => s.id)));
+        isFirstLoad.current = false;
       }
     } catch (err) {
       console.error("Org structure load failed", err);
-      setError("Failed to load organisation structure.");
+      flash("Failed to load organisation structure", true);
     } finally {
       setLoading(false);
     }
@@ -101,58 +179,84 @@ export default function OrgStructure() {
 
   const flash = (msg, isError = false) => {
     if (isError) setError(msg); else setMessage(msg);
-    setTimeout(() => { setError(""); setMessage(""); }, 3000);
+    setTimeout(() => { setError(""); setMessage(""); }, 3500);
   };
 
   const managerUsers = allUsers.filter(u => ["admin", "manager"].includes(u.role));
+
+  // ── Drag and drop ─────────────────────────────────────────────────────────
+  const onDragEnd = async (result) => {
+    const { draggableId: userId, source, destination } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId) return;
+
+    const fromTeamId = source.droppableId === "unassigned" ? null : source.droppableId.replace("team-", "");
+    const toTeamId = destination.droppableId === "unassigned" ? null : destination.droppableId.replace("team-", "");
+    if (fromTeamId === toTeamId) return;
+
+    const movedUser = findUser(userId, structure);
+    if (!movedUser) return;
+
+    // Optimistic update — immediate visual response
+    setStructure(prev => moveUserInStructure(prev, movedUser, fromTeamId, toTeamId));
+
+    try {
+      await axios.patch(`${API}/org/users/${userId}/assign-team`, { team_id: toTeamId }, getAuthConfig());
+    } catch (err) {
+      // Revert on failure
+      setStructure(prev => moveUserInStructure(prev, movedUser, toTeamId, fromTeamId));
+      flash(err.response?.data?.detail || "Failed to move user", true);
+    }
+  };
 
   // ── Settings CRUD ─────────────────────────────────────────────────────────
   const saveSetting = async () => {
     if (!settingForm.name.trim()) return;
     setSaving(true);
     try {
-      if (showEditSetting) {
-        await axios.put(`${API}/org/settings/${showEditSetting.id}`, settingForm, getAuthConfig());
+      if (editingSetting) {
+        await axios.put(`${API}/org/settings/${editingSetting.id}`, settingForm, getAuthConfig());
         flash("Setting updated");
-        setShowEditSetting(null);
+        setEditingSetting(null);
       } else {
-        await axios.post(`${API}/org/settings`, settingForm, getAuthConfig());
+        const res = await axios.post(`${API}/org/settings`, settingForm, getAuthConfig());
         flash("Setting created");
         setShowAddSetting(false);
+        // Auto-expand new setting
+        setExpandedSettings(prev => new Set([...prev, res.data?.id].filter(Boolean)));
       }
       setSettingForm({ name: "", description: "", manager_user_id: "" });
       fetchData();
-    } catch (err) { flash(err.response?.data?.detail || "Failed to save setting", true); }
+    } catch (err) { flash(err.response?.data?.detail || "Failed to save", true); }
     setSaving(false);
   };
 
   const deleteSetting = async (s) => {
-    if (!window.confirm(`Delete "${s.name}"? All teams inside will also be removed.`)) return;
+    if (!window.confirm(`Delete "${s.name}"? All teams will also be removed.`)) return;
     try {
       await axios.delete(`${API}/org/settings/${s.id}`, getAuthConfig());
       flash("Setting deleted");
-      if (selectedSetting?.id === s.id) { setSelectedSetting(null); setSelectedTeam(null); }
       fetchData();
     } catch (err) { flash(err.response?.data?.detail || "Delete failed", true); }
   };
 
   // ── Teams CRUD ─────────────────────────────────────────────────────────────
-  const saveTeam = async () => {
-    if (!teamForm.name.trim() || !selectedSetting) return;
+  const saveTeam = async (settingId) => {
+    if (!teamForm.name.trim()) return;
     setSaving(true);
     try {
-      if (showEditTeam) {
-        await axios.put(`${API}/org/teams/${showEditTeam.id}`, teamForm, getAuthConfig());
+      if (editingTeam) {
+        await axios.put(`${API}/org/teams/${editingTeam.id}`, teamForm, getAuthConfig());
         flash("Team updated");
-        setShowEditTeam(null);
+        setEditingTeam(null);
       } else {
-        await axios.post(`${API}/org/settings/${selectedSetting.id}/teams`, teamForm, getAuthConfig());
+        await axios.post(`${API}/org/settings/${settingId}/teams`, teamForm, getAuthConfig());
         flash("Team created");
-        setShowAddTeam(false);
+        setShowAddTeamFor(null);
       }
       setTeamForm({ name: "", description: "", supervisor_user_id: "" });
       fetchData();
-    } catch (err) { flash(err.response?.data?.detail || "Failed to save team", true); }
+    } catch (err) { flash(err.response?.data?.detail || "Failed to save", true); }
     setSaving(false);
   };
 
@@ -161,21 +265,11 @@ export default function OrgStructure() {
     try {
       await axios.delete(`${API}/org/teams/${t.id}`, getAuthConfig());
       flash("Team deleted");
-      if (selectedTeam?.id === t.id) setSelectedTeam(null);
       fetchData();
     } catch (err) { flash(err.response?.data?.detail || "Delete failed", true); }
   };
 
-  // ── Member management ─────────────────────────────────────────────────────
-  const addMember = async (userId) => {
-    if (!selectedTeam) return;
-    try {
-      await axios.post(`${API}/org/teams/${selectedTeam.id}/members`, { user_id: userId }, getAuthConfig());
-      flash("Member added");
-      fetchData();
-    } catch (err) { flash(err.response?.data?.detail || "Failed to add member", true); }
-  };
-
+  // ── User management ────────────────────────────────────────────────────────
   const openEditUser = (u) => {
     setEditingUser(u);
     setEditUserForm({ name: u.name, email: u.email, role: u.role, is_active: u.is_active !== false });
@@ -195,362 +289,527 @@ export default function OrgStructure() {
       if (showPwdReset && newPassword.trim()) {
         await axios.post(`${API}/admin/users/${editingUser.id}/reset-password`, { new_password: newPassword }, getAuthConfig());
       }
-      setMessage("User updated");
+      flash("User updated");
       setEditingUser(null);
       fetchData();
-      setTimeout(() => setMessage(""), 3000);
-    } catch (err) {
-      setEditUserError(err.response?.data?.detail || "Failed to save");
-    }
+    } catch (err) { setEditUserError(err.response?.data?.detail || "Failed to save"); }
     setSavingUser(false);
   };
 
-  const removeMember = async (userId, userName) => {
-    if (!window.confirm(`Remove ${userName} from this team?`)) return;    try {
-      await axios.delete(`${API}/org/teams/${selectedTeam.id}/members/${userId}`, getAuthConfig());
-      flash("Member removed");
+  const inviteUser = async () => {
+    if (!inviteForm.name.trim()) return setInviteError("Name is required");
+    if (!inviteForm.email.trim()) return setInviteError("Email is required");
+    if (inviteForm.password.length < 8) return setInviteError("Password must be at least 8 characters");
+    setSavingInvite(true);
+    setInviteError("");
+    try {
+      await axios.post(`${API}/org/invite-user`, inviteForm, getAuthConfig());
+      flash("User added successfully");
+      setShowInviteUser(false);
+      setInviteForm({ name: "", email: "", password: "", role: "attendee" });
       fetchData();
-    } catch (err) { flash(err.response?.data?.detail || "Failed to remove member", true); }
+    } catch (err) { setInviteError(err.response?.data?.detail || "Failed to add user"); }
+    setSavingInvite(false);
   };
 
-  const formField = (label, value, onChange, extra = {}) => (
-    <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-      <input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
-        {...extra}
-      />
-    </div>
+  // ── Derived values ─────────────────────────────────────────────────────────
+  const filteredUnassigned = structure.unassigned_users.filter(u =>
+    !searchQuery ||
+    u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const totalUsers = allUsers.length;
+  const assignedCount = totalUsers - structure.unassigned_users.length;
 
-  const selectField = (label, value, onChange, opts, placeholder = "None") => (
-    <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-      <select value={value} onChange={e => onChange(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white">
-        <option value="">{placeholder}</option>
-        {opts.map(o => <option key={o.id} value={o.id}>{o.name} ({o.role})</option>)}
-      </select>
-    </div>
-  );
-
-  const SettingTeamForm = ({ form, setForm, managers, onSave, onCancel }) => (
-    <div className="space-y-3">
-      {formField("Name *", form.name, v => setForm(f => ({ ...f, name: v })), { placeholder: "e.g. Sunflower House" })}
-      {formField("Description", form.description, v => setForm(f => ({ ...f, description: v })), { placeholder: "Optional" })}
-      {managers && selectField("Manager / Supervisor", form.manager_user_id || form.supervisor_user_id, v => setForm(f => ({ ...f, manager_user_id: v, supervisor_user_id: v })), managers)}
-      <div className="flex gap-2 pt-1">
-        <button onClick={onSave} disabled={saving} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60">
-          <Check className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save"}
-        </button>
-        <button onClick={onCancel} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
-      </div>
-    </div>
-  );
-
+  // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-24 text-gray-400">
-          <Loader className="w-5 h-5 animate-spin mr-2" /><span className="text-sm">Loading structure…</span>
+          <Loader className="w-5 h-5 animate-spin mr-2" /><span className="text-sm">Loading…</span>
         </div>
       </Layout>
     );
   }
 
-  const currentTeamMembers = selectedTeam ? (structure.settings.find(s => s.id === selectedSetting?.id)?.teams?.find(t => t.id === selectedTeam.id)?.members || []) : [];
-  const currentSettingTeams = selectedSetting ? (structure.settings.find(s => s.id === selectedSetting?.id)?.teams || []) : [];
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <Layout>
       <div className="p-6 md:p-8 fade-in">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900 font-display">Organisation Structure</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage your care settings, teams, and staff hierarchy</p>
+
+        {/* Page header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 font-display">Organisation Structure</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Drag staff between teams to reassign · {assignedCount}/{totalUsers} staff assigned
+            </p>
+          </div>
+          {isAdmin && (
+            <button
+              onClick={() => { setShowAddSetting(true); setSettingForm({ name: "", description: "", manager_user_id: "" }); }}
+              className="flex items-center gap-1.5 bg-[#1E3A8A] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#1E40AF] transition-colors"
+              data-testid="add-setting-btn"
+            >
+              <Plus className="w-4 h-4" /> Add Setting
+            </button>
+          )}
         </div>
 
         {/* Flash messages */}
         {message && (
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-md p-3 mb-4 text-sm" data-testid="org-success">
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg p-3 mb-4 text-sm" data-testid="org-success">
             <CheckCircle className="w-4 h-4 flex-shrink-0" />{message}
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-md p-3 mb-4 text-sm" data-testid="org-error">
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm" data-testid="org-error">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
             <button onClick={() => setError("")} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
           </div>
         )}
 
-        {/* Unassigned users badge */}
-        {structure.unassigned_users.length > 0 && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-sm text-amber-700">
-            <Users className="w-4 h-4 flex-shrink-0" />
-            <span><strong>{structure.unassigned_users.length}</strong> user{structure.unassigned_users.length !== 1 ? "s" : ""} not yet assigned to a team</span>
-          </div>
-        )}
+        {/* ── Two-panel DnD layout ── */}
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="flex flex-col lg:flex-row gap-5" style={{ alignItems: "flex-start" }}>
 
-        {/* Column layout */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white" style={{ minHeight: 480 }}>
-
-          {/* Column 1 — Settings */}
-          <div className="border-r border-gray-200 flex flex-col" data-testid="settings-column">
-            <ColumnHeader icon={MapPin} label="Settings (Locations)" count={structure.settings.length} onAdd={() => { setShowAddSetting(true); setSettingForm({ name: "", description: "", manager_user_id: "" }); }} addLabel="Add Setting" />
-
-            {showAddSetting && (
-              <div className="p-4 border-b border-gray-100 bg-blue-50">
-                <p className="text-xs font-semibold text-[#1E3A8A] mb-3">New Setting</p>
-                <SettingTeamForm
-                  form={settingForm}
-                  setForm={setSettingForm}
-                  managers={managerUsers}
-                  onSave={saveSetting}
-                  onCancel={() => setShowAddSetting(false)}
-                />
+            {/* ══ LEFT: Org Tree ══════════════════════════════════════════ */}
+            <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" data-testid="org-tree">
+              <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-semibold text-gray-700">Settings &amp; Teams</span>
+                <span className="text-xs text-gray-400">({structure.settings.length})</span>
               </div>
-            )}
 
-            <div className="flex-1 overflow-y-auto">
-              {structure.settings.length === 0 && !showAddSetting && (
-                <div className="text-center py-12 text-gray-400">
-                  <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs">No settings yet</p>
-                </div>
-              )}
-              {structure.settings.map(s => (
-                <div
-                  key={s.id}
-                  onClick={() => { setSelectedSetting(s); setSelectedTeam(null); }}
-                  className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-gray-100 group transition-colors ${selectedSetting?.id === s.id ? "bg-[#EFF6FF] border-l-2 border-l-[#1E3A8A]" : "hover:bg-gray-50"}`}
-                  data-testid={`setting-row-${s.id}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
-                    {s.manager_name && <p className="text-xs text-gray-400 truncate">Manager: {s.manager_name}</p>}
-                    <p className="text-xs text-gray-400">{s.teams?.length || 0} team{(s.teams?.length || 0) !== 1 ? "s" : ""}</p>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
-                    <button onClick={e => { e.stopPropagation(); setShowEditSetting(s); setSettingForm({ name: s.name, description: s.description || "", manager_user_id: s.manager_user_id || "" }); }} className="p-1 text-gray-400 hover:text-[#1E3A8A]" data-testid={`edit-setting-${s.id}`}><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={e => { e.stopPropagation(); deleteSetting(s); }} className="p-1 text-gray-400 hover:text-red-500" data-testid={`delete-setting-${s.id}`}><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                  <ChevronRight className={`w-4 h-4 ml-2 flex-shrink-0 transition-colors ${selectedSetting?.id === s.id ? "text-[#1E3A8A]" : "text-gray-300"}`} />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Column 2 — Teams */}
-          <div className="border-r border-gray-200 flex flex-col" data-testid="teams-column">
-            {!selectedSetting ? (
-              <div className="flex flex-col h-full">
-                <ColumnHeader icon={Users} label="Teams" />
-                <div className="flex-1 flex items-center justify-center text-gray-300">
-                  <div className="text-center"><Users className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-xs">Select a setting</p></div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col h-full">
-                <ColumnHeader icon={Users} label={`Teams — ${selectedSetting.name}`} count={currentSettingTeams.length} onAdd={() => { setShowAddTeam(true); setTeamForm({ name: "", description: "", supervisor_user_id: "" }); }} addLabel="Add Team" />
-
-                {showAddTeam && (
-                  <div className="p-4 border-b border-gray-100 bg-blue-50">
-                    <p className="text-xs font-semibold text-[#1E3A8A] mb-3">New Team</p>
-                    <SettingTeamForm
-                      form={teamForm}
-                      setForm={setTeamForm}
-                      managers={managerUsers}
-                      onSave={saveTeam}
-                      onCancel={() => setShowAddTeam(false)}
-                    />
+              <div className="p-4 space-y-3">
+                {structure.settings.length === 0 && (
+                  <div className="text-center py-16 text-gray-400">
+                    <Building2 className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                    <p className="text-sm font-medium">No settings yet</p>
+                    {isAdmin && <p className="text-xs mt-1">Use "Add Setting" to get started</p>}
                   </div>
                 )}
 
-                <div className="flex-1 overflow-y-auto">
-                  {currentSettingTeams.length === 0 && !showAddTeam && (
-                    <div className="text-center py-12 text-gray-400">
-                      <Users className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-xs">No teams yet</p>
-                    </div>
-                  )}
-                  {currentSettingTeams.map(t => (
-                    <div
-                      key={t.id}
-                      onClick={() => setSelectedTeam(t)}
-                      className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-gray-100 group transition-colors ${selectedTeam?.id === t.id ? "bg-[#EFF6FF] border-l-2 border-l-[#1E3A8A]" : "hover:bg-gray-50"}`}
-                      data-testid={`team-row-${t.id}`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 truncate">{t.name}</p>
-                        {t.supervisor_name && <p className="text-xs text-gray-400">Supervisor: {t.supervisor_name}</p>}
-                        <p className="text-xs text-gray-400">{t.members?.length || 0} member{(t.members?.length || 0) !== 1 ? "s" : ""}</p>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
-                        <button onClick={e => { e.stopPropagation(); setShowEditTeam(t); setTeamForm({ name: t.name, description: t.description || "", supervisor_user_id: t.supervisor_user_id || "" }); }} className="p-1 text-gray-400 hover:text-[#1E3A8A]" data-testid={`edit-team-${t.id}`}><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={e => { e.stopPropagation(); deleteTeam(t); }} className="p-1 text-gray-400 hover:text-red-500" data-testid={`delete-team-${t.id}`}><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
-                      <ChevronRight className={`w-4 h-4 ml-2 flex-shrink-0 transition-colors ${selectedTeam?.id === t.id ? "text-[#1E3A8A]" : "text-gray-300"}`} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+                {structure.settings.map(s => {
+                  const isExpanded = expandedSettings.has(s.id);
+                  const teams = s.teams || [];
+                  const staffCount = teams.reduce((n, t) => n + (t.members?.length || 0), 0);
 
-          {/* Column 3 — Members */}
-          <div className="flex flex-col" data-testid="members-column">
-            {!selectedTeam ? (
-              <div className="flex flex-col h-full">
-                <ColumnHeader icon={UserCog} label="Team Members" />
-                <div className="flex-1 flex items-center justify-center text-gray-300">
-                  <div className="text-center"><UserCog className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-xs">Select a team</p></div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col h-full">
-                <ColumnHeader icon={UserCog} label={`Members — ${selectedTeam.name}`} count={currentTeamMembers.length} onAdd={() => setShowAddMember(true)} addLabel="Add Person" />
+                  return (
+                    <div key={s.id} className="border border-gray-200 rounded-xl overflow-hidden" data-testid={`setting-${s.id}`}>
 
-                <div className="flex-1 overflow-y-auto">
-                  {/* Supervisor badge */}
-                  {selectedTeam.supervisor_name && (() => {
-                    const supUser = allUsers.find(u => u.id === selectedTeam.supervisor_user_id);
-                    return (
-                      <div className="flex items-center gap-2 px-4 py-3 bg-indigo-50 border-b border-indigo-100 group">
-                        <div className="w-7 h-7 rounded-full bg-[#1E3A8A] flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
-                          {selectedTeam.supervisor_name.split(" ").map(w => w[0]).join("").slice(0, 2)}
-                        </div>
+                      {/* Setting header */}
+                      <div
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer group transition-colors ${isExpanded ? "bg-[#EFF6FF]" : "bg-gray-50 hover:bg-gray-100"}`}
+                        onClick={() => setExpandedSettings(prev => {
+                          const next = new Set(prev);
+                          if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                          return next;
+                        })}
+                      >
+                        {isExpanded
+                          ? <ChevronDown className="w-4 h-4 text-[#1E3A8A] flex-shrink-0" />
+                          : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                        <MapPin className="w-4 h-4 text-[#1E3A8A] flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-[#1E3A8A]">{selectedTeam.supervisor_name}</p>
-                          <p className="text-xs text-indigo-400">Supervisor</p>
+                          <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
+                          {s.manager_name && <p className="text-xs text-gray-400">Manager: {s.manager_name}</p>}
+                          <p className="text-xs text-gray-400">{teams.length} team{teams.length !== 1 ? "s" : ""} · {staffCount} staff</p>
                         </div>
-                        {supUser && (
-                          <button onClick={() => openEditUser(supUser)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-[#1E3A8A] transition-all" title="Edit user" data-testid={`edit-user-${supUser.id}`}>
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
+                        {canManage && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => { setEditingSetting(s); setSettingForm({ name: s.name, description: s.description || "", manager_user_id: s.manager_user_id || "" }); }}
+                              className="p-1.5 text-gray-400 hover:text-[#1E3A8A] hover:bg-white rounded"
+                              title="Edit setting"
+                              data-testid={`edit-setting-${s.id}`}
+                            ><Edit2 className="w-3.5 h-3.5" /></button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => deleteSetting(s)}
+                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white rounded"
+                                data-testid={`delete-setting-${s.id}`}
+                              ><Trash2 className="w-3.5 h-3.5" /></button>
+                            )}
+                          </div>
                         )}
                       </div>
-                    );
-                  })()}
 
-                  {currentTeamMembers.filter(m => m.id !== selectedTeam.supervisor_user_id).length === 0 && (
-                    <div className="text-center py-8 text-gray-400"><p className="text-xs">No members yet — add people using the button above</p></div>
-                  )}
+                      {/* Teams list */}
+                      {isExpanded && (
+                        <div className="p-3 space-y-2 bg-white">
+                          {teams.map(t => (
+                            <div key={t.id} className="border border-gray-100 rounded-lg overflow-hidden" data-testid={`team-${t.id}`}>
 
-                  {currentTeamMembers.filter(m => m.id !== selectedTeam.supervisor_user_id).map(m => (
-                    <div key={m.id} className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 group hover:bg-gray-50">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-xs font-semibold flex-shrink-0">
-                          {m.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
+                              {/* Team header */}
+                              <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 group border-b border-gray-100">
+                                <Users className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-gray-800">{t.name}</p>
+                                  {t.supervisor_name && <p className="text-[11px] text-gray-400">Supervisor: {t.supervisor_name}</p>}
+                                </div>
+                                {canManage && (
+                                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() => { setEditingTeam(t); setTeamForm({ name: t.name, description: t.description || "", supervisor_user_id: t.supervisor_user_id || "" }); }}
+                                      className="p-1 text-gray-400 hover:text-[#1E3A8A]"
+                                      data-testid={`edit-team-${t.id}`}
+                                    ><Edit2 className="w-3 h-3" /></button>
+                                    <button
+                                      onClick={() => deleteTeam(t)}
+                                      className="p-1 text-gray-400 hover:text-red-500"
+                                      data-testid={`delete-team-${t.id}`}
+                                    ><Trash2 className="w-3 h-3" /></button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Droppable member list */}
+                              <Droppable droppableId={`team-${t.id}`}>
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.droppableProps}
+                                    className={`min-h-[56px] px-2 py-1.5 transition-colors ${snapshot.isDraggingOver ? "bg-blue-50" : "bg-white"}`}
+                                  >
+                                    {(t.members || []).map((m, idx) => (
+                                      <Draggable key={m.id} draggableId={m.id} index={idx} isDragDisabled={!canManage}>
+                                        {(provided, snapshot) => (
+                                          <div
+                                            ref={provided.innerRef}
+                                            {...provided.draggableProps}
+                                            className={`flex items-center gap-2 px-2 py-1.5 rounded-md mb-1 group/member transition-all ${snapshot.isDragging ? "bg-white shadow-lg ring-1 ring-blue-200" : "hover:bg-gray-50"}`}
+                                            data-testid={`member-${m.id}`}
+                                          >
+                                            {canManage && (
+                                              <div {...provided.dragHandleProps} className="cursor-grab text-gray-300 hover:text-gray-500 flex-shrink-0 touch-none">
+                                                <GripVertical className="w-3.5 h-3.5" />
+                                              </div>
+                                            )}
+                                            <Avatar
+                                              name={m.name}
+                                              color={m.id === t.supervisor_user_id ? "bg-[#1E3A8A] text-white" : "bg-gray-100 text-gray-600"}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-xs font-medium text-gray-900 truncate">{m.name}</p>
+                                              <RoleBadge role={m.role} />
+                                            </div>
+                                            {canManage && (
+                                              <button
+                                                onClick={() => openEditUser(m)}
+                                                className="opacity-0 group-hover/member:opacity-100 p-1 text-gray-300 hover:text-[#1E3A8A] transition-opacity"
+                                                data-testid={`edit-member-${m.id}`}
+                                              ><Pencil className="w-3 h-3" /></button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </Draggable>
+                                    ))}
+                                    {provided.placeholder}
+                                    {(t.members || []).length === 0 && !snapshot.isDraggingOver && (
+                                      <div className="flex items-center justify-center h-[40px] text-[11px] text-gray-300 border border-dashed border-gray-200 rounded-md">
+                                        Drop staff here to assign
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </Droppable>
+                            </div>
+                          ))}
+
+                          {/* Inline Add Team */}
+                          {canManage && (
+                            showAddTeamFor === s.id ? (
+                              <div className="border border-blue-200 rounded-lg p-3 bg-blue-50" data-testid="add-team-form">
+                                <p className="text-xs font-semibold text-[#1E3A8A] mb-2">New team in {s.name}</p>
+                                <div className="space-y-2">
+                                  <input
+                                    value={teamForm.name}
+                                    onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))}
+                                    placeholder="Team name *"
+                                    className={inputCls}
+                                    onKeyDown={e => { if (e.key === "Enter") saveTeam(s.id); if (e.key === "Escape") setShowAddTeamFor(null); }}
+                                    autoFocus
+                                    data-testid="new-team-name-input"
+                                  />
+                                  <select
+                                    value={teamForm.supervisor_user_id}
+                                    onChange={e => setTeamForm(f => ({ ...f, supervisor_user_id: e.target.value }))}
+                                    className={selectCls}
+                                  >
+                                    <option value="">Supervisor — optional</option>
+                                    {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                  </select>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => saveTeam(s.id)}
+                                      disabled={saving || !teamForm.name.trim()}
+                                      className="flex items-center gap-1 bg-[#1E3A8A] text-white text-xs px-3 py-1.5 rounded hover:bg-[#1E40AF] disabled:opacity-60"
+                                      data-testid="save-new-team-btn"
+                                    ><Check className="w-3 h-3" />{saving ? "Saving…" : "Save"}</button>
+                                    <button onClick={() => setShowAddTeamFor(null)} className="text-xs px-3 py-1.5 border border-gray-300 rounded hover:bg-white">Cancel</button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setShowAddTeamFor(s.id); setTeamForm({ name: "", description: "", supervisor_user_id: "" }); }}
+                                className="w-full flex items-center justify-center gap-1.5 text-xs text-[#1E3A8A] font-medium py-2 border border-dashed border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                                data-testid={`add-team-btn-${s.id}`}
+                              ><Plus className="w-3.5 h-3.5" /> Add Team</button>
+                            )
+                          )}
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm text-gray-900 truncate">{m.name}</p>
-                          <p className="text-xs text-gray-400 capitalize truncate">{m.role}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        <button onClick={() => openEditUser(m)} className="p-1 text-gray-300 hover:text-[#1E3A8A]" title="Edit user" data-testid={`edit-user-${m.id}`}>
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => removeMember(m.id, m.name)} className="p-1 text-gray-300 hover:text-red-400" data-testid={`remove-member-${m.id}`}>
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  ))}
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ══ RIGHT: Unassigned People Pool ═══════════════════════════ */}
+            <div className="w-full lg:w-72 flex-shrink-0 lg:sticky lg:top-4">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" data-testid="people-pool">
+
+                {/* Panel header */}
+                <div className="px-4 py-3 border-b border-gray-100 bg-amber-50">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <UserCog className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-semibold text-gray-800">Unassigned Staff</span>
+                      {structure.unassigned_users.length > 0 && (
+                        <span className="bg-amber-200 text-amber-800 text-xs font-bold px-1.5 py-0.5 rounded-full" data-testid="unassigned-count">
+                          {structure.unassigned_users.length}
+                        </span>
+                      )}
+                    </div>
+                    {canManage && (
+                      <button
+                        onClick={() => { setShowInviteUser(true); setInviteForm({ name: "", email: "", password: "", role: "attendee" }); setInviteError(""); }}
+                        className="flex items-center gap-1 text-xs text-[#1E3A8A] font-medium hover:underline"
+                        data-testid="add-user-btn"
+                      ><UserPlus className="w-3.5 h-3.5" /> Add User</button>
+                    )}
+                  </div>
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="Search staff…"
+                      className="w-full pl-7 pr-3 py-1.5 border border-amber-200 rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-300"
+                      data-testid="search-staff-input"
+                    />
+                  </div>
+                </div>
+
+                {/* Droppable unassigned zone */}
+                <Droppable droppableId="unassigned">
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`p-3 min-h-[120px] transition-colors ${snapshot.isDraggingOver ? "bg-amber-50" : "bg-white"}`}
+                      data-testid="unassigned-drop-zone"
+                    >
+                      {filteredUnassigned.map((u, i) => (
+                        <Draggable key={u.id} draggableId={u.id} index={i} isDragDisabled={!canManage}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className={`flex items-center gap-2 p-2 rounded-lg mb-1.5 border transition-all group/ucard ${snapshot.isDragging ? "bg-white shadow-lg ring-1 ring-amber-200 border-transparent" : "bg-gray-50 border-gray-100 hover:border-gray-200"}`}
+                              data-testid={`unassigned-user-${u.id}`}
+                            >
+                              {canManage && (
+                                <div {...provided.dragHandleProps} className="cursor-grab text-gray-300 hover:text-gray-500 flex-shrink-0 touch-none">
+                                  <GripVertical className="w-3.5 h-3.5" />
+                                </div>
+                              )}
+                              <Avatar name={u.name} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-gray-900 truncate">{u.name}</p>
+                                <RoleBadge role={u.role} />
+                              </div>
+                              {canManage && (
+                                <button
+                                  onClick={() => openEditUser(u)}
+                                  className="opacity-0 group-hover/ucard:opacity-100 p-1 text-gray-300 hover:text-[#1E3A8A] transition-opacity"
+                                  data-testid={`edit-user-${u.id}`}
+                                ><Pencil className="w-3 h-3" /></button>
+                              )}
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+
+                      {filteredUnassigned.length === 0 && !snapshot.isDraggingOver && (
+                        <div className="flex flex-col items-center justify-center py-8 text-gray-300">
+                          <UserCheck className="w-8 h-8 mb-2 opacity-50" />
+                          <p className="text-xs text-center">
+                            {searchQuery ? "No matches" : "All staff assigned"}
+                          </p>
+                          {!searchQuery && (
+                            <p className="text-[10px] mt-1 text-gray-300 text-center">
+                              Drag a team member here to unassign
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Droppable>
+
+                {/* Stats footer */}
+                <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-[11px] text-gray-400">
+                  {assignedCount} of {totalUsers} staff assigned to a team
                 </div>
               </div>
-            )}
+            </div>
+
           </div>
-        </div>
+        </DragDropContext>
+
+        {/* ══ MODALS ══════════════════════════════════════════════════════ */}
+
+        {/* Add / Edit Setting */}
+        {(showAddSetting || editingSetting) && (
+          <Modal
+            title={editingSetting ? `Edit — ${editingSetting.name}` : "New Setting"}
+            onClose={() => { setShowAddSetting(false); setEditingSetting(null); }}
+          >
+            <div className="space-y-3">
+              <FormField label="Name *">
+                <input value={settingForm.name} onChange={e => setSettingForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Sunflower House" className={inputCls} data-testid="setting-name-input" />
+              </FormField>
+              <FormField label="Description">
+                <input value={settingForm.description} onChange={e => setSettingForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" className={inputCls} />
+              </FormField>
+              <FormField label="Manager">
+                <select value={settingForm.manager_user_id} onChange={e => setSettingForm(f => ({ ...f, manager_user_id: e.target.value }))} className={selectCls}>
+                  <option value="">None</option>
+                  {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+                </select>
+              </FormField>
+              <div className="flex gap-2 pt-1">
+                <button onClick={saveSetting} disabled={saving} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-setting-btn">
+                  <Check className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save"}
+                </button>
+                <button onClick={() => { setShowAddSetting(false); setEditingSetting(null); }} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
+        {/* Edit Team */}
+        {editingTeam && (
+          <Modal title={`Edit Team — ${editingTeam.name}`} onClose={() => setEditingTeam(null)}>
+            <div className="space-y-3">
+              <FormField label="Name *">
+                <input value={teamForm.name} onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))} className={inputCls} data-testid="team-name-input" />
+              </FormField>
+              <FormField label="Supervisor">
+                <select value={teamForm.supervisor_user_id} onChange={e => setTeamForm(f => ({ ...f, supervisor_user_id: e.target.value }))} className={selectCls}>
+                  <option value="">None</option>
+                  {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </FormField>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => saveTeam(editingTeam.setting_id)} disabled={saving} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-team-btn">
+                  <Check className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save"}
+                </button>
+                <button onClick={() => setEditingTeam(null)} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
+        {/* Add User */}
+        {showInviteUser && (
+          <Modal title="Add New User" onClose={() => setShowInviteUser(false)}>
+            <div className="space-y-3">
+              <FormField label="Full Name *">
+                <input value={inviteForm.name} onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Jane Smith" className={inputCls} data-testid="invite-name-input" />
+              </FormField>
+              <FormField label="Email Address *">
+                <input type="email" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@example.com" className={inputCls} data-testid="invite-email-input" />
+              </FormField>
+              <FormField label="Role">
+                <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))} className={selectCls} data-testid="invite-role-select">
+                  {ROLES.filter(r => !isAdmin ? r.value !== "admin" : true).map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Temporary Password *">
+                <input type="password" value={inviteForm.password} onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 characters" className={inputCls} data-testid="invite-password-input" />
+              </FormField>
+              {inviteError && <p className="text-xs text-red-600" data-testid="invite-error">{inviteError}</p>}
+              <div className="flex gap-2 pt-1">
+                <button onClick={inviteUser} disabled={savingInvite} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-invite-btn">
+                  <UserPlus className="w-3.5 h-3.5" />{savingInvite ? "Adding…" : "Add User"}
+                </button>
+                <button onClick={() => setShowInviteUser(false)} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
+        {/* Edit User */}
+        {editingUser && (
+          <Modal title={`Edit — ${editingUser.name}`} onClose={() => setEditingUser(null)}>
+            <div className="space-y-3">
+              <FormField label="Full name">
+                <input value={editUserForm.name} onChange={e => setEditUserForm(f => ({ ...f, name: e.target.value }))} className={inputCls} data-testid="edit-user-name" />
+              </FormField>
+              <FormField label="Email address">
+                <input type="email" value={editUserForm.email} onChange={e => setEditUserForm(f => ({ ...f, email: e.target.value }))} className={inputCls} data-testid="edit-user-email" />
+              </FormField>
+              <FormField label="Role">
+                <select value={editUserForm.role} onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))} className={selectCls} data-testid="edit-user-role">
+                  {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </FormField>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="edit-user-active" checked={editUserForm.is_active} onChange={e => setEditUserForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4 accent-[#1E3A8A]" data-testid="edit-user-active" />
+                <label htmlFor="edit-user-active" className="text-sm text-gray-700 cursor-pointer">{editUserForm.is_active ? "Active" : "Inactive"}</label>
+              </div>
+              <div className="pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowPwdReset(p => !p); setNewPassword(""); }}
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors"
+                  data-testid="toggle-reset-password"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  {showPwdReset ? "Cancel password change" : "Reset password"}
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showPwdReset ? "rotate-180" : ""}`} />
+                </button>
+                {showPwdReset && (
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="New password (min. 8 chars)"
+                    className={`mt-2 ${inputCls}`}
+                    data-testid="new-password-input"
+                  />
+                )}
+              </div>
+              {editUserError && <p className="text-xs text-red-600" data-testid="edit-user-error">{editUserError}</p>}
+              <div className="flex gap-2 pt-1">
+                <button onClick={saveEditUser} disabled={savingUser} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-edit-user-btn">
+                  <Check className="w-3.5 h-3.5" />{savingUser ? "Saving…" : "Save"}
+                </button>
+                <button onClick={() => setEditingUser(null)} className="border border-gray-300 text-gray-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50">Cancel</button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
       </div>
-
-      {/* Edit Setting Modal */}
-      {showEditSetting && (
-        <Modal title={`Edit — ${showEditSetting.name}`} onClose={() => setShowEditSetting(null)}>
-          <SettingTeamForm form={settingForm} setForm={setSettingForm} managers={managerUsers} onSave={saveSetting} onCancel={() => setShowEditSetting(null)} />
-        </Modal>
-      )}
-
-      {/* Edit Team Modal */}
-      {showEditTeam && (
-        <Modal title={`Edit — ${showEditTeam.name}`} onClose={() => setShowEditTeam(null)}>
-          <SettingTeamForm form={teamForm} setForm={setTeamForm} managers={managerUsers} onSave={saveTeam} onCancel={() => setShowEditTeam(null)} />
-        </Modal>
-      )}
-
-      {/* Add Member Modal */}
-      {showAddMember && selectedTeam && (
-        <Modal title={`Add Person to ${selectedTeam.name}`} onClose={() => setShowAddMember(false)}>
-          <p className="text-xs text-gray-500 mb-3">Select from users not yet assigned to a team:</p>
-          {structure.unassigned_users.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">All users are already assigned to a team</p>
-          ) : (
-            <div className="space-y-1.5 max-h-60 overflow-y-auto" data-testid="unassigned-users-list">
-              {structure.unassigned_users.map(u => (
-                <div key={u.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-md border border-gray-200">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{u.name}</p>
-                    <p className="text-xs text-gray-400 capitalize">{u.role} · {u.email}</p>
-                  </div>
-                  <button onClick={() => { addMember(u.id); setShowAddMember(false); }} className="flex items-center gap-1 text-xs bg-[#1E3A8A] text-white px-3 py-1.5 rounded-md hover:bg-[#1E40AF]" data-testid={`assign-user-${u.id}`}>
-                    <Plus className="w-3 h-3" /> Add
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="text-xs text-gray-400 mt-3">Need to add a new user? Create them first in <strong>Admin → Users</strong>, then assign here.</p>
-        </Modal>
-      )}
-      {/* Edit User Modal */}
-      {editingUser && (
-        <Modal title={`Edit — ${editingUser.name}`} onClose={() => setEditingUser(null)}>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Full name</label>
-              <input value={editUserForm.name} onChange={e => setEditUserForm(f => ({ ...f, name: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="edit-user-name" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Email address</label>
-              <input type="email" value={editUserForm.email} onChange={e => setEditUserForm(f => ({ ...f, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="edit-user-email" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
-              <select value={editUserForm.role} onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="edit-user-role">
-                {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="edit-user-active" checked={editUserForm.is_active} onChange={e => setEditUserForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4 accent-[#1E3A8A]" data-testid="edit-user-active" />
-              <label htmlFor="edit-user-active" className="text-sm text-gray-700 cursor-pointer">{editUserForm.is_active ? "Active" : "Inactive"}</label>
-            </div>
-
-            {/* Password reset */}
-            <div className="pt-2 border-t border-gray-100">
-              <button type="button" onClick={() => { setShowPwdReset(p => !p); setNewPassword(""); }} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors" data-testid="toggle-reset-password">
-                <KeyRound className="w-3.5 h-3.5" />
-                {showPwdReset ? "Cancel password change" : "Reset password"}
-                <ChevronDown className={`w-3 h-3 transition-transform ${showPwdReset ? "rotate-180" : ""}`} />
-              </button>
-              {showPwdReset && (
-                <div className="mt-2">
-                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Min. 8 characters" className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-password-input" />
-                </div>
-              )}
-            </div>
-
-            {editUserError && <p className="text-xs text-red-600" data-testid="edit-user-error">{editUserError}</p>}
-
-            <div className="flex gap-2 pt-1">
-              <button onClick={saveEditUser} disabled={savingUser} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-edit-user-btn">
-                <Check className="w-3.5 h-3.5" />
-                {savingUser ? "Saving…" : "Save"}
-              </button>
-              <button onClick={() => setEditingUser(null)} className="border border-gray-300 text-gray-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50">Cancel</button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </Layout>
   );
 }

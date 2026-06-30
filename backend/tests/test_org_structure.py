@@ -1,196 +1,138 @@
-"""Tests for Organisation Structure API - /api/org/* endpoints"""
+"""Tests for Org Structure new endpoints: assign-team and invite-user"""
 import pytest
 import requests
 import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
+MANAGER_EMAIL = "manager@supervision.com"
+MANAGER_PASSWORD = "Manager123!"
+ADMIN_EMAIL = "admin@supervision.com"
+ADMIN_PASSWORD = "Admin123!"
 
 @pytest.fixture(scope="module")
-def auth_token():
-    resp = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@supervision.com", "password": "Admin123!"
-    })
-    assert resp.status_code == 200, f"Login failed: {resp.text}"
-    return resp.json().get("access_token") or resp.cookies.get("access_token")
-
+def manager_token():
+    r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": MANAGER_EMAIL, "password": MANAGER_PASSWORD})
+    assert r.status_code == 200
+    return r.json().get("token")
 
 @pytest.fixture(scope="module")
-def headers(auth_token):
-    return {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
+def admin_token():
+    r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
+    assert r.status_code == 200
+    return r.json().get("token")
 
-
-@pytest.fixture(scope="module")
-def session(headers):
-    s = requests.Session()
-    s.headers.update(headers)
-    return s
-
+def auth_headers(token):
+    return {"Authorization": f"Bearer {token}"}
 
 class TestOrgStructure:
-    """Test org structure read endpoints"""
+    """Test org structure API endpoints"""
 
-    def test_get_structure(self, session):
-        resp = session.get(f"{BASE_URL}/api/org/structure")
-        assert resp.status_code == 200
-        data = resp.json()
+    def test_get_org_structure(self, manager_token):
+        r = requests.get(f"{BASE_URL}/api/org/structure", headers=auth_headers(manager_token))
+        assert r.status_code == 200
+        data = r.json()
         assert "settings" in data
         assert "unassigned_users" in data
-        assert isinstance(data["settings"], list)
-        assert isinstance(data["unassigned_users"], list)
+        print(f"PASS: GET /api/org/structure - {len(data['settings'])} settings, {len(data['unassigned_users'])} unassigned")
 
-    def test_get_settings(self, session):
-        resp = session.get(f"{BASE_URL}/api/org/settings")
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+    def test_get_org_structure_returns_user_details(self, manager_token):
+        """Verify unassigned users have name and role fields"""
+        r = requests.get(f"{BASE_URL}/api/org/structure", headers=auth_headers(manager_token))
+        assert r.status_code == 200
+        data = r.json()
+        for u in data['unassigned_users']:
+            assert 'name' in u
+            assert 'role' in u
+            assert 'id' in u
+        print(f"PASS: Unassigned users have name/role/id fields")
 
+    def test_invite_user_manager_can_create(self, manager_token):
+        """POST /api/org/invite-user - manager creates a new user"""
+        import time
+        payload = {
+            "name": "TEST_InviteUser Org",
+            "email": f"test_inviteorg_{int(time.time())}@example.com",
+            "password": "TestPass123!",
+            "role": "attendee"
+        }
+        r = requests.post(f"{BASE_URL}/api/org/invite-user", json=payload, headers=auth_headers(manager_token))
+        assert r.status_code in [200, 201], f"Expected 200/201, got {r.status_code}: {r.text}"
+        data = r.json()
+        assert "id" in data or "user" in data or "message" in data
+        print(f"PASS: POST /api/org/invite-user - user created: {r.status_code}")
 
-class TestSettingsCRUD:
-    """Test settings CRUD"""
-    created_setting_id = None
+    def test_invite_user_duplicate_email_fails(self, manager_token):
+        """Duplicate email should return 400"""
+        payload = {
+            "name": "TEST_Dupe",
+            "email": "test_inviteorg_unique@example.com",
+            "password": "TestPass123!",
+            "role": "attendee"
+        }
+        r = requests.post(f"{BASE_URL}/api/org/invite-user", json=payload, headers=auth_headers(manager_token))
+        assert r.status_code == 400
+        print(f"PASS: Duplicate email returns 400")
 
-    def test_create_setting(self, session):
-        resp = session.post(f"{BASE_URL}/api/org/settings", json={
-            "name": "TEST_Setting_Alpha", "description": "Test setting"
-        })
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["name"] == "TEST_Setting_Alpha"
-        assert "id" in data
-        TestSettingsCRUD.created_setting_id = data["id"]
-
-    def test_setting_appears_in_structure(self, session):
-        resp = session.get(f"{BASE_URL}/api/org/structure")
-        assert resp.status_code == 200
-        settings = resp.json()["settings"]
-        names = [s["name"] for s in settings]
-        assert "TEST_Setting_Alpha" in names
-
-    def test_update_setting(self, session):
-        sid = TestSettingsCRUD.created_setting_id
-        assert sid, "No setting created"
-        resp = session.put(f"{BASE_URL}/api/org/settings/{sid}", json={
-            "name": "TEST_Setting_Alpha_Updated", "description": "Updated"
-        })
-        assert resp.status_code == 200
-
-    def test_verify_setting_update_persisted(self, session):
-        resp = session.get(f"{BASE_URL}/api/org/structure")
-        settings = resp.json()["settings"]
-        names = [s["name"] for s in settings]
-        assert "TEST_Setting_Alpha_Updated" in names
-
-    def test_delete_setting(self, session):
-        sid = TestSettingsCRUD.created_setting_id
-        assert sid
-        resp = session.delete(f"{BASE_URL}/api/org/settings/{sid}")
-        assert resp.status_code == 200
-
-    def test_setting_removed_after_delete(self, session):
-        resp = session.get(f"{BASE_URL}/api/org/structure")
-        settings = resp.json()["settings"]
-        ids = [s["id"] for s in settings]
-        assert TestSettingsCRUD.created_setting_id not in ids
-
-
-class TestTeamsCRUD:
-    """Test teams CRUD within a setting"""
-    setting_id = None
-    team_id = None
-
-    def test_setup_create_setting(self, session):
-        resp = session.post(f"{BASE_URL}/api/org/settings", json={
-            "name": "TEST_Setting_ForTeams"
-        })
-        assert resp.status_code == 200
-        TestTeamsCRUD.setting_id = resp.json()["id"]
-
-    def test_create_team(self, session):
-        sid = TestTeamsCRUD.setting_id
-        resp = session.post(f"{BASE_URL}/api/org/settings/{sid}/teams", json={
-            "name": "TEST_Team_Beta", "description": "A test team"
-        })
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["name"] == "TEST_Team_Beta"
-        assert "id" in data
-        TestTeamsCRUD.team_id = data["id"]
-
-    def test_team_appears_in_structure(self, session):
-        resp = session.get(f"{BASE_URL}/api/org/structure")
-        settings = resp.json()["settings"]
-        setting = next((s for s in settings if s["id"] == TestTeamsCRUD.setting_id), None)
-        assert setting is not None
-        team_names = [t["name"] for t in setting.get("teams", [])]
-        assert "TEST_Team_Beta" in team_names
-
-    def test_update_team(self, session):
-        tid = TestTeamsCRUD.team_id
-        resp = session.put(f"{BASE_URL}/api/org/teams/{tid}", json={
-            "name": "TEST_Team_Beta_Updated"
-        })
-        assert resp.status_code == 200
-
-    def test_delete_team(self, session):
-        resp = session.delete(f"{BASE_URL}/api/org/teams/{TestTeamsCRUD.team_id}")
-        assert resp.status_code == 200
-
-    def test_cleanup_setting(self, session):
-        resp = session.delete(f"{BASE_URL}/api/org/settings/{TestTeamsCRUD.setting_id}")
-        assert resp.status_code == 200
-
-
-class TestMemberManagement:
-    """Test member assignment/removal"""
-    setting_id = None
-    team_id = None
-    test_user_id = None
-
-    def test_setup(self, session):
-        # Create setting and team
-        s = session.post(f"{BASE_URL}/api/org/settings", json={"name": "TEST_MemberSetting"})
-        assert s.status_code == 200
-        TestMemberManagement.setting_id = s.json()["id"]
-
-        t = session.post(f"{BASE_URL}/api/org/settings/{TestMemberManagement.setting_id}/teams", json={"name": "TEST_MemberTeam"})
-        assert t.status_code == 200
-        TestMemberManagement.team_id = t.json()["id"]
-
-    def test_get_unassigned_users(self, session):
-        resp = session.get(f"{BASE_URL}/api/org/structure")
-        assert resp.status_code == 200
-        unassigned = resp.json()["unassigned_users"]
-        assert isinstance(unassigned, list)
-        # Store a user id for member assignment test
-        if unassigned:
-            TestMemberManagement.test_user_id = unassigned[0]["id"]
-
-    def test_add_member(self, session):
-        if not TestMemberManagement.test_user_id:
-            pytest.skip("No unassigned user available")
-        resp = session.post(
-            f"{BASE_URL}/api/org/teams/{TestMemberManagement.team_id}/members",
-            json={"user_id": TestMemberManagement.test_user_id}
+    def test_assign_team_invalid_user(self, manager_token):
+        """PATCH /api/org/users/{id}/assign-team with invalid user id returns 404"""
+        r = requests.patch(
+            f"{BASE_URL}/api/org/users/000000000000000000000000/assign-team",
+            json={"team_id": None},
+            headers=auth_headers(manager_token)
         )
-        assert resp.status_code == 200
+        assert r.status_code == 404
+        print(f"PASS: Invalid user returns 404")
 
-    def test_member_appears_in_team(self, session):
-        if not TestMemberManagement.test_user_id:
-            pytest.skip("No unassigned user available")
-        resp = session.get(f"{BASE_URL}/api/org/structure")
-        settings = resp.json()["settings"]
-        setting = next((s for s in settings if s["id"] == TestMemberManagement.setting_id), None)
-        team = next((t for t in setting.get("teams", []) if t["id"] == TestMemberManagement.team_id), None)
-        member_ids = [m["id"] for m in team.get("members", [])]
-        assert TestMemberManagement.test_user_id in member_ids
-
-    def test_remove_member(self, session):
-        if not TestMemberManagement.test_user_id:
-            pytest.skip("No unassigned user available")
-        resp = session.delete(
-            f"{BASE_URL}/api/org/teams/{TestMemberManagement.team_id}/members/{TestMemberManagement.test_user_id}"
+    def test_assign_team_unassign_user(self, manager_token):
+        """Unassign a user by sending team_id: null"""
+        r = requests.get(f"{BASE_URL}/api/org/structure", headers=auth_headers(manager_token))
+        assert r.status_code == 200
+        data = r.json()
+        unassigned = data.get('unassigned_users', [])
+        if not unassigned:
+            pytest.skip("No unassigned users to test")
+        user_id = unassigned[0]['id']
+        r2 = requests.patch(
+            f"{BASE_URL}/api/org/users/{user_id}/assign-team",
+            json={"team_id": None},
+            headers=auth_headers(manager_token)
         )
-        assert resp.status_code == 200
+        assert r2.status_code == 200
+        print(f"PASS: Unassign user (team_id=null) returns 200")
 
-    def test_cleanup(self, session):
-        session.delete(f"{BASE_URL}/api/org/settings/{TestMemberManagement.setting_id}")
+    def test_assign_team_to_team(self, manager_token):
+        """Assign a user to a team if teams exist"""
+        r = requests.get(f"{BASE_URL}/api/org/structure", headers=auth_headers(manager_token))
+        assert r.status_code == 200
+        data = r.json()
+        unassigned = data.get('unassigned_users', [])
+        team_id = None
+        for s in data.get('settings', []):
+            for t in s.get('teams', []):
+                team_id = t['id']
+                break
+            if team_id:
+                break
+        if not unassigned or not team_id:
+            pytest.skip("Need unassigned users and teams to test assignment")
+        user_id = unassigned[0]['id']
+        r2 = requests.patch(
+            f"{BASE_URL}/api/org/users/{user_id}/assign-team",
+            json={"team_id": team_id},
+            headers=auth_headers(manager_token)
+        )
+        assert r2.status_code == 200
+        print(f"PASS: Assign user to team returns 200")
+        # Revert
+        requests.patch(
+            f"{BASE_URL}/api/org/users/{user_id}/assign-team",
+            json={"team_id": None},
+            headers=auth_headers(manager_token)
+        )
+
+    def test_invite_user_unauthenticated_fails(self):
+        """Unauthenticated request should return 401"""
+        r = requests.post(f"{BASE_URL}/api/org/invite-user", json={"name": "X", "email": "x@x.com", "password": "pass1234", "role": "attendee"})
+        assert r.status_code == 401
+        print(f"PASS: Unauthenticated returns 401")

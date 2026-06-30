@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import Response as _Response
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional
@@ -40,6 +40,17 @@ class TeamCreate(BaseModel):
 
 class MemberAssign(BaseModel):
     user_id: str
+
+
+class TeamAssignRequest(BaseModel):
+    team_id: Optional[str] = None
+
+
+class InviteUserRequest(BaseModel):
+    name: str
+    email: EmailStr
+    role: str
+    password: str
 
 
 @router.get("/structure")
@@ -252,8 +263,72 @@ async def remove_member(team_id: str, user_id: str, db=Depends(get_db), current_
     return {"message": "Member removed"}
 
 
+@router.patch("/users/{user_id}/assign-team")
+async def assign_user_to_team(
+    user_id: str,
+    data: TeamAssignRequest,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Move a user to a different team (or unassign if team_id is null). Used by drag-and-drop."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-# ── Branding ──────────────────────────────────────────────────────────────────
+    user = await db.users.find_one({"_id": ObjectId(user_id), "org_id": current_user.get("org_id")})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if data.team_id:
+        team = await db.teams.find_one({"_id": ObjectId(data.team_id)})
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+        setting = await db.org_settings.find_one({"_id": ObjectId(team["setting_id"])})
+        if not setting or str(setting.get("org_id", "")) != str(current_user.get("org_id", "")):
+            raise HTTPException(status_code=403, detail="Team not in your organisation")
+        await db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"team_id": data.team_id, "setting_id": str(team.get("setting_id", ""))}}
+        )
+    else:
+        await db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$unset": {"team_id": "", "setting_id": "", "org_scope": ""}}
+        )
+    return {"ok": True}
+
+
+@router.post("/invite-user")
+async def invite_user_to_org(
+    data: InviteUserRequest,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Create a new user scoped to this org. Managers can create non-admin users."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    from routers.auth import hash_password
+
+    existing = await db.users.find_one({"email": data.email.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    allowed_roles = ["attendee", "manager", "shared_reviewer"]
+    if current_user["role"] == "admin":
+        allowed_roles.append("admin")
+    role = data.role if data.role in allowed_roles else "attendee"
+
+    doc = {
+        "email": data.email.lower(),
+        "password_hash": hash_password(data.password),
+        "name": data.name,
+        "role": role,
+        "org_id": current_user.get("org_id"),
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = await db.users.insert_one(doc)
+    return {"id": str(result.inserted_id), "name": data.name, "email": data.email.lower(), "role": role}
 
 class BrandingUpdate(BaseModel):
     logo_url: Optional[str] = None
