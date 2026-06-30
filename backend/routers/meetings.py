@@ -113,7 +113,10 @@ async def list_meetings(db=Depends(get_db), current_user=Depends(get_current_use
         return []
 
     org_id = current_user.get("org_id")
-    org_filter = {"org_id": org_id} if org_id else {}
+    # No org_id means the user is not part of any organisation — return nothing
+    if not org_id:
+        return []
+    org_filter = {"org_id": org_id}
 
     if role == "admin":
         cursor = db.meetings.find(org_filter).sort("created_at", -1).limit(500)
@@ -148,7 +151,7 @@ async def list_meetings(db=Depends(get_db), current_user=Depends(get_current_use
 @router.get("/{meeting_id}")
 async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     try:
-        doc = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+        doc = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid meeting ID")
     if not doc:
@@ -193,6 +196,8 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
 
 @router.put("/{meeting_id}/attendees")
 async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
     attendees = []
     if data.attendee_ids:
         valid_ids = []
@@ -214,26 +219,32 @@ async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Dep
                     "reviewed": False,
                     "reviewed_at": None,
                 })
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
+    result = await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
         {"$set": {"attendees": attendees, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
     return {"message": "Attendees updated"}
 
 
 @router.put("/{meeting_id}/manager")
 async def update_manager(meeting_id: str, data: UpdateManagerRequest, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
-    mgr = await db.users.find_one({"_id": ObjectId(data.manager_id)})
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    mgr = await db.users.find_one({"_id": ObjectId(data.manager_id), "org_id": current_user.get("org_id")})
     if not mgr:
         raise HTTPException(status_code=404, detail="Manager not found")
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
+    result = await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
         {"$set": {
             "sign_off_manager_id": data.manager_id,
             "sign_off_manager_name": mgr["name"],
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
     return {"message": "Manager updated"}
 
 
@@ -246,7 +257,7 @@ async def delete_meeting(meeting_id: str, db=Depends(get_db), current_user=Depen
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid meeting ID")
 
-    result = await db.meetings.delete_one({"_id": oid})
+    result = await db.meetings.delete_one({"_id": oid, "org_id": current_user.get("org_id")})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Meeting not found")
 

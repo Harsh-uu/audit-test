@@ -21,7 +21,7 @@ class RecordingEventRequest(BaseModel):
 async def log_notice(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     now = datetime.now(timezone.utc).isoformat()
     await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
+        {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
         {"$set": {"recording_notice_shown_at": now, "updated_at": now}}
     )
     return {"message": "Notice logged", "timestamp": now}
@@ -37,7 +37,7 @@ async def start_recording(meeting_id: str, request: Request, db=Depends(get_db),
     ts = data.timestamp or datetime.now(timezone.utc).isoformat()
     event = {"type": "started", "timestamp": ts, "user_id": current_user["id"]}
     await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
+        {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
         {
             "$push": {"recording_events": event},
             "$set": {"status": "recording", "updated_at": datetime.now(timezone.utc).isoformat()}
@@ -56,7 +56,7 @@ async def pause_recording(meeting_id: str, request: Request, db=Depends(get_db),
     ts = data.timestamp or datetime.now(timezone.utc).isoformat()
     event = {"type": "paused", "timestamp": ts, "user_id": current_user["id"]}
     await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
+        {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
         {
             "$push": {"recording_events": event},
             "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
@@ -92,7 +92,7 @@ async def resume_recording(meeting_id: str, request: Request, db=Depends(get_db)
         except Exception:
             pass
 
-    await db.meetings.update_one({"_id": ObjectId(meeting_id)}, update_ops)
+    await db.meetings.update_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")}, update_ops)
     return {"message": "Recording resumed", "timestamp": ts}
 
 
@@ -106,7 +106,7 @@ async def stop_recording(meeting_id: str, request: Request, db=Depends(get_db), 
     ts = data.timestamp or datetime.now(timezone.utc).isoformat()
     event = {"type": "stopped", "timestamp": ts, "user_id": current_user["id"]}
     await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
+        {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
         {
             "$push": {"recording_events": event},
             "$set": {"status": "stopped", "updated_at": datetime.now(timezone.utc).isoformat()}
@@ -117,7 +117,7 @@ async def stop_recording(meeting_id: str, request: Request, db=Depends(get_db), 
 
 @router.get("/{meeting_id}/events")
 async def get_events(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    doc = await db.meetings.find_one({"_id": ObjectId(meeting_id)}, {"recording_events": 1, "paused_periods": 1, "total_paused_duration_seconds": 1})  # noqa: E501
+    doc = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")}, {"recording_events": 1, "paused_periods": 1, "total_paused_duration_seconds": 1})  # noqa: E501
     if not doc:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return {

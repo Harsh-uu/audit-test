@@ -23,6 +23,8 @@ async def get_current_user(request: Request, db=Depends(get_db)):
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        if not user.get("is_active", True):
+            raise HTTPException(status_code=401, detail="Account is deactivated")
         user["id"] = str(user["_id"])
         del user["_id"]
         user.pop("password_hash", None)

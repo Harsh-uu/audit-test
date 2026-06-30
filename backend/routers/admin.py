@@ -100,7 +100,12 @@ async def update_user(user_id: str, data: UpdateUserRequest, db=Depends(get_db),
         clash = await db.users.find_one({"email": update_data["email"], "_id": {"$ne": ObjectId(user_id)}})
         if clash:
             raise HTTPException(status_code=400, detail="Email address already in use")
-    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
+    result = await db.users.update_one(
+        {"_id": ObjectId(user_id), "org_id": current_user.get("org_id")},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User updated"}
 
 
@@ -111,10 +116,12 @@ async def reset_user_password(user_id: str, data: ResetPasswordRequest, db=Depen
     if len(data.new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     from routers.auth import hash_password
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
+    result = await db.users.update_one(
+        {"_id": ObjectId(user_id), "org_id": current_user.get("org_id")},
         {"$set": {"password_hash": hash_password(data.new_password)}}
     )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
     return {"message": "Password reset successfully"}
 
 
@@ -353,8 +360,12 @@ async def get_team_insights(
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
+    org_id = current_user.get("org_id")
+
     # ── Staff ──────────────────────────────────────────────────────────────
     staff_query: dict = {"role": {"$in": ["attendee", "manager"]}, "is_active": {"$ne": False}}
+    if org_id:
+        staff_query["org_id"] = org_id
     if team_id:
         staff_query["team_id"] = team_id
     elif setting_id:
@@ -396,11 +407,12 @@ async def get_team_insights(
     cqc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
     cc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
 
-    # ── Load all signed-off meetings ────────────────────────────────────────
+    # ── Load all signed-off meetings for this org ────────────────────────────
     all_items = []
-    async for meeting in db.meetings.find(
-        {"status": {"$in": ["signed_off", "shared"]}, "analysis_id": {"$exists": True}}
-    ).sort("date", -1):
+    meetings_filter: dict = {"status": {"$in": ["signed_off", "shared"]}, "analysis_id": {"$exists": True}}
+    if org_id:
+        meetings_filter["org_id"] = org_id
+    async for meeting in db.meetings.find(meetings_filter).sort("date", -1):
         adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
         if adoc:
             all_items.append({"meeting": meeting, "analysis": adoc})
@@ -651,6 +663,7 @@ async def export_evidence(data: dict, db=Depends(get_db), current_user=Depends(g
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
+    org_id = current_user.get("org_id")
     fmt = data.get("format", "csv")  # "pdf" | "csv"
     staff_ids = data.get("staff_ids") or []
     date_from = data.get("date_from")
@@ -659,6 +672,8 @@ async def export_evidence(data: dict, db=Depends(get_db), current_user=Depends(g
 
     # Build query
     query: dict = {"status": {"$in": ["signed_off", "shared"]}, "analysis_id": {"$exists": True}}
+    if org_id:
+        query["org_id"] = org_id
 
     if meeting_ids:
         query["_id"] = {"$in": [ObjectId(mid) for mid in meeting_ids if mid]}
@@ -819,10 +834,12 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
 async def get_stats(db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    total_meetings = await db.meetings.count_documents({})
-    signed_off = await db.meetings.count_documents({"status": "signed_off"})
-    in_review = await db.meetings.count_documents({"status": {"$in": ["in_review", "reviewed"]}})
-    total_users = await db.users.count_documents({})
+    org_id = current_user.get("org_id")
+    org_filter = {"org_id": org_id} if org_id else {}
+    total_meetings = await db.meetings.count_documents({**org_filter})
+    signed_off = await db.meetings.count_documents({"status": "signed_off", **org_filter})
+    in_review = await db.meetings.count_documents({"status": {"$in": ["in_review", "reviewed"]}, **org_filter})
+    total_users = await db.users.count_documents({**org_filter})
     total_standards = await db.standards_entries.count_documents({"is_active": True})
     return {
         "total_meetings": total_meetings,

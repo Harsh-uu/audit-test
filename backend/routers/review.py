@@ -86,7 +86,7 @@ async def delete_audio_after_grace(meeting_id: str, db):
 
 @router.get("/{meeting_id}")
 async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    doc = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    doc = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not doc:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = doc_to_dict(doc)
@@ -118,7 +118,7 @@ async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depe
 
 @router.put("/{meeting_id}/summary")
 async def update_summary(meeting_id: str, data: UpdateSummaryRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.get("status") not in ["in_review", "reviewed"]:
@@ -148,7 +148,7 @@ async def update_summary(meeting_id: str, data: UpdateSummaryRequest, db=Depends
 
 @router.put("/{meeting_id}/actions")
 async def update_actions(meeting_id: str, data: UpdateActionsRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.get("status") not in ["in_review", "reviewed"]:
@@ -175,7 +175,7 @@ async def update_actions(meeting_id: str, data: UpdateActionsRequest, db=Depends
 
 @router.put("/{meeting_id}/evidence/{evidence_id}")
 async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenceRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -212,7 +212,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
 
 @router.post("/{meeting_id}/mark-reviewed")
 async def mark_reviewed(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.get("status") not in ["in_review"]:
@@ -249,7 +249,7 @@ async def mark_reviewed(meeting_id: str, db=Depends(get_db), current_user=Depend
 
 @router.post("/{meeting_id}/signoff")
 async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -330,7 +330,7 @@ async def anonymise_transcript(
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can anonymise transcripts")
 
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -371,7 +371,7 @@ async def anonymise_transcript(
 
 @router.post("/{meeting_id}/share")
 async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.get("status") not in ["signed_off", "shared"]:
@@ -394,7 +394,7 @@ async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db),
 
 @router.post("/{meeting_id}/comments")
 async def add_comment(meeting_id: str, data: CommentRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -432,7 +432,7 @@ async def update_speaker_text(
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can edit speaker labels")
 
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -459,7 +459,7 @@ async def update_speaker_text(
 
 @router.get("/{meeting_id}/audit-trail")
 async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -609,7 +609,7 @@ async def get_comments(meeting_id: str, db=Depends(get_db), current_user=Depends
 
 @router.post("/{meeting_id}/send-email")
 async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.get("status") not in ["signed_off", "shared"]:
@@ -650,7 +650,7 @@ async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_
 @router.get("/{meeting_id}/export-pdf")
 async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depends(get_db), current_user=Depends(get_current_user)):
     from fastapi.responses import Response
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.get("status") != "signed_off":

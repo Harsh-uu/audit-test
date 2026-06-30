@@ -235,9 +235,9 @@ async def upload_audio(
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # Validate meeting exists
+    # Validate meeting exists and belongs to this org
     try:
-        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid meeting ID")
     if not meeting:
@@ -304,7 +304,7 @@ async def retry_processing(
 ):
     """Re-trigger transcription + analysis for a processing_failed meeting using stored audio."""
     try:
-        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid meeting ID")
     if not meeting:
@@ -342,7 +342,7 @@ async def diarize_meeting_transcript(
 ):
     """Generate (or regenerate) speaker labels for an existing transcript."""
     try:
-        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid meeting ID")
     if not meeting:
@@ -380,7 +380,7 @@ async def diarize_meeting_transcript(
 async def get_processing_status(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     try:
         meeting = await db.meetings.find_one(
-            {"_id": ObjectId(meeting_id)},
+            {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
             {"status": 1, "audio_file_id": 1, "transcript_id": 1, "analysis_id": 1, "audio_deletion_status": 1}
         )
     except Exception:

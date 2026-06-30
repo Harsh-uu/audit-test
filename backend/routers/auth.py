@@ -50,6 +50,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     name: str
+    # role is accepted for API compatibility but always overridden to "attendee" on public registration
     role: str = "attendee"
 
 
@@ -64,7 +65,8 @@ async def register(data: RegisterRequest, response: Response, db=Depends(get_db)
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    role = data.role if data.role in ["admin", "manager", "attendee", "shared_reviewer"] else "attendee"
+    # Public self-registration is always attendee — elevated roles require admin/super-admin
+    role = "attendee"
     user_doc = {
         "email": email,
         "password_hash": hash_password(data.password),
@@ -152,6 +154,8 @@ async def refresh_token(request: Request, response: Response, db=Depends(get_db)
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        if not user.get("is_active", True):
+            raise HTTPException(status_code=401, detail="Account is deactivated")
         user_id = str(user["_id"])
         new_access = create_access_token(user_id, user["email"])
         new_refresh = create_refresh_token(user_id)
