@@ -319,7 +319,7 @@ export default function MeetingReport() {
                 <span className="hidden sm:inline">Sign Off</span>
               </button>
             )}
-            {isSignedOff && canSignOff && (
+            {(canReview || canSignOff) && (
               <div className="flex items-center gap-2">
                 <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-sm">
                   {/* PDF export — icon only on mobile */}
@@ -333,11 +333,12 @@ export default function MeetingReport() {
                     <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none" title="Speaker turns are always included when available. This adds the full plain-text transcript.">+ Full text</label>
                   </div>
                 </div>
-                {/* Send — icon only on mobile */}
-                <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn" title="Send to Attendees">
-                  <Send className="w-4 h-4" />
-                  <span className="hidden sm:inline">Send to Attendees</span>
-                </button>
+                {isSignedOff && (
+                  <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn" title="Send to Attendees">
+                    <Send className="w-4 h-4" />
+                    <span className="hidden sm:inline">Send to Attendees</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -427,7 +428,9 @@ export default function MeetingReport() {
                     actionMessage={actionMessage}
                   />
                 )}
-                {activeTab === "transcript" && (
+                {/* TranscriptTab stays mounted to preserve unsaved speaker edits
+                    across tab switches — hidden with CSS rather than unmounted */}
+                <div className={activeTab === "transcript" ? "" : "hidden"}>
                   <TranscriptTab
                     meeting={meeting}
                     onAnonymise={handleAnonymise}
@@ -437,7 +440,7 @@ export default function MeetingReport() {
                       transcript: { ...m.transcript, speaker_text: spText }
                     }))}
                   />
-                )}
+                </div>
                 {activeTab === "comments" && (
                   <CommentsTab
                     meeting={meeting}
