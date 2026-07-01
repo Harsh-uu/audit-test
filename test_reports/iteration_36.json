@@ -1,0 +1,24 @@
+{
+  "summary": "Security fix validation tests — all 12 tests passed. Cross-tenant isolation verified for actions, comments, meetings-brief, standards documents, org settings, teams, and portfolio. Regression flows confirmed working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_security_fixes.py",
+    "/app/test_reports/pytest/security_fixes_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": ["/app/backend/tests/test_security_fixes.py"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "N/A - backend only"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Security fixes iteration 36. All 5 fix categories verified: (1) action toggle 404 on fabricated meeting_id, (2) comments 404 on fabricated meeting_id, (3) meetings-brief org-scoped, (4) standards documents org-scoped, (5) org settings PUT 404 on fabricated id, team DELETE 404 on fabricated id, (6) portfolio 404 on fabricated user_id. Regression: org/structure, standards/documents, meetings-brief, and manager portfolio all return 200. Test file: /app/backend/tests/test_security_fixes.py"
+}

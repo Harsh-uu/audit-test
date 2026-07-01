@@ -293,7 +293,7 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, db=Depend
 @router.patch("/{meeting_id}/actions/{action_id}")
 async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
     """Mark an action as complete or incomplete."""
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting or not meeting.get("analysis_id"):
         raise HTTPException(status_code=404, detail="Meeting or analysis not found")
     analysis = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
@@ -714,6 +714,9 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
 
 @router.get("/{meeting_id}/comments")
 async def get_comments(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
     comments = []
     async for c in db.reviewer_comments.find({"meeting_id": meeting_id}).sort("created_at", 1):
         comments.append(doc_to_dict(c))
@@ -799,6 +802,7 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depen
 
 def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_text: str = "") -> bytes:
     from io import BytesIO
+    from xml.sax.saxutils import escape as _xe
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
@@ -825,6 +829,8 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     small_style = ParagraphStyle("Small", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=2, leading=11)
     mono_style = ParagraphStyle("Mono", fontName="Courier", fontSize=8, textColor=colors.HexColor("#374151"), leading=12, spaceAfter=4)
 
+    def e(t): return _xe(str(t or ""))
+
     def section_header(title, bg=NAVY):
         data = [[Paragraph(f'<font color="white"><b>{title}</b></font>', ParagraphStyle("SH", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white))]]
         t = Table(data, colWidths=[170*mm])
@@ -834,13 +840,13 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     def evidence_card(ref, name, badge_text, evidence_summary, excerpt, confidence, bg):
         conf_label = {"likely_evidence": "Likely Evidence", "needs_review": "Needs Review", "not_enough_evidence": "Not Enough Evidence"}.get(confidence, confidence)
         conf_color = CONFIDENCE_COLORS.get(confidence, MID_GRAY)
-        rows = [[Paragraph(f'<b>{ref}</b> — {name}', body_style), Paragraph(f'<font color="{conf_color.hexval()}"><b>{conf_label}</b></font>', small_style)]]
+        rows = [[Paragraph(f'<b>{e(ref)}</b> — {e(name)}', body_style), Paragraph(f'<font color="{conf_color.hexval()}"><b>{e(conf_label)}</b></font>', small_style)]]
         if badge_text:
-            rows.append([Paragraph(f'<i>{badge_text}</i>', small_style), ""])
+            rows.append([Paragraph(f'<i>{e(badge_text)}</i>', small_style), ""])
         if evidence_summary:
-            rows.append([Paragraph(evidence_summary, small_style), ""])
+            rows.append([Paragraph(e(evidence_summary), small_style), ""])
         if excerpt:
-            rows.append([Paragraph(f'<i>"{excerpt}"</i>', small_style), ""])
+            rows.append([Paragraph(f'<i>&#34;{e(excerpt)}&#34;</i>', small_style), ""])
         t = Table(rows, colWidths=[130*mm, 40*mm])
         t.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), bg),
@@ -855,7 +861,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
 
     # ── Header ──────────────────────────────────────────────────────────
     story.append(Paragraph("Supervision 2.0", ParagraphStyle("App", fontName="Helvetica", fontSize=9, textColor=MID_GRAY)))
-    story.append(Paragraph(meeting.get("title", "Meeting Report"), title_style))
+    story.append(Paragraph(e(meeting.get("title", "Meeting Report")), title_style))
     story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=6))
 
     # Meeting metadata table
@@ -880,7 +886,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     story.append(section_header("Meeting Summary"))
     summary = analysis.get("edited_summary") or analysis.get("summary", "No summary available.")
     story.append(Spacer(1, 2*mm))
-    story.append(Paragraph(summary, body_style))
+    story.append(Paragraph(e(summary), body_style))
 
     # ── Actions ──────────────────────────────────────────────────────────
     actions = analysis.get("actions", [])
@@ -911,7 +917,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         for r in risks:
             sev = r.get("severity", "").upper()
             sev_color = {"HIGH": "#DC2626", "MEDIUM": "#D97706", "LOW": "#6B7280"}.get(sev, "#6B7280")
-            story.append(Paragraph(f'<font color="{sev_color}"><b>[{sev}]</b></font> {r.get("text", "")}', body_style))
+            story.append(Paragraph(f'<font color="{sev_color}"><b>[{sev}]</b></font> {e(r.get("text", ""))}', body_style))
 
     # ── CQC Evidence ──────────────────────────────────────────────────────
     cqc_maps = analysis.get("cqc_mappings", [])
@@ -985,7 +991,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
                 is_manager = (sl in ("manager", "supervisor") or
                               any(w in sl for w in manager_words))
                 label_color = MGMT_NAVY if is_manager else WORKER_GREEN
-                row = [[Paragraph(speaker.upper(), label_text_style), Paragraph(text, turn_text_style)]]
+                row = [[Paragraph(e(speaker.upper()), label_text_style), Paragraph(e(text), turn_text_style)]]
                 t = Table(row, colWidths=[22*mm, 148*mm])
                 t.setStyle(TableStyle([
                     ("BACKGROUND", (0, 0), (0, 0), label_color),
@@ -1005,7 +1011,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
             story.append(Paragraph("Names in this transcript have been replaced with initials.", small_style))
             for chunk in transcript_text.split("\n"):
                 if chunk.strip():
-                    story.append(Paragraph(chunk.strip(), mono_style))
+                    story.append(Paragraph(e(chunk.strip()), mono_style))
 
     # ── Footer note ───────────────────────────────────────────────────────
     story.append(Spacer(1, 8*mm))

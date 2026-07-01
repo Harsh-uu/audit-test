@@ -170,7 +170,7 @@ async def create_setting(data: SettingCreate, db=Depends(get_db), current_user=D
 async def update_setting(setting_id: str, data: SettingCreate, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    existing = await db.org_settings.find_one({"_id": ObjectId(setting_id)})
+    existing = await db.org_settings.find_one({"_id": ObjectId(setting_id), "org_id": current_user.get("org_id")})
     if not existing:
         raise HTTPException(status_code=404, detail="Setting not found")
     # Remove org_scope from old manager if changed
@@ -197,7 +197,7 @@ async def delete_setting(setting_id: str, db=Depends(get_db), current_user=Depen
         await db.users.update_many({"team_id": tid}, {"$unset": {"team_id": "", "setting_id": "", "org_scope": ""}})
     await db.teams.delete_many({"setting_id": setting_id})
     await db.users.update_many({"setting_id": setting_id}, {"$unset": {"setting_id": "", "org_scope": ""}})
-    result = await db.org_settings.delete_one({"_id": ObjectId(setting_id)})
+    result = await db.org_settings.delete_one({"_id": ObjectId(setting_id), "org_id": current_user.get("org_id")})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Setting not found")
     return {"message": "Setting deleted"}
@@ -207,7 +207,7 @@ async def delete_setting(setting_id: str, db=Depends(get_db), current_user=Depen
 async def create_team(setting_id: str, data: TeamCreate, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    if not await db.org_settings.find_one({"_id": ObjectId(setting_id)}):
+    if not await db.org_settings.find_one({"_id": ObjectId(setting_id), "org_id": current_user.get("org_id")}):
         raise HTTPException(status_code=404, detail="Setting not found")
     now = datetime.now(timezone.utc).isoformat()
     doc = {
@@ -235,7 +235,7 @@ async def create_team(setting_id: str, data: TeamCreate, db=Depends(get_db), cur
 async def update_team(team_id: str, data: TeamCreate, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    existing = await db.teams.find_one({"_id": ObjectId(team_id)})
+    existing = await db.teams.find_one({"_id": ObjectId(team_id), "org_id": current_user.get("org_id")})
     if not existing:
         raise HTTPException(status_code=404, detail="Team not found")
     old_sup = existing.get("supervisor_user_id")
@@ -256,7 +256,7 @@ async def delete_team(team_id: str, db=Depends(get_db), current_user=Depends(get
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     await db.users.update_many({"team_id": team_id}, {"$unset": {"team_id": "", "org_scope": ""}})
-    result = await db.teams.delete_one({"_id": ObjectId(team_id)})
+    result = await db.teams.delete_one({"_id": ObjectId(team_id), "org_id": current_user.get("org_id")})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Team not found")
     return {"message": "Team deleted"}
@@ -266,9 +266,12 @@ async def delete_team(team_id: str, db=Depends(get_db), current_user=Depends(get
 async def add_member(team_id: str, data: MemberAssign, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    team = await db.teams.find_one({"_id": ObjectId(team_id)})
+    team = await db.teams.find_one({"_id": ObjectId(team_id), "org_id": current_user.get("org_id")})
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
+    user_doc = await db.users.find_one({"_id": ObjectId(data.user_id), "org_id": current_user.get("org_id")})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
     await db.users.update_one(
         {"_id": ObjectId(data.user_id)},
         {"$set": {"team_id": team_id, "setting_id": team.get("setting_id", "")}}
@@ -280,8 +283,11 @@ async def add_member(team_id: str, data: MemberAssign, db=Depends(get_db), curre
 async def remove_member(team_id: str, user_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
+    team = await db.teams.find_one({"_id": ObjectId(team_id), "org_id": current_user.get("org_id")})
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
     await db.users.update_one(
-        {"_id": ObjectId(user_id)},
+        {"_id": ObjectId(user_id), "org_id": current_user.get("org_id")},
         {"$unset": {"team_id": "", "setting_id": "", "org_scope": ""}}
     )
     return {"message": "Member removed"}

@@ -171,7 +171,7 @@ async def list_documents(db=Depends(get_db), current_user=Depends(get_current_us
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Admin/Manager only")
     docs = []
-    async for doc in db.standards_documents.find({}).sort("created_at", -1):
+    async for doc in db.standards_documents.find({"org_id": current_user.get("org_id")}).sort("created_at", -1):
         docs.append(doc_to_dict(doc))
     return docs
 
@@ -213,6 +213,7 @@ async def upload_document(
         "size_bytes": len(file_data),
         "parse_status": "parsing",
         "is_active": True,
+        "org_id": current_user.get("org_id"),
         "uploaded_by": current_user["id"],
         "uploaded_by_name": current_user.get("name", ""),
         "created_at": now,
@@ -276,7 +277,7 @@ async def update_document(doc_id: str, data: dict, db=Depends(get_db), current_u
     update = {k: v for k, v in data.items() if k in allowed}
     if not update:
         raise HTTPException(status_code=400, detail="No valid fields to update")
-    await db.standards_documents.update_one({"_id": ObjectId(doc_id)}, {"$set": update})
+    await db.standards_documents.update_one({"_id": ObjectId(doc_id), "org_id": current_user.get("org_id")}, {"$set": update})
     return {"message": "Updated"}
 
 
@@ -284,7 +285,7 @@ async def update_document(doc_id: str, data: dict, db=Depends(get_db), current_u
 async def delete_document(doc_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Admin/Manager only")
-    await db.standards_documents.delete_one({"_id": ObjectId(doc_id)})
+    await db.standards_documents.delete_one({"_id": ObjectId(doc_id), "org_id": current_user.get("org_id")})
     return {"message": "Deleted"}
 
 
@@ -324,13 +325,15 @@ async def rescan_meetings_background(doc_id: str, db):
         if not doc or doc.get("parse_status") != "parsed":
             return
         doc["id"] = str(doc["_id"])
+        org_id = doc.get("org_id")
+        org_filter = {"org_id": org_id} if org_id else {}
         updated = 0
         async for analysis in db.analyses.find({}):
             # Skip if already mapped for this doc
             already = any(m.get("document_id") == doc_id for m in analysis.get("custom_mappings", []))
             if already:
                 continue
-            meeting = await db.meetings.find_one({"analysis_id": str(analysis["_id"])})
+            meeting = await db.meetings.find_one({"analysis_id": str(analysis["_id"]), **org_filter})
             if not meeting or not meeting.get("transcript_id"):
                 continue
             tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
@@ -644,7 +647,7 @@ async def list_meetings_brief(db=Depends(get_db), current_user=Depends(get_curre
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     meetings = []
     async for doc in db.meetings.find(
-        {"status": {"$in": ["signed_off", "shared"]}},
+        {"status": {"$in": ["signed_off", "shared"]}, "org_id": current_user.get("org_id")},
         {"title": 1, "date": 1, "attendees": 1, "status": 1}
     ).sort("date", -1):
         meetings.append({
@@ -743,6 +746,7 @@ async def export_evidence(data: dict, db=Depends(get_db), current_user=Depends(g
 
 def _generate_export_pdf(mtg_analyses: list) -> bytes:
     from io import BytesIO
+    from xml.sax.saxutils import escape as _xe
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
@@ -761,6 +765,8 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
     title_s = ParagraphStyle("T", fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=2)
     h2_s = ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=11, textColor=NAVY, spaceAfter=3, spaceBefore=8)
     small_s = ParagraphStyle("S", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
+
+    def e(t): return _xe(str(t or ""))
 
     story = []
     story.append(Paragraph("Supervision 2.0 — Evidence Export", small_s))
@@ -786,9 +792,9 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
         if i > 0:
             story.append(PageBreak())
 
-        story.append(Paragraph(mtg.get("title", "Meeting"), title_s))
+        story.append(Paragraph(e(mtg.get("title", "Meeting")), title_s))
         attendees = ", ".join(a.get("name", "") for a in mtg.get("attendees", []))
-        story.append(Paragraph(f'Date: {mtg.get("date", "—")} | Attendees: {attendees} | Manager: {mtg.get("sign_off_manager_name", "—")}', small_s))  # noqa: E501
+        story.append(Paragraph(f'Date: {e(mtg.get("date", "—"))} | Attendees: {e(attendees)} | Manager: {e(mtg.get("sign_off_manager_name", "—"))}', small_s))  # noqa: E501
         story.append(Spacer(1, 3*mm))
 
         for maps, label, bg, ref_key, name_key in [

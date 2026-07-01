@@ -189,7 +189,9 @@ async def _build_portfolio_data(user_id: str, db):
 async def get_portfolio(user_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"] and current_user["id"] != user_id:
         raise HTTPException(status_code=403, detail="You can only view your own portfolio")
-
+    target = await db.users.find_one({"_id": ObjectId(user_id)}, {"org_id": 1})
+    if not target or target.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=404, detail="User not found")
     data = await _build_portfolio_data(user_id, db)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -200,7 +202,9 @@ async def get_portfolio(user_id: str, db=Depends(get_db), current_user=Depends(g
 async def export_portfolio_pdf(user_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"] and current_user["id"] != user_id:
         raise HTTPException(status_code=403, detail="You can only export your own portfolio")
-
+    target = await db.users.find_one({"_id": ObjectId(user_id)}, {"org_id": 1})
+    if not target or target.get("org_id") != current_user.get("org_id"):
+        raise HTTPException(status_code=404, detail="User not found")
     data = await _build_portfolio_data(user_id, db)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -217,6 +221,7 @@ async def export_portfolio_pdf(user_id: str, db=Depends(get_db), current_user=De
 
 def _generate_portfolio_pdf(data: dict) -> bytes:
     from io import BytesIO
+    from xml.sax.saxutils import escape as _xe
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
@@ -241,6 +246,8 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     small_s = ParagraphStyle("S", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
     italic_s = ParagraphStyle("I", fontName="Helvetica-Oblique", fontSize=8, textColor=MID_GRAY, leading=11, spaceAfter=2)
 
+    def e(t): return _xe(str(t or ""))
+
     def section_hdr(title, bg=NAVY):
         t = Table([[Paragraph(f'<font color="white"><b>{title}</b></font>',
                     ParagraphStyle("SH", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white))]],
@@ -262,7 +269,7 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
 
     # ── Header ───────────────────────────────────────────────────────────
     story.append(Paragraph("Supervision 2.0 — Staff Evidence Portfolio", small_s))
-    story.append(Paragraph(user["name"], title_s))
+    story.append(Paragraph(e(user["name"]), title_s))
     story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=4))
 
     meta = [
@@ -318,17 +325,17 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
         for s in data["cqc_summary"]:
             kq = ", ".join(s.get("key_questions", []))
             rows = [[
-                Paragraph(f'<b>{s["regulation_ref"]}</b> — {s["regulation_name"]}', body_s),
+                Paragraph(f'<b>{e(s["regulation_ref"])}</b> — {e(s["regulation_name"])}', body_s),
                 Paragraph(f'<b>{s["evidence_count"]}</b> item(s)', small_s),
             ]]
             if kq:
-                rows.append([Paragraph(f'Key Questions: {kq}', small_s), ""])
+                rows.append([Paragraph(f'Key Questions: {e(kq)}', small_s), ""])
             rows.append([Paragraph(f'Likely: {s["likely_count"]}  |  Needs Review: {s["needs_review_count"]}', small_s), ""])
             dates = ", ".join(sorted(set(r["date"][:10] for r in s.get("meeting_refs", []))))
             if dates:
-                rows.append([Paragraph(f'Meetings: {dates}', small_s), ""])
+                rows.append([Paragraph(f'Meetings: {e(dates)}', small_s), ""])
             if s.get("latest_excerpt"):
-                rows.append([Paragraph(f'"{s["latest_excerpt"]}"', italic_s), ""])
+                rows.append([Paragraph(f'&#34;{e(s["latest_excerpt"])}&#34;', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, -1), PURPLE_BG),
@@ -352,17 +359,17 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
         story.append(Spacer(1, 2*mm))
         for s in data["care_cert_summary"]:
             rows = [[
-                Paragraph(f'<b>{s["standard_ref"]}</b> — {s["standard_name"]}', body_s),
+                Paragraph(f'<b>{e(s["standard_ref"])}</b> — {e(s["standard_name"])}', body_s),
                 Paragraph(f'<b>{s["evidence_count"]}</b> item(s)', small_s),
             ]]
             if s.get("outcome_ref"):
-                rows.append([Paragraph(f'Outcome {s["outcome_ref"]}: {s.get("outcome_name", "")}', small_s), ""])
+                rows.append([Paragraph(f'Outcome {e(s["outcome_ref"])}: {e(s.get("outcome_name", ""))}', small_s), ""])
             rows.append([Paragraph(f'Likely: {s["likely_count"]}  |  Needs Review: {s["needs_review_count"]}', small_s), ""])
             dates = ", ".join(sorted(set(r["date"][:10] for r in s.get("meeting_refs", []))))
             if dates:
-                rows.append([Paragraph(f'Meetings: {dates}', small_s), ""])
+                rows.append([Paragraph(f'Meetings: {e(dates)}', small_s), ""])
             if s.get("latest_excerpt"):
-                rows.append([Paragraph(f'"{s["latest_excerpt"]}"', italic_s), ""])
+                rows.append([Paragraph(f'&#34;{e(s["latest_excerpt"])}&#34;', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, -1), BLUE_BG),
@@ -386,17 +393,17 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
         story.append(Spacer(1, 2*mm))
         for s in data["custom_summary"]:
             rows = [[
-                Paragraph(f'<b>{s["criterion_ref"]}</b> — {s["criterion_name"]}', body_s),
+                Paragraph(f'<b>{e(s["criterion_ref"])}</b> — {e(s["criterion_name"])}', body_s),
                 Paragraph(f'<b>{s["evidence_count"]}</b> item(s)', small_s),
             ]]
             if s.get("document_name"):
-                rows.append([Paragraph(f'Document: {s["document_name"]}', small_s), ""])
+                rows.append([Paragraph(f'Document: {e(s["document_name"])}', small_s), ""])
             rows.append([Paragraph(f'Likely: {s["likely_count"]}  |  Needs Review: {s["needs_review_count"]}', small_s), ""])
             dates = ", ".join(sorted(set(r["date"][:10] for r in s.get("meeting_refs", []))))
             if dates:
-                rows.append([Paragraph(f'Meetings: {dates}', small_s), ""])
+                rows.append([Paragraph(f'Meetings: {e(dates)}', small_s), ""])
             if s.get("latest_excerpt"):
-                rows.append([Paragraph(f'"{s["latest_excerpt"]}"', italic_s), ""])
+                rows.append([Paragraph(f'&#34;{e(s["latest_excerpt"])}&#34;', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, -1), TEAL_BG),
