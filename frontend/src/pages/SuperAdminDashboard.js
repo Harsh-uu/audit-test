@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy, Pencil, Trash2, Check } from "lucide-react";
@@ -51,6 +52,8 @@ export default function SuperAdminDashboard() {
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "manager" });
   const [inviteForm, setInviteForm] = useState({ name: "", email: "" });
   const [inviteResult, setInviteResult] = useState(null); // { message, invite_link?, email_failed? }
+  const [userToDelete, setUserToDelete] = useState(null); // user object pending deletion
+  const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -136,13 +139,23 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!window.confirm("Delete this user? This cannot be undone.")) return;
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    setDeleting(true);
     try {
-      await axios.delete(`${API}/super-admin/orgs/${selectedOrg.id}/users/${userId}`, getAuthConfig());
+      const { data } = await axios.delete(
+        `${API}/super-admin/orgs/${selectedOrg.id}/users/${userToDelete.id}`,
+        getAuthConfig()
+      );
+      toast.success(data.message || "User deleted successfully");
+      setUserToDelete(null);
       await loadOrgUsers(selectedOrg);
+      await loadOrgs(); // refresh user count on org cards
     } catch (err) {
-      setError(err.response?.data?.detail || "Failed to delete user");
+      toast.error(err.response?.data?.detail || "Failed to delete user");
+      setUserToDelete(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -353,7 +366,7 @@ export default function SuperAdminDashboard() {
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteUser(u.id)}
+                            onClick={() => setUserToDelete(u)}
                             className="p-1.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
                             title="Delete user"
                             data-testid={`delete-user-btn-${u.id}`}
@@ -674,6 +687,48 @@ export default function SuperAdminDashboard() {
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        </>
+      )}
+      {/* ── Delete User Confirmation Modal ──────────────────────────── */}
+      {userToDelete && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => !deleting && setUserToDelete(null)} />
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+              <div className="flex items-start gap-4 mb-5">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-base">Delete User</h3>
+                  <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+                    Are you sure you want to delete <strong className="text-gray-800">{userToDelete.name}</strong>?
+                    Their schedules and login sessions will also be removed.
+                    <span className="block mt-1 text-red-500 font-medium">This cannot be undone.</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setUserToDelete(null)}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  data-testid="cancel-delete-user-btn"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteUser}
+                  disabled={deleting}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-60 transition-colors"
+                  data-testid="confirm-delete-user-btn"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {deleting ? "Deleting..." : "Delete User"}
+                </button>
+              </div>
             </div>
           </div>
         </>

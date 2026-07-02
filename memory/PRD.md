@@ -46,6 +46,12 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - [x] Admin can upload reference documents
 - [x] Manager can upload org-specific standards documents (Custom Standards tab) — Skills for Care Supervision Guide uploaded per-org
 
+### Super Admin User Management (Phase 5b)
+- [x] Delete User with full cascade (schedules + refresh tokens cleaned up) — backend `DELETE /api/super-admin/orgs/{org_id}/users/{user_id}`
+- [x] Confirmation modal before deletion (shows user name, warns about cascade)
+- [x] `toast.success` / `toast.error` feedback via sonner after delete completes
+- [x] Org user count auto-refreshes after deletion
+
 ### Document Import (Phase 2b)
 - [x] Managers/admins can upload a previous supervision document (PDF or DOCX) via `/upload-supervision`
 - [x] Document linked to a specific staff member with supervision date + label

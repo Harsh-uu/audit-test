@@ -323,7 +323,7 @@ async def update_org_user(
     return _to(updated)
 
 
-@router.delete("/orgs/{org_id}/users/{user_id}", status_code=204)
+@router.delete("/orgs/{org_id}/users/{user_id}", status_code=200)
 async def delete_org_user(
     org_id: str,
     user_id: str,
@@ -338,10 +338,28 @@ async def delete_org_user(
 
     user = await db.users.find_one({"_id": uid, "org_id": org_id})
     if not user:
-        raise HTTPException(status_code=404, detail="User not found in this organisation")
+        # Could be missing org_id or wrong org — try by ID alone as fallback
+        user = await db.users.find_one({"_id": uid})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.get("org_id") and user.get("org_id") != org_id:
+            raise HTTPException(status_code=403, detail="User belongs to a different organisation")
+
+    user_name = user.get("name", user_id)
+
+    # Cascade: schedules, refresh tokens (keep meetings/transcripts — they are evidence records)
+    sched = await db.schedules.delete_many({"staff_user_id": user_id})
+    tokens = await db.refresh_tokens.delete_many({"user_id": user_id})
 
     await db.users.delete_one({"_id": uid})
 
+    logger.info("Deleted user '%s' (%s) from org %s — schedules: %d, tokens: %d",
+                user_name, user_id, org_id, sched.deleted_count, tokens.deleted_count)
+
+    return {
+        "message": f"User '{user_name}' deleted",
+        "deleted": {"schedules": sched.deleted_count, "refresh_tokens": tokens.deleted_count},
+    }
 
 # ── Invite Admin ──────────────────────────────────────────────────────────────
 
