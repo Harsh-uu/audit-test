@@ -144,9 +144,7 @@ function MatrixView({ matrix, ccStandards = [], onCellClick }) {
                           height: 76,
                           lineHeight: "1.3",
                           overflow: "hidden",
-                          display: "-webkit-box",
-                          WebkitLineClamp: 1,
-                          WebkitBoxOrient: "vertical",
+                          whiteSpace: "nowrap",
                         }}
                         className="text-xs font-semibold text-gray-500 uppercase tracking-wide mx-auto"
                       >
