@@ -544,31 +544,49 @@ async def update_speaker_text(
         raise HTTPException(status_code=404, detail="No transcript found for this meeting")
 
     now = datetime.now(timezone.utc).isoformat()
-    # Keep the previous value as a one-deep backup before overwriting
-    existing = await db.transcripts.find_one({"_id": ObjectId(transcript_id)}, {"speaker_text": 1})
+    # Detect whether this save contains text edits (not just speaker label changes)
+    existing_t = await db.transcripts.find_one({"_id": ObjectId(transcript_id)}, {"speaker_text": 1})
+    prev_text = existing_t.get("speaker_text", "") if existing_t else ""
+    has_text_edit = False
+    if prev_text:
+        # Compare turn text content (strip speaker labels) to detect text-only edits
+        def _turn_bodies(s):
+            return [ln.split(":", 1)[-1].strip() for ln in s.strip().split("\n") if ":" in ln]
+        has_text_edit = _turn_bodies(prev_text) != _turn_bodies(data.speaker_text)
     update_fields = {
         "speaker_text": data.speaker_text,
         "speaker_text_edited_by_name": current_user.get("name", ""),
         "speaker_text_edited_at": now,
     }
-    if existing and existing.get("speaker_text"):
-        update_fields["speaker_text_backup"] = existing["speaker_text"]
-        update_fields["speaker_text_backup_at"] = existing.get("speaker_text_edited_at", "")
-        update_fields["speaker_text_backup_by"] = existing.get("speaker_text_edited_by_name", "")
+    if existing_t and existing_t.get("speaker_text"):
+        update_fields["speaker_text_backup"] = existing_t["speaker_text"]
+        update_fields["speaker_text_backup_at"] = existing_t.get("speaker_text_edited_at", "")
+        update_fields["speaker_text_backup_by"] = existing_t.get("speaker_text_edited_by_name", "")
 
     await db.transcripts.update_one(
         {"_id": ObjectId(transcript_id)},
         {"$set": update_fields}
     )
 
-    await db.audit_logs.insert_one({
+    # Audit: always log the save; log a separate text-edit event when turn bodies changed
+    logs = [{
         "meeting_id": meeting_id,
         "user_id": current_user["id"],
         "user_name": current_user.get("name", ""),
         "action": "speaker_correction",
         "edit_type": "speaker_correction",
         "timestamp": now,
-    })
+    }]
+    if has_text_edit:
+        logs.append({
+            "meeting_id": meeting_id,
+            "user_id": current_user["id"],
+            "user_name": current_user.get("name", ""),
+            "action": "transcript_text_edited",
+            "edit_type": "transcript_text_edited",
+            "timestamp": now,
+        })
+    await db.audit_logs.insert_many(logs)
 
     return {
         "message": "Speaker labels updated",
@@ -801,7 +819,25 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
             "detail": text[:100] + ("…" if len(text) > 100 else ""),
         })
 
-    # 9. Audio deleted
+    # 9a. Speaker-text edits (stored in audit_logs collection)
+    label_map_audit = {
+        "speaker_correction": "Speaker labels edited",
+        "transcript_text_edited": "Transcript text edited",
+        "speaker_reset": "Speaker labels reset to raw transcript",
+        "speaker_restore_backup": "Speaker labels restored from backup",
+        "speaker_diarize": "Speaker identification (AI)",
+    }
+    async for log in db.audit_logs.find({"meeting_id": meeting_id}).sort("timestamp", 1):
+        action = log.get("action", "unknown")
+        events.append({
+            "type": action,
+            "label": label_map_audit.get(action, action.replace("_", " ").title()),
+            "actor": log.get("user_name", "System"),
+            "timestamp": log.get("timestamp", ""),
+            "detail": None,
+        })
+
+    # 9b. Audio deleted
     if meeting.get("audio_deletion_status") == "deleted" and meeting.get("audio_deleted_at"):
         events.append({
             "type": "audio_deleted",

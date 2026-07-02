@@ -464,16 +464,20 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
             );
             if (poll.data.diarize_status === "done") {
               clearInterval(intervalId);
-              // Fetch updated transcript
-              const updated = await axios.get(
-                `${API}/api/review/${meeting.id}`,
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
-              const newSpeakerText = updated.data.transcript?.speaker_text;
-              if (onSpeakerTextGenerated) onSpeakerTextGenerated(newSpeakerText, null, null);
-              setViewMode("speaker");
+              // Only update localTurns if the user hasn't made manual changes
+              if (!isDirtyRef.current) {
+                const updated = await axios.get(
+                  `${API}/api/review/${meeting.id}`,
+                  { headers: { Authorization: `Bearer ${token}` } }
+                );
+                const newSpeakerText = updated.data.transcript?.speaker_text;
+                if (onSpeakerTextGenerated) onSpeakerTextGenerated(newSpeakerText, null, null);
+                setViewMode("speaker");
+                toast.success("Speaker labels generated");
+              } else {
+                toast.success("Speaker identification complete — save or discard your current changes to see the new labels");
+              }
               setGenerating(false);
-              toast.success("Speaker labels generated");
             } else if (poll.data.diarize_status === "failed") {
               clearInterval(intervalId);
               setGenerating(false);
