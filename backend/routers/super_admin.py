@@ -123,7 +123,94 @@ async def update_org(org_id: str, data: UpdateOrgRequest, db=Depends(get_db), cu
     return {"message": "Organisation updated"}
 
 
-@router.put("/orgs/{org_id}/branding")
+@router.patch("/orgs/{org_id}")
+async def update_org(org_id: str, data: UpdateOrgRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    _require_super_admin(current_user)
+    try:
+        obj_id = ObjectId(org_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid org ID")
+    existing = await db.organisations.find_one({"_id": obj_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+    update = {}
+    if data.name is not None:
+        update["name"] = data.name.strip()
+        update["slug"] = _slugify(data.name)
+    if data.status is not None and data.status in ["active", "suspended"]:
+        update["status"] = data.status
+    if not update:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.organisations.update_one({"_id": obj_id}, {"$set": update})
+    return {"message": "Organisation updated"}
+
+
+@router.delete("/orgs/{org_id}", status_code=200)
+async def delete_org(org_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+    """Permanently delete an organisation and all its associated data (users, meetings, transcripts, analyses, schedules, uploads, audit logs)."""
+    _require_super_admin(current_user)
+    try:
+        obj_id = ObjectId(org_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid org ID")
+
+    org = await db.organisations.find_one({"_id": obj_id})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    org_name = org.get("name", org_id)
+    totals = {}
+
+    # Meetings — collect IDs for dependent cascade
+    meeting_ids = []
+    async for m in db.meetings.find({"org_id": org_id}, {"_id": 1}):
+        meeting_ids.append(str(m["_id"]))
+
+    # Transcripts + analyses linked to meetings
+    if meeting_ids:
+        t = await db.transcripts.delete_many({"meeting_id": {"$in": meeting_ids}})
+        totals["transcripts"] = t.deleted_count
+        a = await db.analyses.delete_many({"meeting_id": {"$in": meeting_ids}})
+        totals["analyses"] = a.deleted_count
+        al = await db.audit_logs.delete_many({"meeting_id": {"$in": meeting_ids}})
+        totals["audit_logs"] = al.deleted_count
+
+    # Meetings themselves
+    r = await db.meetings.delete_many({"org_id": org_id})
+    totals["meetings"] = r.deleted_count
+
+    # Users
+    r = await db.users.delete_many({"org_id": org_id})
+    totals["users"] = r.deleted_count
+
+    # Schedules + meeting types
+    r = await db.schedules.delete_many({"org_id": org_id})
+    totals["schedules"] = r.deleted_count
+    r = await db.meeting_types.delete_many({"org_id": org_id})
+    totals["meeting_types"] = r.deleted_count
+
+    # Standards documents
+    r = await db.standards_documents.delete_many({"org_id": org_id})
+    totals["standards_documents"] = r.deleted_count
+
+    # Supervision uploads (document imports)
+    r = await db.supervision_uploads.delete_many({"org_id": org_id})
+    totals["supervision_uploads"] = r.deleted_count
+
+    # Invites + refresh tokens
+    r = await db.invites.delete_many({"org_id": org_id})
+    totals["invites"] = r.deleted_count
+    r = await db.refresh_tokens.delete_many({"org_id": org_id})
+    totals["refresh_tokens"] = r.deleted_count
+
+    # Organisation record itself
+    await db.organisations.delete_one({"_id": obj_id})
+
+    logger.info("Deleted org '%s' (%s): %s", org_name, org_id, totals)
+    return {"message": f"Organisation '{org_name}' permanently deleted", "deleted": totals}
+
+
 async def update_org_branding(org_id: str, data: OrgBrandingUpdate, db=Depends(get_db), current_user=Depends(get_current_user)):
     _require_super_admin(current_user)
     try:
