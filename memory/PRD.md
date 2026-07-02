@@ -262,7 +262,14 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - Speaker turn splitting: select any text within a turn in Speaker View → "Split turn here ✂" popup extracts it as a new standalone turn; user can then reassign each part. Uses browser `range.startOffset`/`endOffset` for character-accurate splitting.
 - Full speaker state refactored to `localTurns` mutable array — single source of truth replacing `speakerMap + turnOverrides` layered state.
 
-*Last Updated: 2026-Jun (inline transcript editing + re-scan evidence)*
+## Changelog (Recent)
+- **2026-Jul** — Manager access to Admin Library (Standards Library + Document Import tabs; Users/Branding hidden)
+- **2026-Jul** — Import Supervision Document: PDF/DOCX upload linked to staff, async o4-mini evidence scan, `DocUploadReport` page, portfolio "Imported Documents" section
+- **2026-Jul** — Custom weeks frequency for schedules (`weeks_N` format, e.g. six-weekly)
+- **2026-Jul** — Supervision Matrix page: colour-coded grid (red/amber/green) of all staff schedules, auto-fill responsive grid, filter bar, sidebar link
+- **2026-Jul** — CQC Inspection Prep page: per-regulation coverage bars, expandable gap details (which staff have no evidence), stats chips, section tabs (CQC / Care Cert), filter (All / Gaps / Evidenced)
+- **2026-Jul** — Meeting summary AI prompt updated: intro sentences + bullet points + closing sentences format; `SummaryBody` renderer in EvidenceTab parses and displays structured format
+- **2026-Jul** — Schedule pills right-aligned in Schedules page; status pills right-aligned in Dashboard meeting cards
 
 ## Changelog (Continued)
 - **2026-Jun** — Mobile responsive fix: Added "Compliance" as a 5th mobile-only tab on Meeting Report page.
