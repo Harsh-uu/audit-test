@@ -570,6 +570,46 @@ async def update_speaker_text(
     }
 
 
+@router.delete("/{meeting_id}/speaker-text")
+async def reset_speaker_text(
+    meeting_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Clear the edited speaker_text so the transcript falls back to the raw full text."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can reset speaker labels")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcript_id = meeting.get("transcript_id")
+    if not transcript_id:
+        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.transcripts.update_one(
+        {"_id": ObjectId(transcript_id)},
+        {"$unset": {
+            "speaker_text": "",
+            "speaker_text_edited_by_name": "",
+            "speaker_text_edited_at": "",
+        }}
+    )
+
+    await db.audit_logs.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": current_user["id"],
+        "user_name": current_user.get("name", ""),
+        "action": "speaker_reset",
+        "edit_type": "speaker_reset",
+        "timestamp": now,
+    })
+
+    return {"message": "Speaker labels cleared — transcript restored to full raw text"}
+
+
 @router.get("/{meeting_id}/audit-trail")
 async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})

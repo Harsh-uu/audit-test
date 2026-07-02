@@ -489,7 +489,8 @@ export default function MeetingReport() {
                       transcript: {
                         ...m.transcript,
                         speaker_text: spText,
-                        ...(editedByName ? { speaker_text_edited_by_name: editedByName, speaker_text_edited_at: editedAt } : {}),
+                        speaker_text_edited_by_name: editedByName || null,
+                        speaker_text_edited_at: editedAt || null,
                       }
                     }))}
                   />

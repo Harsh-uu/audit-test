@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check } from "lucide-react";
+import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check, RotateCcw } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { anonymiseTranscript } from "@/utils/anonymise";
@@ -57,7 +57,7 @@ function roleToStyle(role) {
 }
 
 // ── Speaker Manager Panel ────────────────────────────────────────────────────
-function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, saving, isDirty, lastEditedBy, lastEditedAt }) {
+function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, saving, isDirty, lastEditedBy, lastEditedAt }) {
   const speakerCounts = useMemo(() => {
     const counts = {};
     for (const t of localTurns) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
@@ -167,6 +167,17 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
                     Discard
                   </button>
                 </>
+              )}
+              {!isDirty && lastEditedBy && onReset && (
+                <button
+                  onClick={onReset}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors mt-1"
+                  data-testid="reset-speaker-labels-btn"
+                  title="Clear edited speaker labels and restore full raw transcript"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Reset
+                </button>
               )}
             </div>
           </div>
@@ -353,6 +364,24 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     setEditingTurnText("");
   }, [originalTurns]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleReset = async () => {
+    if (!window.confirm("This will clear the edited speaker labels and restore the full raw transcript. Continue?")) return;
+    try {
+      const token = localStorage.getItem("supervision_token");
+      await axios.delete(
+        `${API}/api/review/${meeting.id}/speaker-text`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setLocalTurns([]);
+      setDirty(false);
+      setViewMode("full");
+      toast.success("Speaker labels cleared — full transcript restored");
+      if (onSpeakerTextGenerated) onSpeakerTextGenerated(null, null, null);
+    } catch {
+      toast.error("Failed to reset speaker labels");
+    }
+  };
+
   const handleSave = async (stagedOverrides = {}) => {
     setSaving(true);
     try {
@@ -485,11 +514,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   }, [editingTurnIndex]);
 
   const raw = anonymiseTranscript(meeting.transcript?.text, meeting.attendees || []);
-  // Word count from displayed content — use parsed turns if available, fall back to raw transcript
-  const displayText = localTurns.length > 0
-    ? localTurns.map(t => t.text).join(" ")
-    : (raw || "");
-  const wordCount = displayText.trim().split(/\s+/).filter(Boolean).length;
+  const wordCount = raw ? raw.trim().split(/\s+/).filter(Boolean).length : 0;
   const readMins = Math.ceil(wordCount / 150);
 
   return (
@@ -566,6 +591,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                 onSwapAll={handleSwapAll}
                 onSave={handleSave}
                 onDiscard={handleDiscard}
+                onReset={handleReset}
                 saving={saving}
                 isDirty={isDirty}
                 lastEditedBy={meeting.transcript?.speaker_text_edited_by_name}
