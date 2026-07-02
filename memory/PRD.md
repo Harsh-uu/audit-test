@@ -46,6 +46,16 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - [x] Admin can upload reference documents
 - [x] Manager can upload org-specific standards documents (Custom Standards tab) — Skills for Care Supervision Guide uploaded per-org
 
+### Find & Replace in Transcript (Phase 5d)
+- [x] "Find & Replace" button in Transcript tab toolbar (Ctrl+H shortcut also works)
+- [x] Two-row bar: Search input with match counter (e.g. "2 / 7") + Prev/Next navigation; Replace input with Replace (current) and Replace All buttons
+- [x] All matches highlighted in yellow; current (active) match highlighted in amber
+- [x] Auto-scrolls to current match on Prev/Next
+- [x] Speaker View: Replace modifies `localTurns` client-side → dirty flag → uses existing Save flow to persist
+- [x] Full Text: Replace All calls `POST /api/review/{id}/find-replace`, saves to DB, refreshes transcript
+- [x] Audit trail entry `transcript_text_edited` with detail "Find & Replace: 'X' → 'Y' (N occurrences)"
+- [x] Escape closes bar; Enter navigates to next match
+
 ### PII / Confidentiality Review Gate (Phase 5c)
 - [x] Appears on FIRST open only for managers/admins (once cleared, never shows again)
 - [x] AI (GPT-4o) scans for third-party names + sensitive context; regex scans for UK phone, email, postcode, NHS/NI numbers

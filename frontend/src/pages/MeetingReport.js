@@ -242,6 +242,21 @@ export default function MeetingReport() {
     }
   };
 
+  const handleFindReplace = async (find, replace) => {
+    try {
+      const { data } = await axios.post(
+        `${API}/review/${meetingId}/find-replace`,
+        { find, replace },
+        getAuthConfig()
+      );
+      if (data.replaced_count > 0) {
+        await fetchMeeting();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Find & Replace failed");
+    }
+  };
+
   const rescanEvidence = async () => {
     if (speakersDirty) {
       toast.error("You have unsaved transcript changes. Save them in the Transcript tab first, then re-scan.");
@@ -518,6 +533,7 @@ export default function MeetingReport() {
                     canEditSpeakers={canEditSpeakers}
                     highlightExcerpt={highlightExcerpt}
                     onDirtyChange={(dirty) => setSpeakersDirty(dirty)}
+                    onFindReplace={handleFindReplace}
                     onSpeakerTextGenerated={(spText, editedByName, editedAt, speakerColors) => setMeeting(m => ({
                       ...m,
                       transcript: {

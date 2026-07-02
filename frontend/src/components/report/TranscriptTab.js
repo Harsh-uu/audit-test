@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check, RotateCcw } from "lucide-react";
+import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check, RotateCcw, Search, X } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { anonymiseTranscript } from "@/utils/anonymise";
@@ -26,6 +26,36 @@ function HighlightedText({ text, query }) {
       {text.slice(idx + q.length)}
     </>
   );
+}
+
+/** Escape special regex chars */
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Render text with multiple highlighted spans — supports current (amber) + other (yellow) */
+function MultiHighlightText({ text, matches, currentGlobalIdx }) {
+  if (!matches || !matches.length) return <>{text}</>;
+  const parts = [];
+  let last = 0;
+  for (const { start, end, globalIdx } of matches) {
+    if (start > last) parts.push(<span key={`t${last}`}>{text.slice(last, start)}</span>);
+    const isCurrent = globalIdx === currentGlobalIdx;
+    parts.push(
+      <mark
+        key={`m${globalIdx}`}
+        data-find-match={isCurrent ? "current" : undefined}
+        className={`rounded-sm px-0.5 not-italic transition-colors ${
+          isCurrent ? "bg-orange-300 text-gray-900 ring-1 ring-orange-400" : "bg-yellow-200 text-gray-900"
+        }`}
+      >
+        {text.slice(start, end)}
+      </mark>
+    );
+    last = end;
+  }
+  if (last < text.length) parts.push(<span key="tail">{text.slice(last)}</span>);
+  return <>{parts}</>;
 }
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -269,7 +299,7 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "" }) {
+export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "", onFindReplace }) {
   const [viewMode, setViewMode] = useState("full");
 
   // ── Speaker editing state ─────────────────────────────────────────────────
@@ -293,6 +323,13 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   const [openTurnMenu, setOpenTurnMenu] = useState(null);
   const [editingTurnIndex, setEditingTurnIndex] = useState(null);
   const [editingTurnText, setEditingTurnText] = useState("");
+
+  // ── Find & Replace state ───────────────────────────────────────────────────
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [replaceWith, setReplaceWith] = useState("");
+  const [findMatchIdx, setFindMatchIdx] = useState(0);
+  const findInputRef = useRef(null);
 
   // ── Full-text anonymise popup ─────────────────────────────────────────────
   const [selectionText, setSelectionText] = useState("");
@@ -346,6 +383,58 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
 
   // For raw text mode
   const rawParas = useMemo(() => formatTranscript(meeting.transcript?.text || ""), [meeting.transcript?.text]);
+
+  // ── Find & Replace match computation ──────────────────────────────────────
+  const findMatches = useMemo(() => {
+    const q = findQuery.trim();
+    if (!q) return [];
+    const ql = q.toLowerCase();
+    const matches = [];
+
+    if (viewMode === "speaker" && localTurns.length) {
+      localTurns.forEach((turn, turnIdx) => {
+        const tl = turn.text.toLowerCase();
+        let pos = 0, idx;
+        while ((idx = tl.indexOf(ql, pos)) !== -1) {
+          matches.push({ turnIdx, start: idx, end: idx + ql.length, type: "turn" });
+          pos = idx + 1;
+        }
+      });
+    } else {
+      rawParas.forEach((para, paraIdx) => {
+        const pl = para.toLowerCase();
+        let pos = 0, idx;
+        while ((idx = pl.indexOf(ql, pos)) !== -1) {
+          matches.push({ paraIdx, start: idx, end: idx + ql.length, type: "para" });
+          pos = idx + 1;
+        }
+      });
+    }
+    return matches;
+  }, [findQuery, viewMode, localTurns, rawParas]);
+
+  // Build per-turn / per-para match maps with globalIdx for multi-highlight rendering
+  const turnMatchMap = useMemo(() => {
+    const map = {};
+    findMatches.forEach((m, gi) => {
+      if (m.type === "turn") {
+        if (!map[m.turnIdx]) map[m.turnIdx] = [];
+        map[m.turnIdx].push({ start: m.start, end: m.end, globalIdx: gi });
+      }
+    });
+    return map;
+  }, [findMatches]);
+
+  const paraMatchMap = useMemo(() => {
+    const map = {};
+    findMatches.forEach((m, gi) => {
+      if (m.type === "para") {
+        if (!map[m.paraIdx]) map[m.paraIdx] = [];
+        map[m.paraIdx].push({ start: m.start, end: m.end, globalIdx: gi });
+      }
+    });
+    return map;
+  }, [findMatches]);
   const matchParaIdx = useMemo(() => {
     if (!highlightExcerpt || hasSpeakerText) return -1;
     const q = cleanExcerpt(highlightExcerpt).toLowerCase();
@@ -646,6 +735,84 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     setEditingTurnText("");
   }, []);
 
+  // ── Find & Replace effects ─────────────────────────────────────────────────
+  // Reset match index when query changes
+  useEffect(() => { setFindMatchIdx(0); }, [findQuery, viewMode]);
+
+  // Focus search input when bar opens
+  useEffect(() => {
+    if (findReplaceOpen) setTimeout(() => findInputRef.current?.focus(), 50);
+  }, [findReplaceOpen]);
+
+  // Scroll to current match
+  useEffect(() => {
+    if (!findMatches.length) return;
+    const el = document.querySelector("[data-find-match='current']");
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [findMatchIdx, findMatches]);
+
+  // Keyboard shortcut: Ctrl/Cmd+H to open, Escape to close
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "h") { e.preventDefault(); setFindReplaceOpen(true); }
+      if (e.key === "Escape" && findReplaceOpen) { setFindReplaceOpen(false); setFindQuery(""); }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [findReplaceOpen]);
+
+  // ── Find & Replace handlers ────────────────────────────────────────────────
+  const handleFindNext = useCallback(() => {
+    if (!findMatches.length) return;
+    setFindMatchIdx(i => (i + 1) % findMatches.length);
+  }, [findMatches.length]);
+
+  const handleFindPrev = useCallback(() => {
+    if (!findMatches.length) return;
+    setFindMatchIdx(i => (i - 1 + findMatches.length) % findMatches.length);
+  }, [findMatches.length]);
+
+  const handleReplaceOne = useCallback(async () => {
+    if (!findMatches.length) return;
+    const match = findMatches[findMatchIdx];
+
+    if (match.type === "turn") {
+      setLocalTurns(prev => prev.map((t, i) => {
+        if (i !== match.turnIdx) return t;
+        const newText = t.text.slice(0, match.start) + replaceWith + t.text.slice(match.end);
+        return { ...t, text: newText };
+      }));
+      setDirty(true);
+      // Move to next (or clamp) after replacement since matches will recompute
+      setFindMatchIdx(i => Math.min(i, findMatches.length - 2));
+    } else if (match.type === "para" && onFindReplace) {
+      // Full text: replace just this one occurrence using surrounding context as anchor
+      // Simplest approach: call replace all with a count of 1 — handled server-side
+      const para = rawParas[match.paraIdx];
+      const original = para.slice(match.start, match.end);
+      await onFindReplace(original, replaceWith, 1);
+    }
+  }, [findMatches, findMatchIdx, replaceWith, rawParas, onFindReplace, setDirty]); // eslint-disable-line
+
+  const handleReplaceAll = useCallback(async () => {
+    if (!findQuery.trim() || !findMatches.length) return;
+    const count = findMatches.length;
+
+    if (viewMode === "speaker") {
+      const pattern = new RegExp(escapeRegex(findQuery), "gi");
+      setLocalTurns(prev => prev.map(t => ({ ...t, text: t.text.replace(pattern, replaceWith) })));
+      setDirty(true);
+      toast.success(`Replaced ${count} occurrence${count !== 1 ? "s" : ""} — save to persist`);
+    } else if (onFindReplace) {
+      await onFindReplace(findQuery, replaceWith);
+      toast.success(`Replaced ${count} occurrence${count !== 1 ? "s" : ""}`);
+    }
+
+    setFindQuery("");
+    setReplaceWith("");
+    setFindReplaceOpen(false);
+  }, [findQuery, replaceWith, viewMode, findMatches.length, onFindReplace, setDirty]); // eslint-disable-line
+
   // ── Anonymise selection (Full Text only) ──────────────────────────────────
   const handleFullTextMouseUp = useCallback(() => {
     if (!canAnonymise) return;
@@ -719,7 +886,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   return (
     <div data-testid="transcript-view">
       {/* Header row */}
-      <div className="flex items-start gap-2 mb-4">
+      <div className="flex items-start gap-2 mb-4 flex-wrap">
         <div className="flex-1 bg-amber-50 border border-amber-200 rounded-md p-3 hidden sm:flex items-center gap-2">
           <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <p className="text-xs text-amber-700 flex-1">
@@ -730,6 +897,24 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
               : "Transcript is read-only. Use the Evidence tab to edit summaries and evidence wording."}
           </p>
         </div>
+
+        {/* Find & Replace button — always visible when transcript exists */}
+        {raw && (canAnonymise || canEditSpeakers) && (
+          <button
+            onClick={() => setFindReplaceOpen(v => !v)}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-medium transition-colors ${
+              findReplaceOpen
+                ? "bg-[#1E3A8A] border-[#1E3A8A] text-white"
+                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+            data-testid="find-replace-btn"
+            title="Find & Replace (Ctrl+H)"
+          >
+            <Search className="w-3.5 h-3.5" />
+            Find & Replace
+          </button>
+        )}
+
         {hasSpeakerText ? (
           <div className="flex rounded-md border border-gray-200 overflow-hidden flex-shrink-0 text-xs font-medium">
             <button
@@ -775,6 +960,96 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                 <span className="text-blue-500">{localTurns.length} turns</span>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Find & Replace Bar ──────────────────────────────────────────── */}
+        {findReplaceOpen && (
+          <div className="border-b border-blue-200 bg-blue-50 px-4 py-3" data-testid="find-replace-bar">
+            {/* Row 1 — Find */}
+            <div className="flex items-center gap-2 mb-2">
+              <Search className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+              <input
+                ref={findInputRef}
+                type="text"
+                value={findQuery}
+                onChange={e => setFindQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.shiftKey ? handleFindPrev() : handleFindNext(); } }}
+                placeholder="Find…"
+                className="flex-1 min-w-0 text-xs px-2.5 py-1.5 rounded border border-blue-200 bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] placeholder-gray-400"
+                data-testid="find-input"
+              />
+              {/* Match counter */}
+              <span className="text-xs text-gray-500 min-w-[44px] text-center flex-shrink-0">
+                {findQuery.trim()
+                  ? findMatches.length === 0
+                    ? <span className="text-red-500">No match</span>
+                    : `${findMatchIdx + 1} / ${findMatches.length}`
+                  : ""}
+              </span>
+              {/* Prev / Next */}
+              <button
+                onClick={handleFindPrev}
+                disabled={findMatches.length === 0}
+                className="p-1 rounded hover:bg-blue-100 disabled:opacity-30 transition-colors"
+                title="Previous (Shift+Enter)"
+                data-testid="find-prev-btn"
+              >
+                <ChevronUp className="w-3.5 h-3.5 text-gray-600" />
+              </button>
+              <button
+                onClick={handleFindNext}
+                disabled={findMatches.length === 0}
+                className="p-1 rounded hover:bg-blue-100 disabled:opacity-30 transition-colors"
+                title="Next (Enter)"
+                data-testid="find-next-btn"
+              >
+                <ChevronDown className="w-3.5 h-3.5 text-gray-600" />
+              </button>
+              {/* Close */}
+              <button
+                onClick={() => { setFindReplaceOpen(false); setFindQuery(""); setReplaceWith(""); }}
+                className="ml-1 p-1 rounded hover:bg-blue-100 transition-colors"
+                title="Close (Escape)"
+                data-testid="find-replace-close-btn"
+              >
+                <X className="w-3.5 h-3.5 text-gray-500" />
+              </button>
+            </div>
+            {/* Row 2 — Replace */}
+            <div className="flex items-center gap-2">
+              <div className="w-3.5 flex-shrink-0" /> {/* align with search icon */}
+              <input
+                type="text"
+                value={replaceWith}
+                onChange={e => setReplaceWith(e.target.value)}
+                onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") handleReplaceAll(); }}
+                placeholder="Replace with…"
+                className="flex-1 min-w-0 text-xs px-2.5 py-1.5 rounded border border-blue-200 bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] placeholder-gray-400"
+                data-testid="replace-input"
+              />
+              <button
+                onClick={handleReplaceOne}
+                disabled={findMatches.length === 0}
+                className="text-xs px-3 py-1.5 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors flex-shrink-0 font-medium"
+                data-testid="replace-one-btn"
+              >
+                Replace
+              </button>
+              <button
+                onClick={handleReplaceAll}
+                disabled={findMatches.length === 0}
+                className="text-xs px-3 py-1.5 rounded bg-[#1E3A8A] text-white hover:bg-[#1E40AF] disabled:opacity-40 transition-colors flex-shrink-0 font-semibold"
+                data-testid="replace-all-btn"
+              >
+                Replace All
+              </button>
+              {viewMode === "speaker" && findMatches.length > 0 && (
+                <span className="text-xs text-gray-400 hidden sm:inline">
+                  Changes will appear in Save flow
+                </span>
+              )}
+            </div>
           </div>
         )}
 
@@ -930,7 +1205,9 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                               matchTurnIdx === i ? "rounded px-1 -mx-1 bg-yellow-50 ring-1 ring-yellow-300" : ""
                             }`}
                           >
-                            {matchTurnIdx === i
+                            {findReplaceOpen && findQuery.trim() && turnMatchMap[i]
+                              ? <MultiHighlightText text={turn.text} matches={turnMatchMap[i]} currentGlobalIdx={findMatchIdx} />
+                              : matchTurnIdx === i
                               ? <HighlightedText text={turn.text} query={highlightExcerpt} />
                               : turn.text}
                           </p>
@@ -968,7 +1245,9 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                   matchParaIdx === idx ? "rounded px-1 -mx-1 bg-yellow-50 ring-1 ring-yellow-300" : ""
                 }`}
               >
-                {matchParaIdx === idx
+                {findReplaceOpen && findQuery.trim() && paraMatchMap[idx]
+                  ? <MultiHighlightText text={para} matches={paraMatchMap[idx]} currentGlobalIdx={findMatchIdx} />
+                  : matchParaIdx === idx
                   ? <HighlightedText text={para} query={highlightExcerpt} />
                   : para}
               </p>

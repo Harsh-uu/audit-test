@@ -48,6 +48,11 @@ class PIIReviewRequest(BaseModel):
     redactions: List[dict] = []
     skipped: bool = False
 
+class FindReplaceRequest(BaseModel):
+    find: str
+    replace: str
+    case_sensitive: bool = False
+
 class AnonymiseRequest(BaseModel):
     phrase: str
 
@@ -416,7 +421,67 @@ async def anonymise_transcript(
     return {"message": f"'{phrase}' replaced with '{initial}'", "replaced": True}
 
 
-@router.post("/{meeting_id}/rescan-evidence")
+@router.post("/{meeting_id}/find-replace")
+async def find_replace_transcript(
+    meeting_id: str,
+    data: FindReplaceRequest,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Replace all occurrences of a phrase in the stored full-text transcript."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can edit the transcript")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcript_id = meeting.get("transcript_id")
+    if not transcript_id:
+        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
+
+    transcript = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    find = data.find.strip()
+    if not find:
+        raise HTTPException(status_code=400, detail="Find text cannot be empty")
+
+    flags = 0 if data.case_sensitive else re.IGNORECASE
+    pattern = re.compile(re.escape(find), flags)
+
+    updates = {}
+    replaced = 0
+
+    for field in ("text", "speaker_text"):
+        original = transcript.get(field, "")
+        if original:
+            new_val, count = pattern.subn(data.replace, original)
+            if count:
+                updates[field] = new_val
+                replaced += count
+
+    if not replaced:
+        return {"replaced_count": 0, "message": "No matches found in transcript"}
+
+    now = datetime.now(timezone.utc).isoformat()
+    updates["updated_at"] = now
+    await db.transcripts.update_one({"_id": ObjectId(transcript_id)}, {"$set": updates})
+
+    await db.audit_logs.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": current_user["id"],
+        "user_name": current_user.get("name", ""),
+        "action": "transcript_text_edited",
+        "edit_type": "transcript_text_edited",
+        "detail": f"Find & Replace: '{find}' → '{data.replace}' ({replaced} occurrence{'s' if replaced != 1 else ''})",
+        "timestamp": now,
+    })
+
+    return {"replaced_count": replaced, "message": f"Replaced {replaced} occurrence{'s' if replaced != 1 else ''}"}
+
+
 async def rescan_evidence(
     meeting_id: str,
     db=Depends(get_db),
