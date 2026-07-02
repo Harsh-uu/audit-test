@@ -593,7 +593,7 @@ async def update_speaker_text(
         "speaker_text": data.speaker_text,
         "edited_by_name": current_user.get("name", ""),
         "edited_at": now,
-        "has_backup": bool(existing and existing.get("speaker_text")),
+        "has_backup": bool(existing_t and existing_t.get("speaker_text")),
     }
 
 
