@@ -594,6 +594,43 @@ Only include criteria with actual evidence. Return empty mappings array if nothi
         return []
 
 
+SUMMARY_ONLY_PROMPT = """You are a meeting summarizer for UK adult social care supervision sessions.
+Generate a structured meeting summary in EXACTLY this format — three sections separated by blank lines:
+
+Section 1: Two sentences that introduce the session (who was involved, what type of meeting, its main purpose or context).
+
+Section 2: 4 to 6 bullet points covering the key topics and discussion points, each starting with "- ".
+
+Section 3: Two sentences that frame the essential outcomes, overall themes, or agreed next steps from the session.
+
+Output plain text only. Use a blank line (\\n\\n) to separate each of the three sections. Do not use any markdown headers or JSON."""
+
+
+async def generate_meeting_summary(transcript_text: str) -> str:
+    """Re-generate just the meeting summary in the new structured format."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise ValueError("EMERGENT_LLM_KEY not set")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"summary_{uuid.uuid4()}",
+        system_message=SUMMARY_ONLY_PROMPT,
+    ).with_model("openai", "o4-mini").with_params(reasoning_effort="medium")
+
+    user_prompt = f"Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
+
+    full = ""
+    async for event in chat.stream_message(UserMessage(text=user_prompt)):
+        from emergentintegrations.llm.chat import TextDelta, StreamDone
+        if isinstance(event, TextDelta):
+            full += event.content
+        elif isinstance(event, StreamDone):
+            break
+
+    return full.strip()
+
+
 DOC_EVIDENCE_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers.
 Analyze this supervision document to identify evidence of compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
 

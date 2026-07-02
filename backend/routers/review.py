@@ -473,7 +473,48 @@ async def rescan_evidence(
     return {"message": "Compliance evidence re-scanned successfully", "analysis": updated}
 
 
-@router.post("/{meeting_id}/share")
+@router.post("/{meeting_id}/regenerate-summary")
+async def regenerate_summary(
+    meeting_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Re-generate just the meeting summary in the new structured format (intro + bullets + closing)."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers/admins can regenerate summaries")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    if not meeting.get("analysis_id"):
+        raise HTTPException(status_code=400, detail="No analysis found — run initial processing first")
+
+    transcript_id = meeting.get("transcript_id")
+    if not transcript_id:
+        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
+
+    transcript = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    text = transcript.get("speaker_text") or transcript.get("text") or ""
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="No transcript text to summarise")
+
+    from utils.ai import generate_meeting_summary
+    new_summary = await generate_meeting_summary(text)
+
+    analysis_id = meeting["analysis_id"]
+    await db.analyses.update_one(
+        {"_id": ObjectId(analysis_id)},
+        {"$set": {"summary": new_summary}},
+    )
+
+    return {"summary": new_summary}
+
+
+
 async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:

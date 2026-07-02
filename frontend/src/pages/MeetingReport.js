@@ -473,6 +473,10 @@ export default function MeetingReport() {
                     removeAction={removeAction}
                     toggleActionComplete={toggleActionComplete}
                     actionMessage={actionMessage}
+                    onSummaryRegenerated={newSummary => {
+                      setMeeting(m => ({ ...m, analysis: { ...m.analysis, summary: newSummary } }));
+                      setSummaryText(newSummary);
+                    }}
                   />
                 )}
                 {/* TranscriptTab stays mounted to preserve unsaved speaker edits

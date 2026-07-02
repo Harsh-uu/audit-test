@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
+import axios from "axios";
+import { useAuth } from "@/context/AuthContext";
 import {
-  Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield,
+  Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
 } from "lucide-react";
 
 /**
@@ -65,7 +67,28 @@ export function EvidenceTab({
   removeAction,
   toggleActionComplete,
   actionMessage,
+  onSummaryRegenerated,
 }) {
+  const { getAuthConfig, API } = useAuth();
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState("");
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    setRegenError("");
+    try {
+      const { data } = await axios.post(
+        `${API}/review/${meeting.id}/regenerate-summary`,
+        {},
+        getAuthConfig(),
+      );
+      if (onSummaryRegenerated) onSummaryRegenerated(data.summary);
+    } catch (err) {
+      setRegenError(err.response?.data?.detail || "Regeneration failed — please try again");
+    }
+    setRegenerating(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* Summary */}
@@ -73,11 +96,24 @@ export function EvidenceTab({
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-900 text-sm font-display">Meeting Summary</h3>
           {canReview && !editingSummary && (
-            <button onClick={() => setEditingSummary(true)} className="text-xs text-[#1E3A8A] flex items-center gap-1 hover:underline" data-testid="edit-summary-btn">
-              <Edit3 className="w-3 h-3" /> Edit
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRegenerate}
+                disabled={regenerating}
+                className="text-xs text-gray-500 flex items-center gap-1 hover:text-[#1E3A8A] disabled:opacity-50"
+                title="Regenerate summary in structured format"
+                data-testid="regenerate-summary-btn"
+              >
+                <RefreshCw className={`w-3 h-3 ${regenerating ? "animate-spin" : ""}`} />
+                {regenerating ? "Regenerating…" : "Regenerate"}
+              </button>
+              <button onClick={() => setEditingSummary(true)} className="text-xs text-[#1E3A8A] flex items-center gap-1 hover:underline" data-testid="edit-summary-btn">
+                <Edit3 className="w-3 h-3" /> Edit
+              </button>
+            </div>
           )}
         </div>
+        {regenError && <p className="text-xs text-red-500 mb-2">{regenError}</p>}
         {editingSummary ? (
           <div>
             <textarea value={summaryText} onChange={e => setSummaryText(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" rows={10} data-testid="summary-textarea" />
