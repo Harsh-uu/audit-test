@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
-  FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award, RefreshCw, Loader,
+  FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award, RefreshCw, Loader, AlignLeft,
 } from "lucide-react";
 
 const CONFIDENCE_CONFIG = {
@@ -45,7 +45,7 @@ function KeyQuestionBadge({ label }) {
   );
 }
 
-function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
+function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type, onShowInTranscript }) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(mapping.edited_evidence_summary || mapping.evidence_summary);
@@ -106,9 +106,20 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type }) {
       {expanded && (
         <div className="p-4 bg-white">
           {mapping.transcript_excerpt && (
-            <blockquote className="border-l-3 border-l-gray-300 pl-3 py-1 mb-3 bg-gray-50 rounded-r text-sm text-gray-700 italic">
-              "{mapping.transcript_excerpt}"
-            </blockquote>
+            <>
+              <blockquote className="border-l-3 border-l-gray-300 pl-3 py-1 mb-1.5 bg-gray-50 rounded-r text-sm text-gray-700 italic">
+                "{mapping.transcript_excerpt}"
+              </blockquote>
+              {onShowInTranscript && (
+                <button
+                  onClick={() => onShowInTranscript(mapping.transcript_excerpt)}
+                  className="flex items-center gap-1.5 text-xs text-[#1E3A8A] hover:text-[#1E40AF] hover:underline mb-3 font-medium"
+                  data-testid={`show-in-transcript-${mapping.id}`}
+                >
+                  <AlignLeft className="w-3 h-3" /> Show in transcript
+                </button>
+              )}
+            </>
           )}
           {editing ? (
             <div className="mb-3">
@@ -261,7 +272,7 @@ function CareCertDrillDown({ mappings }) {
   );
 }
 
-export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence }) {
+export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence, onShowInTranscript }) {
   const totalCount = (analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0);
   const wrapperClass = className !== undefined ? className : "lg:col-span-5 bg-[#F8F9FA] overflow-y-auto";
   const [rescanning, setRescanning] = useState(false);
@@ -308,7 +319,7 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
               <span className="ml-auto text-xs text-gray-400">{analysis.cqc_mappings.length}</span>
             </div>
             {analysis.cqc_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="cqc" />
+              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="cqc" onShowInTranscript={onShowInTranscript} />
             ))}
           </div>
         )}
@@ -321,7 +332,7 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
               <span className="ml-auto text-xs text-gray-400">{analysis.care_cert_mappings.length}</span>
             </div>
             {analysis.care_cert_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="care_cert" />
+              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="care_cert" onShowInTranscript={onShowInTranscript} />
             ))}
             <CareCertDrillDown mappings={analysis.care_cert_mappings} />
           </div>
@@ -335,7 +346,7 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
               <span className="ml-auto text-xs text-gray-400">{analysis.custom_mappings.length}</span>
             </div>
             {analysis.custom_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="custom" />
+              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="custom" onShowInTranscript={onShowInTranscript} />
             ))}
           </div>
         )}

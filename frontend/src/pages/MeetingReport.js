@@ -64,6 +64,7 @@ export default function MeetingReport() {
   const [summaryText, setSummaryText] = useState("");
   const [newComment, setNewComment] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const [highlightExcerpt, setHighlightExcerpt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [addingAction, setAddingAction] = useState(false);
   const [newAction, setNewAction] = useState({ text: "", assigned_to: "", due_date: "" });
@@ -487,6 +488,7 @@ export default function MeetingReport() {
                     onAnonymise={handleAnonymise}
                     canAnonymise={canAnonymise}
                     canEditSpeakers={canEditSpeakers}
+                    highlightExcerpt={highlightExcerpt}
                     onDirtyChange={(dirty) => setSpeakersDirty(dirty)}
                     onSpeakerTextGenerated={(spText, editedByName, editedAt, speakerColors) => setMeeting(m => ({
                       ...m,
@@ -524,6 +526,7 @@ export default function MeetingReport() {
                       updateEvidence={updateEvidence}
                       canRescan={canEditSpeakers && !!meeting?.transcript_id}
                       onRescanEvidence={rescanEvidence}
+                      onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setActiveTab("transcript"); }}
                       className="bg-[#F8F9FA]"
                       noMaxHeight
                     />
@@ -538,6 +541,7 @@ export default function MeetingReport() {
               updateEvidence={updateEvidence}
               canRescan={canEditSpeakers && !!meeting?.transcript_id}
               onRescanEvidence={rescanEvidence}
+              onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setActiveTab("transcript"); }}
               className="hidden lg:block lg:col-span-5 bg-[#F8F9FA] overflow-y-auto"
             />
           </div>

@@ -1,8 +1,32 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check, RotateCcw } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { anonymiseTranscript } from "@/utils/anonymise";
+
+/** Strip leading/trailing curly quotes and truncate for searching */
+function cleanExcerpt(excerpt) {
+  return (excerpt || "")
+    .replace(/^[\u201C\u201D\u2018\u2019"']+|[\u201C\u201D\u2018\u2019"']+$/g, "")
+    .trim()
+    .slice(0, 120);
+}
+
+/** Render text with a highlighted substring */
+function HighlightedText({ text, query }) {
+  if (!query) return <>{text}</>;
+  const q = cleanExcerpt(query).toLowerCase();
+  if (!q) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-200 text-gray-900 rounded-sm px-0.5 not-italic">{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
+}
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -245,7 +269,7 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange }) {
+export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "" }) {
   const [viewMode, setViewMode] = useState("full");
 
   // ── Speaker editing state ─────────────────────────────────────────────────
@@ -306,6 +330,40 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   useEffect(() => {
     if (hasSpeakerText) setViewMode("speaker");
   }, [hasSpeakerText]);
+
+  // ── Highlight / scroll-to-excerpt ─────────────────────────────────────────
+  const highlightRef = useRef(null);
+
+  const matchTurnIdx = useMemo(() => {
+    if (!highlightExcerpt || !localTurns.length) return -1;
+    const q = cleanExcerpt(highlightExcerpt).toLowerCase();
+    if (!q) return -1;
+    // Try first 80 chars, then fallback to first 40
+    let idx = localTurns.findIndex(t => t.text.toLowerCase().includes(q.slice(0, 80)));
+    if (idx === -1) idx = localTurns.findIndex(t => t.text.toLowerCase().includes(q.slice(0, 40)));
+    return idx;
+  }, [highlightExcerpt, localTurns]);
+
+  // For raw text mode
+  const rawParas = useMemo(() => formatTranscript(meeting.transcript?.text || ""), [meeting.transcript?.text]);
+  const matchParaIdx = useMemo(() => {
+    if (!highlightExcerpt || hasSpeakerText) return -1;
+    const q = cleanExcerpt(highlightExcerpt).toLowerCase();
+    if (!q) return -1;
+    let idx = rawParas.findIndex(p => p.toLowerCase().includes(q.slice(0, 80)));
+    if (idx === -1) idx = rawParas.findIndex(p => p.toLowerCase().includes(q.slice(0, 40)));
+    return idx;
+  }, [highlightExcerpt, rawParas, hasSpeakerText]);
+
+  useEffect(() => {
+    const hasMatch = hasSpeakerText ? matchTurnIdx >= 0 : matchParaIdx >= 0;
+    if (hasMatch && highlightRef.current) {
+      setTimeout(() => {
+        highlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 200);
+    }
+  }, [matchTurnIdx, matchParaIdx, highlightExcerpt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Close turn menu when clicking outside
   useEffect(() => {
@@ -865,12 +923,16 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                           </div>
                         </div>
                       ) : (
-                        <div className="relative">
+                        <div className="relative" ref={matchTurnIdx === i ? highlightRef : null}>
                           <p
                             data-turn-index={i}
-                            className="text-sm text-gray-800 leading-relaxed select-text cursor-text pr-5"
+                            className={`text-sm text-gray-800 leading-relaxed select-text cursor-text pr-5 transition-colors duration-300 ${
+                              matchTurnIdx === i ? "rounded px-1 -mx-1 bg-yellow-50 ring-1 ring-yellow-300" : ""
+                            }`}
                           >
-                            {turn.text}
+                            {matchTurnIdx === i
+                              ? <HighlightedText text={turn.text} query={highlightExcerpt} />
+                              : turn.text}
                           </p>
                           {canEditSpeakers && (
                             <button
@@ -898,9 +960,17 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
           </>
         ) : (
           <div className="p-5" onMouseUp={handleFullTextMouseUp}>
-            {formatTranscript(raw).map((para, idx) => (
-              <p key={idx} className="text-sm text-gray-700 leading-relaxed mb-3 last:mb-0">
-                {para}
+            {rawParas.map((para, idx) => (
+              <p
+                key={idx}
+                ref={matchParaIdx === idx ? highlightRef : null}
+                className={`text-sm text-gray-700 leading-relaxed mb-3 last:mb-0 transition-colors duration-300 ${
+                  matchParaIdx === idx ? "rounded px-1 -mx-1 bg-yellow-50 ring-1 ring-yellow-300" : ""
+                }`}
+              >
+                {matchParaIdx === idx
+                  ? <HighlightedText text={para} query={highlightExcerpt} />
+                  : para}
               </p>
             ))}
           </div>
