@@ -474,7 +474,6 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
                       <h3 className="font-medium text-gray-900 truncate">{meeting.title}</h3>
-                      <StatusBadge status={meeting.status} />
                     </div>
                     <div className="flex items-center gap-4 text-xs text-gray-500">
                       <span>{formatDate(meeting.date || meeting.created_at)}</span>
@@ -491,6 +490,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    <StatusBadge status={meeting.status} />
                     {canDelete && (
                       deletingId === meeting.id ? (
                         <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
