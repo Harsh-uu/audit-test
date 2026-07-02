@@ -485,7 +485,11 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   }, [editingTurnIndex]);
 
   const raw = anonymiseTranscript(meeting.transcript?.text, meeting.attendees || []);
-  const wordCount = raw ? raw.trim().split(/\s+/).filter(Boolean).length : 0;
+  // Word count from displayed content — use parsed turns if available, fall back to raw transcript
+  const displayText = localTurns.length > 0
+    ? localTurns.map(t => t.text).join(" ")
+    : (raw || "");
+  const wordCount = displayText.trim().split(/\s+/).filter(Boolean).length;
   const readMins = Math.ceil(wordCount / 150);
 
   return (
