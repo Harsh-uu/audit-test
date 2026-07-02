@@ -419,23 +419,22 @@ export default function Schedules() {
                           <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
                           {hasOverdue && <span className="text-xs text-red-600 font-medium bg-red-50 px-1.5 py-0.5 rounded-full flex-shrink-0">Overdue</span>}
                         </div>
-                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                          <span className="text-xs text-gray-400 capitalize mr-1">{u.role}</span>
-                          {!isExpanded && (
-                            <>
-                              {userSchedules.length === 0
-                                ? <span className="text-xs text-gray-300 italic">No schedules</span>
-                                : userSchedules.slice(0, 4).map(s => (
-                                  <span key={s.id} className="text-xs px-2 py-0.5 rounded-full text-white font-medium" style={{ backgroundColor: s.meeting_type_color }}>
-                                    {s.meeting_type_name}
-                                  </span>
-                                ))
-                              }
-                              {userSchedules.length > 4 && <span className="text-xs text-gray-400">+{userSchedules.length - 4} more</span>}
-                            </>
-                          )}
-                        </div>
+                        <p className="text-xs text-gray-400 capitalize">{u.role}</p>
                       </div>
+                      {/* Schedule pills — right-aligned, fill leftwards */}
+                      {!isExpanded && (
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end flex-shrink-0 max-w-[55%]">
+                          {userSchedules.length === 0
+                            ? <span className="text-xs text-gray-300 italic">No schedules</span>
+                            : userSchedules.slice(0, 4).map(s => (
+                              <span key={s.id} className="text-xs px-2.5 py-0.5 rounded-full text-white font-medium whitespace-nowrap" style={{ backgroundColor: s.meeting_type_color }}>
+                                {s.meeting_type_name}
+                              </span>
+                            ))
+                          }
+                          {userSchedules.length > 4 && <span className="text-xs text-gray-400 flex-shrink-0">+{userSchedules.length - 4}</span>}
+                        </div>
+                      )}
                     </div>
 
                     {/* Expanded schedules */}
