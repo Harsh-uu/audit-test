@@ -74,7 +74,7 @@ Analyze meeting transcripts to identify evidence of compliance with CQC regulati
 
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
 {
-  "summary": "3-5 sentence meeting summary",
+  "summary": "Two opening sentences that set context and introduce the session (who, when, what type of meeting).\\n\\n- Key topic or discussion point one\\n- Key topic or discussion point two\\n- Key topic or discussion point three\\n- Key topic or discussion point four\\n- Key topic or discussion point five\\n\\nTwo closing sentences that frame the essential outcomes, any overall themes or next steps from the session.",
   "actions": [
     {"id": "unique_id", "text": "action description", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
   ],
@@ -128,7 +128,8 @@ Rules:
 - If no custom standards are provided, return custom_mappings as an empty array []
 - If the meeting had paused sections, note this in the summary
 - Include transcript excerpts as exact quotes from the provided text
-- Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")"""
+- Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
+- Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections."""
 
 
 CRITERIA_EXTRACTION_PROMPT = """You are reviewing a standards/policy document from a UK adult social care provider. Extract a structured list of criteria, standards, or competencies from this document.

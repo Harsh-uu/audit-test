@@ -3,6 +3,51 @@ import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield,
 } from "lucide-react";
 
+/**
+ * Renders the AI-generated summary which follows the format:
+ *   Intro sentence one. Intro sentence two.
+ *
+ *   - Bullet one
+ *   - Bullet two
+ *
+ *   Closing sentence one. Closing sentence two.
+ *
+ * Falls back to a plain paragraph for older single-block summaries.
+ */
+function SummaryBody({ text }) {
+  if (!text) return <p className="text-sm text-gray-400 italic">No summary available.</p>;
+
+  const blocks = text.split(/\n\n+/);
+  // If there's only one block (old format), just render it as text
+  if (blocks.length <= 1) {
+    return <p className="text-sm text-gray-700 leading-relaxed">{text}</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, i) => {
+        const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
+        const isBulletBlock = lines.length > 0 && lines.every(l => l.startsWith("- "));
+        if (isBulletBlock) {
+          return (
+            <ul key={i} className="space-y-1.5 pl-1">
+              {lines.map((line, j) => (
+                <li key={j} className="flex items-start gap-2 text-sm text-gray-700">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#1E3A8A]/40 flex-shrink-0" />
+                  <span className="leading-relaxed">{line.replace(/^-\s*/, "")}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <p key={i} className="text-sm text-gray-700 leading-relaxed">{block}</p>
+        );
+      })}
+    </div>
+  );
+}
+
 export function EvidenceTab({
   meeting,
   analysis,
@@ -35,16 +80,16 @@ export function EvidenceTab({
         </div>
         {editingSummary ? (
           <div>
-            <textarea value={summaryText} onChange={e => setSummaryText(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" rows={5} data-testid="summary-textarea" />
+            <textarea value={summaryText} onChange={e => setSummaryText(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" rows={10} data-testid="summary-textarea" />
             <div className="flex gap-2 mt-2">
               <button onClick={saveSummary} className="text-xs bg-[#1E3A8A] text-white px-3 py-1.5 rounded hover:bg-[#1E40AF]" data-testid="save-summary-btn">Save</button>
               <button onClick={() => setEditingSummary(false)} className="text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded">Cancel</button>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-700 leading-relaxed" data-testid="summary-text">
-            {analysis.edited_summary || analysis.summary || "No summary available."}
-          </p>
+          <div data-testid="summary-text">
+            <SummaryBody text={analysis.edited_summary || analysis.summary} />
+          </div>
         )}
       </div>
 
