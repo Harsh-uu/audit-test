@@ -544,13 +544,21 @@ async def update_speaker_text(
         raise HTTPException(status_code=404, detail="No transcript found for this meeting")
 
     now = datetime.now(timezone.utc).isoformat()
+    # Keep the previous value as a one-deep backup before overwriting
+    existing = await db.transcripts.find_one({"_id": ObjectId(transcript_id)}, {"speaker_text": 1})
+    update_fields = {
+        "speaker_text": data.speaker_text,
+        "speaker_text_edited_by_name": current_user.get("name", ""),
+        "speaker_text_edited_at": now,
+    }
+    if existing and existing.get("speaker_text"):
+        update_fields["speaker_text_backup"] = existing["speaker_text"]
+        update_fields["speaker_text_backup_at"] = existing.get("speaker_text_edited_at", "")
+        update_fields["speaker_text_backup_by"] = existing.get("speaker_text_edited_by_name", "")
+
     await db.transcripts.update_one(
         {"_id": ObjectId(transcript_id)},
-        {"$set": {
-            "speaker_text": data.speaker_text,
-            "speaker_text_edited_by_name": current_user.get("name", ""),
-            "speaker_text_edited_at": now,
-        }}
+        {"$set": update_fields}
     )
 
     await db.audit_logs.insert_one({
@@ -567,6 +575,61 @@ async def update_speaker_text(
         "speaker_text": data.speaker_text,
         "edited_by_name": current_user.get("name", ""),
         "edited_at": now,
+        "has_backup": bool(existing and existing.get("speaker_text")),
+    }
+
+
+@router.post("/{meeting_id}/speaker-text/restore-backup")
+async def restore_speaker_text_backup(
+    meeting_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Restore the one-deep backup of speaker_text (the version before the last save)."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can restore speaker labels")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcript_id = meeting.get("transcript_id")
+    if not transcript_id:
+        raise HTTPException(status_code=404, detail="No transcript found")
+
+    t = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
+    backup = t.get("speaker_text_backup") if t else None
+    if not backup:
+        raise HTTPException(status_code=404, detail="No backup available")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.transcripts.update_one(
+        {"_id": ObjectId(transcript_id)},
+        {"$set": {
+            "speaker_text": backup,
+            "speaker_text_edited_by_name": t.get("speaker_text_backup_by", ""),
+            "speaker_text_edited_at": t.get("speaker_text_backup_at", now),
+        }, "$unset": {
+            "speaker_text_backup": "",
+            "speaker_text_backup_at": "",
+            "speaker_text_backup_by": "",
+        }}
+    )
+
+    await db.audit_logs.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": current_user["id"],
+        "user_name": current_user.get("name", ""),
+        "action": "speaker_restore_backup",
+        "edit_type": "speaker_restore_backup",
+        "timestamp": now,
+    })
+
+    return {
+        "message": "Previous speaker labels restored",
+        "speaker_text": backup,
+        "edited_by_name": t.get("speaker_text_backup_by", ""),
+        "edited_at": t.get("speaker_text_backup_at", now),
     }
 
 

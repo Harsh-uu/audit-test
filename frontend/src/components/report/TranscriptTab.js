@@ -57,7 +57,7 @@ function roleToStyle(role) {
 }
 
 // ── Speaker Manager Panel ────────────────────────────────────────────────────
-function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, saving, isDirty, lastEditedBy, lastEditedAt }) {
+function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, onRestoreBackup, saving, isDirty, lastEditedBy, lastEditedAt, backupBy, backupAt }) {
   const speakerCounts = useMemo(() => {
     const counts = {};
     for (const t of localTurns) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
@@ -177,6 +177,17 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
                 >
                   <RotateCcw className="w-3 h-3" />
                   Reset
+                </button>
+              )}
+              {!isDirty && backupBy && onRestoreBackup && (
+                <button
+                  onClick={onRestoreBackup}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors mt-1"
+                  data-testid="restore-backup-btn"
+                  title={`Restore previous save by ${backupBy}${backupAt ? ` at ${new Date(backupAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}`}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Restore previous save
                 </button>
               )}
             </div>
@@ -363,6 +374,25 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     setEditingTurnIndex(null);
     setEditingTurnText("");
   }, [originalTurns]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRestoreBackup = async () => {
+    const backupBy = meeting.transcript?.speaker_text_backup_by;
+    const backupAt = meeting.transcript?.speaker_text_backup_at;
+    const label = backupBy ? ` (saved by ${backupBy}${backupAt ? ` at ${new Date(backupAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""})` : "";
+    if (!window.confirm(`Restore the previous version of speaker labels${label}? This will overwrite the current labels.`)) return;
+    try {
+      const token = localStorage.getItem("supervision_token");
+      const res = await axios.post(
+        `${API}/api/review/${meeting.id}/speaker-text/restore-backup`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success("Previous speaker labels restored");
+      if (onSpeakerTextGenerated) onSpeakerTextGenerated(res.data.speaker_text, res.data.edited_by_name, res.data.edited_at);
+    } catch {
+      toast.error("No backup available to restore");
+    }
+  };
 
   const handleReset = async () => {
     if (!window.confirm("This will clear the edited speaker labels and restore the full raw transcript. Continue?")) return;
@@ -592,10 +622,13 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                 onSave={handleSave}
                 onDiscard={handleDiscard}
                 onReset={handleReset}
+                onRestoreBackup={handleRestoreBackup}
                 saving={saving}
                 isDirty={isDirty}
                 lastEditedBy={meeting.transcript?.speaker_text_edited_by_name}
                 lastEditedAt={meeting.transcript?.speaker_text_edited_at}
+                backupBy={meeting.transcript?.speaker_text_backup_by}
+                backupAt={meeting.transcript?.speaker_text_backup_at}
               />
             ) : (
               <div className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 border-b border-amber-100 text-xs text-amber-700">
