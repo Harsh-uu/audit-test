@@ -899,7 +899,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
         </div>
 
         {/* Find & Replace button — always visible when transcript exists */}
-        {raw && (canAnonymise || canEditSpeakers) && (
+        {(meeting.transcript?.text || meeting.transcript?.speaker_text) && (canAnonymise || canEditSpeakers) && (
           <button
             onClick={() => setFindReplaceOpen(v => !v)}
             className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-medium transition-colors ${
