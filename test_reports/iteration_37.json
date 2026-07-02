@@ -1,0 +1,37 @@
+{
+  "summary": "Tested Upload Supervision Document feature end-to-end. Backend: 8/8 tests passed. Frontend: Upload form, Analysis flow, DocUploadReport page all working correctly. One critical UI bug found: 'Imported Documents' section in staff portfolio is hidden when staff has 0 signed-off meetings.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "StaffPortfolio.js",
+        "issue": "Imported Documents section (imported-docs-list, import-supervision-prompt) is nested inside the `stats.total_meetings > 0` else branch (line 429-606). When staff has 0 signed-off meetings, the empty state replaces the entire right panel including the Imported Documents section, so uploaded documents are never visible in the portfolio.",
+        "selector": "[data-testid='imported-docs-list']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_doc_uploads.py",
+    "/app/test_reports/pytest/doc_uploads_results.xml"
+  ],
+  "action_items": [
+    "Fix StaffPortfolio.js: Move the 'Imported Documents' section outside of the stats.total_meetings === 0 conditional. The section (lines 524-601) should render independently of whether there are signed-off meetings. Suggested fix: show the Imported Documents section below the empty state div (after line 428), or restructure the right panel so it always renders with the Imported Documents section regardless of total_meetings count."
+  ],
+  "critical_code_review_comments": [
+    "StaffPortfolio.js: Imported Documents section (canViewUploads + docUploads) is inside the `stats.total_meetings > 0` JSX branch — this means it never shows for staff with no signed-off meetings, which is the exact case when importing docs is most valuable (e.g., new staff).",
+    "Minor HTML hydration warning: <span> inside <option> in UploadSupervision.js staff dropdown (does not affect functionality)"
+  ],
+  "updated_files": ["/app/backend/tests/test_doc_uploads.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "85% - upload/report/sidebar/staff-restriction all pass; portfolio Imported Docs section blocked by conditional"},
+  "seed_data_creation": "Created and deleted a test docx upload during backend tests. Existing upload 6a46b912a09c5dcbd7140086 preserved.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All doc upload features work except StaffPortfolio imported docs section. Fix needed in StaffPortfolio.js around line 421-429: the Imported Documents right-panel section must be accessible even when total_meetings = 0. After fix, test /portfolio/6a3e5728bb3b2159b3c93f63 as manager to verify imported-docs-list shows with the existing upload (ID 6a46b912a09c5dcbd7140086, Staff Member, 5 CQC + 2 Care Cert).",
+  "rca_of_issue": "Root cause: StaffPortfolio.js renders a ternary at line 421 — `stats.total_meetings === 0 ? <empty-state> : <full-two-column-panel>`. The right column containing Imported Documents is only in the `<full-two-column-panel>` branch. Fix: Extract the Imported Documents section from the right column and render it unconditionally (or append it after the empty state). The docUploads fetch (line 287-293) is correct and returns data — the bug is purely in the render tree."
+}

@@ -593,6 +593,143 @@ Only include criteria with actual evidence. Return empty mappings array if nothi
         return []
 
 
+DOC_EVIDENCE_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers.
+Analyze this supervision document to identify evidence of compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
+
+Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
+{
+  "cqc_mappings": [
+    {
+      "id": "cqc_1",
+      "regulation_ref": "Regulation 18",
+      "regulation_name": "Staffing",
+      "evidence_summary": "Brief description of evidence found",
+      "transcript_excerpt": "Exact quote from the document",
+      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+    }
+  ],
+  "care_cert_mappings": [
+    {
+      "id": "cc_1",
+      "standard_ref": "Standard 2",
+      "standard_name": "Your personal development",
+      "outcome_ref": "2.1a",
+      "outcome_name": "Describe the processes for identifying own learning needs",
+      "evidence_summary": "Brief description of evidence found",
+      "transcript_excerpt": "Exact quote from the document",
+      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+    }
+  ],
+  "custom_mappings": [
+    {
+      "id": "custom_1",
+      "document_id": "the document_id provided",
+      "document_name": "Company Values Policy",
+      "criterion_ref": "CV-1",
+      "criterion_name": "Compassion",
+      "evidence_summary": "Brief description of evidence found",
+      "transcript_excerpt": "Exact quote from the document",
+      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+    }
+  ]
+}
+
+Rules:
+- Only map evidence EXPLICITLY mentioned in the document
+- Do not infer or assume — map only what is directly discussed
+- Use "likely_evidence" only when clearly demonstrated
+- Use "needs_review" when partially demonstrated or unclear
+- Use "not_enough_evidence" when barely touched on
+- For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h")
+- For custom_mappings, only include entries if custom standards are provided AND there is actual evidence
+- If no custom standards provided, return custom_mappings as an empty array []
+- Generate unique IDs for each item (e.g. "cqc_1", "cc_1", "custom_1")"""
+
+
+async def analyze_doc_for_evidence(
+    text: str,
+    cqc_standards: list,
+    care_cert_standards: list,
+    custom_standards: list = None,
+) -> dict:
+    """Map evidence from an uploaded supervision document to CQC/Care Cert/custom standards."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise ValueError("EMERGENT_LLM_KEY not set")
+
+    cqc_context = "\n".join([
+        f"- {s['reference']}: {s['name']}" +
+        (f" [Key Questions: {', '.join(s.get('key_questions', []))}]" if s.get('key_questions') else "") +
+        f" — {s.get('description', '')}"
+        for s in cqc_standards[:20]
+    ])
+
+    cc_lines = []
+    for s in care_cert_standards[:16]:
+        line = f"- {s['reference']}: {s['name']}"
+        sub_outcomes = s.get("sub_outcomes", [])
+        if sub_outcomes:
+            so_list = "\n    ".join([f"{so['ref']}: {so['desc']}" for so in sub_outcomes])
+            line += f"\n    Sub-outcomes (map to these):\n    {so_list}"
+        cc_lines.append(line)
+    cc_context = "\n".join(cc_lines)
+
+    custom_context = ""
+    if custom_standards:
+        custom_lines = []
+        for doc in custom_standards:
+            doc_id = doc.get("id", "")
+            doc_name = doc.get("label") or doc.get("filename", "Unknown Document")
+            criteria = doc.get("extracted_criteria", [])
+            if criteria:
+                custom_lines.append(f"\nDocument: {doc_name} (document_id: {doc_id})")
+                for c in criteria:
+                    custom_lines.append(f"  - {c['ref']}: {c['name']} — {c.get('description', '')}")
+        if custom_lines:
+            custom_context = "\n\nCUSTOM / ORGANISATIONAL STANDARDS TO MAP AGAINST:\n" + "\n".join(custom_lines)
+
+    user_prompt = f"""Analyze this supervision document and map evidence to the relevant standards.
+
+DOCUMENT CONTENT:
+{text[:12000]}
+
+CQC REGULATIONS TO MAP AGAINST:
+{cqc_context}
+
+CARE CERTIFICATE STANDARDS TO MAP AGAINST:
+{cc_context}{custom_context}
+
+Provide your analysis as JSON only. Only map regulations/standards where there is actual evidence in the document."""
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"docevidence_{uuid.uuid4()}",
+        system_message=DOC_EVIDENCE_SYSTEM_PROMPT,
+    ).with_model("openai", "o4-mini").with_params(reasoning_effort="high")
+
+    full_response = ""
+    async for event in chat.stream_message(UserMessage(text=user_prompt)):
+        from emergentintegrations.llm.chat import TextDelta, StreamDone
+        if isinstance(event, TextDelta):
+            full_response += event.content
+        elif isinstance(event, StreamDone):
+            break
+
+    try:
+        text_resp = full_response.strip()
+        if text_resp.startswith("```"):
+            lines = text_resp.split("\n")
+            text_resp = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+        result = json.loads(text_resp)
+        result.setdefault("cqc_mappings", [])
+        result.setdefault("care_cert_mappings", [])
+        result.setdefault("custom_mappings", [])
+        return result
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse doc evidence response: %s\nResponse: %s", exc, full_response[:500])
+        return {"cqc_mappings": [], "care_cert_mappings": [], "custom_mappings": []}
+
+
 async def analyze_meeting(
     transcript_text: str,
     cqc_standards: list,

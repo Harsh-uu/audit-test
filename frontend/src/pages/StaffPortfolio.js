@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   ArrowLeft, Shield, Award, FileText, Download, Loader,
-  CheckCircle, Clock, ChevronRight, ChevronDown, TrendingUp, User, Check
+  CheckCircle, Clock, ChevronRight, ChevronDown, TrendingUp, User, Check, FileUp
 } from "lucide-react";
 
 const CONF_CONFIG = {
@@ -254,8 +254,10 @@ export default function StaffPortfolio() {
   const [evidenceTab, setEvidenceTab] = useState("cqc");
   const [exporting, setExporting] = useState(false);
   const [ccStandards, setCcStandards] = useState([]);
+  const [docUploads, setDocUploads] = useState([]);
 
   const effectiveUserId = userId || me?.id;
+  const canViewUploads = me?.role === "admin" || me?.role === "manager";
 
   const fetchPortfolio = useCallback(async () => {
     if (!effectiveUserId) return;
@@ -281,6 +283,14 @@ export default function StaffPortfolio() {
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!canViewUploads || !effectiveUserId) return;
+    axios.get(`${API}/doc-uploads/?staff_id=${effectiveUserId}`, getAuthConfig())
+      .then(r => setDocUploads(r.data))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveUserId, canViewUploads]);
 
   const exportPdf = async () => {
     setExporting(true);
@@ -466,7 +476,7 @@ export default function StaffPortfolio() {
               </div>
             </div>
 
-            {/* Right: Meeting History */}
+            {/* Right: Meeting History + Imported Documents */}
             <div className="lg:col-span-5 bg-[#F8F9FA] overflow-y-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
               <div className="p-4">
                 <h2 className="text-sm font-semibold text-gray-900 mb-3 font-display">
@@ -510,6 +520,85 @@ export default function StaffPortfolio() {
                     </div>
                   ))}
                 </div>
+
+                {/* Imported Documents */}
+                {canViewUploads && docUploads.length > 0 && (
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-sm font-semibold text-gray-900 font-display flex items-center gap-2">
+                        <FileUp className="w-3.5 h-3.5 text-indigo-600" />
+                        Imported Documents
+                      </h2>
+                      <button
+                        onClick={() => navigate("/upload-supervision")}
+                        className="text-xs text-indigo-600 hover:underline font-medium"
+                        data-testid="add-import-btn"
+                      >
+                        + Import
+                      </button>
+                    </div>
+                    <div className="space-y-2" data-testid="imported-docs-list">
+                      {docUploads.map(u => (
+                        <div
+                          key={u.id}
+                          onClick={() => u.status === "done" && navigate(`/doc-uploads/${u.id}`)}
+                          className={`bg-white border border-indigo-100 rounded-lg p-3 flex items-start gap-3 transition-all duration-150 ${u.status === "done" ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : "opacity-70"}`}
+                          data-testid={`portfolio-upload-${u.id}`}
+                        >
+                          <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{u.label || u.filename}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {u.meeting_date}
+                              {u.uploader_name && ` · ${u.uploader_name}`}
+                            </p>
+                            {u.status === "done" && (
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                {(u.cqc_mappings?.length || 0) > 0 && (
+                                  <span className="text-xs bg-purple-50 text-purple-700 border border-purple-100 rounded-full px-2 py-0.5">
+                                    {u.cqc_mappings.length} CQC
+                                  </span>
+                                )}
+                                {(u.care_cert_mappings?.length || 0) > 0 && (
+                                  <span className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5">
+                                    {u.care_cert_mappings.length} Care Cert
+                                  </span>
+                                )}
+                                <span className="text-xs bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-full px-2 py-0.5 font-medium">
+                                  Document Import
+                                </span>
+                              </div>
+                            )}
+                            {u.status === "processing" && (
+                              <span className="text-xs text-amber-600 flex items-center gap-1 mt-1">
+                                <Clock className="w-3 h-3 animate-pulse" /> Scanning…
+                              </span>
+                            )}
+                          </div>
+                          {u.status === "done" && <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {canViewUploads && docUploads.length === 0 && (
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-sm font-semibold text-gray-900 font-display flex items-center gap-2">
+                        <FileUp className="w-3.5 h-3.5 text-indigo-600" />
+                        Imported Documents
+                      </h2>
+                    </div>
+                    <button
+                      onClick={() => navigate("/upload-supervision")}
+                      className="w-full border border-dashed border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-600 text-xs font-medium rounded-lg p-3 flex items-center justify-center gap-2 transition-colors"
+                      data-testid="import-supervision-prompt"
+                    >
+                      <FileUp className="w-3.5 h-3.5" /> Import a previous supervision document
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

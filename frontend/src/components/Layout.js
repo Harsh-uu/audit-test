@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
-  TrendingUp, Download, BarChart2, X, Building2, ShieldCheck, Calendar
+  TrendingUp, Download, BarChart2, X, Building2, ShieldCheck, Calendar, FileUp
 } from "lucide-react";
 
 export default function Layout({ children }) {
@@ -165,7 +165,8 @@ export default function Layout({ children }) {
                   ]
                 : []),
               ...(user?.role === "admin" || user?.role === "manager"
-                ? [{ path: "/admin", icon: BookOpen, label: "Standards Library", testId: "nav-standards-library", exact: true }]
+                ? [{ path: "/admin", icon: BookOpen, label: "Standards Library", testId: "nav-standards-library", exact: true },
+                   { path: "/upload-supervision", icon: FileUp, label: "Import Supervision", testId: "nav-import-supervision", exact: true }]
                 : []),
             ].map(({ path, icon: Icon, label, testId, exact }) => {
               const active = exact ? location.pathname === path : isActive(path);
