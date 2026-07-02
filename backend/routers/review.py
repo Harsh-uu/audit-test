@@ -1176,6 +1176,18 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depen
             if include_transcript:
                 transcript_text = tdoc.get("text", "")
 
+    # ── Apply PII redactions for non-privileged viewers ───────────────────
+    redactions = meeting.get("pii_redactions", [])
+    if redactions:
+        user_id = current_user.get("id", "")
+        # meeting is a raw MongoDB doc here — _has_privileged_access works on any dict
+        # that has created_by + attendees fields
+        if not _has_privileged_access(meeting, user_id):
+            if speaker_text:
+                speaker_text = _apply_redactions_to_text(speaker_text, redactions)
+            if transcript_text:
+                transcript_text = _apply_redactions_to_text(transcript_text, redactions)
+
     pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text)
     safe_title = "".join(c for c in meeting.get("title", "report") if c.isalnum() or c in " _-")
     filename = f"supervision_{safe_title[:40].strip().replace(' ', '_')}.pdf"
