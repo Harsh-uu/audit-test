@@ -334,13 +334,42 @@ async def retry_processing(
     return {"message": "Retry started. Processing will resume shortly."}
 
 
+async def _run_diarization_background(meeting_id: str, transcript_id: str, transcript_text: str,
+                                      manager_name: str, attendee_names: list, meeting_type: str, db):
+    """Run GPT-4o speaker diarization in the background and persist the result."""
+    try:
+        speaker_text = await diarize_transcript(transcript_text, manager_name, attendee_names, meeting_type)
+        if speaker_text:
+            await db.transcripts.update_one(
+                {"_id": ObjectId(transcript_id)},
+                {"$set": {"speaker_text": speaker_text}}
+            )
+            await db.meetings.update_one(
+                {"_id": ObjectId(meeting_id)},
+                {"$set": {"diarize_status": "done"}}
+            )
+            logger.info(f"Background diarization complete for meeting {meeting_id}")
+        else:
+            await db.meetings.update_one(
+                {"_id": ObjectId(meeting_id)},
+                {"$set": {"diarize_status": "failed"}}
+            )
+    except Exception as e:
+        logger.error(f"Background diarization failed for meeting {meeting_id}: {e}")
+        await db.meetings.update_one(
+            {"_id": ObjectId(meeting_id)},
+            {"$set": {"diarize_status": "failed"}}
+        )
+
+
 @router.post("/{meeting_id}/diarize")
 async def diarize_meeting_transcript(
     meeting_id: str,
+    background_tasks: BackgroundTasks,
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Generate (or regenerate) speaker labels for an existing transcript."""
+    """Start speaker identification as a background task — returns immediately."""
     try:
         meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     except Exception:
@@ -365,15 +394,19 @@ async def diarize_meeting_transcript(
     attendee_names = [a.get("name") for a in attendees if a.get("name")]
     meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
 
-    speaker_text = await diarize_transcript(transcript_text, manager_name, attendee_names, meeting_type)
-    if not speaker_text:
-        raise HTTPException(status_code=500, detail="Speaker identification failed — please try again")
-
-    await db.transcripts.update_one(
-        {"_id": ObjectId(transcript_id)},
-        {"$set": {"speaker_text": speaker_text}}
+    # Mark as processing immediately so the frontend can start polling
+    await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id)},
+        {"$set": {"diarize_status": "processing"}}
     )
-    return {"message": "Speaker view generated successfully", "speaker_text": speaker_text}
+
+    background_tasks.add_task(
+        _run_diarization_background,
+        meeting_id, transcript_id, transcript_text,
+        manager_name, attendee_names, meeting_type, db
+    )
+
+    return {"status": "processing", "message": "Speaker identification started — this may take 1–2 minutes for long transcripts"}
 
 
 @router.get("/{meeting_id}/status")
@@ -390,6 +423,7 @@ async def get_processing_status(meeting_id: str, db=Depends(get_db), current_use
 
     return {
         "status": meeting.get("status"),
+        "diarize_status": meeting.get("diarize_status"),
         "has_audio": bool(meeting.get("audio_file_id")),
         "has_transcript": bool(meeting.get("transcript_id")),
         "has_analysis": bool(meeting.get("analysis_id")),

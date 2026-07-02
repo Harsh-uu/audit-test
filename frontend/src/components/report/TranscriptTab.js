@@ -452,12 +452,52 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (onSpeakerTextGenerated) onSpeakerTextGenerated(res.data.speaker_text);
-      setViewMode("speaker");
+
+      if (res.data.status === "processing") {
+        toast.info("Identifying speakers — this may take 1–2 minutes for long transcripts…");
+        // Poll every 5s until done or failed
+        const intervalId = setInterval(async () => {
+          try {
+            const poll = await axios.get(
+              `${API}/api/processing/${meeting.id}/status`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (poll.data.diarize_status === "done") {
+              clearInterval(intervalId);
+              // Fetch updated transcript
+              const updated = await axios.get(
+                `${API}/api/review/${meeting.id}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              const newSpeakerText = updated.data.transcript?.speaker_text;
+              if (onSpeakerTextGenerated) onSpeakerTextGenerated(newSpeakerText, null, null);
+              setViewMode("speaker");
+              setGenerating(false);
+              toast.success("Speaker labels generated");
+            } else if (poll.data.diarize_status === "failed") {
+              clearInterval(intervalId);
+              setGenerating(false);
+              toast.error("Speaker identification failed — please try again");
+            }
+          } catch {
+            clearInterval(intervalId);
+            setGenerating(false);
+          }
+        }, 5000);
+        // Safety timeout after 5 minutes
+        setTimeout(() => {
+          clearInterval(intervalId);
+          setGenerating(false);
+          toast.error("Speaker identification is taking longer than expected — reload the page to check");
+        }, 300000);
+      } else if (res.data.speaker_text) {
+        if (onSpeakerTextGenerated) onSpeakerTextGenerated(res.data.speaker_text, null, null);
+        setViewMode("speaker");
+        setGenerating(false);
+      }
     } catch (e) {
-      alert(e?.response?.data?.detail || "Failed to generate speaker view. Please try again.");
-    } finally {
       setGenerating(false);
+      toast.error(e?.response?.data?.detail || "Failed to start speaker identification. Please try again.");
     }
   };
 
