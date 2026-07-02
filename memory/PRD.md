@@ -46,6 +46,18 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - [x] Admin can upload reference documents
 - [x] Manager can upload org-specific standards documents (Custom Standards tab) — Skills for Care Supervision Guide uploaded per-org
 
+### PII / Confidentiality Review Gate (Phase 5c)
+- [x] Appears on FIRST open only for managers/admins (once cleared, never shows again)
+- [x] AI (GPT-4o) scans for third-party names + sensitive context; regex scans for UK phone, email, postcode, NHS/NI numbers
+- [x] Meeting participants' names excluded from AI scan so they're never incorrectly flagged
+- [x] Manager can accept/modify/deselect each flag before applying
+- [x] `POST /api/review/{id}/scan-pii` — returns AI + regex flags
+- [x] `POST /api/review/{id}/complete-pii-review` — saves redactions, sets `pii_review_status = "reviewed"`
+- [x] Original transcript preserved in DB; redacted view applied on-the-fly for non-privileged viewers
+- [x] Privileged access = meeting creator + listed attendees (see original); everyone else sees redacted
+- [x] Skip path records "acknowledged" in audit trail with date/time
+- [x] Audit trail shows "Confidentiality review completed" / "skipped (acknowledged)" events
+
 ### Super Admin User Management (Phase 5b)
 - [x] Delete User with full cascade (schedules + refresh tokens cleaned up) — backend `DELETE /api/super-admin/orgs/{org_id}/users/{user_id}`
 - [x] Confirmation modal before deletion (shows user name, warns about cascade)

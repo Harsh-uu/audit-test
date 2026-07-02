@@ -44,6 +44,10 @@ class CommentRequest(BaseModel):
     text: str
 
 
+class PIIReviewRequest(BaseModel):
+    redactions: List[dict] = []
+    skipped: bool = False
+
 class AnonymiseRequest(BaseModel):
     phrase: str
 
@@ -86,6 +90,29 @@ async def delete_audio_after_grace(meeting_id: str, db):
         logger.error(f"Audio deletion failed for meeting {meeting_id}: {e}")
 
 
+def _apply_redactions_to_text(text: str, redactions: list) -> str:
+    """Apply saved redaction pairs to a text string (case-sensitive exact match)."""
+    if not text or not redactions:
+        return text
+    result = text
+    for r in redactions:
+        original = r.get("original", "")
+        replacement = r.get("replacement", "[Redacted]")
+        if original:
+            result = result.replace(original, replacement)
+    return result
+
+
+def _has_privileged_access(meeting: dict, user_id: str) -> bool:
+    """True if the user was present in the meeting (creator or listed attendee)."""
+    if meeting.get("created_by") == user_id:
+        return True
+    for a in meeting.get("attendees", []):
+        if a.get("user_id") == user_id:
+            return True
+    return False
+
+
 @router.get("/{meeting_id}")
 async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     doc = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
@@ -114,6 +141,24 @@ async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depe
     async for c in db.reviewer_comments.find({"meeting_id": meeting_id}).sort("created_at", 1):
         comments.append(doc_to_dict(c))
     meeting["comments"] = comments
+
+    # ── PII redaction access control ─────────────────────────────────────
+    user_id = current_user.get("id", "")
+    redactions = meeting.get("pii_redactions", [])
+    privileged = _has_privileged_access(meeting, user_id)
+
+    if redactions and not privileged and meeting.get("transcript"):
+        # Apply redactions to transcript text for non-privileged viewers
+        t = meeting["transcript"]
+        for field in ("text", "speaker_text"):
+            if t.get(field):
+                t[field] = _apply_redactions_to_text(t[field], redactions)
+
+    if not privileged:
+        # Never expose original (pre-redaction) text to non-meeting-participants
+        meeting.pop("pii_redactions", None)
+        if redactions:
+            meeting["pii_redactions_count"] = len(redactions)
 
     return meeting
 
@@ -514,6 +559,96 @@ async def regenerate_summary(
     return {"summary": new_summary}
 
 
+@router.post("/{meeting_id}/scan-pii")
+async def scan_pii(
+    meeting_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Run AI + regex scan on the meeting transcript to surface potential third-party PII."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can scan for PII")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if not meeting.get("transcript_id"):
+        return {"flags": []}
+
+    transcript = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
+    if not transcript:
+        return {"flags": []}
+
+    text = transcript.get("speaker_text") or transcript.get("text", "")
+    if not text.strip():
+        return {"flags": []}
+
+    from utils.ai import scan_pii_in_transcript
+    attendees = meeting.get("attendees", [])
+    manager_name = meeting.get("created_by_name", "") or meeting.get("sign_off_manager_name", "")
+    flags = await scan_pii_in_transcript(text, attendees, manager_name)
+    return {"flags": flags}
+
+
+@router.post("/{meeting_id}/complete-pii-review")
+async def complete_pii_review(
+    meeting_id: str,
+    data: PIIReviewRequest,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Save the manager's PII review decision (redactions applied or skipped).
+    Sets pii_review_status = 'reviewed' so the gate never shows again."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can complete PII review")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    clean_redactions = []
+    for r in data.redactions:
+        original = r.get("original", "").strip()
+        replacement = r.get("replacement", "[Redacted]").strip()
+        if original and replacement:
+            clean_redactions.append({
+                "id": r.get("id", str(uuid.uuid4())[:8]),
+                "original": original,
+                "replacement": replacement,
+                "type": r.get("type", "unknown"),
+                "added_at": now,
+                "added_by": current_user["id"],
+            })
+
+    await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id)},
+        {"$set": {
+            "pii_review_status": "reviewed",
+            "pii_reviewed_at": now,
+            "pii_reviewed_by": current_user["id"],
+            "pii_reviewed_by_name": current_user.get("name", ""),
+            "pii_skipped": data.skipped,
+            "pii_redactions": clean_redactions,
+        }}
+    )
+
+    action = "pii_review_skipped" if data.skipped else "pii_review_completed"
+    detail = "Acknowledged — no changes made" if data.skipped else f"{len(clean_redactions)} redaction(s) applied"
+    await db.audit_logs.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": current_user["id"],
+        "user_name": current_user.get("name", ""),
+        "action": action,
+        "edit_type": action,
+        "detail": detail,
+        "timestamp": now,
+    })
+
+    logger.info("PII review for meeting %s: %s — %s", meeting_id, action, detail)
+    return {"message": "PII review completed", "redactions_applied": len(clean_redactions)}
+
 
 async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
@@ -871,6 +1006,8 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
         "speaker_reset": "Speaker labels reset to raw transcript",
         "speaker_restore_backup": "Speaker labels restored from backup",
         "speaker_diarize": "Speaker identification (AI)",
+        "pii_review_completed": "Confidentiality review completed",
+        "pii_review_skipped": "Confidentiality review skipped (acknowledged)",
     }
     async for log in db.audit_logs.find({"meeting_id": meeting_id}).sort("timestamp", 1):
         action = log.get("action", "unknown")

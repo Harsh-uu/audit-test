@@ -606,6 +606,126 @@ Section 3: Two sentences that frame the essential outcomes, overall themes, or a
 Output plain text only. Use a blank line (\\n\\n) to separate each of the three sections. Do not use any markdown headers or JSON."""
 
 
+PII_SCAN_SYSTEM_PROMPT = """You are a PII detection specialist for UK adult social care supervision meeting transcripts.
+
+Identify references to THIRD PARTIES — people NOT present in this meeting — whose identity could be determined from the transcript.
+
+In UK adult social care settings, flag:
+- Named service users, residents, or clients (people being cared for)
+- Named family members, next-of-kin, carers or friends of service users
+- Named colleagues referenced in sensitive context (incidents, complaints, disciplinary matters)
+- Any full name combined with sensitive health, financial, or personal details
+
+DO NOT flag:
+- The meeting participants (their names are listed below)
+- Generic roles without specific names ("the doctor", "a colleague", "the manager")
+- Generic references without identifying detail ("a resident", "the service user")
+- Organisation names, care home names, or place names alone
+
+Return valid JSON array only — no markdown, no text outside JSON:
+[{"original": "exact phrase as it appears in the transcript", "type": "third_party_name|sensitive_personal_detail|contact_detail|address", "replacement": "safe replacement e.g. [Service User], [Family Member], [Colleague], [Resident]", "reason": "one sentence explanation"}]
+
+Return [] if no third-party PII is found.
+If the same person appears multiple times, return one entry for their most complete name/reference."""
+
+
+async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, manager_name: str = "") -> list:
+    """Scan transcript for PII using regex (UK patterns) + GPT-4o (third-party names).
+    Returns a merged, deduplicated list of flag dicts."""
+    import re as _re
+
+    flags = []
+    seen_originals: set = set()
+
+    # ── 1. Regex patterns for structured UK PII ──────────────────────────
+    regex_patterns = [
+        # UK phone numbers (07xxx, 01xxx, 02xxx, +44)
+        (r'\b(?:0(?:7\d{9}|[123]\d{8,9})|\+44[\s\-]?\d{2,5}[\s\-]?\d{3,8})\b',
+         'contact_detail', '[Phone Number]'),
+        # Email addresses
+        (r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b',
+         'contact_detail', '[Email Address]'),
+        # UK postcodes
+        (r'\b[A-Z]{1,2}[0-9][0-9A-Z]?\s?[0-9][A-Z]{2}\b',
+         'address', '[Postcode]'),
+        # National Insurance numbers
+        (r'\b[A-CEGHJ-PR-TW-Z]{1}[A-CEGHJ-NPR-TW-Z]{1}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]\b',
+         'sensitive_personal_detail', '[NI Number]'),
+        # NHS numbers (10-digit, formatted as 3-3-4 or unformatted)
+        (r'\b\d{3}\s\d{3}\s\d{4}\b',
+         'sensitive_personal_detail', '[NHS Number]'),
+    ]
+
+    for pattern, pii_type, replacement in regex_patterns:
+        for match in _re.finditer(pattern, transcript_text, _re.IGNORECASE):
+            original = match.group().strip()
+            if original and original not in seen_originals:
+                seen_originals.add(original)
+                flags.append({
+                    "id": str(uuid.uuid4())[:8],
+                    "original": original,
+                    "type": pii_type,
+                    "replacement": replacement,
+                    "reason": f"Detected {pii_type.replace('_', ' ')} pattern",
+                    "source": "regex",
+                })
+
+    # ── 2. AI scan for names and sensitive context ────────────────────────
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if api_key and transcript_text.strip():
+        participant_names: list = []
+        if manager_name:
+            participant_names.append(manager_name)
+        if attendees:
+            for a in (attendees or []):
+                if isinstance(a, dict) and a.get("name"):
+                    participant_names.append(a["name"])
+
+        participant_note = ""
+        if participant_names:
+            participant_note = f"\n\nMEETING PARTICIPANTS (do NOT flag these): {', '.join(participant_names)}"
+
+        user_prompt = (
+            f"Scan this supervision transcript for third-party PII:{participant_note}\n\n"
+            f"TRANSCRIPT:\n{transcript_text[:8000]}"
+        )
+
+        try:
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=f"pii_scan_{uuid.uuid4()}",
+                system_message=PII_SCAN_SYSTEM_PROMPT,
+            ).with_model("openai", "gpt-4o")
+
+            full_response = ""
+            async for event in chat.stream_message(UserMessage(text=user_prompt)):
+                from emergentintegrations.llm.chat import TextDelta, StreamDone
+                if isinstance(event, TextDelta):
+                    full_response += event.content
+                elif isinstance(event, StreamDone):
+                    break
+
+            text_resp = full_response.strip()
+            if text_resp.startswith("```"):
+                lines = text_resp.split("\n")
+                text_resp = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+            ai_flags = json.loads(text_resp)
+            if isinstance(ai_flags, list):
+                for flag in ai_flags:
+                    original = flag.get("original", "").strip()
+                    if original and original not in seen_originals:
+                        seen_originals.add(original)
+                        flag["id"] = str(uuid.uuid4())[:8]
+                        flag["source"] = "ai"
+                        flags.append(flag)
+        except Exception as e:
+            logger.error(f"AI PII scan failed: {e}")
+            # Return regex-only results on AI failure
+
+    return flags
+
+
 async def generate_meeting_summary(transcript_text: str) -> str:
     """Re-generate just the meeting summary in the new structured format."""
     api_key = os.environ.get("EMERGENT_LLM_KEY")

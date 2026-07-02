@@ -13,6 +13,7 @@ import { CommentsTab } from "@/components/report/CommentsTab";
 import { AuditTrailTab } from "@/components/report/AuditTrailTab";
 import { EvidenceSidebar } from "@/components/report/EvidenceSidebar";
 import { EmailModal } from "@/components/report/EmailModal";
+import { PIIReviewGate } from "@/components/PIIReviewGate";
 
 function RetryButton({ meetingId, onRetry, API, getAuthConfig }) {
   const [retrying, setRetrying] = useState(false);
@@ -77,6 +78,7 @@ export default function MeetingReport() {
   const [emailMessage, setEmailMessage] = useState("");
   const [showSignOffConfirm, setShowSignOffConfirm] = useState(false);
   const [speakersDirty, setSpeakersDirty] = useState(false);
+  const [piiGateDone, setPiiGateDone] = useState(false);
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
   const isInReview = meeting?.status === "in_review";
@@ -312,6 +314,32 @@ export default function MeetingReport() {
   }
 
   if (!meeting) return <Layout><div className="p-8 text-center text-gray-500">Meeting not found</div></Layout>;
+
+  // ── PII confidentiality gate ─────────────────────────────────────────
+  // Show for managers/admins on first open of a processed meeting
+  const shouldShowPIIGate =
+    !piiGateDone &&
+    meeting.pii_review_status !== "reviewed" &&
+    (user?.role === "manager" || user?.role === "admin") &&
+    !!meeting.transcript &&
+    !!meeting.analysis &&
+    !isProcessing;
+
+  if (shouldShowPIIGate) {
+    return (
+      <Layout>
+        <PIIReviewGate
+          meetingId={meetingId}
+          onComplete={async () => {
+            await fetchMeeting();
+            setPiiGateDone(true);
+          }}
+          API={API}
+          getAuthConfig={getAuthConfig}
+        />
+      </Layout>
+    );
+  }
 
   const stageCfg = PROCESSING_STAGES[meeting.status];
   const analysis = meeting.analysis;
