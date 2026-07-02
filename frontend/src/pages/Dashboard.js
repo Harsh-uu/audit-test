@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar, Building2, Trash2 } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck } from "lucide-react";
 
 const STATUS_CONFIG = {
   draft:             { label: "Draft",        color: "bg-gray-100 text-gray-700 border-gray-200",       icon: FileText },
@@ -71,11 +71,23 @@ function DueCard({ s, navigate }) {
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.draft;
   const Icon = cfg.icon;
+  const isSignedOff = status === "signed_off" || status === "shared";
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border rounded-full ${cfg.color}`}>
-      <Icon className="w-3 h-3" />
-      {cfg.label}
-    </span>
+    <>
+      {/* Mobile: shield-tick icon for signed_off, icon-only pill for everything else */}
+      {isSignedOff ? (
+        <ShieldCheck className="sm:hidden w-6 h-6 text-emerald-600 flex-shrink-0" title="Signed Off" />
+      ) : (
+        <span className={`sm:hidden inline-flex items-center px-2 py-0.5 text-xs font-medium border rounded-full ${cfg.color}`}>
+          <Icon className="w-3 h-3" />
+        </span>
+      )}
+      {/* Desktop: full label pill */}
+      <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border rounded-full ${cfg.color}`}>
+        <Icon className="w-3 h-3" />
+        {cfg.label}
+      </span>
+    </>
   );
 }
 
