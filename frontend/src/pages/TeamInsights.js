@@ -22,7 +22,7 @@ function MatrixCell({ cell }) {
   if (status === "evidenced") {
     return (
       <div
-        title={cell?.total_sub ? `All ${cell.total_sub} sub-outcomes evidenced` : "All outcomes evidenced"}
+        title={cell?.total_sub ? `All ${cell.total_sub} outcomes evidenced` : "All outcomes evidenced"}
         className="w-10 h-10 flex items-center justify-center rounded border bg-emerald-100 border-emerald-300 transition-opacity hover:opacity-80 cursor-default"
       >
         <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -37,7 +37,7 @@ function MatrixCell({ cell }) {
     const total = cell?.total_sub ?? 0;
     return (
       <div
-        title={`${covered}/${total} sub-outcomes evidenced (${cell?.pct ?? 0}%)`}
+        title={`${covered}/${total} outcomes evidenced (${cell?.pct ?? 0}%)`}
         className="w-10 h-10 flex items-center justify-center rounded border bg-amber-50 border-amber-200 transition-opacity hover:opacity-80 cursor-default"
       >
         <span className="text-[9px] font-bold text-amber-600 leading-none">{covered}/{total}</span>
@@ -166,7 +166,7 @@ function MatrixView({ matrix, ccStandards = [], onCellClick }) {
                           <button
                             className="hover:opacity-75 transition-opacity"
                             onClick={() => onCellClick && onCellClick(row, std)}
-                            title={`${row.staff_name} — ${std.ref}: click to see sub-outcomes`}
+                            title={`${row.staff_name} — ${std.ref}: click to see outcomes`}
                             data-testid={`cc-cell-${row.staff_id}-${std.ref.replace(/\s/g, '-')}`}
                           >
                             <MatrixCell cell={row.cells[std.ref]} />
@@ -213,7 +213,7 @@ function MatrixView({ matrix, ccStandards = [], onCellClick }) {
               <div className="w-7 h-7 rounded border bg-emerald-100 border-emerald-300 flex items-center justify-center">
                 <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
               </div>
-              All sub-outcomes evidenced
+              All outcomes evidenced
             </div>
             <div className="flex items-center gap-1.5 text-xs text-gray-500">
               <div className="w-7 h-7 rounded border bg-amber-50 border-amber-200 flex items-center justify-center">
@@ -297,7 +297,7 @@ function CcDrillDownModal({ staffName, stdRef, stdName, cell, ccStandards, onClo
         {/* Sub-outcomes list */}
         <div className="flex-1 overflow-y-auto p-4">
           {allSubs.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No sub-outcomes defined for this standard</p>
+            <p className="text-sm text-gray-400 text-center py-8">No outcomes defined for this standard</p>
           ) : (
             <>
               {covered.length > 0 && (
@@ -356,7 +356,7 @@ function GapBar({ gap }) {
   const denominator = isCc ? gap.total_sub : gap.total;
   const pct = denominator > 0 ? Math.round((numerator / denominator) * 100) : 0;
   const label = isCc
-    ? `${numerator}/${denominator} sub-outcomes`
+    ? `${numerator}/${denominator} outcomes`
     : `${numerator}/${denominator} staff`;
   const TYPE_COLOR = {
     cqc:       { badge: "bg-purple-100 text-purple-700", bar: "bg-purple-500" },

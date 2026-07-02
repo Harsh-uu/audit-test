@@ -46,7 +46,8 @@ async def create_meeting(data: CreateMeetingRequest, db=Depends(get_db), current
                 valid_ids.append(ObjectId(uid))
             except Exception:
                 pass
-        users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": valid_ids}})}
+        org_id = current_user.get("org_id")
+        users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": valid_ids}, "org_id": org_id})}
         for uid in data.attendee_ids:
             user = users_map.get(uid)
             if user:
@@ -63,7 +64,7 @@ async def create_meeting(data: CreateMeetingRequest, db=Depends(get_db), current
     manager_name = None
     if data.sign_off_manager_id:
         try:
-            mgr = await db.users.find_one({"_id": ObjectId(data.sign_off_manager_id)})
+            mgr = await db.users.find_one({"_id": ObjectId(data.sign_off_manager_id), "org_id": current_user.get("org_id")})
             if mgr:
                 manager_name = mgr["name"]
         except Exception:
@@ -230,7 +231,7 @@ async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Dep
                 valid_ids.append(ObjectId(uid))
             except Exception:
                 pass
-        users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": valid_ids}})}
+        users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": valid_ids}, "org_id": current_user.get("org_id")})}
         for uid in data.attendee_ids:
             user = users_map.get(uid)
             if user:
@@ -291,5 +292,6 @@ async def delete_meeting(meeting_id: str, db=Depends(get_db), current_user=Depen
     await db.audio_files.delete_many({"meeting_id": meeting_id})
     await db.reviewer_comments.delete_many({"meeting_id": meeting_id})
     await db.review_edits.delete_many({"meeting_id": meeting_id})
+    await db.audit_logs.delete_many({"meeting_id": meeting_id})
 
     return {"message": "Meeting deleted"}

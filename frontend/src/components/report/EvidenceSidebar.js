@@ -194,7 +194,7 @@ function CareCertDrillDown({ mappings }) {
     <div className="mt-4 pt-4 border-t border-blue-100" data-testid="care-cert-drilldown">
       <div className="flex items-center gap-2 mb-3">
         <Award className="w-3.5 h-3.5 text-blue-600" />
-        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Sub-outcome Coverage</h3>
+        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Specific Outcomes</h3>
       </div>
       {relevantStds.map(std => {
         const stData = byStandard[std.reference];
@@ -249,7 +249,7 @@ function CareCertDrillDown({ mappings }) {
                       onClick={() => setShowGaps(s => ({ ...s, [std.reference]: !s[std.reference] }))}
                     >
                       {showingGaps ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                      {gaps.length} sub-outcomes not yet evidenced
+                      {gaps.length} outcomes not yet evidenced
                     </button>
                     {showingGaps && gaps.map(sub => (
                       <div key={sub.ref} className="flex items-start gap-2 py-1 opacity-50">

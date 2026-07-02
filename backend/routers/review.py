@@ -52,6 +52,7 @@ class FindReplaceRequest(BaseModel):
     find: str
     replace: str
     case_sensitive: bool = False
+    replace_one: bool = False  # True = replace only the first occurrence
 
 class AnonymiseRequest(BaseModel):
     phrase: str
@@ -96,7 +97,7 @@ async def delete_audio_after_grace(meeting_id: str, db):
 
 
 def _apply_redactions_to_text(text: str, redactions: list) -> str:
-    """Apply saved redaction pairs to a text string (case-sensitive exact match)."""
+    """Apply saved redaction pairs to a text string (case-insensitive match)."""
     if not text or not redactions:
         return text
     result = text
@@ -104,7 +105,7 @@ def _apply_redactions_to_text(text: str, redactions: list) -> str:
         original = r.get("original", "")
         replacement = r.get("replacement", "[Redacted]")
         if original:
-            result = result.replace(original, replacement)
+            result = re.sub(re.escape(original), replacement, result, flags=re.IGNORECASE)
     return result
 
 
@@ -478,7 +479,11 @@ async def find_replace_transcript(
     for field in ("text", "speaker_text"):
         original = transcript.get(field, "")
         if original:
-            new_val, count = pattern.subn(data.replace, original)
+            if data.replace_one:
+                new_val = pattern.sub(data.replace, original, count=1)
+                count = 0 if new_val == original else 1
+            else:
+                new_val, count = pattern.subn(data.replace, original)
             if count:
                 updates[field] = new_val
                 replaced += count

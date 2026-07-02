@@ -222,7 +222,7 @@ function CareCertGroupedView({ items, ccStandards }) {
                       {isShowingGaps
                         ? <ChevronDown className="w-3 h-3" />
                         : <ChevronRight className="w-3 h-3" />}
-                      {gapSubs.length} sub-outcome{gapSubs.length !== 1 ? "s" : ""} not yet evidenced
+                      {gapSubs.length} outcome{gapSubs.length !== 1 ? "s" : ""} not yet evidenced
                     </button>
                     {isShowingGaps && gapSubs.map(sub => (
                       <div key={sub.ref} className="flex items-start gap-2 py-1.5 opacity-50">
