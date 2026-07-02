@@ -110,12 +110,29 @@ function roleToStyle(role) {
     : { pill: "bg-emerald-700 text-white", row: "bg-emerald-50/40" };
 }
 
-// ── Speaker colour palette ────────────────────────────────────────────────────
+// ── Speaker colour palette — pastel / -300 range ─────────────────────────────
 const SPEAKER_PALETTE = [
-  "#1E40AF", "#7C3AED", "#047857", "#B91C1C",
-  "#B45309", "#0E7490", "#BE185D", "#9A3412",
-  "#1D4ED8", "#065F46",
+  "#93C5FD",  // blue-300
+  "#C4B5FD",  // violet-300
+  "#6EE7B7",  // emerald-300
+  "#FCA5A5",  // red-300
+  "#FCD34D",  // amber-300
+  "#67E8F9",  // cyan-300
+  "#F9A8D4",  // pink-300
+  "#FDBA74",  // orange-300
+  "#A5B4FC",  // indigo-300
+  "#86EFAC",  // green-300
 ];
+
+/** Return dark or white text based on background luminance */
+function getContrastColor(hex) {
+  if (!hex || hex.length < 7) return "#fff";
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.55 ? "#374151" : "#ffffff";
+}
 
 // ── Speaker Manager Panel ────────────────────────────────────────────────────
 function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, onRestoreBackup, saving, isDirty, lastEditedBy, lastEditedAt, backupBy, backupAt, stagedColors, onColorChange }) {
@@ -1093,8 +1110,8 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                 const style = roleToStyle(speakerRoleMap[turn.speaker] || getSpeakerRole(turn.speaker, managerName));
                 const customColor = stagedColors[turn.speaker];
                 const isMenuOpen = openTurnMenu === i;
-                const rowStyle = customColor ? { backgroundColor: `${customColor}14` } : {};
-                const pillStyle = customColor ? { backgroundColor: customColor, color: "#fff" } : {};
+                const rowStyle = customColor ? { backgroundColor: `${customColor}30` } : {};
+                const pillStyle = customColor ? { backgroundColor: customColor, color: getContrastColor(customColor) } : {};
                 const pillClass = customColor ? "" : style.pill;
                 return (
                   <div key={i} className={`flex gap-3 px-5 py-3.5 ${customColor ? "" : style.row}`} style={rowStyle}>
