@@ -157,7 +157,6 @@ export default function Layout({ children }) {
               <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Admin</div>
             )}
             {[
-              { path: "/admin/team", icon: BarChart2, label: "Team Intelligence", testId: "nav-team-intelligence" },
               ...(user?.role === "admin" || user?.role === "manager"
                 ? [
                     { path: "/organisation", icon: Building2, label: "Organisation", testId: "nav-organisation" },
@@ -168,6 +167,7 @@ export default function Layout({ children }) {
                 ? [{ path: "/admin", icon: BookOpen, label: "Standards Library", testId: "nav-standards-library", exact: true },
                    { path: "/upload-supervision", icon: FileUp, label: "Import Supervision", testId: "nav-import-supervision", exact: true },
                    { path: "/supervision-matrix", icon: LayoutGrid, label: "Supervision Matrix", testId: "nav-supervision-matrix", exact: true },
+                   { path: "/admin/team", icon: BarChart2, label: "Team Intelligence", testId: "nav-team-intelligence", exact: true },
                    { path: "/inspection-prep", icon: ClipboardCheck, label: "Inspection Prep", testId: "nav-inspection-prep", exact: true }]
                 : []),
             ].map(({ path, icon: Icon, label, testId, exact }) => {
