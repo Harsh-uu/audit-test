@@ -46,6 +46,16 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - [x] Admin can upload reference documents
 - [x] Manager can upload org-specific standards documents (Custom Standards tab) — Skills for Care Supervision Guide uploaded per-org
 
+### Document Import (Phase 2b)
+- [x] Managers/admins can upload a previous supervision document (PDF or DOCX) via `/upload-supervision`
+- [x] Document linked to a specific staff member with supervision date + label
+- [x] AI (o4-mini) scans extracted text and maps to CQC + Care Certificate + custom standards (evidence mapping only, no summary/actions)
+- [x] Background async processing with 3-second frontend polling
+- [x] `DocUploadReport` page shows evidence sidebar for imported doc
+- [x] Staff portfolio shows "Imported Documents" section with Document Import badge, always visible regardless of signed-off meeting count
+- [x] "Import Supervision" sidebar link for admin/manager roles
+- [x] Max 20MB, PDF + DOCX supported, stored in `supervision_uploads` collection
+
 ### Recording (Phase 3)
 - [x] Recording notice display and logging
 - [x] Browser MediaRecorder API integration

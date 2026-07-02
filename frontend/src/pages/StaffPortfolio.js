@@ -418,36 +418,38 @@ export default function StaffPortfolio() {
           </div>
         </div>
 
-        {stats.total_meetings === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-center py-24 text-gray-400">
-            <div>
-              <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium text-gray-500">No signed-off supervision records yet</p>
-              <p className="text-sm mt-1">Evidence will appear here once meetings are signed off</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
+        {/* Always-visible two-column grid */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
 
-            {/* Left: Evidence Standards */}
-            <div className="lg:col-span-7 border-r border-gray-200 flex flex-col overflow-hidden">
-              {/* Tab row */}
-              <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-1">
-                {tabCfg.map(({ key, label, count, icon: Icon, color }) => (
-                  <button
-                    key={key}
-                    onClick={() => setEvidenceTab(key)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                      evidenceTab === key
-                        ? "bg-gray-100 text-gray-900"
-                        : "text-gray-500 hover:text-gray-700"
-                    }`}
-                    data-testid={`evidence-tab-${key}`}
-                  >
-                    <Icon className={`w-3.5 h-3.5 ${color}`} />
-                    {label}
-                    {count > 0 && (
-                      <span className={`text-xs rounded-full px-1.5 ${evidenceTab === key ? "bg-[#1E3A8A] text-white" : "bg-gray-200 text-gray-600"}`}>
+          {/* Left: Evidence Standards (or empty state) */}
+          <div className="lg:col-span-7 border-r border-gray-200 flex flex-col overflow-hidden">
+            {stats.total_meetings === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-center py-24 text-gray-400">
+                <div>
+                  <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium text-gray-500">No signed-off supervision records yet</p>
+                  <p className="text-sm mt-1">Evidence will appear here once meetings are signed off</p>
+                </div>
+              </div>
+            ) : (
+              <>
+            {/* Tab row */}
+            <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-1">
+              {tabCfg.map(({ key, label, count, icon: Icon, color }) => (
+                <button
+                  key={key}
+                  onClick={() => setEvidenceTab(key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    evidenceTab === key
+                      ? "bg-gray-100 text-gray-900"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                  data-testid={`evidence-tab-${key}`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${color}`} />
+                  {label}
+                  {count > 0 && (
+                    <span className={`text-xs rounded-full px-1.5 ${evidenceTab === key ? "bg-[#1E3A8A] text-white" : "bg-gray-200 text-gray-600"}`}>
                         {count}
                       </span>
                     )}
@@ -474,7 +476,9 @@ export default function StaffPortfolio() {
                   </div>
                 )}
               </div>
-            </div>
+            </>
+            )}
+          </div>
 
             {/* Right: Meeting History + Imported Documents */}
             <div className="lg:col-span-5 bg-[#F8F9FA] overflow-y-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
@@ -603,7 +607,6 @@ export default function StaffPortfolio() {
             </div>
 
           </div>
-        )}
       </div>
     </Layout>
   );
