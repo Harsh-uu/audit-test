@@ -164,7 +164,7 @@ export default function Layout({ children }) {
                     { path: "/admin/schedules", icon: Calendar, label: "Schedules", testId: "nav-schedules" },
                   ]
                 : []),
-              ...(user?.role === "admin"
+              ...(user?.role === "admin" || user?.role === "manager"
                 ? [{ path: "/admin", icon: BookOpen, label: "Standards Library", testId: "nav-standards-library", exact: true }]
                 : []),
             ].map(({ path, icon: Icon, label, testId, exact }) => {

@@ -39,7 +39,7 @@ function App() {
           <Route path="/meetings/new" element={<ProtectedRoute><NewMeeting /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/record" element={<ProtectedRoute><RecordingScreen /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/report" element={<ProtectedRoute><MeetingReport /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><AdminLibrary /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute roles={["admin", "manager"]}><AdminLibrary /></ProtectedRoute>} />
           <Route path="/admin/team" element={<ProtectedRoute roles={["admin", "manager"]}><TeamInsights /></ProtectedRoute>} />
           <Route path="/organisation" element={<ProtectedRoute roles={["admin", "manager"]}><OrgStructure /></ProtectedRoute>} />
           <Route path="/admin/schedules" element={<ProtectedRoute roles={["admin", "manager"]}><Schedules /></ProtectedRoute>} />

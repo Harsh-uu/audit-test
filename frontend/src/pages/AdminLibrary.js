@@ -23,7 +23,8 @@ function TabBtn({ active, onClick, children }) {
 }
 
 export default function AdminLibrary() {
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
   const [tab, setTab] = useState("cqc");
   const [standards, setStandards] = useState([]);
@@ -80,16 +81,20 @@ export default function AdminLibrary() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [stdRes, userRes, docRes, tmplRes] = await Promise.all([
+      const requests = [
         axios.get(`${API}/admin/standards`, getAuthConfig()),
-        axios.get(`${API}/admin/users`, getAuthConfig()),
         axios.get(`${API}/admin/standards/documents`, getAuthConfig()),
         axios.get(`${API}/admin/template`, getAuthConfig()),
-      ]);
+      ];
+      if (user?.role === "admin") {
+        requests.push(axios.get(`${API}/admin/users`, getAuthConfig()));
+      }
+      const results = await Promise.all(requests);
+      const [stdRes, docRes, tmplRes] = results;
       setStandards(stdRes.data);
-      setUsers(userRes.data);
       setDocs(docRes.data);
       setTemplate(tmplRes.data || { name: "Supervision Template", description: "", steps: [] });
+      if (user?.role === "admin" && results[3]) setUsers(results[3].data);
     } catch (err) {
       console.error("Admin fetchAll failed:", err);
       setError("Failed to load admin data. Please refresh.");
@@ -299,18 +304,22 @@ export default function AdminLibrary() {
             <FileText className="inline w-3.5 h-3.5 mr-1.5" />
             Supervision Template
           </TabBtn>
-          <TabBtn active={tab === "users"} onClick={() => setTab("users")}>
-            <Users className="inline w-3.5 h-3.5 mr-1.5" />
-            Users ({users.length})
-          </TabBtn>
+          {isAdmin && (
+            <TabBtn active={tab === "users"} onClick={() => setTab("users")}>
+              <Users className="inline w-3.5 h-3.5 mr-1.5" />
+              Users ({users.length})
+            </TabBtn>
+          )}
           <TabBtn active={tab === "export"} onClick={() => { setTab("export"); if (!exportMeetings.length) fetchExportMeetings(); }}>
             <Download className="inline w-3.5 h-3.5 mr-1.5" />
             Evidence Export
           </TabBtn>
-          <TabBtn active={tab === "branding"} onClick={() => setTab("branding")}>
-            <Palette className="inline w-3.5 h-3.5 mr-1.5" />
-            Branding
-          </TabBtn>
+          {isAdmin && (
+            <TabBtn active={tab === "branding"} onClick={() => setTab("branding")}>
+              <Palette className="inline w-3.5 h-3.5 mr-1.5" />
+              Branding
+            </TabBtn>
+          )}
         </div>
 
         {(tab === "cqc" || tab === "care_cert") && (
@@ -356,7 +365,7 @@ export default function AdminLibrary() {
           />
         )}
 
-        {tab === "users" && (
+        {tab === "users" && isAdmin && (
           <UsersTab
             users={users}
             showNewUser={showNewUser}
@@ -392,7 +401,7 @@ export default function AdminLibrary() {
           />
         )}
 
-        {tab === "branding" && <BrandingTab />}
+        {tab === "branding" && isAdmin && <BrandingTab />}
       </div>
     </Layout>
   );

@@ -23,7 +23,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 | Role | Description |
 |------|-------------|
 | admin | Full access, manage users and standards library |
-| manager | Create meetings, sign-off, view all meetings |
+| manager | Create meetings, sign-off, view all meetings, upload org-specific standards documents |
 | attendee | Record meetings, review assigned meetings |
 | shared_reviewer | View signed-off meetings, add comments |
 
@@ -44,6 +44,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - [x] Care Certificate standards pre-seeded (16 standards, 2025 version)
 - [x] Admin can add/deactivate individual standards
 - [x] Admin can upload reference documents
+- [x] Manager can upload org-specific standards documents (Custom Standards tab) — Skills for Care Supervision Guide uploaded per-org
 
 ### Recording (Phase 3)
 - [x] Recording notice display and logging
