@@ -152,11 +152,6 @@ async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depe
     redactions = meeting.get("pii_redactions", [])
     privileged = _has_privileged_access(meeting, user_id)
 
-    # ── PII redaction access control ─────────────────────────────────────
-    user_id = current_user.get("id", "")
-    redactions = meeting.get("pii_redactions", [])
-    privileged = _has_privileged_access(meeting, user_id)
-
     if redactions and meeting.get("transcript"):
         t = meeting["transcript"]
         # Speaker view: ALWAYS apply redactions for every user.

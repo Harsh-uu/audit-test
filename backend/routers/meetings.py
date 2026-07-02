@@ -169,6 +169,25 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
         except Exception:
             pass
 
+    # Apply PII redactions —
+    # speaker_text is always redacted (everyone works from the redacted view).
+    # raw text is only redacted for non-privileged users (creator/attendees keep the original).
+    from routers.review import _apply_redactions_to_text, _has_privileged_access
+    redactions = meeting.get("pii_redactions", [])
+    if redactions and meeting.get("transcript"):
+        t = meeting["transcript"]
+        if t.get("speaker_text"):
+            t["speaker_text"] = _apply_redactions_to_text(t["speaker_text"], redactions)
+        user_id = current_user.get("id", "")
+        if not _has_privileged_access(meeting, user_id) and t.get("text"):
+            t["text"] = _apply_redactions_to_text(t["text"], redactions)
+    # Strip raw redaction list from non-privileged callers
+    if redactions:
+        user_id = current_user.get("id", "")
+        if not _has_privileged_access(meeting, user_id):
+            meeting.pop("pii_redactions", None)
+            meeting["pii_redactions_count"] = len(redactions)
+
     # Attach analysis
     if meeting.get("analysis_id"):
         try:
