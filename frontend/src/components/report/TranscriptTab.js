@@ -803,11 +803,10 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       // Move to next (or clamp) after replacement since matches will recompute
       setFindMatchIdx(i => Math.min(i, findMatches.length - 2));
     } else if (match.type === "para" && onFindReplace) {
-      // Full text: replace just this one occurrence using surrounding context as anchor
-      // Simplest approach: call replace all with a count of 1 — handled server-side
-      const para = rawParas[match.paraIdx];
-      const original = para.slice(match.start, match.end);
-      await onFindReplace(original, replaceWith, 1);
+      // Full text: replace exactly the highlighted occurrence.
+      // Count how many full-text (para) matches precede the current one to get the 0-based index.
+      const occurrenceIndex = findMatches.slice(0, findMatchIdx).filter(m => m.type === "para").length;
+      await onFindReplace(findQuery, replaceWith, 1, occurrenceIndex);
     }
   }, [findMatches, findMatchIdx, replaceWith, rawParas, onFindReplace, setDirty]); // eslint-disable-line
 

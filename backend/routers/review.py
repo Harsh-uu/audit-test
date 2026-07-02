@@ -52,7 +52,8 @@ class FindReplaceRequest(BaseModel):
     find: str
     replace: str
     case_sensitive: bool = False
-    replace_one: bool = False  # True = replace only the first occurrence
+    replace_one: bool = False       # True = replace only one occurrence
+    occurrence_index: int = 0       # 0-based index of the occurrence to replace when replace_one=True
 
 class AnonymiseRequest(BaseModel):
     phrase: str
@@ -96,31 +97,8 @@ async def delete_audio_after_grace(meeting_id: str, db):
         logger.error(f"Audio deletion failed for meeting {meeting_id}: {e}")
 
 
-def _apply_redactions_to_text(text: str, redactions: list) -> str:
-    """Apply saved redaction pairs to a text string (case-insensitive match)."""
-    if not text or not redactions:
-        return text
-    result = text
-    for r in redactions:
-        original = r.get("original", "")
-        replacement = r.get("replacement", "[Redacted]")
-        if original:
-            result = re.sub(re.escape(original), replacement, result, flags=re.IGNORECASE)
-    return result
-
-
-def _apply_redactions_deep(obj, redactions: list):
-    """Recursively apply redactions to every string value in a dict / list structure.
-    Used to sanitise analysis documents (evidence summaries, transcript excerpts, etc.)."""
-    if not redactions:
-        return obj
-    if isinstance(obj, str):
-        return _apply_redactions_to_text(obj, redactions)
-    if isinstance(obj, dict):
-        return {k: _apply_redactions_deep(v, redactions) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_apply_redactions_deep(item, redactions) for item in obj]
-    return obj
+from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
+from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 
 
 def _has_privileged_access(meeting: dict, user_id: str) -> bool:
@@ -192,6 +170,8 @@ async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depe
 
 @router.put("/{meeting_id}/summary")
 async def update_summary(meeting_id: str, data: UpdateSummaryRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can edit the summary")
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -222,6 +202,8 @@ async def update_summary(meeting_id: str, data: UpdateSummaryRequest, db=Depends
 
 @router.put("/{meeting_id}/actions")
 async def update_actions(meeting_id: str, data: UpdateActionsRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can edit action items")
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -249,6 +231,8 @@ async def update_actions(meeting_id: str, data: UpdateActionsRequest, db=Depends
 
 @router.put("/{meeting_id}/evidence/{evidence_id}")
 async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenceRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can edit evidence items")
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -366,6 +350,8 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, db=Depend
 @router.patch("/{meeting_id}/actions/{action_id}")
 async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
     """Mark an action as complete or incomplete."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can toggle action completion")
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting or not meeting.get("analysis_id"):
         raise HTTPException(status_code=404, detail="Meeting or analysis not found")
@@ -478,12 +464,22 @@ async def find_replace_transcript(
 
     for field in ("text", "speaker_text"):
         original = transcript.get(field, "")
-        if original:
-            if data.replace_one:
-                new_val = pattern.sub(data.replace, original, count=1)
-                count = 0 if new_val == original else 1
-            else:
-                new_val, count = pattern.subn(data.replace, original)
+        if not original:
+            continue
+        if data.replace_one:
+            # Full Text mode only — target the exact occurrence by index.
+            # speaker_text is managed client-side in Speaker View; skip it here.
+            if field != "text":
+                continue
+            all_matches = list(pattern.finditer(original))
+            idx = data.occurrence_index
+            if idx < len(all_matches):
+                m = all_matches[idx]
+                new_val = original[:m.start()] + data.replace + original[m.end():]
+                updates[field] = new_val
+                replaced += 1
+        else:
+            new_val, count = pattern.subn(data.replace, original)
             if count:
                 updates[field] = new_val
                 replaced += count

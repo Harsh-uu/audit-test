@@ -4,6 +4,7 @@ from bson import ObjectId
 import logging
 
 from deps import get_db, get_current_user
+from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -70,6 +71,9 @@ async def _build_portfolio_data(user_id: str, db):
             continue
         adoc = analyses_map.get(aid)
         if adoc:
+            redactions = meeting.get("pii_redactions", [])
+            if redactions:
+                adoc = _apply_redactions_deep(dict(adoc), redactions)
             raw_meetings.append({"meeting": meeting, "analysis": adoc})
 
     # ── Aggregate by standard ──────────────────────────────────────────────

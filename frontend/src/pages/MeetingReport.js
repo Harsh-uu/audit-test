@@ -242,11 +242,11 @@ export default function MeetingReport() {
     }
   };
 
-  const handleFindReplace = async (find, replace, count) => {
+  const handleFindReplace = async (find, replace, count, occurrenceIndex = 0) => {
     try {
       const { data } = await axios.post(
         `${API}/review/${meetingId}/find-replace`,
-        { find, replace, replace_one: count === 1 },
+        { find, replace, replace_one: count === 1, occurrence_index: occurrenceIndex },
         getAuthConfig()
       );
       if (data.replaced_count > 0) {
