@@ -484,13 +484,14 @@ export default function MeetingReport() {
                     canAnonymise={canAnonymise}
                     canEditSpeakers={canEditSpeakers}
                     onDirtyChange={(dirty) => setSpeakersDirty(dirty)}
-                    onSpeakerTextGenerated={(spText, editedByName, editedAt) => setMeeting(m => ({
+                    onSpeakerTextGenerated={(spText, editedByName, editedAt, speakerColors) => setMeeting(m => ({
                       ...m,
                       transcript: {
                         ...m.transcript,
                         speaker_text: spText,
                         speaker_text_edited_by_name: editedByName || null,
                         speaker_text_edited_at: editedAt || null,
+                        ...(speakerColors !== undefined ? { speaker_colors: speakerColors } : {}),
                       }
                     }))}
                   />

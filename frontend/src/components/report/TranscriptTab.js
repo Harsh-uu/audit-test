@@ -56,8 +56,15 @@ function roleToStyle(role) {
     : { pill: "bg-emerald-700 text-white", row: "bg-emerald-50/40" };
 }
 
+// ── Speaker colour palette ────────────────────────────────────────────────────
+const SPEAKER_PALETTE = [
+  "#1E40AF", "#7C3AED", "#047857", "#B91C1C",
+  "#B45309", "#0E7490", "#BE185D", "#9A3412",
+  "#1D4ED8", "#065F46",
+];
+
 // ── Speaker Manager Panel ────────────────────────────────────────────────────
-function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, onRestoreBackup, saving, isDirty, lastEditedBy, lastEditedAt, backupBy, backupAt }) {
+function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, onRestoreBackup, saving, isDirty, lastEditedBy, lastEditedAt, backupBy, backupAt, stagedColors, onColorChange }) {
   const speakerCounts = useMemo(() => {
     const counts = {};
     for (const t of localTurns) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
@@ -67,6 +74,15 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
   const uniqueSpeakers = Object.keys(speakerCounts);
   const canSwap = uniqueSpeakers.length === 2;
   const [collapsed, setCollapsed] = useState(false);
+  const [openColorPicker, setOpenColorPicker] = useState(null);
+
+  // Close palette on click outside
+  React.useEffect(() => {
+    if (!openColorPicker) return;
+    const handler = (e) => { if (!e.target.closest("[data-colorpicker]")) setOpenColorPicker(null); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openColorPicker]);
 
   // Staging: temporary rename values before committing to localTurns
   const [staged, setStaged] = useState({});
@@ -119,6 +135,36 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
               <div className="flex flex-col gap-2.5">
                 {uniqueSpeakers.map(speaker => (
                   <div key={speaker} className="flex items-center gap-2 flex-wrap">
+                    {/* Colour swatch + palette picker */}
+                    <div className="relative flex-shrink-0" data-colorpicker>
+                      <button
+                        type="button"
+                        onClick={() => setOpenColorPicker(openColorPicker === speaker ? null : speaker)}
+                        className="w-6 h-6 rounded-full border-2 border-white shadow ring-1 ring-gray-300 hover:ring-blue-400 transition-all flex-shrink-0"
+                        style={{ backgroundColor: stagedColors?.[speaker] || "#6B7280" }}
+                        title="Pick colour"
+                        data-testid={`color-swatch-${speaker.replace(/\s/g, "-")}`}
+                      />
+                      {openColorPicker === speaker && (
+                        <div className="absolute left-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-2.5 grid grid-cols-5 gap-1.5 w-max">
+                          {SPEAKER_PALETTE.map(c => (
+                            <button
+                              key={c}
+                              type="button"
+                              data-colorpicker
+                              onClick={() => { onColorChange(speaker, c); setOpenColorPicker(null); }}
+                              className="w-6 h-6 rounded-full transition-transform hover:scale-125 focus:outline-none"
+                              style={{
+                                backgroundColor: c,
+                                outline: stagedColors?.[speaker] === c ? `2px solid ${c}` : "none",
+                                outlineOffset: "2px",
+                              }}
+                              title={c}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <input
                       className="text-xs font-semibold px-2.5 py-1.5 rounded border border-gray-200 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 focus:outline-none w-44 bg-white"
                       value={staged[speaker] ?? speaker}
@@ -375,6 +421,19 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     setEditingTurnText("");
   }, [originalTurns]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [stagedColors, setStagedColors] = useState(meeting.transcript?.speaker_colors || {});
+
+  // Sync saved colors when meeting reloads (only when not dirty)
+  React.useEffect(() => {
+    if (isDirtyRef.current) return;
+    setStagedColors(meeting.transcript?.speaker_colors || {});
+  }, [meeting.transcript?.speaker_colors]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleColorChange = React.useCallback((speaker, color) => {
+    setStagedColors(prev => ({ ...prev, [speaker]: color }));
+    setDirty(true);
+  }, [setDirty]);
+
   const handleRestoreBackup = async () => {
     const backupBy = meeting.transcript?.speaker_text_backup_by;
     const backupAt = meeting.transcript?.speaker_text_backup_at;
@@ -425,9 +484,17 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
           })
         : localTurns;
       const newText = serializeTurns(finalTurns);
+
+      // Remap color keys to match any pending renames
+      const finalColors = {};
+      for (const [oldName, color] of Object.entries(stagedColors)) {
+        const newName = stagedOverrides[oldName] ?? oldName;
+        finalColors[newName] = color;
+      }
+
       const res = await axios.patch(
         `${API}/api/review/${meeting.id}/speaker-text`,
-        { speaker_text: newText },
+        { speaker_text: newText, speaker_colors: Object.keys(finalColors).length ? finalColors : null },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       // Immediately commit the saved state — must happen before onSpeakerTextGenerated
@@ -435,7 +502,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       setLocalTurns(finalTurns.map(t => ({ ...t })));
       setDirty(false);
       toast.success("Speaker labels saved");
-      if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText, res.data.edited_by_name, res.data.edited_at);
+      if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText, res.data.edited_by_name, res.data.edited_at, res.data.speaker_colors);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to save speaker labels. Please try again.");
     } finally {
@@ -673,6 +740,8 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                 lastEditedAt={meeting.transcript?.speaker_text_edited_at}
                 backupBy={meeting.transcript?.speaker_text_backup_by}
                 backupAt={meeting.transcript?.speaker_text_backup_at}
+                stagedColors={stagedColors}
+                onColorChange={handleColorChange}
               />
             ) : (
               <div className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 border-b border-amber-100 text-xs text-amber-700">
@@ -689,16 +758,21 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
             >
               {localTurns.map((turn, i) => {
                 const style = roleToStyle(speakerRoleMap[turn.speaker] || getSpeakerRole(turn.speaker, managerName));
+                const customColor = stagedColors[turn.speaker];
                 const isMenuOpen = openTurnMenu === i;
+                const rowStyle = customColor ? { backgroundColor: `${customColor}14` } : {};
+                const pillStyle = customColor ? { backgroundColor: customColor, color: "#fff" } : {};
+                const pillClass = customColor ? "" : style.pill;
                 return (
-                  <div key={i} className={`flex gap-3 px-5 py-3.5 ${style.row}`}>
+                  <div key={i} className={`flex gap-3 px-5 py-3.5 ${customColor ? "" : style.row}`} style={rowStyle}>
                     {/* Speaker pill — clickable to reassign (managers/admins only) */}
                     <div className="relative flex-shrink-0 mt-0.5">
                       {canEditSpeakers ? (
                         <button
                           data-testid={`speaker-pill-${i}`}
                           onMouseDown={e => { e.stopPropagation(); setOpenTurnMenu(isMenuOpen ? null : i); setSplitPopup(null); }}
-                          className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${style.pill} ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
+                          className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${pillClass} ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
+                          style={pillStyle}
                           title="Click to reassign this speaker turn"
                         >
                           {turn.speaker}
@@ -707,7 +781,10 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                           </svg>
                         </button>
                       ) : (
-                        <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full h-fit ${style.pill}`}>
+                        <span
+                          className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full h-fit ${pillClass}`}
+                          style={pillStyle}
+                        >
                           {turn.speaker}
                         </span>
                       )}

@@ -49,6 +49,7 @@ class AnonymiseRequest(BaseModel):
 
 class SpeakerTextUpdateRequest(BaseModel):
     speaker_text: str
+    speaker_colors: Optional[dict] = None
 
 
 class EmailRequest(BaseModel):
@@ -558,6 +559,8 @@ async def update_speaker_text(
         "speaker_text_edited_by_name": current_user.get("name", ""),
         "speaker_text_edited_at": now,
     }
+    if data.speaker_colors is not None:
+        update_fields["speaker_colors"] = data.speaker_colors
     if existing_t and existing_t.get("speaker_text"):
         update_fields["speaker_text_backup"] = existing_t["speaker_text"]
         update_fields["speaker_text_backup_at"] = existing_t.get("speaker_text_edited_at", "")
@@ -591,6 +594,7 @@ async def update_speaker_text(
     return {
         "message": "Speaker labels updated",
         "speaker_text": data.speaker_text,
+        "speaker_colors": data.speaker_colors,
         "edited_by_name": current_user.get("name", ""),
         "edited_at": now,
         "has_backup": bool(existing_t and existing_t.get("speaker_text")),
