@@ -9,10 +9,57 @@ import {
 } from "lucide-react";
 
 const FREQ_OPTIONS = [
-  { value: "monthly",   label: "Monthly"   },
-  { value: "quarterly", label: "Quarterly" },
-  { value: "annual",    label: "Annual"    },
+  { value: "monthly",      label: "Monthly"   },
+  { value: "quarterly",    label: "Quarterly" },
+  { value: "annual",       label: "Annual"    },
+  { value: "custom_weeks", label: "Custom (set weeks)" },
 ];
+
+function freqLabel(frequency) {
+  if (!frequency) return "";
+  if (frequency.startsWith("weeks_")) {
+    const n = frequency.split("_")[1];
+    return `Every ${n} week${n !== "1" ? "s" : ""}`;
+  }
+  return { monthly: "Monthly", quarterly: "Quarterly", annual: "Annual" }[frequency] || frequency;
+}
+
+/** Renders a frequency <select> + optional week-count input for "Custom (set weeks)" */
+function FreqSelector({ value, onChange, className, testId }) {
+  const isCustom = value && value.startsWith("weeks_");
+  const weeks = isCustom ? (parseInt(value.split("_")[1]) || 6) : 6;
+
+  return (
+    <div>
+      <select
+        value={isCustom ? "custom_weeks" : (value || "monthly")}
+        onChange={e => {
+          if (e.target.value === "custom_weeks") onChange("weeks_6");
+          else onChange(e.target.value);
+        }}
+        className={className}
+        data-testid={testId}
+      >
+        {FREQ_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {isCustom && (
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-xs text-gray-500">Every</span>
+          <input
+            type="number"
+            min="1"
+            max="52"
+            value={weeks}
+            onChange={e => onChange(`weeks_${Math.max(1, parseInt(e.target.value) || 1)}`)}
+            className="w-16 px-2 py-1.5 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+            data-testid={testId ? `${testId}-weeks` : undefined}
+          />
+          <span className="text-xs text-gray-500">weeks</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const FREQ_LABELS = { monthly: "Monthly", quarterly: "Quarterly", annual: "Annual" };
 
@@ -291,7 +338,7 @@ export default function Schedules() {
                     <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-gray-900 truncate">{t.name}</p>
-                      <p className="text-[10px] text-gray-400">{FREQ_LABELS[t.default_frequency] || t.default_frequency}</p>
+                      <p className="text-[10px] text-gray-400">{freqLabel(t.default_frequency)}</p>
                     </div>
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => { setEditingType(t); setTypeForm({ name: t.name, default_frequency: t.default_frequency, color: t.color }); setShowAddType(false); }} className="p-1 text-gray-400 hover:text-[#1E3A8A]" data-testid={`edit-type-${t.id}`}><Edit2 className="w-3 h-3" /></button>
@@ -306,9 +353,7 @@ export default function Schedules() {
                     <p className="text-xs font-semibold text-[#1E3A8A]">{editingType ? "Edit Type" : "New Type"}</p>
                     <input value={typeForm.name} onChange={e => setTypeForm(f => ({ ...f, name: e.target.value }))} placeholder="Type name *" className={inputCls} autoFocus data-testid="type-name-input"
                       onKeyDown={e => { if (e.key === "Enter") saveType(); if (e.key === "Escape") { setShowAddType(false); setEditingType(null); } }} />
-                    <select value={typeForm.default_frequency} onChange={e => setTypeForm(f => ({ ...f, default_frequency: e.target.value }))} className={selectCls}>
-                      {FREQ_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    <FreqSelector value={typeForm.default_frequency} onChange={v => setTypeForm(f => ({ ...f, default_frequency: v }))} className={selectCls} testId="type-freq-select" />
                     <div>
                       <p className="text-[10px] text-gray-500 mb-1">Colour</p>
                       <div className="flex gap-1.5 flex-wrap">
@@ -400,7 +445,7 @@ export default function Schedules() {
                             <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: s.meeting_type_color }} />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900">{s.meeting_type_name}</p>
-                              <p className="text-xs text-gray-400">{FREQ_LABELS[s.frequency]} · Started {fmt(s.start_date)} · {s.completed_count} completed</p>
+                              <p className="text-xs text-gray-400">{freqLabel(s.frequency)} · Started {fmt(s.start_date)} · {s.completed_count} completed</p>
                             </div>
                             <DueBadge nextDue={s.next_due} isOverdue={s.is_overdue} daysUntil={s.days_until_due} />
                             {s.is_overdue || s.days_until_due <= 31 ? (
@@ -422,9 +467,7 @@ export default function Schedules() {
                               <option value="">Select meeting type *</option>
                               {meetingTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
-                            <select value={scheduleForm.frequency} onChange={e => setScheduleForm(f => ({ ...f, frequency: e.target.value }))} className={selectCls} data-testid="schedule-freq-select">
-                              {FREQ_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
+                            <FreqSelector value={scheduleForm.frequency} onChange={v => setScheduleForm(f => ({ ...f, frequency: v }))} className={selectCls} testId="schedule-freq-select" />
                             <div>
                               <label className="text-[10px] text-gray-500 block mb-1">Start date</label>
                               <input type="date" value={scheduleForm.start_date} onChange={e => setScheduleForm(f => ({ ...f, start_date: e.target.value }))} className={inputCls} data-testid="schedule-start-date" />
@@ -471,9 +514,7 @@ export default function Schedules() {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
-                  <select value={bulkForm.frequency} onChange={e => setBulkForm(f => ({ ...f, frequency: e.target.value }))} className={selectCls} data-testid="bulk-freq-select">
-                    {FREQ_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  <FreqSelector value={bulkForm.frequency} onChange={v => setBulkForm(f => ({ ...f, frequency: v }))} className={selectCls} testId="bulk-freq-select" />
                 </div>
 
                 <div>

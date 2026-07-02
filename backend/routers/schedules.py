@@ -19,6 +19,17 @@ FREQ_MONTHS = {"monthly": 1, "quarterly": 3, "annual": 12}
 FREQ_LABELS = {"monthly": "Monthly", "quarterly": "Quarterly", "annual": "Annual"}
 
 
+def freq_label(frequency: str) -> str:
+    """Human-readable label for any frequency value including custom weeks."""
+    if frequency and frequency.startswith("weeks_"):
+        try:
+            n = int(frequency.split("_")[1])
+            return f"Every {n} week{'s' if n != 1 else ''}"
+        except (IndexError, ValueError):
+            pass
+    return FREQ_LABELS.get(frequency, frequency.capitalize() if frequency else "")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def add_months(d: date, months: int) -> date:
@@ -32,6 +43,10 @@ def add_months(d: date, months: int) -> date:
 def next_due_date(start_date_str: str, frequency: str, completed_count: int) -> str:
     try:
         start = date.fromisoformat(start_date_str)
+        if frequency and frequency.startswith("weeks_"):
+            from datetime import timedelta
+            weeks = int(frequency.split("_")[1])
+            return (start + timedelta(weeks=weeks * completed_count)).isoformat()
         months = FREQ_MONTHS.get(frequency, 1) * completed_count
         return add_months(start, months).isoformat()
     except Exception:
