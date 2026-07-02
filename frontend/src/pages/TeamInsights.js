@@ -67,6 +67,17 @@ function MatrixCell({ cell }) {
   );
 }
 
+// ── Shorten a standard ref for the column header ─────────────────────────────
+function shortRef(ref) {
+  if (!ref) return ref;
+  return ref
+    .replace(/CQC\s+Reg\s*/i, "Reg ")   // "CQC Reg 12" → "Reg 12"
+    .replace(/Regulation\s+/i, "Reg ")   // "Regulation 9" → "Reg 9"
+    .replace(/Standard\s+/i, "Std ")     // "Standard 2" → "Std 2"
+    .replace(/:.*$/, "")                  // Strip ": name" suffix
+    .trim();
+}
+
 // ── Evidence Matrix ─────────────────────────────────────────────────────────
 function MatrixView({ matrix, ccStandards = [], onCellClick }) {
   const [matrixTab, setMatrixTab] = useState("cqc");
@@ -126,11 +137,20 @@ function MatrixView({ matrix, ccStandards = [], onCellClick }) {
                   {data.standards.map(std => (
                     <th key={std.ref} className="px-2 py-2 text-center min-w-[44px]">
                       <div
-                        className="text-xs font-medium text-gray-600 truncate max-w-[80px] mx-auto"
                         title={`${std.ref} — ${std.name}`}
-                        style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", height: 72, lineHeight: "1.2" }}
+                        style={{
+                          writingMode: "vertical-rl",
+                          transform: "rotate(180deg)",
+                          height: 76,
+                          lineHeight: "1.3",
+                          overflow: "hidden",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                        className="text-xs font-semibold text-gray-500 uppercase tracking-wide mx-auto"
                       >
-                        {std.ref}
+                        {shortRef(std.ref)}
                       </div>
                     </th>
                   ))}
