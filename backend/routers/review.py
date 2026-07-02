@@ -1019,7 +1019,7 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
                 events.append({
                     "type": "transcribed",
                     "label": "Audio transcribed",
-                    "actor": "System (Whisper)",
+                    "actor": "1two.one",
                     "timestamp": tdoc["created_at"],
                     "detail": None,
                 })
@@ -1034,7 +1034,7 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
                 events.append({
                     "type": "analyzed",
                     "label": "AI analysis completed",
-                    "actor": "System (GPT-4o)",
+                    "actor": "1two.one",
                     "timestamp": adoc["created_at"],
                     "detail": None,
                 })
