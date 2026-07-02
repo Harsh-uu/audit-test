@@ -108,6 +108,20 @@ def _apply_redactions_to_text(text: str, redactions: list) -> str:
     return result
 
 
+def _apply_redactions_deep(obj, redactions: list):
+    """Recursively apply redactions to every string value in a dict / list structure.
+    Used to sanitise analysis documents (evidence summaries, transcript excerpts, etc.)."""
+    if not redactions:
+        return obj
+    if isinstance(obj, str):
+        return _apply_redactions_to_text(obj, redactions)
+    if isinstance(obj, dict):
+        return {k: _apply_redactions_deep(v, redactions) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_apply_redactions_deep(item, redactions) for item in obj]
+    return obj
+
+
 def _has_privileged_access(meeting: dict, user_id: str) -> bool:
     """True if the user was present in the meeting (creator or listed attendee)."""
     if meeting.get("created_by") == user_id:
@@ -155,14 +169,16 @@ async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depe
     if redactions and meeting.get("transcript"):
         t = meeting["transcript"]
         # Speaker view: ALWAYS apply redactions for every user.
-        # Even the manager who ran the meeting works from the redacted speaker text —
-        # the original is preserved in the full-text field below.
         if t.get("speaker_text"):
             t["speaker_text"] = _apply_redactions_to_text(t["speaker_text"], redactions)
         # Raw full text: only redact for non-privileged viewers.
-        # Privileged users (creator / listed attendees) retain the original for reference.
         if not privileged and t.get("text"):
             t["text"] = _apply_redactions_to_text(t["text"], redactions)
+
+    # Analysis (evidence summaries, transcript excerpts): always redact for everyone.
+    # These quotes come from the transcript so they can contain PII names.
+    if redactions and meeting.get("analysis"):
+        meeting["analysis"] = _apply_redactions_deep(meeting["analysis"], redactions)
 
     if not privileged:
         # Never expose the redactions array to non-participants (it contains the original PII text)
@@ -487,6 +503,7 @@ async def find_replace_transcript(
     return {"replaced_count": replaced, "message": f"Replaced {replaced} occurrence{'s' if replaced != 1 else ''}"}
 
 
+@router.post("/{meeting_id}/rescan-evidence")
 async def rescan_evidence(
     meeting_id: str,
     db=Depends(get_db),
@@ -1192,6 +1209,9 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depen
         # Full transcript text: only redact for non-privileged users
         if not privileged and transcript_text:
             transcript_text = _apply_redactions_to_text(transcript_text, redactions)
+        # Analysis (evidence summaries, excerpts): always redact
+        if analysis:
+            analysis = _apply_redactions_deep(analysis, redactions)
 
     pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text)
     safe_title = "".join(c for c in meeting.get("title", "report") if c.isalnum() or c in " _-")

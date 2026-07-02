@@ -172,7 +172,7 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
     # Apply PII redactions —
     # speaker_text is always redacted (everyone works from the redacted view).
     # raw text is only redacted for non-privileged users (creator/attendees keep the original).
-    from routers.review import _apply_redactions_to_text, _has_privileged_access
+    from routers.review import _apply_redactions_to_text, _apply_redactions_deep, _has_privileged_access
     redactions = meeting.get("pii_redactions", [])
     if redactions and meeting.get("transcript"):
         t = meeting["transcript"]
@@ -194,6 +194,9 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
             adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
             if adoc:
                 meeting["analysis"] = doc_to_dict(adoc)
+                # Analysis text (evidence summaries, excerpts) always uses the redacted version
+                if redactions:
+                    meeting["analysis"] = _apply_redactions_deep(meeting["analysis"], redactions)
         except Exception:
             pass
 
