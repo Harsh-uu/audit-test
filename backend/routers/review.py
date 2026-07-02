@@ -152,15 +152,25 @@ async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depe
     redactions = meeting.get("pii_redactions", [])
     privileged = _has_privileged_access(meeting, user_id)
 
-    if redactions and not privileged and meeting.get("transcript"):
-        # Apply redactions to transcript text for non-privileged viewers
+    # ── PII redaction access control ─────────────────────────────────────
+    user_id = current_user.get("id", "")
+    redactions = meeting.get("pii_redactions", [])
+    privileged = _has_privileged_access(meeting, user_id)
+
+    if redactions and meeting.get("transcript"):
         t = meeting["transcript"]
-        for field in ("text", "speaker_text"):
-            if t.get(field):
-                t[field] = _apply_redactions_to_text(t[field], redactions)
+        # Speaker view: ALWAYS apply redactions for every user.
+        # Even the manager who ran the meeting works from the redacted speaker text —
+        # the original is preserved in the full-text field below.
+        if t.get("speaker_text"):
+            t["speaker_text"] = _apply_redactions_to_text(t["speaker_text"], redactions)
+        # Raw full text: only redact for non-privileged viewers.
+        # Privileged users (creator / listed attendees) retain the original for reference.
+        if not privileged and t.get("text"):
+            t["text"] = _apply_redactions_to_text(t["text"], redactions)
 
     if not privileged:
-        # Never expose original (pre-redaction) text to non-meeting-participants
+        # Never expose the redactions array to non-participants (it contains the original PII text)
         meeting.pop("pii_redactions", None)
         if redactions:
             meeting["pii_redactions_count"] = len(redactions)
@@ -1176,17 +1186,17 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depen
             if include_transcript:
                 transcript_text = tdoc.get("text", "")
 
-    # ── Apply PII redactions for non-privileged viewers ───────────────────
+    # ── Apply PII redactions ──────────────────────────────────────────────
     redactions = meeting.get("pii_redactions", [])
     if redactions:
         user_id = current_user.get("id", "")
-        # meeting is a raw MongoDB doc here — _has_privileged_access works on any dict
-        # that has created_by + attendees fields
-        if not _has_privileged_access(meeting, user_id):
-            if speaker_text:
-                speaker_text = _apply_redactions_to_text(speaker_text, redactions)
-            if transcript_text:
-                transcript_text = _apply_redactions_to_text(transcript_text, redactions)
+        privileged = _has_privileged_access(meeting, user_id)
+        # Speaker text in PDFs: always redacted — PDFs are for sharing/archiving
+        if speaker_text:
+            speaker_text = _apply_redactions_to_text(speaker_text, redactions)
+        # Full transcript text: only redact for non-privileged users
+        if not privileged and transcript_text:
+            transcript_text = _apply_redactions_to_text(transcript_text, redactions)
 
     pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text)
     safe_title = "".join(c for c in meeting.get("title", "report") if c.isalnum() or c in " _-")
