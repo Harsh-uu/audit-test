@@ -77,10 +77,11 @@ function StandardRow({ item, open, onToggle }) {
 
 function StatChip({ label, value, sub, color }) {
   const cls = {
-    green: "bg-emerald-50 border-emerald-200 text-emerald-800",
-    amber: "bg-amber-50 border-amber-200 text-amber-800",
-    red:   "bg-red-50 border-red-200 text-red-800",
-    blue:  "bg-[#1E3A8A]/5 border-[#1E3A8A]/20 text-[#1E3A8A]",
+    green:  "bg-emerald-50 border-emerald-200 text-emerald-800",
+    amber:  "bg-amber-50 border-amber-200 text-amber-800",
+    red:    "bg-red-50 border-red-200 text-red-800",
+    blue:   "bg-blue-50 border-blue-200 text-blue-800",
+    purple: "bg-purple-50 border-purple-200 text-purple-800",
   }[color] || "bg-gray-50 border-gray-200 text-gray-800";
   return (
     <div className={`border rounded-xl px-4 py-3 min-w-[100px] ${cls}`}>
@@ -187,8 +188,8 @@ export default function CareCertPrep() {
 
         {/* Page header */}
         <div className="flex items-start gap-3 mb-6">
-          <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Award className="w-4 h-4 text-amber-600" />
+          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Award className="w-4 h-4 text-blue-600" />
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-semibold text-gray-900 font-display">Care Certificate</h1>

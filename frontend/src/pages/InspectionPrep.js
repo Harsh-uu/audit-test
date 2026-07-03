@@ -89,10 +89,11 @@ function StandardRow({ item, open, onToggle }) {
 
 function StatChip({ label, value, sub, color }) {
   const cls = {
-    green: "bg-emerald-50 border-emerald-200 text-emerald-800",
-    amber: "bg-amber-50 border-amber-200 text-amber-800",
-    red:   "bg-red-50 border-red-200 text-red-800",
-    blue:  "bg-[#1E3A8A]/5 border-[#1E3A8A]/20 text-[#1E3A8A]",
+    green:  "bg-emerald-50 border-emerald-200 text-emerald-800",
+    amber:  "bg-amber-50 border-amber-200 text-amber-800",
+    red:    "bg-red-50 border-red-200 text-red-800",
+    blue:   "bg-blue-50 border-blue-200 text-blue-800",
+    purple: "bg-purple-50 border-purple-200 text-purple-800",
   }[color] || "bg-gray-50 border-gray-200 text-gray-800";
 
   return (
@@ -205,8 +206,8 @@ export default function InspectionPrep() {
 
         {/* Page header */}
         <div className="flex items-start gap-3 mb-6">
-          <div className="w-8 h-8 rounded-lg bg-[#1E3A8A]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <ClipboardCheck className="w-4 h-4 text-[#1E3A8A]" />
+          <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <ClipboardCheck className="w-4 h-4 text-purple-700" />
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-semibold text-gray-900 font-display">CQC Inspection Prep</h1>
@@ -228,7 +229,7 @@ export default function InspectionPrep() {
           <StatChip label="Fully covered" value={cqcFull}    sub={`of ${cqcStds.length} CQC regs`}  color="green" />
           <StatChip label="Partial cover" value={cqcPartial} sub="some staff have gaps"              color="amber" />
           <StatChip label="No evidence"   value={cqcGaps}    sub="across all staff"                  color="red"   />
-          <StatChip label="Staff tracked" value={totalStaff} sub="signed-off meetings"               color="blue"  />
+          <StatChip label="Staff tracked" value={totalStaff} sub="signed-off meetings"               color="purple" />
         </div>
 
         {/* Filter */}

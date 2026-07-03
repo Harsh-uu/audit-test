@@ -830,8 +830,8 @@ def _generate_cqc_excerpts_pdf(sorted_refs, reg_map, reg_names, meeting_count) -
     MID_GRAY  = colors.HexColor("#6B7280")
     LIGHT_BG  = colors.HexColor("#F8FAFC")
 
-    title_s  = ParagraphStyle("T",  fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=2)
-    meta_s   = ParagraphStyle("M",  fontName="Helvetica",      fontSize=8,  textColor=MID_GRAY, spaceAfter=1, leading=11)
+    title_s  = ParagraphStyle("T",  fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=6, leading=20)
+    meta_s   = ParagraphStyle("M",  fontName="Helvetica",      fontSize=8,  textColor=MID_GRAY, spaceAfter=3, leading=12)
     reg_s    = ParagraphStyle("RH", fontName="Helvetica-Bold", fontSize=11, textColor=colors.white, spaceAfter=0, leading=14)
     item_s   = ParagraphStyle("EI", fontName="Helvetica",      fontSize=8,  textColor=colors.HexColor("#374151"), leading=11, spaceAfter=2)
     summary_s= ParagraphStyle("ES", fontName="Helvetica",      fontSize=9,  textColor=colors.HexColor("#1F2937"), leading=13, spaceAfter=3, leftIndent=4)
@@ -971,14 +971,15 @@ def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count) ->
 
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
-    AMBER     = colors.HexColor("#D97706")
-    AMBER_BG  = colors.HexColor("#FFFBEB")
+    NAVY      = colors.HexColor("#1E3A8A")
+    BLUE      = colors.HexColor("#2563EB")
+    BLUE_BG   = colors.HexColor("#EFF6FF")
+    BLUE_MID  = colors.HexColor("#DBEAFE")
     LIGHT_BG  = colors.HexColor("#F8FAFC")
     MID_GRAY  = colors.HexColor("#6B7280")
-    NAVY      = colors.HexColor("#1E3A8A")
 
-    title_s  = ParagraphStyle("T",  fontName="Helvetica-Bold", fontSize=18, textColor=NAVY,  spaceAfter=2)
-    meta_s   = ParagraphStyle("M",  fontName="Helvetica",      fontSize=8,  textColor=MID_GRAY, spaceAfter=1, leading=11)
+    title_s  = ParagraphStyle("T",  fontName="Helvetica-Bold", fontSize=16, textColor=NAVY,  spaceAfter=6, leading=20)
+    meta_s   = ParagraphStyle("M",  fontName="Helvetica",      fontSize=8,  textColor=MID_GRAY, spaceAfter=3, leading=12)
     hdr_s    = ParagraphStyle("RH", fontName="Helvetica-Bold", fontSize=11, textColor=colors.white, spaceAfter=0, leading=14)
     item_s   = ParagraphStyle("EI", fontName="Helvetica",      fontSize=8,  textColor=colors.HexColor("#374151"), leading=11, spaceAfter=2)
     summary_s= ParagraphStyle("ES", fontName="Helvetica",      fontSize=9,  textColor=colors.HexColor("#1F2937"), leading=13, spaceAfter=3, leftIndent=4)
@@ -990,7 +991,7 @@ def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count) ->
     story.append(Paragraph("Care Certificate Evidence Excerpts", title_s))
     story.append(Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_s))
     story.append(Paragraph(f"{len(sorted_refs)} standard(s) | evidence drawn from {meeting_count} meeting(s)", meta_s))
-    story.append(HRFlowable(width="100%", thickness=2, color=AMBER, spaceAfter=8))
+    story.append(HRFlowable(width="100%", thickness=2, color=BLUE, spaceAfter=8))
 
     for ref in sorted_refs:
         items = std_map[ref]
@@ -1001,7 +1002,7 @@ def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count) ->
             colWidths=[170*mm],
         )
         hdr_tbl.setStyle(TableStyle([
-            ("BACKGROUND",    (0, 0), (-1, -1), AMBER),
+            ("BACKGROUND",    (0, 0), (-1, -1), BLUE),
             ("TOPPADDING",    (0, 0), (-1, -1), 6),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ("LEFTPADDING",   (0, 0), (-1, -1), 8),
@@ -1015,7 +1016,7 @@ def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count) ->
             excerpt = (item.get("transcript_excerpt", "")).strip()
             outcome = item.get("outcome_ref", "")
 
-            bg = AMBER_BG if idx % 2 == 0 else LIGHT_BG
+            bg = BLUE_BG if idx % 2 == 0 else LIGHT_BG
 
             meta_text = (
                 f'<b>{e(item["meeting_title"])}</b>  ·  {e(item["meeting_date"])}'
