@@ -411,9 +411,9 @@ async def get_team_insights(
     cqc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
     cc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
 
-    # ── Load all signed-off meetings for this org ────────────────────────────
+    # ── Load all meetings in review or beyond for this org ──────────────────
     all_items = []
-    meetings_filter: dict = {"status": {"$in": ["signed_off", "shared"]}, "analysis_id": {"$exists": True}}
+    meetings_filter: dict = {"status": {"$in": ["in_review", "reviewed", "signed_off", "shared"]}, "analysis_id": {"$exists": True}}
     if org_id:
         meetings_filter["org_id"] = org_id
     async for meeting in db.meetings.find(meetings_filter).sort("date", -1):
@@ -445,6 +445,8 @@ async def get_team_insights(
                 continue
 
             for m in ana.get("cqc_mappings", []):
+                if m.get("status") == "rejected":
+                    continue
                 ref = m.get("regulation_ref", "")
                 if not ref:
                     continue
@@ -460,6 +462,8 @@ async def get_team_insights(
                     c["last_date"] = date
 
             for m in ana.get("care_cert_mappings", []):
+                if m.get("status") == "rejected":
+                    continue
                 std_ref = m.get("standard_ref", "")
                 outcome_ref = m.get("outcome_ref", "")
                 if not std_ref:
@@ -478,6 +482,8 @@ async def get_team_insights(
                     c["covered_refs"].add(outcome_ref)
 
             for m in ana.get("custom_mappings", []):
+                if m.get("status") == "rejected":
+                    continue
                 ref = m.get("criterion_ref", "") or m.get("document_name", "")
                 if not ref:
                     continue
