@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   Grid3x3, TrendingUp, AlertTriangle, ClipboardList, Shield, Award,
-  FileText, Users, RefreshCw, ChevronRight, Building2, Check, X
+  FileText, Users, RefreshCw, ChevronRight, Building2, Check, X, Download
 } from "lucide-react";
 
 // ── Cell rendering ──────────────────────────────────────────────────────────
@@ -533,6 +533,37 @@ export default function TeamInsights() {
     });
   };
 
+  const exportMatrixCSV = () => {
+    if (!data?.matrix) return;
+    const lines = ["Staff Member,Framework,Standard Ref,Standard Name,Status,Coverage"];
+    const frameworkLabel = { cqc: "CQC", care_cert: "Care Certificate", custom: "Organisational" };
+
+    ["cqc", "care_cert", "custom"].forEach(key => {
+      const section = data.matrix[key];
+      if (!section?.standards?.length) return;
+      section.rows.forEach(row => {
+        section.standards.forEach(std => {
+          const cell = row.cells?.[std.ref];
+          const status = cell?.status || "gap";
+          let coverage = "0%";
+          if (status === "evidenced") coverage = "100%";
+          else if (status === "partial") {
+            const pct = cell?.pct ?? 0;
+            coverage = `${pct}% (${cell?.covered_sub ?? 0}/${cell?.total_sub ?? 0})`;
+          } else if (status === "needs_review") coverage = "needs review";
+          const esc = s => `"${String(s).replace(/"/g, '""')}"`;
+          lines.push([esc(row.staff_name), esc(frameworkLabel[key] || key), esc(std.ref), esc(std.name), esc(status.replace("_", " ")), esc(coverage)].join(","));
+        });
+      });
+    });
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "team_intelligence.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Layout>
       <div className="flex flex-col h-full">
@@ -576,6 +607,16 @@ export default function TeamInsights() {
                 )}
               </div>
             )}
+            <button
+              onClick={exportMatrixCSV}
+              disabled={!data || loading}
+              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+              data-testid="export-csv-btn"
+              title="Export matrix as CSV spreadsheet"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
             <button
               onClick={() => load(orgFilter)}
               disabled={loading}

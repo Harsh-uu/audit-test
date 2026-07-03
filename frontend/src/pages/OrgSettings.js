@@ -37,7 +37,6 @@ export default function OrgSettings() {
 
   // ── Export state ──────────────────────────────────────────────────────────
   const [users, setUsers]                           = useState([]);
-  const [exportFormat, setExportFormat]             = useState("pdf");
   const [exportStaffIds, setExportStaffIds]         = useState([]);
   const [exportDateFrom, setExportDateFrom]         = useState("");
   const [exportDateTo, setExportDateTo]             = useState("");
@@ -114,7 +113,7 @@ export default function OrgSettings() {
     try {
       const token = localStorage.getItem("supervision_token");
       const payload = {
-        format: exportFormat,
+        format: "pdf",
         staff_ids: exportStaffIds.length ? exportStaffIds : null,
         date_from: exportDateFrom || null,
         date_to: exportDateTo || null,
@@ -130,7 +129,7 @@ export default function OrgSettings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = exportFormat === "csv" ? "evidence_export.csv" : "evidence_export.pdf";
+      a.download = "evidence_export.pdf";
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) { setError("Export failed: " + err.message); }
@@ -193,8 +192,6 @@ export default function OrgSettings() {
         {tab === "export" && (
           <ExportTab
             users={users}
-            exportFormat={exportFormat}
-            setExportFormat={setExportFormat}
             exportStaffIds={exportStaffIds}
             toggleExportStaff={toggleExportStaff}
             exportDateFrom={exportDateFrom}

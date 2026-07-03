@@ -3,8 +3,6 @@ import { Download, Calendar, Users, Filter, Loader, X } from "lucide-react";
 
 export function ExportTab({
   users,
-  exportFormat,
-  setExportFormat,
   exportStaffIds,
   toggleExportStaff,
   exportDateFrom,
@@ -24,32 +22,9 @@ export function ExportTab({
     <div data-testid="export-tab">
       <div className="max-w-2xl">
         <p className="text-sm text-gray-500 mb-6">
-          Export compliance evidence records across signed-off supervision meetings.
-          Filter by staff member, date range, or specific meetings. Choose PDF or CSV format.
+          Export compliance evidence records as a formatted PDF report across signed-off supervision meetings.
+          Filter by staff member, date range, or specific meetings.
         </p>
-
-        {/* Format toggle */}
-        <div className="mb-5">
-          <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Export Format</label>
-          <div className="flex gap-2">
-            {["csv", "pdf"].map(f => (
-              <button
-                key={f}
-                onClick={() => setExportFormat(f)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md border text-sm font-medium transition-colors ${
-                  exportFormat === f
-                    ? "bg-[#1E3A8A] text-white border-[#1E3A8A]"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                }`}
-                data-testid={`format-${f}`}
-              >
-                <Download className="w-3.5 h-3.5" />
-                {f.toUpperCase()}
-                <span className="text-xs opacity-70">{f === "csv" ? "spreadsheet" : "formatted report"}</span>
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* Date range */}
         <div className="mb-5">
@@ -151,7 +126,7 @@ export function ExportTab({
           data-testid="run-export-btn"
         >
           <Download className="w-4 h-4" />
-          {exportLoading ? "Generating…" : `Export ${exportFormat.toUpperCase()}`}
+          {exportLoading ? "Generating…" : "Export PDF"}
         </button>
       </div>
     </div>
