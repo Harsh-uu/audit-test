@@ -4,7 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  ClipboardCheck, ChevronDown, ChevronRight, Shield, Award,
+  ClipboardCheck, ChevronDown, ChevronRight,
   Loader, AlertCircle, CheckCircle, TrendingUp, Download,
 } from "lucide-react";
 
@@ -106,11 +106,6 @@ function StatChip({ label, value, sub, color }) {
 
 /* ── Main page ────────────────────────────────────────────────────────────── */
 
-const SECTION_TABS = [
-  { key: "cqc",       label: "CQC Regulations",        Icon: Shield },
-  { key: "care_cert", label: "Care Certificate",        Icon: Award },
-];
-
 const FILTER_OPTS = [
   { key: "all",       label: "All" },
   { key: "gaps",      label: "Gaps only" },
@@ -123,7 +118,6 @@ export default function InspectionPrep() {
 
   const [insights, setInsights] = useState(null);
   const [loading, setLoading]   = useState(true);
-  const [section, setSection]   = useState("cqc");
   const [filter, setFilter]     = useState("all");
   const [open, setOpen]         = useState(new Set());
   const [exporting, setExporting] = useState(false);
@@ -186,31 +180,24 @@ export default function InspectionPrep() {
     );
   }
 
-  const cqcRows  = insights.matrix?.cqc?.rows  || [];
-  const ccRows   = insights.matrix?.care_cert?.rows || [];
+  const cqcRows  = insights.matrix?.cqc?.rows      || [];
   const cqcStds  = insights.matrix?.cqc?.standards  || [];
-  const ccStds   = insights.matrix?.care_cert?.standards  || [];
 
   const cqcCov  = buildCoverage(cqcStds, cqcRows);
-  const ccCov   = buildCoverage(ccStds, ccRows);
 
   // sort: red → amber → green
   const order = { red: 0, amber: 1, green: 2 };
-  const sorted = arr => [...arr].sort((a, b) => order[a.theme.key] - order[b.theme.key]);
+  const cqcSorted = [...cqcCov].sort((a, b) => order[a.theme.key] - order[b.theme.key]);
 
-  const cqcSorted = sorted(cqcCov);
-  const ccSorted  = sorted(ccCov);
+  const filtered = filter === "gaps"      ? cqcSorted.filter(s => s.gaps.length > 0)
+                 : filter === "evidenced" ? cqcSorted.filter(s => s.evidenced === s.total && s.total > 0)
+                 : cqcSorted;
 
-  const activeCov = section === "cqc" ? cqcSorted : ccSorted;
-  const filtered  = filter === "gaps"      ? activeCov.filter(s => s.gaps.length > 0)
-                  : filter === "evidenced" ? activeCov.filter(s => s.evidenced === s.total && s.total > 0)
-                  : activeCov;
-
-  // Headline stats (CQC)
-  const cqcGaps     = cqcCov.filter(s => s.pct < 70).length;
-  const cqcFull     = cqcCov.filter(s => s.evidenced === s.total && s.total > 0).length;
-  const cqcPartial  = cqcCov.filter(s => s.evidenced > 0 && s.evidenced < s.total).length;
-  const totalStaff  = cqcRows.length;
+  // Headline stats
+  const cqcGaps    = cqcCov.filter(s => s.pct < 70).length;
+  const cqcFull    = cqcCov.filter(s => s.evidenced === s.total && s.total > 0).length;
+  const cqcPartial = cqcCov.filter(s => s.evidenced > 0 && s.evidenced < s.total).length;
+  const totalStaff = cqcRows.length;
 
   return (
     <Layout>
@@ -244,22 +231,8 @@ export default function InspectionPrep() {
           <StatChip label="Staff tracked" value={totalStaff} sub="signed-off meetings"               color="blue"  />
         </div>
 
-        {/* Section tabs */}
+        {/* Filter */}
         <div className="flex items-center gap-1 mb-4">
-          {SECTION_TABS.map(({ key, label, Icon }) => (
-            <button
-              key={key}
-              onClick={() => { setSection(key); setFilter("all"); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                section === key ? "bg-[#1E3A8A] text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-              }`}
-              data-testid={`section-tab-${key}`}
-            >
-              <Icon className="w-3.5 h-3.5" /> {label}
-            </button>
-          ))}
-
-          {/* Filter */}
           <div className="ml-auto flex items-center gap-1">
             {FILTER_OPTS.map(f => (
               <button
