@@ -4,9 +4,10 @@ import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
-  TrendingUp, Download, BarChart2, X, Building2, ShieldCheck, Calendar, FileUp, LayoutGrid, ClipboardCheck,
-  Pencil, Check, Loader
+  TrendingUp, BarChart2, X, Building2, Calendar, FileUp, LayoutGrid, ClipboardCheck,
+  Pencil, Check, Loader, KeyRound
 } from "lucide-react";
+import ChangePasswordModal from "./ChangePasswordModal";
 
 export default function Layout({ children }) {
   const { user, logout, getAuthConfig, updateOrgName, API } = useAuth();
@@ -14,6 +15,7 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // ── Org name banner state ─────────────────────────────────────────────────
   const [editingOrgName, setEditingOrgName] = useState(false);
@@ -53,6 +55,7 @@ export default function Layout({ children }) {
   if (user?.role === "super_admin") {
     return (
       <div className="flex h-screen bg-[#F8F9FA] overflow-hidden">
+        {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
         <aside className="hidden lg:flex flex-col w-56 bg-[#1E3A8A] flex-shrink-0">
           <div className="p-4 border-b border-white/10">
             <div className="flex items-center gap-2">
@@ -78,6 +81,14 @@ export default function Layout({ children }) {
               <p className="text-sm font-medium text-white truncate">{user?.name}</p>
               <p className="text-xs text-blue-300">Super Admin</p>
             </div>
+            <button
+              onClick={() => setShowChangePassword(true)}
+              data-testid="super-admin-change-password-btn"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-blue-200 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <KeyRound className="w-4 h-4 flex-shrink-0" />
+              <span>Change password</span>
+            </button>
             <button
               onClick={handleLogout}
               data-testid="logout-btn"
@@ -224,6 +235,14 @@ export default function Layout({ children }) {
           </div>
         )}
         <button
+          onClick={() => setShowChangePassword(true)}
+          data-testid="change-password-btn"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+        >
+          <KeyRound className="w-4 h-4 flex-shrink-0" />
+          {!collapsed && <span>Change password</span>}
+        </button>
+        <button
           onClick={handleLogout}
           data-testid="logout-btn"
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors"
@@ -237,6 +256,9 @@ export default function Layout({ children }) {
 
   return (
     <div className="flex h-screen bg-[#F8F9FA] overflow-hidden">
+
+      {/* ── Change Password modal ─────────────────────────────────────────── */}
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
 
       {/* ── Mobile backdrop ──────────────────────────────────────────────── */}
       {mobileOpen && (

@@ -6,6 +6,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/sonner";
 import Login from "@/pages/Login";
 import ResetPassword from "@/pages/ResetPassword";
+import SetPassword from "@/pages/SetPassword";
 import Dashboard from "@/pages/Dashboard";
 import NewMeeting from "@/pages/NewMeeting";
 import RecordingScreen from "@/pages/RecordingScreen";
@@ -37,6 +38,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
+          <Route path="/set-password" element={<SetPassword />} />
           <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
           <Route path="/super-admin" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

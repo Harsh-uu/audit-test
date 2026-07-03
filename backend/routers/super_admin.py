@@ -236,7 +236,8 @@ async def create_org_user(
     org = await db.organisations.find_one({"_id": obj_id})
     if not org:
         raise HTTPException(status_code=404, detail="Organisation not found")
-    from routers.auth import hash_password
+    from routers.auth import hash_password, validate_password_strength
+    validate_password_strength(data.password)
     existing = await db.users.find_one({"email": data.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="Email already exists")
@@ -248,6 +249,7 @@ async def create_org_user(
         "role": role,
         "org_id": org_id,
         "is_active": True,
+        "must_change_password": True,   # Force user to set their own password on first login
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     result = await db.users.insert_one(doc)
@@ -293,7 +295,8 @@ async def update_org_user(
             raise HTTPException(status_code=400, detail=f"Role must be one of {valid_roles}")
         updates["role"] = data.role
     if data.password:
-        from routers.auth import hash_password
+        from routers.auth import hash_password, validate_password_strength
+        validate_password_strength(data.password)
         updates["password_hash"] = hash_password(data.password)
 
     if not updates:

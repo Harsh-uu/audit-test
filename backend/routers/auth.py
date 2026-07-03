@@ -4,6 +4,7 @@ from bson import ObjectId
 import bcrypt
 import jwt
 import os
+import re
 import secrets
 import resend
 from datetime import datetime, timezone, timedelta
@@ -20,6 +21,23 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+
+
+def validate_password_strength(password: str):
+    """Raise 400 if password doesn't meet the minimum strength policy."""
+    errors = []
+    if len(password) < 10:
+        errors.append("at least 10 characters")
+    if not re.search(r'[A-Z]', password):
+        errors.append("an uppercase letter")
+    if not re.search(r'[a-z]', password):
+        errors.append("a lowercase letter")
+    if not re.search(r'[0-9]', password):
+        errors.append("a number")
+    if not re.search(r'[^A-Za-z0-9]', password):
+        errors.append("a special character (!@#$%^&* etc.)")
+    if errors:
+        raise HTTPException(status_code=400, detail=f"Password must contain {', '.join(errors)}.")
 
 
 def create_access_token(user_id: str, email: str) -> str:
@@ -109,7 +127,11 @@ async def login(data: LoginRequest, response: Response, request: Request, db=Dep
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     set_auth_cookies(response, access_token, refresh_token)
-    return {"id": user_id, "email": email, "name": user["name"], "role": user["role"], "token": access_token, "refresh_token": refresh_token}
+    return {
+        "id": user_id, "email": email, "name": user["name"], "role": user["role"],
+        "token": access_token, "refresh_token": refresh_token,
+        "must_change_password": user.get("must_change_password", False),
+    }
 
 
 @router.post("/logout")
@@ -226,8 +248,7 @@ async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_db)):
 
 @router.post("/reset-password")
 async def reset_password(data: ResetPasswordRequest, db=Depends(get_db)):
-    if len(data.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+    validate_password_strength(data.new_password)
 
     record = await db.password_reset_tokens.find_one({"token": data.token, "used": False})
     if not record:
@@ -237,11 +258,44 @@ async def reset_password(data: ResetPasswordRequest, db=Depends(get_db)):
 
     await db.users.update_one(
         {"email": record["email"]},
-        {"$set": {"password_hash": hash_password(data.new_password)}}
+        {"$set": {
+            "password_hash": hash_password(data.new_password),
+            "must_change_password": False,
+            "password_changed_at": datetime.now(timezone.utc).isoformat(),
+        }}
     )
     await db.password_reset_tokens.update_one({"token": data.token}, {"$set": {"used": True}})
 
     return {"message": "Password updated successfully. You can now log in."}
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(data: ChangePasswordRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    """Authenticated users change their own password (requires knowing current password)."""
+    validate_password_strength(data.new_password)
+
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not verify_password(data.current_password, user.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if data.current_password == data.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from the current one")
+
+    await db.users.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {
+            "password_hash": hash_password(data.new_password),
+            "must_change_password": False,
+            "password_changed_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+    return {"message": "Password changed successfully"}
 
 
 async def seed_admin(db):
@@ -313,6 +367,7 @@ async def accept_invite(data: AcceptInviteRequest, response: Response, db=Depend
     """Claim an invite: set password, activate the user, return a JWT session."""
     if len(data.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    validate_password_strength(data.password)
 
     now = datetime.now(timezone.utc).isoformat()
     invite = await db.invitations.find_one({"token": data.token, "used_at": {"$exists": False}})
@@ -325,7 +380,7 @@ async def accept_invite(data: AcceptInviteRequest, response: Response, db=Depend
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Activate user with the chosen password
+    # Activate user with the chosen password; user chose this password, no force-change needed
     name = data.name.strip() or user["name"]
     await db.users.update_one(
         {"_id": ObjectId(invite["user_id"])},
@@ -333,6 +388,7 @@ async def accept_invite(data: AcceptInviteRequest, response: Response, db=Depend
             "password_hash": hash_password(data.password),
             "name": name,
             "is_active": True,
+            "must_change_password": False,
         }}
     )
 
