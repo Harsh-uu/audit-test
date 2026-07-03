@@ -985,7 +985,7 @@ async def export_cc_excerpts(
     )
 
 
-def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count) -> bytes:
+def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count, staff_label="All staff") -> bytes:
     from io import BytesIO
     from xml.sax.saxutils import escape as _xe
     from reportlab.lib.pagesizes import A4
@@ -1016,6 +1016,7 @@ def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count) ->
     story = []
     story.append(Paragraph("Care Certificate Evidence Excerpts", title_s))
     story.append(Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_s))
+    story.append(Paragraph(f"Staff: {e(staff_label)}", meta_s))
     story.append(Paragraph(f"{len(sorted_refs)} standard(s) | evidence drawn from {meeting_count} meeting(s)", meta_s))
     story.append(HRFlowable(width="100%", thickness=2, color=BLUE, spaceAfter=8))
 

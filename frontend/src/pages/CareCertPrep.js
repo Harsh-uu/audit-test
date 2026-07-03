@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
@@ -6,6 +6,7 @@ import Layout from "@/components/Layout";
 import {
   Award, ChevronDown, ChevronRight,
   Loader, AlertCircle, CheckCircle, TrendingUp, Download,
+  Users, Search, X,
 } from "lucide-react";
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
@@ -92,6 +93,120 @@ function StatChip({ label, value, sub, color }) {
   );
 }
 
+/* ── StaffPicker ──────────────────────────────────────────────────────────── */
+
+function StaffPicker({ users, selected, onChange }) {
+  const [open, setOpen]       = useState(false);
+  const [search, setSearch]   = useState("");
+  const ref                   = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = users.filter(u =>
+    u.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggle = id => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    onChange(next);
+  };
+
+  const label = selected.size === 0
+    ? "All staff"
+    : selected.size === 1
+      ? users.find(u => selected.has(u.id))?.name || "1 staff"
+      : `${selected.size} staff selected`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+        data-testid="staff-picker-trigger"
+      >
+        <Users className="w-3.5 h-3.5 text-gray-400" />
+        <span>{label}</span>
+        {selected.size > 0 && (
+          <span className="ml-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+            {selected.size}
+          </span>
+        )}
+        <ChevronDown className="w-3 h-3 text-gray-400 ml-0.5" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden" data-testid="staff-picker-dropdown">
+          {/* Search */}
+          <div className="p-2 border-b border-gray-100">
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1.5">
+              <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <input
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search staff…"
+                className="flex-1 text-sm bg-transparent outline-none text-gray-700 placeholder-gray-400"
+                data-testid="staff-picker-search"
+              />
+              {search && <button onClick={() => setSearch("")}><X className="w-3 h-3 text-gray-400" /></button>}
+            </div>
+          </div>
+
+          {/* All staff option */}
+          <div
+            className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50 border-b border-gray-100 ${selected.size === 0 ? "bg-blue-50" : ""}`}
+            onClick={() => { onChange(new Set()); setOpen(false); }}
+            data-testid="staff-picker-all"
+          >
+            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${selected.size === 0 ? "bg-blue-600 border-blue-600" : "border-gray-300"}`}>
+              {selected.size === 0 && <CheckCircle className="w-3 h-3 text-white" />}
+            </div>
+            <span className="text-sm text-gray-700 font-medium">All staff</span>
+          </div>
+
+          {/* Staff list */}
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">No staff found</p>
+            ) : filtered.map(u => (
+              <div
+                key={u.id}
+                className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50"
+                onClick={() => toggle(u.id)}
+                data-testid={`staff-picker-item-${u.id}`}
+              >
+                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${selected.has(u.id) ? "bg-blue-600 border-blue-600" : "border-gray-300"}`}>
+                  {selected.has(u.id) && <CheckCircle className="w-3 h-3 text-white" />}
+                </div>
+                <span className="text-sm text-gray-700">{u.name}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer */}
+          {selected.size > 0 && (
+            <div className="px-3 py-2 border-t border-gray-100 flex justify-between items-center">
+              <span className="text-xs text-gray-400">{selected.size} selected</span>
+              <button
+                onClick={() => onChange(new Set())}
+                className="text-xs text-blue-600 hover:underline"
+                data-testid="staff-picker-clear"
+              >Clear</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main page ────────────────────────────────────────────────────────────── */
 
 const FILTER_OPTS = [
@@ -104,17 +219,23 @@ export default function CareCertPrep() {
   const { getAuthConfig, API } = useAuth();
   const navigate = useNavigate();
 
-  const [insights, setInsights]   = useState(null);
-  const [loading, setLoading]     = useState(true);
-  const [filter, setFilter]       = useState("all");
-  const [open, setOpen]           = useState(new Set());
-  const [exporting, setExporting] = useState(false);
+  const [insights, setInsights]       = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [filter, setFilter]           = useState("all");
+  const [open, setOpen]               = useState(new Set());
+  const [exporting, setExporting]     = useState(false);
+  const [users, setUsers]             = useState([]);
+  const [selectedStaff, setSelectedStaff] = useState(new Set());
 
   useEffect(() => {
     axios.get(`${API}/admin/team-insights`, getAuthConfig())
       .then(r => setInsights(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+    // Fetch org users for the staff picker
+    axios.get(`${API}/admin/users`, getAuthConfig())
+      .then(r => setUsers((r.data || []).filter(u => u.role === "attendee" || u.role === "manager")))
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
 
@@ -128,7 +249,10 @@ export default function CareCertPrep() {
     setExporting(true);
     try {
       const token = localStorage.getItem("supervision_token");
-      const resp = await fetch(`${API}/admin/export-cc-excerpts`, {
+      const params = selectedStaff.size > 0
+        ? `?staff_ids=${Array.from(selectedStaff).join(",")}`
+        : "";
+      const resp = await fetch(`${API}/admin/export-cc-excerpts${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) throw new Error(await resp.text());
@@ -195,15 +319,18 @@ export default function CareCertPrep() {
             <h1 className="text-2xl font-semibold text-gray-900 font-display">Care Certificate</h1>
             <p className="text-sm text-gray-500 mt-0.5">Evidence coverage across {totalStaff} staff member{totalStaff !== 1 ? "s" : ""}</p>
           </div>
-          <button
-            onClick={handleExportExcerpts}
-            disabled={exporting}
-            className="flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
-            data-testid="export-cc-excerpts-btn"
-          >
-            <Download className="w-4 h-4" />
-            {exporting ? "Generating…" : "Export Excerpts"}
-          </button>
+          <div className="flex items-center gap-2">
+            <StaffPicker users={users} selected={selectedStaff} onChange={setSelectedStaff} />
+            <button
+              onClick={handleExportExcerpts}
+              disabled={exporting}
+              className="flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
+              data-testid="export-cc-excerpts-btn"
+            >
+              <Download className="w-4 h-4" />
+              {exporting ? "Generating…" : "Export Excerpts"}
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
