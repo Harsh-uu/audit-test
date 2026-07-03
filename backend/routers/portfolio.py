@@ -48,9 +48,14 @@ async def _build_portfolio_data(user_id: str, db):
     else:
         user_data["setting_name"] = None
 
-    # Signed-off meetings where this user is an attendee — bulk-fetch analyses
+    # Signed-off meetings where this user is an attendee (supervisee, not supervisor)
     meetings_list = await db.meetings.find(
-        {"attendees.user_id": user_id, "status": {"$in": ["signed_off", "shared"]}, "analysis_id": {"$exists": True}}
+        {
+            "attendees.user_id": user_id,
+            "sign_off_manager_id": {"$ne": user_id},  # exclude meetings they conducted as supervisor
+            "status": {"$in": ["signed_off", "shared"]},
+            "analysis_id": {"$exists": True},
+        }
     ).sort("date", -1).limit(500).to_list(length=500)
 
     analysis_ids = []

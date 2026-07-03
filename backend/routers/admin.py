@@ -438,10 +438,14 @@ async def get_team_insights(
     for item in all_items:
         mtg, ana = item["meeting"], item["analysis"]
         date = mtg.get("date", "")
+        sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
 
         for attendee in mtg.get("attendees", []):
             uid = attendee.get("user_id", "")
             if uid not in staff_ids:
+                continue
+            # The sign-off manager is the SUPERVISOR — evidence belongs to supervisees only
+            if sign_off_mgr_id and uid == sign_off_mgr_id:
                 continue
 
             for m in ana.get("cqc_mappings", []):
@@ -715,7 +719,11 @@ async def export_evidence(data: dict, db=Depends(get_db), current_user=Depends(g
 
         mtg_analyses.append({"meeting": meeting, "analysis": adoc})
 
+        sign_off_mgr_id = str(meeting.get("sign_off_manager_id") or "")
         for attendee in meeting.get("attendees", []):
+            # Skip the supervisor — evidence is attributed to supervisees only
+            if sign_off_mgr_id and attendee.get("user_id") == sign_off_mgr_id:
+                continue
             staff_name = attendee.get("name", "Unknown")
             for m in adoc.get("cqc_mappings", []):
                 rows.append([staff_name, meeting.get("title", ""), meeting.get("date", "")[:10],
