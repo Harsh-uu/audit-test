@@ -848,9 +848,21 @@ def _generate_cqc_excerpts_pdf(sorted_refs, reg_map, reg_names, meeting_count) -
     def e(t): return _xe(str(t or ""))
 
     story = []
-    # Cover header
-    story.append(Paragraph("CQC Evidence Excerpts", title_s))
-    story.append(Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_s))
+    # Header row: title left, generated date right
+    meta_right_s = ParagraphStyle("MR", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, leading=12, alignment=2)
+    hdr_row = Table(
+        [[Paragraph("CQC Evidence Excerpts", title_s),
+          Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_right_s)]],
+        colWidths=[120*mm, 50*mm],
+    )
+    hdr_row.setStyle(TableStyle([
+        ("VALIGN",  (0, 0), (-1, -1), "BOTTOM"),
+        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+    ]))
+    story.append(hdr_row)
     story.append(Paragraph(f"{len(sorted_refs)} regulation(s) | evidence drawn from {meeting_count} meeting(s)", meta_s))
     story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=8))
 
@@ -1022,9 +1034,23 @@ def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count, st
     def e(t): return _xe(str(t or ""))
 
     story = []
-    story.append(Paragraph("Care Certificate Evidence Excerpts", title_s))
-    story.append(Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_s))
-    story.append(Paragraph(f"Staff: {e(staff_label)}", meta_s))
+    # Header row: title left, generated date right
+    meta_right_s = ParagraphStyle("MR", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, leading=12, alignment=2)  # 2=right
+    staff_name_s = ParagraphStyle("SN", fontName="Helvetica-Bold", fontSize=13, textColor=NAVY, spaceAfter=2, leading=17)
+    hdr_row = Table(
+        [[Paragraph("Care Certificate Evidence Excerpts", title_s),
+          Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_right_s)]],
+        colWidths=[120*mm, 50*mm],
+    )
+    hdr_row.setStyle(TableStyle([
+        ("VALIGN",  (0, 0), (-1, -1), "BOTTOM"),
+        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+    ]))
+    story.append(hdr_row)
+    story.append(Paragraph(f"<b>{e(staff_label)}</b>", staff_name_s))
     story.append(Paragraph(f"{len(sorted_refs)} standard(s) | evidence drawn from {meeting_count} meeting(s)", meta_s))
     story.append(HRFlowable(width="100%", thickness=2, color=BLUE, spaceAfter=8))
 
