@@ -906,8 +906,12 @@ def _generate_cqc_excerpts_pdf(sorted_refs, reg_map, reg_names, meeting_count) -
 
 
 @router.get("/export-cc-excerpts")
-async def export_cc_excerpts(db=Depends(get_db), current_user=Depends(get_current_user)):
-    """PDF of all Care Certificate evidence items across the org, grouped by standard."""
+async def export_cc_excerpts(
+    staff_ids: str = None,   # comma-separated user IDs, empty = all
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """PDF of Care Certificate evidence items, grouped by standard. Optionally filtered by staff."""
     from fastapi.responses import Response as _Response
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
@@ -916,6 +920,11 @@ async def export_cc_excerpts(db=Depends(get_db), current_user=Depends(get_curren
     query = {"status": {"$in": ["in_review", "reviewed", "signed_off", "shared"]}, "analysis_id": {"$exists": True}}
     if org_id:
         query["org_id"] = org_id
+
+    # Optional staff filter — only meetings where any selected staff member is an attendee
+    selected_ids = [s.strip() for s in staff_ids.split(",") if s.strip()] if staff_ids else []
+    if selected_ids:
+        query["attendees.user_id"] = {"$in": selected_ids}
 
     from collections import defaultdict
     std_map   = defaultdict(list)
@@ -929,11 +938,18 @@ async def export_cc_excerpts(db=Depends(get_db), current_user=Depends(get_curren
         if redactions:
             adoc = _apply_redactions_deep(dict(adoc), redactions)
 
-        attendees = ", ".join(a.get("name", "") for a in meeting.get("attendees", []))
+        # Determine which attendees to include
+        all_attendees = meeting.get("attendees", [])
+        if selected_ids:
+            include = [a for a in all_attendees if a.get("user_id") in selected_ids]
+        else:
+            include = all_attendees
+        attendees_str = ", ".join(a.get("name", "") for a in include)
+
         ctx = {
             "meeting_title": meeting.get("title", "Meeting"),
             "meeting_date":  meeting.get("date", ""),
-            "attendees":     attendees,
+            "attendees":     attendees_str,
             "manager":       meeting.get("sign_off_manager_name", ""),
         }
         for m in adoc.get("care_cert_mappings", []):
@@ -947,15 +963,25 @@ async def export_cc_excerpts(db=Depends(get_db), current_user=Depends(get_curren
             std_map[ref].append({**ctx, **m})
 
     if not std_map:
-        raise HTTPException(status_code=404, detail="No Care Certificate evidence found in any meetings")
+        raise HTTPException(status_code=404, detail="No Care Certificate evidence found for the selected staff")
 
     sorted_refs = sorted(std_map.keys())
     meeting_count = len({item["meeting_title"] for items in std_map.values() for item in items})
-    pdf_bytes = _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count)
+
+    # Resolve selected staff names for the PDF title
+    staff_label = "All staff"
+    if selected_ids:
+        names = []
+        async for u in db.users.find({"_id": {"$in": [__import__("bson").ObjectId(i) for i in selected_ids]}}, {"name": 1}):
+            names.append(u.get("name", ""))
+        staff_label = ", ".join(sorted(names)) if names else "Selected staff"
+
+    pdf_bytes = _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count, staff_label)
+    filename = f"care_cert_{'_'.join(names).replace(' ', '_')}.pdf" if selected_ids and names else "care_cert_evidence_excerpts.pdf"
     return _Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="care_cert_evidence_excerpts.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
