@@ -379,8 +379,8 @@ async def get_branding(db=Depends(get_db), current_user=Depends(get_current_user
 
 @router.put("/branding")
 async def update_branding(data: BrandingUpdate, db=Depends(get_db), current_user=Depends(get_current_user)):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin or manager only")
     org_id = current_user.get("org_id")
     if not org_id:
         raise HTTPException(status_code=400, detail="No organisation assigned")
@@ -403,8 +403,8 @@ async def upload_logo(
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin or manager only")
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")

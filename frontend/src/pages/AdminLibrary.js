@@ -25,6 +25,7 @@ function TabBtn({ active, onClick, children }) {
 export default function AdminLibrary() {
   const { getAuthConfig, API, user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const canBrand = user?.role === "admin" || user?.role === "manager";
   const navigate = useNavigate();
   const [tab, setTab] = useState("cqc");
   const [standards, setStandards] = useState([]);
@@ -314,7 +315,7 @@ export default function AdminLibrary() {
             <Download className="inline w-3.5 h-3.5 mr-1.5" />
             Evidence Export
           </TabBtn>
-          {isAdmin && (
+          {canBrand && (
             <TabBtn active={tab === "branding"} onClick={() => setTab("branding")}>
               <Palette className="inline w-3.5 h-3.5 mr-1.5" />
               Branding
@@ -401,7 +402,7 @@ export default function AdminLibrary() {
           />
         )}
 
-        {tab === "branding" && isAdmin && <BrandingTab />}
+        {tab === "branding" && canBrand && <BrandingTab />}
       </div>
     </Layout>
   );
