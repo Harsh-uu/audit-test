@@ -123,9 +123,7 @@ export default function OrgStructure() {
   const isFirstLoad = useRef(true);
 
   // Org name inline edit
-  const [editingOrgName, setEditingOrgName] = useState(false);
-  const [orgNameDraft, setOrgNameDraft] = useState("");
-  const [savingOrgName, setSavingOrgName] = useState(false);
+  // org name editing is now handled in Layout.js
 
   // Flash
   const [message, setMessage] = useState("");
@@ -158,19 +156,7 @@ export default function OrgStructure() {
   const [inviteError, setInviteError] = useState("");
 
   // ── Org name edit ─────────────────────────────────────────────────────────
-  const saveOrgName = async () => {
-    const trimmed = orgNameDraft.trim();
-    if (!trimmed || trimmed === currentUser?.org_name) { setEditingOrgName(false); return; }
-    setSavingOrgName(true);
-    try {
-      await axios.patch(`${API}/org/name`, { name: trimmed }, getAuthConfig());
-      updateOrgName(trimmed);
-      setEditingOrgName(false);
-    } catch (err) {
-      flash(err.response?.data?.detail || "Failed to rename organisation", true);
-    }
-    setSavingOrgName(false);
-  };
+  // (Handled globally in Layout.js)
 
   // ── Data fetching ────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -355,51 +341,6 @@ export default function OrgStructure() {
   return (
     <Layout>
       <div>
-        {/* ── Blue org name banner ── */}
-        <div className="bg-[#1E3A8A] px-6 md:px-8 py-3 flex items-center gap-3" data-testid="org-name-bar">
-          <Building2 className="w-4 h-4 text-white/60 flex-shrink-0" />
-          {editingOrgName ? (
-            <>
-              <input
-                autoFocus
-                value={orgNameDraft}
-                onChange={e => setOrgNameDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") saveOrgName(); if (e.key === "Escape") setEditingOrgName(false); }}
-                className="bg-white/10 border border-white/40 rounded px-2.5 py-0.5 text-white text-sm font-semibold focus:outline-none focus:bg-white/20 min-w-0 w-48"
-                data-testid="org-name-input"
-              />
-              <button
-                onClick={saveOrgName}
-                disabled={savingOrgName}
-                className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-50"
-                data-testid="org-name-save"
-              >
-                {savingOrgName ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                onClick={() => setEditingOrgName(false)}
-                className="p-1 rounded hover:bg-white/10 text-white/70 hover:text-white"
-                data-testid="org-name-cancel"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="text-sm font-semibold text-white">{currentUser?.org_name || "Organisation"}</span>
-              {canManage && (
-                <button
-                  onClick={() => { setEditingOrgName(true); setOrgNameDraft(currentUser?.org_name || ""); }}
-                  className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors"
-                  data-testid="org-name-edit"
-                  title="Rename organisation"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </>
-          )}
-        </div>
 
         {/* ── Main content ── */}
         <div className="p-6 md:p-8 fade-in">
