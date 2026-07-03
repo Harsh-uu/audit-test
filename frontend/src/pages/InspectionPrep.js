@@ -173,7 +173,7 @@ export default function InspectionPrep() {
     );
   }
 
-  if (!insights || (!insights.cqc?.rows?.length)) {
+  if (!insights || (!insights.matrix?.cqc?.rows?.length)) {
     return (
       <Layout>
         <div className="p-8 text-center text-gray-400">
@@ -186,10 +186,10 @@ export default function InspectionPrep() {
     );
   }
 
-  const cqcRows  = insights.cqc?.rows  || [];
-  const ccRows   = insights.care_cert?.rows || [];
-  const cqcStds  = insights.cqc?.standards  || [];
-  const ccStds   = insights.care_cert?.standards  || [];
+  const cqcRows  = insights.matrix?.cqc?.rows  || [];
+  const ccRows   = insights.matrix?.care_cert?.rows || [];
+  const cqcStds  = insights.matrix?.cqc?.standards  || [];
+  const ccStds   = insights.matrix?.care_cert?.standards  || [];
 
   const cqcCov  = buildCoverage(cqcStds, cqcRows);
   const ccCov   = buildCoverage(ccStds, ccRows);
