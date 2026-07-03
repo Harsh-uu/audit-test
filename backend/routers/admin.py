@@ -757,6 +757,154 @@ async def export_evidence(data: dict, db=Depends(get_db), current_user=Depends(g
         )
 
 
+@router.get("/export-cqc-excerpts")
+async def export_cqc_excerpts(db=Depends(get_db), current_user=Depends(get_current_user)):
+    """PDF of all CQC evidence items across the org, grouped by regulation."""
+    from fastapi.responses import Response as _Response
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    org_id = current_user.get("org_id")
+    query = {"status": {"$in": ["in_review", "reviewed", "signed_off", "shared"]}, "analysis_id": {"$exists": True}}
+    if org_id:
+        query["org_id"] = org_id
+
+    # Build: regulation_ref → list of evidence items with meeting context
+    from collections import defaultdict
+    reg_map = defaultdict(list)   # ref → [{...evidence + meeting meta}]
+    reg_names = {}                # ref → name
+
+    async for meeting in db.meetings.find(query).sort("date", -1):
+        adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+        if not adoc:
+            continue
+        redactions = meeting.get("pii_redactions", [])
+        if redactions:
+            adoc = _apply_redactions_deep(dict(adoc), redactions)
+
+        attendees = ", ".join(a.get("name", "") for a in meeting.get("attendees", []))
+        ctx = {
+            "meeting_title": meeting.get("title", "Meeting"),
+            "meeting_date":  meeting.get("date", ""),
+            "attendees":     attendees,
+            "manager":       meeting.get("sign_off_manager_name", ""),
+        }
+        for m in adoc.get("cqc_mappings", []):
+            if m.get("status") == "rejected":
+                continue
+            ref = m.get("regulation_ref", "")
+            if not ref:
+                continue
+            if ref not in reg_names:
+                reg_names[ref] = m.get("regulation_name", ref)
+            reg_map[ref].append({**ctx, **m})
+
+    if not reg_map:
+        raise HTTPException(status_code=404, detail="No CQC evidence found in any meetings")
+
+    # Sort regulations by ref
+    sorted_refs = sorted(reg_map.keys())
+    pdf_bytes = _generate_cqc_excerpts_pdf(sorted_refs, reg_map, reg_names, len({k for k in [item["meeting_title"] for items in reg_map.values() for item in items]}))
+    return _Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="cqc_evidence_excerpts.pdf"'},
+    )
+
+
+def _generate_cqc_excerpts_pdf(sorted_refs, reg_map, reg_names, meeting_count) -> bytes:
+    from io import BytesIO
+    from xml.sax.saxutils import escape as _xe
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    from datetime import datetime as _dt
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+    NAVY   = colors.HexColor("#1E3A8A")
+    PURPLE = colors.HexColor("#7C3AED")
+    PURPLE_BG = colors.HexColor("#F5F3FF")
+    MID_GRAY  = colors.HexColor("#6B7280")
+    LIGHT_BG  = colors.HexColor("#F8FAFC")
+
+    title_s  = ParagraphStyle("T",  fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=2)
+    meta_s   = ParagraphStyle("M",  fontName="Helvetica",      fontSize=8,  textColor=MID_GRAY, spaceAfter=1, leading=11)
+    reg_s    = ParagraphStyle("RH", fontName="Helvetica-Bold", fontSize=11, textColor=colors.white, spaceAfter=0, leading=14)
+    item_s   = ParagraphStyle("EI", fontName="Helvetica",      fontSize=8,  textColor=colors.HexColor("#374151"), leading=11, spaceAfter=2)
+    summary_s= ParagraphStyle("ES", fontName="Helvetica",      fontSize=9,  textColor=colors.HexColor("#1F2937"), leading=13, spaceAfter=3, leftIndent=4)
+    small_s  = ParagraphStyle("S",  fontName="Helvetica",      fontSize=8,  textColor=MID_GRAY, spaceAfter=1, leading=11)
+
+    def e(t): return _xe(str(t or ""))
+
+    story = []
+    # Cover header
+    story.append(Paragraph("CQC Evidence Excerpts", title_s))
+    story.append(Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_s))
+    story.append(Paragraph(f"{len(sorted_refs)} regulation(s) | evidence drawn from {meeting_count} meeting(s)", meta_s))
+    story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=8))
+
+    for ref in sorted_refs:
+        items = reg_map[ref]
+        name  = reg_names.get(ref, ref)
+
+        # Regulation header bar
+        hdr_tbl = Table(
+            [[Paragraph(f'<font color="white"><b>{e(ref)} — {e(name)}</b></font>', reg_s)]],
+            colWidths=[170*mm],
+        )
+        hdr_tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), PURPLE),
+            ("TOPPADDING",    (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+        ]))
+        story.append(hdr_tbl)
+
+        for idx, item in enumerate(items):
+            conf    = item.get("confidence", "").replace("_", " ").title()
+            status  = item.get("status", "pending").title()
+            summary = (item.get("edited_evidence_summary") or item.get("evidence_summary", "")).strip()
+            excerpt = (item.get("transcript_excerpt", "")).strip()
+
+            # Alternating row background
+            bg = PURPLE_BG if idx % 2 == 0 else LIGHT_BG
+
+            meta_text = (
+                f'<b>{e(item["meeting_title"])}</b>  ·  {e(item["meeting_date"])}'
+                + (f'  ·  {e(item["attendees"])}' if item["attendees"] else "")
+                + (f'  ·  Mgr: {e(item["manager"])}' if item["manager"] else "")
+                + f'  ·  <font color="#6B7280">{e(conf)} / {e(status)}</font>'
+            )
+
+            cell_rows = [Paragraph(meta_text, item_s)]
+            if summary:
+                cell_rows.append(Paragraph(e(summary), summary_s))
+            if excerpt and excerpt != summary:
+                cell_rows.append(Paragraph(f'<i>"{e(excerpt[:300])}{"…" if len(excerpt) > 300 else ""}"</i>', item_s))
+
+            from reportlab.platypus import KeepTogether
+            row_tbl = Table([[cell_rows]], colWidths=[170*mm])
+            row_tbl.setStyle(TableStyle([
+                ("BACKGROUND",    (0, 0), (-1, -1), bg),
+                ("TOPPADDING",    (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+                ("GRID",          (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+            ]))
+            story.append(row_tbl)
+
+        story.append(Spacer(1, 6*mm))
+
+    story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GRAY))
+    story.append(Paragraph("1two.one — CQC Evidence Excerpts — Confidential", small_s))
+    doc.build(story)
+    return buf.getvalue()
+
+
 def _generate_export_pdf(mtg_analyses: list) -> bytes:
     from io import BytesIO
     from xml.sax.saxutils import escape as _xe

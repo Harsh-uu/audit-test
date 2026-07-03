@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   ClipboardCheck, ChevronDown, ChevronRight, Shield, Award,
-  Loader, AlertCircle, CheckCircle, TrendingUp,
+  Loader, AlertCircle, CheckCircle, TrendingUp, Download,
 } from "lucide-react";
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
@@ -126,6 +126,7 @@ export default function InspectionPrep() {
   const [section, setSection]   = useState("cqc");
   const [filter, setFilter]     = useState("all");
   const [open, setOpen]         = useState(new Set());
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     axios.get(`${API}/admin/team-insights`, getAuthConfig())
@@ -140,6 +141,27 @@ export default function InspectionPrep() {
     if (next.has(ref)) next.delete(ref); else next.add(ref);
     return next;
   });
+
+  const handleExportExcerpts = async () => {
+    setExporting(true);
+    try {
+      const token = localStorage.getItem("supervision_token");
+      const resp = await fetch(`${API}/admin/export-cqc-excerpts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "cqc_evidence_excerpts.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Export failed: " + err.message);
+    }
+    setExporting(false);
+  };
 
   if (loading) {
     return (
@@ -199,10 +221,19 @@ export default function InspectionPrep() {
           <div className="w-8 h-8 rounded-lg bg-[#1E3A8A]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
             <ClipboardCheck className="w-4 h-4 text-[#1E3A8A]" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-semibold text-gray-900 font-display">CQC Inspection Prep</h1>
             <p className="text-sm text-gray-500 mt-0.5">Evidence coverage across {totalStaff} staff member{totalStaff !== 1 ? "s" : ""}</p>
           </div>
+          <button
+            onClick={handleExportExcerpts}
+            disabled={exporting}
+            className="flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
+            data-testid="export-excerpts-btn"
+          >
+            <Download className="w-4 h-4" />
+            {exporting ? "Generating…" : "Export Excerpts"}
+          </button>
         </div>
 
         {/* Stats row */}
