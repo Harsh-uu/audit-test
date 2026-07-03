@@ -1117,7 +1117,7 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
             "detail": "Audio file removed after sign-off grace period",
         })
 
-    events.sort(key=lambda e: e.get("timestamp") or "")
+    events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
     return {"events": events}
 
 
