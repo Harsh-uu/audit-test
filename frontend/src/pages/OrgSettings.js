@@ -37,7 +37,7 @@ export default function OrgSettings() {
 
   // ── Export state ──────────────────────────────────────────────────────────
   const [users, setUsers]                           = useState([]);
-  const [exportFormat, setExportFormat]             = useState("csv");
+  const [exportFormat, setExportFormat]             = useState("pdf");
   const [exportStaffIds, setExportStaffIds]         = useState([]);
   const [exportDateFrom, setExportDateFrom]         = useState("");
   const [exportDateTo, setExportDateTo]             = useState("");
