@@ -20,6 +20,7 @@ import StaffPortfolio from "@/pages/StaffPortfolio";
 import TeamInsights from "@/pages/TeamInsights";
 import OrgStructure from "@/pages/OrgStructure";
 import Schedules from "@/pages/Schedules";
+import OrgSettings from "@/pages/OrgSettings";
 import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
 import AcceptInvite from "@/pages/AcceptInvite";
 import "@/App.css";
@@ -50,6 +51,7 @@ function App() {
           <Route path="/doc-uploads/:uploadId" element={<ProtectedRoute roles={["admin", "manager"]}><DocUploadReport /></ProtectedRoute>} />
           <Route path="/supervision-matrix" element={<ProtectedRoute roles={["admin", "manager"]}><SupervisionMatrix /></ProtectedRoute>} />
           <Route path="/inspection-prep" element={<ProtectedRoute roles={["admin", "manager"]}><InspectionPrep /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute roles={["admin", "manager"]}><OrgSettings /></ProtectedRoute>} />
           <Route path="/admin/team" element={<ProtectedRoute roles={["admin", "manager"]}><TeamInsights /></ProtectedRoute>} />
           <Route path="/organisation" element={<ProtectedRoute roles={["admin", "manager"]}><OrgStructure /></ProtectedRoute>} />
           <Route path="/admin/schedules" element={<ProtectedRoute roles={["admin", "manager"]}><Schedules /></ProtectedRoute>} />

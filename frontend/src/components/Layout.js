@@ -5,7 +5,7 @@ import axios from "axios";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
   TrendingUp, BarChart2, X, Building2, Calendar, FileUp, LayoutGrid, ClipboardCheck,
-  Pencil, Check, Loader, KeyRound
+  Pencil, Check, Loader, KeyRound, Settings
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 
@@ -202,7 +202,8 @@ export default function Layout({ children }) {
                    { path: "/upload-supervision", icon: FileUp, label: "Import Supervision", testId: "nav-import-supervision", exact: true },
                    { path: "/supervision-matrix", icon: LayoutGrid, label: "Supervision Matrix", testId: "nav-supervision-matrix", exact: true },
                    { path: "/admin/team", icon: BarChart2, label: "Team Intelligence", testId: "nav-team-intelligence", exact: true },
-                   { path: "/inspection-prep", icon: ClipboardCheck, label: "Inspection Prep", testId: "nav-inspection-prep", exact: true }]
+                   { path: "/inspection-prep", icon: ClipboardCheck, label: "Inspection Prep", testId: "nav-inspection-prep", exact: true },
+                   { path: "/settings", icon: Settings, label: "Settings", testId: "nav-settings", exact: true }]
                 : []),
             ].map(({ path, icon: Icon, label, testId, exact }) => {
               const active = exact ? location.pathname === path : isActive(path);

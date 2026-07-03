@@ -3,13 +3,10 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Shield, Award, BookOpen, FileText, Users, Download, CheckCircle, AlertCircle, X, Palette } from "lucide-react";
+import { Shield, Award, BookOpen, Users, CheckCircle, AlertCircle, X } from "lucide-react";
 import { StandardsTab } from "@/components/admin/StandardsTab";
 import { DocumentsTab } from "@/components/admin/DocumentsTab";
-import { TemplateTab } from "@/components/admin/TemplateTab";
 import { UsersTab } from "@/components/admin/UsersTab";
-import { ExportTab } from "@/components/admin/ExportTab";
-import { BrandingTab } from "@/components/admin/BrandingTab";
 
 function TabBtn({ active, onClick, children }) {
   return (
@@ -25,7 +22,6 @@ function TabBtn({ active, onClick, children }) {
 export default function AdminLibrary() {
   const { getAuthConfig, API, user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const canBrand = user?.role === "admin" || user?.role === "manager";
   const navigate = useNavigate();
   const [tab, setTab] = useState("cqc");
   const [standards, setStandards] = useState([]);
@@ -42,18 +38,6 @@ export default function AdminLibrary() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
-  const [template, setTemplate] = useState({ name: "Supervision Template", description: "", steps: [] });
-  const [templateSaving, setTemplateSaving] = useState(false);
-  const [newStepTitle, setNewStepTitle] = useState("");
-  const [newStepDesc, setNewStepDesc] = useState("");
-  const [exportFormat, setExportFormat] = useState("csv");
-  const [exportStaffIds, setExportStaffIds] = useState([]);
-  const [exportDateFrom, setExportDateFrom] = useState("");
-  const [exportDateTo, setExportDateTo] = useState("");
-  const [exportMeetings, setExportMeetings] = useState([]);
-  const [exportSelectedMeetings, setExportSelectedMeetings] = useState([]);
-  const [exportLoading, setExportLoading] = useState(false);
-  const [exportMeetingsLoading, setExportMeetingsLoading] = useState(false);
 
   useEffect(() => {
     fetchAll();
@@ -85,63 +69,21 @@ export default function AdminLibrary() {
       const requests = [
         axios.get(`${API}/admin/standards`, getAuthConfig()),
         axios.get(`${API}/admin/standards/documents`, getAuthConfig()),
-        axios.get(`${API}/admin/template`, getAuthConfig()),
       ];
       if (user?.role === "admin") {
         requests.push(axios.get(`${API}/admin/users`, getAuthConfig()));
       }
       const results = await Promise.all(requests);
-      const [stdRes, docRes, tmplRes] = results;
+      const [stdRes, docRes] = results;
       setStandards(stdRes.data);
       setDocs(docRes.data);
-      setTemplate(tmplRes.data || { name: "Supervision Template", description: "", steps: [] });
-      if (user?.role === "admin" && results[3]) setUsers(results[3].data);
+      if (user?.role === "admin" && results[2]) setUsers(results[2].data);
     } catch (err) {
       console.error("Admin fetchAll failed:", err);
       setError("Failed to load admin data. Please refresh.");
     }
     setLoading(false);
   };
-
-  const fetchExportMeetings = async () => {
-    setExportMeetingsLoading(true);
-    try {
-      const { data } = await axios.get(`${API}/admin/meetings-brief`, getAuthConfig());
-      setExportMeetings(data);
-    } catch (err) { console.error("Failed to load meetings for export:", err); }
-    setExportMeetingsLoading(false);
-  };
-
-  const handleExport = async () => {
-    setExportLoading(true);
-    try {
-      const token = localStorage.getItem("supervision_token");
-      const payload = {
-        format: exportFormat,
-        staff_ids: exportStaffIds.length ? exportStaffIds : null,
-        date_from: exportDateFrom || null,
-        date_to: exportDateTo || null,
-        meeting_ids: exportSelectedMeetings.length ? exportSelectedMeetings : null,
-      };
-      const resp = await fetch(`${API}/admin/export-evidence`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = exportFormat === "csv" ? "evidence_export.csv" : "evidence_export.pdf";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) { setError("Export failed: " + err.message); }
-    setExportLoading(false);
-  };
-
-  const toggleExportStaff = (uid) => setExportStaffIds(ids => ids.includes(uid) ? ids.filter(i => i !== uid) : [...ids, uid]);
-  const toggleExportMeeting = (mid) => setExportSelectedMeetings(ids => ids.includes(mid) ? ids.filter(i => i !== mid) : [...ids, mid]);
 
   const cqcStandards = standards.filter(s => s.type === "cqc");
   const ccStandards = standards.filter(s => s.type === "care_cert");
@@ -235,34 +177,6 @@ export default function AdminLibrary() {
     } catch (err) { console.error("Delete document failed:", err); setError("Failed to delete document."); }
   };
 
-  const handleAddStep = () => {
-    if (!newStepTitle.trim()) return;
-    const steps = template.steps || [];
-    setTemplate(t => ({ ...t, steps: [...steps, { id: `step_${Date.now()}`, order: steps.length + 1, title: newStepTitle.trim(), description: newStepDesc.trim() }] }));
-    setNewStepTitle("");
-    setNewStepDesc("");
-  };
-
-  const handleRemoveStep = (idx) => setTemplate(t => ({ ...t, steps: t.steps.filter((_, i) => i !== idx) }));
-
-  const handleMoveStep = (idx, dir) => {
-    const steps = [...template.steps];
-    const target = idx + dir;
-    if (target < 0 || target >= steps.length) return;
-    [steps[idx], steps[target]] = [steps[target], steps[idx]];
-    steps.forEach((s, i) => { s.order = i + 1; });
-    setTemplate(t => ({ ...t, steps }));
-  };
-
-  const handleSaveTemplate = async () => {
-    setTemplateSaving(true);
-    try {
-      await axios.put(`${API}/admin/template`, template, getAuthConfig());
-      setMessage("Supervision template saved");
-    } catch (err) { setError("Failed to save template"); }
-    setTemplateSaving(false);
-  };
-
   if (loading) return <Layout><div className="p-8 text-center text-gray-400 text-sm">Loading…</div></Layout>;
 
   return (
@@ -301,24 +215,10 @@ export default function AdminLibrary() {
             <BookOpen className="inline w-3.5 h-3.5 mr-1.5" />
             Custom Standards ({docs.length})
           </TabBtn>
-          <TabBtn active={tab === "template"} onClick={() => setTab("template")}>
-            <FileText className="inline w-3.5 h-3.5 mr-1.5" />
-            Supervision Template
-          </TabBtn>
           {isAdmin && (
             <TabBtn active={tab === "users"} onClick={() => setTab("users")}>
               <Users className="inline w-3.5 h-3.5 mr-1.5" />
               Users ({users.length})
-            </TabBtn>
-          )}
-          <TabBtn active={tab === "export"} onClick={() => { setTab("export"); if (!exportMeetings.length) fetchExportMeetings(); }}>
-            <Download className="inline w-3.5 h-3.5 mr-1.5" />
-            Evidence Export
-          </TabBtn>
-          {canBrand && (
-            <TabBtn active={tab === "branding"} onClick={() => setTab("branding")}>
-              <Palette className="inline w-3.5 h-3.5 mr-1.5" />
-              Branding
             </TabBtn>
           )}
         </div>
@@ -379,30 +279,6 @@ export default function AdminLibrary() {
             navigate={navigate}
           />
         )}
-
-        {tab === "export" && (
-          <ExportTab
-            users={users}
-            exportFormat={exportFormat}
-            setExportFormat={setExportFormat}
-            exportStaffIds={exportStaffIds}
-            toggleExportStaff={toggleExportStaff}
-            exportDateFrom={exportDateFrom}
-            setExportDateFrom={setExportDateFrom}
-            exportDateTo={exportDateTo}
-            setExportDateTo={setExportDateTo}
-            exportMeetings={exportMeetings}
-            exportSelectedMeetings={exportSelectedMeetings}
-            toggleExportMeeting={toggleExportMeeting}
-            exportLoading={exportLoading}
-            exportMeetingsLoading={exportMeetingsLoading}
-            handleExport={handleExport}
-            setExportSelectedMeetings={setExportSelectedMeetings}
-            setExportStaffIds={setExportStaffIds}
-          />
-        )}
-
-        {tab === "branding" && canBrand && <BrandingTab />}
       </div>
     </Layout>
   );
