@@ -292,7 +292,13 @@ async def delete_document(doc_id: str, db=Depends(get_db), current_user=Depends(
 
 @router.get("/template")
 async def get_template(db=Depends(get_db), current_user=Depends(get_current_user)):
-    doc = await db.settings.find_one({"_id": "supervision_template"})
+    org_id = current_user.get("org_id")
+    # Try org-scoped key first, fall back to legacy global record for existing orgs
+    doc = None
+    if org_id:
+        doc = await db.settings.find_one({"_id": f"supervision_template:{org_id}"})
+    if not doc:
+        doc = await db.settings.find_one({"_id": "supervision_template"})
     if not doc:
         return {"steps": [], "name": "Supervision Template", "description": ""}
     return {"steps": doc.get("steps", []), "name": doc.get("name", "Supervision Template"), "description": doc.get("description", "")}  # noqa: E501
@@ -302,11 +308,14 @@ async def get_template(db=Depends(get_db), current_user=Depends(get_current_user
 async def save_template(data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Admin/Manager only")
+    org_id = current_user.get("org_id")
+    template_key = f"supervision_template:{org_id}" if org_id else "supervision_template"
     now = datetime.now(timezone.utc).isoformat()
     await db.settings.replace_one(
-        {"_id": "supervision_template"},
+        {"_id": template_key},
         {
-            "_id": "supervision_template",
+            "_id": template_key,
+            "org_id": org_id,
             "steps": data.get("steps", []),
             "name": data.get("name", "Supervision Template"),
             "description": data.get("description", ""),
@@ -794,6 +803,7 @@ async def export_cqc_excerpts(db=Depends(get_db), current_user=Depends(get_curre
         ctx = {
             "meeting_title": meeting.get("title", "Meeting"),
             "meeting_date":  meeting.get("date", ""),
+            "meeting_id":    str(meeting["_id"]),
             "attendees":     attendees,
             "manager":       meeting.get("sign_off_manager_name", ""),
         }
@@ -812,7 +822,8 @@ async def export_cqc_excerpts(db=Depends(get_db), current_user=Depends(get_curre
 
     # Sort regulations by ref
     sorted_refs = sorted(reg_map.keys())
-    pdf_bytes = _generate_cqc_excerpts_pdf(sorted_refs, reg_map, reg_names, len({k for k in [item["meeting_title"] for items in reg_map.values() for item in items]}))
+    # Count distinct meeting IDs (not titles) to avoid undercounting when meetings share a name
+    pdf_bytes = _generate_cqc_excerpts_pdf(sorted_refs, reg_map, reg_names, len({item["meeting_id"] for items in reg_map.values() for item in items}))
     return _Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -905,7 +916,6 @@ def _generate_cqc_excerpts_pdf(sorted_refs, reg_map, reg_names, meeting_count) -
             if excerpt and excerpt != summary:
                 cell_rows.append(Paragraph(f'<i>"{e(excerpt[:300])}{"…" if len(excerpt) > 300 else ""}"</i>', item_s))
 
-            from reportlab.platypus import KeepTogether
             row_tbl = Table([[cell_rows]], colWidths=[170*mm])
             row_tbl.setStyle(TableStyle([
                 ("BACKGROUND",    (0, 0), (-1, -1), bg),
@@ -958,17 +968,26 @@ async def export_cc_excerpts(
         if redactions:
             adoc = _apply_redactions_deep(dict(adoc), redactions)
 
-        # Determine which attendees to include
+        sign_off_mgr_id = str(meeting.get("sign_off_manager_id") or "")
         all_attendees = meeting.get("attendees", [])
+
+        # Evidence belongs to supervisees only — exclude meetings where all selected
+        # staff are the supervisor (same rule as get_team_insights / export-evidence)
         if selected_ids:
-            include = [a for a in all_attendees if a.get("user_id") in selected_ids]
+            supervisee_selected = [s for s in selected_ids if s != sign_off_mgr_id]
+            if not supervisee_selected:
+                continue  # This person was only the supervisor in this meeting
+            include = [a for a in all_attendees if a.get("user_id") in supervisee_selected]
         else:
-            include = all_attendees
+            include = [a for a in all_attendees if str(a.get("user_id", "")) != sign_off_mgr_id]
+
         attendees_str = ", ".join(a.get("name", "") for a in include)
+        meeting_id_str = str(meeting["_id"])
 
         ctx = {
             "meeting_title": meeting.get("title", "Meeting"),
             "meeting_date":  meeting.get("date", ""),
+            "meeting_id":    meeting_id_str,
             "attendees":     attendees_str,
             "manager":       meeting.get("sign_off_manager_name", ""),
         }
@@ -986,7 +1005,8 @@ async def export_cc_excerpts(
         raise HTTPException(status_code=404, detail="No Care Certificate evidence found for the selected staff")
 
     sorted_refs = sorted(std_map.keys())
-    meeting_count = len({item["meeting_title"] for items in std_map.values() for item in items})
+    # Count distinct meeting IDs (not titles) to avoid undercounting when meetings share a name
+    meeting_count = len({item["meeting_id"] for items in std_map.values() for item in items})
 
     # Resolve selected staff names for the PDF title
     staff_label = "All staff"
@@ -1020,7 +1040,6 @@ def _generate_cc_excerpts_pdf(sorted_refs, std_map, std_names, meeting_count, st
     NAVY      = colors.HexColor("#1E3A8A")
     BLUE      = colors.HexColor("#2563EB")
     BLUE_BG   = colors.HexColor("#EFF6FF")
-    BLUE_MID  = colors.HexColor("#DBEAFE")
     LIGHT_BG  = colors.HexColor("#F8FAFC")
     MID_GRAY  = colors.HexColor("#6B7280")
 

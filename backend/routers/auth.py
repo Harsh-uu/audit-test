@@ -60,8 +60,8 @@ def create_refresh_token(user_id: str) -> str:
 
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
-    response.set_cookie("access_token", access_token, httponly=True, secure=False, samesite="lax", max_age=28800, path="/")  # noqa: E501
-    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")  # noqa: E501
+    response.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/")  # noqa: E501
+    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=True, samesite="lax", max_age=604800, path="/")  # noqa: E501
 
 
 class RegisterRequest(BaseModel):
@@ -181,8 +181,8 @@ async def refresh_token(request: Request, response: Response, db=Depends(get_db)
         user_id = str(user["_id"])
         new_access = create_access_token(user_id, user["email"])
         new_refresh = create_refresh_token(user_id)
-        response.set_cookie("access_token", new_access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")  # noqa: E501
-        response.set_cookie("refresh_token", new_refresh, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")  # noqa: E501
+        response.set_cookie("access_token", new_access, httponly=True, secure=True, samesite="lax", max_age=86400, path="/")  # noqa: E501
+        response.set_cookie("refresh_token", new_refresh, httponly=True, secure=True, samesite="lax", max_age=604800, path="/")  # noqa: E501
         return {"access_token": new_access, "refresh_token": new_refresh, "message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")

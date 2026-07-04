@@ -257,9 +257,12 @@ export default function CareCertPrep() {
       });
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();
+      const disposition = resp.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match ? match[1] : "care_cert_evidence_excerpts.pdf";
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
-      a.href = url; a.download = "care_cert_evidence_excerpts.pdf"; a.click();
+      a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
       alert("Export failed: " + err.message);

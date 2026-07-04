@@ -121,15 +121,22 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         cqc_standards = await db.standards_entries.find({"type": "cqc", "is_active": True}).to_list(50)
         care_cert_standards = await db.standards_entries.find({"type": "care_cert", "is_active": True}).to_list(20)
 
-        # Load active parsed library documents
+        # Load active parsed library documents — scoped to this org only
         custom_standards = []
-        async for doc in db.standards_documents.find({"is_active": True, "parse_status": "parsed"}):
+        meeting_org_id = meeting.get("org_id")
+        std_doc_query = {"is_active": True, "parse_status": "parsed"}
+        if meeting_org_id:
+            std_doc_query["org_id"] = meeting_org_id
+        async for doc in db.standards_documents.find(std_doc_query):
             doc["id"] = str(doc["_id"])
             custom_standards.append(doc)
 
-        # Load supervision template
+        # Load supervision template — org-scoped, with fallback to legacy global record
         supervision_template = None
-        tmpl_doc = await db.settings.find_one({"_id": "supervision_template"})
+        meeting_org_id = meeting.get("org_id")
+        tmpl_doc = await db.settings.find_one({"_id": f"supervision_template:{meeting_org_id}"}) if meeting_org_id else None
+        if not tmpl_doc:
+            tmpl_doc = await db.settings.find_one({"_id": "supervision_template"})
         if tmpl_doc and tmpl_doc.get("steps"):
             supervision_template = tmpl_doc
 
