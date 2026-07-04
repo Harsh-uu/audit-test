@@ -22,7 +22,7 @@ export function ExportTab({
     <div data-testid="export-tab">
       <div className="max-w-2xl">
         <p className="text-sm text-gray-500 mb-6">
-          Export compliance evidence records as a formatted PDF report across signed-off supervision meetings.
+          Export all compliance evidence records as a single formatted PDF report, covering all CQC and Care Certificate mappings across signed-off supervision meetings.
           Filter by staff member, date range, or specific meetings.
         </p>
 

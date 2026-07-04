@@ -164,7 +164,7 @@ export default function OrgSettings() {
             <FileText className="w-3.5 h-3.5" />Supervision Template
           </TabBtn>
           <TabBtn active={tab === "export"} onClick={() => { setTab("export"); if (!exportMeetings.length) fetchExportMeetings(); }}>
-            <Download className="w-3.5 h-3.5" />Evidence Export
+            <Download className="w-3.5 h-3.5" />Export All
           </TabBtn>
           {canBrand && (
             <TabBtn active={tab === "branding"} onClick={() => setTab("branding")}>
