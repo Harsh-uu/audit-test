@@ -1204,6 +1204,196 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
     return buf.getvalue()
 
 
+@router.post("/export-transcripts")
+async def export_transcripts(data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
+    """Bulk transcript PDF export. Accepts filters: staff_ids, date_from, date_to, meeting_ids."""
+    from fastapi.responses import Response as _Response
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    org_id = current_user.get("org_id")
+    staff_ids = data.get("staff_ids") or []
+    date_from = data.get("date_from")
+    date_to = data.get("date_to")
+    meeting_ids = data.get("meeting_ids") or []
+
+    query: dict = {"status": "signed_off", "analysis_id": {"$exists": True}}
+    if org_id:
+        query["org_id"] = org_id
+    if meeting_ids:
+        query["_id"] = {"$in": [ObjectId(mid) for mid in meeting_ids if mid]}
+    else:
+        if staff_ids:
+            query["attendees.user_id"] = {"$in": staff_ids}
+        if date_from or date_to:
+            df: dict = {}
+            if date_from:
+                df["$gte"] = date_from
+            if date_to:
+                df["$lte"] = date_to
+            if df:
+                query["date"] = df
+
+    meetings_data = []
+    async for meeting in db.meetings.find(query).sort("date", -1):
+        if not meeting.get("transcript_id"):
+            continue
+        tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
+        if not tdoc:
+            continue
+        speaker_text = tdoc.get("speaker_text", "")
+        transcript_text = tdoc.get("text", "")
+        redactions = meeting.get("pii_redactions", [])
+        if redactions:
+            from utils.redaction import apply_redactions_to_text as _art
+            if speaker_text:
+                speaker_text = _art(speaker_text, redactions)
+            if transcript_text:
+                transcript_text = _art(transcript_text, redactions)
+        meetings_data.append({"meeting": meeting, "speaker_text": speaker_text, "transcript_text": transcript_text})
+
+    if not meetings_data:
+        raise HTTPException(status_code=404, detail="No transcripts found for the selected filters")
+
+    pdf_bytes = _generate_bulk_transcripts_pdf(meetings_data)
+    return _Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="transcripts_export.pdf"'},
+    )
+
+
+def _generate_bulk_transcripts_pdf(meetings_data: list) -> bytes:
+    import re as _re
+    from io import BytesIO
+    from xml.sax.saxutils import escape as _xe
+    from datetime import datetime as _dt
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+
+    NAVY         = colors.HexColor("#1E3A8A")
+    MID_GRAY     = colors.HexColor("#6B7280")
+    MGMT_NAVY    = colors.HexColor("#1E3A8A")
+    WORKER_GREEN = colors.HexColor("#065F46")
+
+    cover_s  = ParagraphStyle("C",  fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=4, leading=20)
+    meta_r_s = ParagraphStyle("MR", fontName="Helvetica",      fontSize=8,  textColor=MID_GRAY, leading=12, alignment=2)
+    title_s  = ParagraphStyle("T",  fontName="Helvetica-Bold", fontSize=13, textColor=NAVY, spaceAfter=2, leading=17)
+    name_s   = ParagraphStyle("SN", fontName="Helvetica-Bold", fontSize=11, textColor=NAVY, spaceAfter=2, leading=14)
+    small_s  = ParagraphStyle("S",  fontName="Helvetica",      fontSize=8,  textColor=MID_GRAY, spaceAfter=1, leading=11)
+    label_s  = ParagraphStyle("L",  fontName="Helvetica-Bold", fontSize=7,  textColor=colors.white, leading=9)
+    turn_s   = ParagraphStyle("TT", fontName="Helvetica",      fontSize=8.5, textColor=colors.HexColor("#1F2937"), leading=13)
+    mono_s   = ParagraphStyle("M",  fontName="Courier",        fontSize=8,  textColor=colors.HexColor("#374151"), leading=12, spaceAfter=3)
+
+    def e(t): return _xe(str(t or ""))
+
+    story = []
+
+    # Cover sheet
+    cover_hdr = Table(
+        [[Paragraph("Supervision Transcripts", cover_s),
+          Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_r_s)]],
+        colWidths=[120*mm, 50*mm],
+    )
+    cover_hdr.setStyle(TableStyle([
+        ("VALIGN",        (0, 0), (-1, -1), "BOTTOM"),
+        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+    ]))
+    story.append(cover_hdr)
+    story.append(Paragraph(f"{len(meetings_data)} session(s) included", small_s))
+    story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=8))
+
+    for idx, item in enumerate(meetings_data):
+        if idx > 0:
+            story.append(PageBreak())
+
+        meeting       = item["meeting"]
+        speaker_text  = item["speaker_text"]
+        transcript_text = item["transcript_text"]
+
+        sign_off_mgr_id = str(meeting.get("sign_off_manager_id") or "")
+        supervisees = [a.get("name", "") for a in meeting.get("attendees", []) if a.get("user_id") != sign_off_mgr_id]
+
+        # Meeting title header
+        mtg_hdr = Table(
+            [[Paragraph(e(meeting.get("title", "Meeting")), title_s), Paragraph(e(meeting.get("date", "")[:10]), small_s)]],
+            colWidths=[140*mm, 30*mm],
+        )
+        mtg_hdr.setStyle(TableStyle([
+            ("VALIGN",        (0, 0), (-1, -1), "BOTTOM"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (1, 0), (1, 0),  0),
+            ("ALIGN",         (1, 0), (1, 0),  "RIGHT"),
+        ]))
+        story.append(mtg_hdr)
+
+        if supervisees:
+            story.append(Paragraph(", ".join(supervisees), name_s))
+        story.append(Paragraph(f"Manager: {e(meeting.get('sign_off_manager_name', '—'))}", small_s))
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#CBD5E1"), spaceAfter=5))
+
+        manager_name = meeting.get("sign_off_manager_name", "")
+        manager_words = [w.lower() for w in manager_name.split() if len(w) > 2] if manager_name else []
+
+        if speaker_text:
+            turns = []
+            for line in speaker_text.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                m = _re.match(r'^([^:]{1,50}):\s*(.+)', line)
+                if m:
+                    turns.append([m.group(1).strip(), m.group(2).strip()])
+                elif turns:
+                    turns[-1][1] += " " + line
+                else:
+                    turns.append(["Speaker", line])
+
+            for speaker, text in turns:
+                sl = speaker.lower()
+                is_mgr = sl in ("manager", "supervisor") or any(w in sl for w in manager_words)
+                color = MGMT_NAVY if is_mgr else WORKER_GREEN
+                row = [[Paragraph(e(speaker.upper()), label_s), Paragraph(e(text), turn_s)]]
+                t = Table(row, colWidths=[22*mm, 148*mm])
+                t.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (0, 0), color),
+                    ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#F9FAFB")),
+                    ("VALIGN",     (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING",   (0, 0), (0, 0), 4),
+                    ("RIGHTPADDING",  (0, 0), (0, 0), 4),
+                    ("LEFTPADDING",   (1, 0), (1, 0), 6),
+                    ("RIGHTPADDING",  (1, 0), (1, 0), 6),
+                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+                ]))
+                story.append(t)
+                story.append(Spacer(1, 1*mm))
+        elif transcript_text:
+            for chunk in transcript_text.split("\n"):
+                if chunk.strip():
+                    story.append(Paragraph(e(chunk.strip()), mono_s))
+        else:
+            story.append(Paragraph("No transcript available.", small_s))
+
+    story.append(Spacer(1, 6*mm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GRAY))
+    story.append(Paragraph("1two.one — Transcripts Export — Confidential", small_s))
+    doc.build(story)
+    return buf.getvalue()
+
+
 @router.get("/stats")
 async def get_stats(db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:

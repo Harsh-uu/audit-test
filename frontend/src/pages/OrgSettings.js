@@ -6,6 +6,7 @@ import { FileText, Download, Palette, CheckCircle, AlertCircle, X } from "lucide
 import { TemplateTab } from "@/components/admin/TemplateTab";
 import { ExportTab } from "@/components/admin/ExportTab";
 import { BrandingTab } from "@/components/admin/BrandingTab";
+import { TranscriptExportTab } from "@/components/admin/TranscriptExportTab";
 
 function TabBtn({ active, onClick, children }) {
   return (
@@ -35,7 +36,7 @@ export default function OrgSettings() {
   const [newStepTitle, setNewStepTitle]   = useState("");
   const [newStepDesc, setNewStepDesc]     = useState("");
 
-  // ── Export state ──────────────────────────────────────────────────────────
+  // ── Export + Transcript state (shared filters) ────────────────────────────
   const [users, setUsers]                           = useState([]);
   const [exportStaffIds, setExportStaffIds]         = useState([]);
   const [exportDateFrom, setExportDateFrom]         = useState("");
@@ -43,6 +44,7 @@ export default function OrgSettings() {
   const [exportMeetings, setExportMeetings]         = useState([]);
   const [exportSelectedMeetings, setExportSelectedMeetings] = useState([]);
   const [exportLoading, setExportLoading]           = useState(false);
+  const [txExportLoading, setTxExportLoading]       = useState(false);
   const [exportMeetingsLoading, setExportMeetingsLoading] = useState(false);
 
   useEffect(() => {
@@ -136,6 +138,32 @@ export default function OrgSettings() {
     setExportLoading(false);
   };
 
+  const handleTranscriptExport = async () => {
+    setTxExportLoading(true);
+    setError("");
+    try {
+      const token = localStorage.getItem("supervision_token");
+      const payload = {
+        staff_ids: exportStaffIds.length ? exportStaffIds : null,
+        date_from: exportDateFrom || null,
+        date_to: exportDateTo || null,
+        meeting_ids: exportSelectedMeetings.length ? exportSelectedMeetings : null,
+      };
+      const resp = await fetch(`${API}/admin/export-transcripts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "transcripts_export.pdf"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { setError("Transcript export failed: " + err.message); }
+    setTxExportLoading(false);
+  };
+
   if (loading) return <Layout><div className="p-8 text-center text-gray-400 text-sm">Loading…</div></Layout>;
 
   return (
@@ -165,6 +193,9 @@ export default function OrgSettings() {
           </TabBtn>
           <TabBtn active={tab === "export"} onClick={() => { setTab("export"); if (!exportMeetings.length) fetchExportMeetings(); }}>
             <Download className="w-3.5 h-3.5" />Export All
+          </TabBtn>
+          <TabBtn active={tab === "transcripts"} onClick={() => { setTab("transcripts"); if (!exportMeetings.length) fetchExportMeetings(); }}>
+            <FileText className="w-3.5 h-3.5" />Transcripts
           </TabBtn>
           {canBrand && (
             <TabBtn active={tab === "branding"} onClick={() => setTab("branding")}>
@@ -204,6 +235,26 @@ export default function OrgSettings() {
             exportLoading={exportLoading}
             exportMeetingsLoading={exportMeetingsLoading}
             handleExport={handleExport}
+            setExportSelectedMeetings={setExportSelectedMeetings}
+            setExportStaffIds={setExportStaffIds}
+          />
+        )}
+
+        {tab === "transcripts" && (
+          <TranscriptExportTab
+            users={users}
+            exportStaffIds={exportStaffIds}
+            toggleExportStaff={toggleExportStaff}
+            exportDateFrom={exportDateFrom}
+            setExportDateFrom={setExportDateFrom}
+            exportDateTo={exportDateTo}
+            setExportDateTo={setExportDateTo}
+            exportMeetings={exportMeetings}
+            exportSelectedMeetings={exportSelectedMeetings}
+            toggleExportMeeting={toggleExportMeeting}
+            exportLoading={txExportLoading}
+            exportMeetingsLoading={exportMeetingsLoading}
+            handleTranscriptExport={handleTranscriptExport}
             setExportSelectedMeetings={setExportSelectedMeetings}
             setExportStaffIds={setExportStaffIds}
           />

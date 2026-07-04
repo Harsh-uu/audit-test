@@ -72,6 +72,7 @@ export default function MeetingReport() {
   const [auditTrail, setAuditTrail] = useState(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingTranscript, setExportingTranscript] = useState(false);
   const [includeTranscript, setIncludeTranscript] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -293,6 +294,23 @@ export default function MeetingReport() {
     finally { setExportingPdf(false); }
   };
 
+  const exportTranscript = async () => {
+    setExportingTranscript(true);
+    try {
+      const token = localStorage.getItem("supervision_token");
+      const resp = await fetch(`${API}/review/${meetingId}/export-transcript`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `transcript_${meetingId.slice(-6)}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { alert("Transcript export failed: " + err.message); }
+    finally { setExportingTranscript(false); }
+  };
+
   const sendReport = async () => {
     const attendeeEmails = (meeting?.attendees || []).map(a => a.email).filter(Boolean);
     // Fall back to the meeting creator if no attendees have email addresses
@@ -403,15 +421,27 @@ export default function MeetingReport() {
             {canSignOff && (
               <div className="flex items-center gap-2">
                 {isSignedOff ? (
-                  <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-sm">
-                    <button onClick={exportPdf} disabled={exportingPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60 rounded-l-md" data-testid="export-pdf-btn" title="Export PDF">
-                      <FileText className="w-4 h-4 text-gray-500" />
-                      <span className="hidden sm:inline">{exportingPdf ? "Generating…" : "Export PDF"}</span>
-                    </button>
-                    <div className="hidden sm:flex border-l border-gray-200 px-2 py-2 items-center gap-1.5">
-                      <input type="checkbox" id="include-transcript" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
-                      <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none">+ Full text</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-sm">
+                      <button onClick={exportPdf} disabled={exportingPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60 rounded-l-md" data-testid="export-pdf-btn" title="Export PDF">
+                        <FileText className="w-4 h-4 text-gray-500" />
+                        <span className="hidden sm:inline">{exportingPdf ? "Generating…" : "Export PDF"}</span>
+                      </button>
+                      <div className="hidden sm:flex border-l border-gray-200 px-2 py-2 items-center gap-1.5">
+                        <input type="checkbox" id="include-transcript" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
+                        <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none">+ Full text</label>
+                      </div>
                     </div>
+                    <button
+                      onClick={exportTranscript}
+                      disabled={exportingTranscript}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60"
+                      data-testid="export-transcript-btn"
+                      title="Download transcript only"
+                    >
+                      <FileText className="w-4 h-4 text-gray-500" />
+                      <span className="hidden sm:inline">{exportingTranscript ? "Generating…" : "Transcript"}</span>
+                    </button>
                   </div>
                 ) : (
                   <button
