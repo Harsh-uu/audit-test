@@ -428,7 +428,7 @@ async def get_processing_status(meeting_id: str, db=Depends(get_db), current_use
     try:
         meeting = await db.meetings.find_one(
             {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
-            {"status": 1, "audio_file_id": 1, "transcript_id": 1, "analysis_id": 1, "audio_deletion_status": 1}
+            {"status": 1, "audio_file_id": 1, "transcript_id": 1, "analysis_id": 1, "audio_deletion_status": 1, "diarize_status": 1}
         )
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid meeting ID")
@@ -443,3 +443,100 @@ async def get_processing_status(meeting_id: str, db=Depends(get_db), current_use
         "has_analysis": bool(meeting.get("analysis_id")),
         "audio_deletion_status": meeting.get("audio_deletion_status", "none"),
     }
+
+
+@router.post("/{meeting_id}/retranscribe")
+async def retranscribe_meeting(
+    meeting_id: str,
+    background_tasks: BackgroundTasks,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Re-submit audio to AssemblyAI with speakers_expected hint.
+    Only updates the speaker/transcript track — does NOT touch meeting status, analysis, or sign-off.
+    Manager/admin only. Requires the original audio to still be in storage.
+    """
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Manager or admin required")
+
+    try:
+        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid meeting ID")
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    audio_file_id = meeting.get("audio_file_id")
+    if not audio_file_id:
+        raise HTTPException(status_code=400, detail="No audio file associated with this meeting — cannot retranscribe")
+
+    audio_file = await db.audio_files.find_one({"_id": ObjectId(audio_file_id)})
+    if not audio_file or not audio_file.get("storage_path"):
+        raise HTTPException(status_code=404, detail="Audio file record not found")
+
+    transcript_id = meeting.get("transcript_id")
+    if not transcript_id:
+        raise HTTPException(status_code=400, detail="No transcript record found — use retry instead")
+
+    await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id)},
+        {"$set": {"diarize_status": "processing"}}
+    )
+
+    background_tasks.add_task(
+        _run_retranscribe_background,
+        meeting_id, transcript_id, audio_file["storage_path"], meeting, db
+    )
+
+    return {"status": "processing", "message": "Re-scanning audio with AssemblyAI — this takes 1–3 minutes. Refresh the transcript tab when done."}
+
+
+async def _run_retranscribe_background(meeting_id: str, transcript_id: str, storage_path: str, meeting: dict, db):
+    """Re-submit audio to AssemblyAI with speakers_expected, then remap names. Leaves all other meeting data unchanged."""
+    from utils.storage import get_object
+    try:
+        audio_data, _ = get_object(storage_path)
+    except Exception as e:
+        logger.error(f"Retranscribe: could not load audio for {meeting_id}: {e}")
+        await db.meetings.update_one({"_id": ObjectId(meeting_id)}, {"$set": {"diarize_status": "failed"}})
+        return
+
+    assemblyai_key = os.environ.get("ASSEMBLYAI_API_KEY")
+    if not assemblyai_key:
+        logger.error("Retranscribe: ASSEMBLYAI_API_KEY not set")
+        await db.meetings.update_one({"_id": ObjectId(meeting_id)}, {"$set": {"diarize_status": "failed"}})
+        return
+
+    attendee_count = len(meeting.get("attendees", [])) or None
+    try:
+        plain_text, numbered_speaker_text = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
+    except Exception as e:
+        logger.error(f"Retranscribe: AssemblyAI failed for {meeting_id}: {e}")
+        await db.meetings.update_one({"_id": ObjectId(meeting_id)}, {"$set": {"diarize_status": "failed"}})
+        return
+
+    manager_name   = meeting.get("sign_off_manager_name") or "Manager"
+    attendees      = meeting.get("attendees", [])
+    attendee_names = [a.get("name") for a in attendees if a.get("name")]
+    meeting_type   = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
+
+    if numbered_speaker_text:
+        speaker_text = await map_speaker_numbers_to_names(numbered_speaker_text, manager_name, attendee_names, meeting_type)
+    else:
+        speaker_text = await diarize_transcript(plain_text, manager_name, attendee_names, meeting_type)
+
+    if not speaker_text:
+        logger.warning(f"Retranscribe: diarization returned nothing for {meeting_id}")
+        await db.meetings.update_one({"_id": ObjectId(meeting_id)}, {"$set": {"diarize_status": "failed"}})
+        return
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.transcripts.update_one(
+        {"_id": ObjectId(transcript_id)},
+        {"$set": {"text": plain_text, "speaker_text": speaker_text, "retranscribed_at": now}}
+    )
+    await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id)},
+        {"$set": {"diarize_status": "done", "retranscribed_at": now}}
+    )
+    logger.info(f"Retranscribe complete for meeting {meeting_id} — speakers_expected={attendee_count}")

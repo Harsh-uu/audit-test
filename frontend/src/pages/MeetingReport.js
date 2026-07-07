@@ -74,6 +74,7 @@ export default function MeetingReport() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingTranscript, setExportingTranscript] = useState(false);
   const [includeTranscript, setIncludeTranscript] = useState(false);
+  const [retranscribing, setRetranscribing] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailMessage, setEmailMessage] = useState("");
@@ -311,6 +312,25 @@ export default function MeetingReport() {
     finally { setExportingTranscript(false); }
   };
 
+  const handleRetranscribe = async () => {
+    if (!window.confirm(`Re-scan this meeting's audio with AssemblyAI using ${meeting?.attendees?.length || "the"} expected speaker(s)?\n\nThis will update the transcript and speaker view. The meeting status and compliance evidence will not change.`)) return;
+    setRetranscribing(true);
+    try {
+      const token = localStorage.getItem("supervision_token");
+      const resp = await fetch(`${API}/processing/${meetingId}/retranscribe`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || "Failed");
+      toast.success("Re-scan started — refresh this page in 2–3 minutes to see updated speaker diarization.");
+    } catch (err) {
+      toast.error("Re-scan failed: " + err.message);
+    } finally {
+      setRetranscribing(false);
+    }
+  };
+
   const sendReport = async () => {
     const attendeeEmails = (meeting?.attendees || []).map(a => a.email).filter(Boolean);
     // Fall back to the meeting creator if no attendees have email addresses
@@ -442,6 +462,18 @@ export default function MeetingReport() {
                       <FileText className="w-4 h-4 text-gray-500" />
                       <span className="hidden sm:inline">{exportingTranscript ? "Generating…" : "Transcript"}</span>
                     </button>
+                    {meeting?.audio_file_id && canEditSpeakers && (
+                      <button
+                        onClick={handleRetranscribe}
+                        disabled={retranscribing}
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-md shadow-sm hover:bg-amber-100 transition-colors disabled:opacity-60"
+                        data-testid="retranscribe-btn"
+                        title={`Re-scan audio with ${meeting?.attendees?.length || "?"} expected speakers`}
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        <span className="hidden sm:inline">{retranscribing ? "Scanning…" : "Re-scan Audio"}</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <button
