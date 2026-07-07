@@ -161,6 +161,15 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = doc_to_dict(doc)
 
+    # Non-managers can only read meetings they participated in or were explicitly shared with.
+    # Return 404 (not 403) to avoid leaking that the meeting exists.
+    user_id = current_user.get("id", "")
+    if current_user.get("role") not in ["admin", "manager"]:
+        attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
+        shared_with  = meeting.get("shared_with", []) or []
+        if user_id not in attendee_ids and user_id not in shared_with and user_id != meeting.get("created_by", ""):
+            raise HTTPException(status_code=404, detail="Meeting not found")
+
     # Attach transcript
     if meeting.get("transcript_id"):
         try:

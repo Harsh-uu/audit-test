@@ -214,7 +214,6 @@ async def get_due_meetings(db=Depends(get_db), current_user=Depends(get_current_
     # End of current month
     last_day = calendar.monthrange(today.year, today.month)[1]
     month_end = date(today.year, today.month, last_day).isoformat()
-    today_iso = today.isoformat()
     due = [s for s in all_s if s["next_due"] <= month_end]
     due.sort(key=lambda s: s["next_due"])
     return due

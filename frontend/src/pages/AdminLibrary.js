@@ -250,22 +250,6 @@ export default function AdminLibrary() {
           />
         )}
 
-        {tab === "template" && (
-          <TemplateTab
-            template={template}
-            setTemplate={setTemplate}
-            templateSaving={templateSaving}
-            newStepTitle={newStepTitle}
-            setNewStepTitle={setNewStepTitle}
-            newStepDesc={newStepDesc}
-            setNewStepDesc={setNewStepDesc}
-            handleAddStep={handleAddStep}
-            handleRemoveStep={handleRemoveStep}
-            handleMoveStep={handleMoveStep}
-            handleSaveTemplate={handleSaveTemplate}
-          />
-        )}
-
         {tab === "users" && isAdmin && (
           <UsersTab
             users={users}
