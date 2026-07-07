@@ -199,13 +199,14 @@ Rules:
 - Output ONLY the reformatted transcript — no preamble, explanation, or markdown"""
 
 
-async def transcribe_with_assemblyai(audio_data: bytes) -> tuple:
+async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int = None) -> tuple:
     """
     Transcribe + diarise with AssemblyAI (Universal model, speaker_labels=True).
     Works reliably on mono audio from browser MediaRecorder.
     Returns (plain_text, speaker_labeled_text_or_none).
     speaker_labeled_text uses "Speaker A:", "Speaker B:" labels.
     Falls back to None if only 1 speaker found (GPT-4o will diarise from text).
+    Pass speakers_expected (from meeting attendee count) to improve diarization accuracy.
     """
     import io
     import assemblyai as aai
@@ -217,6 +218,7 @@ async def transcribe_with_assemblyai(audio_data: bytes) -> tuple:
     aai.settings.api_key = api_key
     config = aai.TranscriptionConfig(
         speaker_labels=True,
+        speakers_expected=speakers_expected if speakers_expected and speakers_expected >= 2 else None,
         speech_models=["universal-3-pro"],  # AssemblyAI medical-capable model
         domain="medical-v1",               # Activates medical mode (care/clinical vocab)
         word_boost=[                        # Reinforce UK adult social care terminology
@@ -233,7 +235,8 @@ async def transcribe_with_assemblyai(audio_data: bytes) -> tuple:
     transcriber = aai.Transcriber()
 
     loop = asyncio.get_event_loop()
-    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to AssemblyAI (speaker_labels=True)")
+    hint_msg = f", speakers_expected={speakers_expected}" if speakers_expected else ""
+    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to AssemblyAI (speaker_labels=True{hint_msg})")
 
     transcript = await loop.run_in_executor(
         None,
@@ -449,7 +452,7 @@ async def diarize_transcript(
 
     # Build comma-separated label hint for the instruction line
     all_labels = [manager_label] + [n for n in (attendee_names or []) if n and n.lower() != manager_label.lower()]
-    label_hint = " / ".join(f"{l}:" for l in all_labels)
+    label_hint = " / ".join(f"{lbl}:" for lbl in all_labels)
 
     user_prompt = (
         f"Meeting type: {meeting_type}\n\n"

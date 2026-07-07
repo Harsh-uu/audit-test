@@ -72,6 +72,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
             {"$set": {"status": "transcribing", "updated_at": datetime.now(timezone.utc).isoformat()}}
         )
 
+        # Fetch meeting for attendee count (speaker hint) and metadata used later
+        meeting_doc = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
+        attendee_count = len((meeting_doc or {}).get("attendees", [])) or None
+
         # Get audio from storage
         from utils.storage import get_object
         audio_data, _ = get_object(audio_path)
@@ -87,7 +91,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         if assemblyai_key:
             try:
                 logger.info("Attempting AssemblyAI medical transcription + diarization")
-                transcript_text, numbered_speaker_text = await transcribe_with_assemblyai(audio_data)
+                # Pass attendee count as a speaker hint to improve diarization accuracy
+                transcript_text, numbered_speaker_text = await transcribe_with_assemblyai(
+                    audio_data, speakers_expected=attendee_count
+                )
             except Exception as aai_err:
                 logger.warning(f"AssemblyAI failed ({aai_err}), falling back to Whisper")
                 transcript_text = await transcribe_audio(audio_data)
