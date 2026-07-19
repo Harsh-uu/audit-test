@@ -111,6 +111,10 @@ export default function Layout({ children }) {
           </div>
           <main className="flex-1 overflow-y-auto">
             {children}
+            <footer className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+              <span>© {new Date().getFullYear()} Supervision2</span>
+              <a href="https://supervision2.co.uk/guide" target="_blank" rel="noopener noreferrer" className="text-[#1E3A8A] hover:underline font-medium">Free supervision guide</a>
+            </footer>
           </main>
         </div>
       </div>
@@ -370,6 +374,10 @@ export default function Layout({ children }) {
 
         <main className="flex-1 overflow-y-auto">
           {children}
+          <footer className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+            <span>© {new Date().getFullYear()} Supervision2</span>
+            <a href="https://supervision2.co.uk/guide" target="_blank" rel="noopener noreferrer" className="text-[#1E3A8A] hover:underline font-medium">Free supervision guide</a>
+          </footer>
         </main>
       </div>
 
