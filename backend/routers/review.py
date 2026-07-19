@@ -516,10 +516,12 @@ async def find_replace_transcript(
 @router.post("/{meeting_id}/rescan-evidence")
 async def rescan_evidence(
     meeting_id: str,
+    background_tasks: BackgroundTasks,
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """Re-run AI compliance mapping using the current (possibly edited) transcript.
+    Runs in the background to avoid gateway timeouts on large standard sets.
     Only regenerates CQC/Care Cert/Custom evidence mappings — preserves summary, actions, and risks."""
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can re-scan evidence")
@@ -527,7 +529,6 @@ async def rescan_evidence(
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-
     if not meeting.get("analysis_id"):
         raise HTTPException(status_code=400, detail="No analysis found — run initial processing first")
 
@@ -539,82 +540,116 @@ async def rescan_evidence(
     if not transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
 
-    # Use speaker_text (may contain manual text corrections) if available, else plain text
     transcript_text = transcript.get("speaker_text") or transcript.get("text", "")
     if not transcript_text.strip():
         raise HTTPException(status_code=400, detail="Transcript is empty")
 
-    # Load standards (same as initial processing)
-    cqc_standards = await db.standards_entries.find({"type": "cqc", "is_active": True}).to_list(50)
-    care_cert_standards = await db.standards_entries.find({"type": "care_cert", "is_active": True}).to_list(20)
+    # Mark as processing immediately so the frontend can show a spinner
+    await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id)},
+        {"$set": {"rescan_status": "processing"}}
+    )
 
-    custom_standards = []
-    meeting_org_id = meeting.get("org_id")
-    std_doc_query = {"is_active": True, "parse_status": "parsed"}
-    if meeting_org_id:
-        std_doc_query["org_id"] = meeting_org_id
-    async for doc in db.standards_documents.find(std_doc_query):
-        doc["id"] = str(doc["_id"])
-        custom_standards.append(doc)
+    background_tasks.add_task(
+        _run_rescan_background,
+        meeting_id, meeting, transcript_text, str(current_user["id"]), current_user["name"], db
+    )
 
-    # Load supervision template — org-scoped, with fallback to legacy global record
-    supervision_template = None
-    meeting_org_id = meeting.get("org_id")
-    tmpl_doc = await db.settings.find_one({"_id": f"supervision_template:{meeting_org_id}"}) if meeting_org_id else None
-    if not tmpl_doc:
-        tmpl_doc = await db.settings.find_one({"_id": "supervision_template"})
-    if tmpl_doc and tmpl_doc.get("steps"):
-        supervision_template = tmpl_doc
+    return {"status": "processing", "message": "Re-scanning evidence in the background — this takes 1–2 minutes. The page will update automatically."}
 
-    paused_periods = meeting.get("paused_periods", [])
 
+async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text: str, user_id: str, user_name: str, db):
+    """Background worker: re-runs AI compliance mapping and updates the analysis record."""
     from utils.ai import analyze_meeting as _analyze_meeting
-    analysis_result = await _analyze_meeting(
-        transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template
-    )
+    try:
+        meeting_org_id = meeting.get("org_id")
 
-    # Enrich CQC mappings with key_questions from standards data
-    cqc_kq_map = {s["reference"]: s.get("key_questions", []) for s in cqc_standards}
-    for item in analysis_result.get("cqc_mappings", []):
-        item.setdefault("status", "pending")
-        item.setdefault("edited_evidence_summary", None)
-        item.setdefault("notes", "")
-        if not item.get("key_questions"):
-            item["key_questions"] = cqc_kq_map.get(item.get("regulation_ref", ""), [])
-    for item in analysis_result.get("care_cert_mappings", []):
-        item.setdefault("status", "pending")
-        item.setdefault("edited_evidence_summary", None)
-        item.setdefault("notes", "")
-    for item in analysis_result.get("custom_mappings", []):
-        item.setdefault("status", "pending")
-        item.setdefault("edited_evidence_summary", None)
-        item.setdefault("notes", "")
+        # Load CQC standards from the system collection (includes QS + regulations)
+        cqc_standards = await db.standards.find({"type": "cqc", "is_active": True}).to_list(100)
+        care_cert_standards = await db.standards.find({"type": "care_cert", "is_active": True}).to_list(50)
 
-    now = datetime.now(timezone.utc).isoformat()
-    analysis_id = meeting["analysis_id"]
+        # Merge any user-managed custom library entries not already in the system set
+        system_refs = {s.get("reference") for s in cqc_standards}
+        async for doc in db.standards_entries.find({"type": "cqc", "is_active": True}):
+            if doc.get("reference") not in system_refs:
+                cqc_standards.append(doc)
+        cc_refs = {s.get("reference") for s in care_cert_standards}
+        async for doc in db.standards_entries.find({"type": "care_cert", "is_active": True}):
+            if doc.get("reference") not in cc_refs:
+                care_cert_standards.append(doc)
 
-    # Only overwrite compliance mappings — summary, edited_summary, actions, risks are preserved
-    await db.analyses.update_one(
-        {"_id": ObjectId(analysis_id)},
-        {"$set": {
-            "cqc_mappings": analysis_result.get("cqc_mappings", []),
-            "care_cert_mappings": analysis_result.get("care_cert_mappings", []),
-            "custom_mappings": analysis_result.get("custom_mappings", []),
-            "last_edited_at": now,
-            "last_edited_by": current_user["id"],
-            "rescanned_at": now,
-            "rescanned_by_name": current_user["name"],
-        }}
-    )
+        custom_standards = []
+        std_doc_query = {"is_active": True, "parse_status": "parsed"}
+        if meeting_org_id:
+            std_doc_query["org_id"] = meeting_org_id
+        async for doc in db.standards_documents.find(std_doc_query):
+            doc["id"] = str(doc["_id"])
+            custom_standards.append(doc)
 
-    await db.review_edits.insert_one({
-        "meeting_id": meeting_id,
-        "editor_id": current_user["id"],
-        "editor_name": current_user["name"],
-        "edit_type": "evidence_rescan",
-        "content": "Compliance evidence re-scanned from corrected transcript",
-        "created_at": now,
-    })
+        supervision_template = None
+        tmpl_doc = await db.settings.find_one({"_id": f"supervision_template:{meeting_org_id}"}) if meeting_org_id else None
+        if not tmpl_doc:
+            tmpl_doc = await db.settings.find_one({"_id": "supervision_template"})
+        if tmpl_doc and tmpl_doc.get("steps"):
+            supervision_template = tmpl_doc
+
+        paused_periods = meeting.get("paused_periods", [])
+
+        analysis_result = await _analyze_meeting(
+            transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template
+        )
+
+        cqc_kq_map = {s.get("reference"): s.get("key_questions", []) for s in cqc_standards}
+        for item in analysis_result.get("cqc_mappings", []):
+            item.setdefault("status", "pending")
+            item.setdefault("edited_evidence_summary", None)
+            item.setdefault("notes", "")
+            if not item.get("key_questions"):
+                item["key_questions"] = cqc_kq_map.get(item.get("regulation_ref", ""), [])
+        for item in analysis_result.get("care_cert_mappings", []):
+            item.setdefault("status", "pending")
+            item.setdefault("edited_evidence_summary", None)
+            item.setdefault("notes", "")
+        for item in analysis_result.get("custom_mappings", []):
+            item.setdefault("status", "pending")
+            item.setdefault("edited_evidence_summary", None)
+            item.setdefault("notes", "")
+
+        now = datetime.now(timezone.utc).isoformat()
+        analysis_id = meeting["analysis_id"]
+
+        await db.analyses.update_one(
+            {"_id": ObjectId(analysis_id)},
+            {"$set": {
+                "cqc_mappings": analysis_result.get("cqc_mappings", []),
+                "care_cert_mappings": analysis_result.get("care_cert_mappings", []),
+                "custom_mappings": analysis_result.get("custom_mappings", []),
+                "last_edited_at": now,
+                "last_edited_by": user_id,
+                "rescanned_at": now,
+                "rescanned_by_name": user_name,
+            }}
+        )
+        await db.meetings.update_one(
+            {"_id": ObjectId(meeting_id)},
+            {"$set": {"rescan_status": "done"}}
+        )
+        await db.review_edits.insert_one({
+            "meeting_id": meeting_id,
+            "editor_id": user_id,
+            "editor_name": user_name,
+            "edit_type": "evidence_rescan",
+            "content": "Compliance evidence re-scanned from corrected transcript",
+            "created_at": now,
+        })
+        logger.info(f"Rescan complete for meeting {meeting_id} — {len(analysis_result.get('cqc_mappings',[]))} CQC, {len(analysis_result.get('care_cert_mappings',[]))} CC mappings")
+
+    except Exception as e:
+        logger.error(f"Rescan failed for meeting {meeting_id}: {e}")
+        await db.meetings.update_one(
+            {"_id": ObjectId(meeting_id)},
+            {"$set": {"rescan_status": "failed"}}
+        )
 
     updated = await db.analyses.find_one({"_id": ObjectId(analysis_id)})
     if updated:
