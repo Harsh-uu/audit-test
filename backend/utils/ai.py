@@ -822,7 +822,7 @@ async def analyze_doc_for_evidence(
         f"- {s['reference']}: {s['name']}" +
         (f" [Key Questions: {', '.join(s.get('key_questions', []))}]" if s.get('key_questions') else "") +
         f" — {s.get('description', '')}"
-        for s in cqc_standards[:20]
+        for s in cqc_standards[:60]
     ])
 
     cc_lines = []
@@ -908,7 +908,7 @@ async def analyze_meeting(
         f"- {s['reference']}: {s['name']}" +
         (f" [Key Questions: {', '.join(s.get('key_questions', []))}]" if s.get('key_questions') else "") +
         f" — {s.get('description', '')}"
-        for s in cqc_standards[:20]
+        for s in cqc_standards[:60]
     ])
 
     # Care Certificate context — includes granular sub-outcomes for precise mapping
