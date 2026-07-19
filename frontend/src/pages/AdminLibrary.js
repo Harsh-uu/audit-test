@@ -205,7 +205,7 @@ export default function AdminLibrary() {
         <div className="border-b border-gray-200 mb-6">
           <TabBtn active={tab === "cqc"} onClick={() => setTab("cqc")}>
             <Shield className="inline w-3.5 h-3.5 mr-1.5" />
-            CQC Regulations ({cqcStandards.length})
+            CQC ({cqcStandards.length})
           </TabBtn>
           <TabBtn active={tab === "care_cert"} onClick={() => setTab("care_cert")}>
             <Award className="inline w-3.5 h-3.5 mr-1.5" />

@@ -128,12 +128,27 @@ async def reset_user_password(user_id: str, data: ResetPasswordRequest, db=Depen
 
 @router.get("/standards")
 async def list_standards(type: Optional[str] = None, db=Depends(get_db), current_user=Depends(get_current_user)):
-    query = {"is_active": True}
+    query: dict = {"is_active": True}
     if type:
         query["type"] = type
+
+    # User-managed entries (org library)
     standards = []
+    seen_refs: set = set()
     async for doc in db.standards_entries.find(query).sort([("type", 1), ("reference", 1)]):
-        standards.append(doc_to_dict(doc))
+        d = doc_to_dict(doc)
+        standards.append(d)
+        seen_refs.add(d.get("reference", ""))
+
+    # System-seeded standards (regulations + quality statements) — read-only in library
+    sys_query: dict = {"is_active": True}
+    if type:
+        sys_query["type"] = type
+    async for doc in db.standards.find(sys_query).sort([("key_questions", 1), ("reference", 1)]):
+        d = doc_to_dict(doc)
+        if d.get("reference", "") not in seen_refs:
+            d["system"] = True  # non-deletable flag used by the frontend
+            standards.append(d)
     return standards
 
 

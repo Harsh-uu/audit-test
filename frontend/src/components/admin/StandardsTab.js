@@ -81,14 +81,19 @@ export function StandardsTab({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {displayStandards.map(s => (
-              <tr key={s.id} className="hover:bg-gray-50 transition-colors" data-testid={`standard-row-${s.id}`}>
-                <td className="px-4 py-3 text-sm font-medium text-[#1E3A8A]">{s.reference}</td>
+              <tr key={s.id || s.reference} className="hover:bg-gray-50 transition-colors" data-testid={`standard-row-${s.id || s.reference}`}>
+                <td className="px-4 py-3 text-sm font-medium text-[#1E3A8A]">
+                  {s.reference}
+                  {s.system && <span className="ml-1.5 text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium">System</span>}
+                </td>
                 <td className="px-4 py-3 text-sm text-gray-900">{s.name}</td>
                 <td className="px-4 py-3 text-xs text-gray-500 hidden md:table-cell max-w-xs truncate">{s.description}</td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => handleDeleteStandard(s.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded" data-testid={`delete-standard-${s.id}`}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {!s.system && (
+                    <button onClick={() => handleDeleteStandard(s.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded" data-testid={`delete-standard-${s.id}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
