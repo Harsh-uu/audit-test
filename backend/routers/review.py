@@ -651,12 +651,6 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             {"$set": {"rescan_status": "failed"}}
         )
 
-    updated = await db.analyses.find_one({"_id": ObjectId(analysis_id)})
-    if updated:
-        updated["id"] = str(updated["_id"])
-        del updated["_id"]
-    return {"message": "Compliance evidence re-scanned successfully", "analysis": updated}
-
 
 @router.post("/{meeting_id}/regenerate-summary")
 async def regenerate_summary(

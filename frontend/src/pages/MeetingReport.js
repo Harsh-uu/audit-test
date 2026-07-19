@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
@@ -81,8 +81,10 @@ export default function MeetingReport() {
   const [showSignOffConfirm, setShowSignOffConfirm] = useState(false);
   const [speakersDirty, setSpeakersDirty] = useState(false);
   const [piiGateDone, setPiiGateDone] = useState(false);
+  const rescanInitiated = useRef(false);
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
+  const isRescanning = meeting?.rescan_status === "processing";
   const isInReview = meeting?.status === "in_review";
   const isReviewed = meeting?.status === "reviewed";
   const isSignedOff = ["signed_off", "shared"].includes(meeting?.status);
@@ -130,9 +132,21 @@ export default function MeetingReport() {
 
   useEffect(() => {
     fetchMeeting();
-    const interval = setInterval(() => { if (isProcessing) fetchMeeting(); }, 5000);
+    const interval = setInterval(() => { if (isProcessing || isRescanning) fetchMeeting(); }, 5000);
     return () => clearInterval(interval);
-  }, [fetchMeeting, isProcessing]);
+  }, [fetchMeeting, isProcessing, isRescanning]);
+
+  // Detect rescan completion and surface result as a toast
+  useEffect(() => {
+    if (!rescanInitiated.current) return;
+    if (meeting?.rescan_status === "done") {
+      rescanInitiated.current = false;
+      toast.success("Evidence re-scanned — compliance mappings updated.");
+    } else if (meeting?.rescan_status === "failed") {
+      rescanInitiated.current = false;
+      toast.error("Re-scan failed. Please try again or contact support.");
+    }
+  }, [meeting?.rescan_status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (activeTab === "audit" && auditTrail === null) fetchAuditTrail();
@@ -266,9 +280,21 @@ export default function MeetingReport() {
     }
     try {
       const { data } = await axios.post(`${API}/review/${meetingId}/rescan-evidence`, {}, getAuthConfig());
-      setMeeting(m => ({ ...m, analysis: data.analysis }));
-      if (data.analysis?.edited_summary || data.analysis?.summary) {
-        setSummaryText(data.analysis?.edited_summary || data.analysis?.summary || "");
+
+      if (data.status === "processing") {
+        // Background task started — mark locally so polling and completion toast fire
+        rescanInitiated.current = true;
+        setMeeting(m => ({ ...m, rescan_status: "processing" }));
+        toast.info("Re-scan started — evidence will update automatically in 1–2 minutes.");
+        return;
+      }
+
+      // Fallback: synchronous response (should not happen in normal flow)
+      if (data.analysis) {
+        setMeeting(m => ({ ...m, analysis: data.analysis }));
+        if (data.analysis?.edited_summary || data.analysis?.summary) {
+          setSummaryText(data.analysis?.edited_summary || data.analysis?.summary || "");
+        }
       }
       toast.success("Compliance evidence re-scanned successfully");
     } catch (err) {

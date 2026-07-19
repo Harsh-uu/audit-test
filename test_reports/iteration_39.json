@@ -1,0 +1,25 @@
+{
+  "summary": "Tested the rescan-evidence background task fix. All acceptance criteria passed: API returns 200 immediately with status='processing', DB gets rescan_status='processing' instantly, background task completes in ~47s setting rescan_status='done', frontend shows correct toast and button returns to normal. Report page regression checks also passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_rescan_evidence.py",
+    "/app/test_reports/pytest/rescan_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": ["/app/backend/tests/test_rescan_evidence.py"],
+  "success_rate": {"backend": "100% (5/5 tests, 1 skipped - Steve account not configured)", "frontend": "100%"},
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Rescan-evidence fix fully verified. Key meeting: jane@sunrisecare.com, meeting ID 6a46da6d1936c45e856ce791 (signed_off with transcript). Backend tests in /app/backend/tests/test_rescan_evidence.py. Background task completes in ~47s. Frontend toast: 'Re-scan started — evidence will update automatically in 1–2 minutes.' Success toast 'Evidence re-scanned — compliance mappings updated.' fires when polling detects rescan_status='done'.",
+  "test_credentials": "jane@sunrisecare.com / Jane1two1! (manager, Sunrise Care Ltd)"
+}
