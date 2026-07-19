@@ -206,7 +206,7 @@ export default function Login() {
 
         </div>
       </div>
-      <footer className="absolute bottom-0 w-full py-3 flex justify-center text-xs text-gray-400">
+      <footer className="absolute bottom-0 right-0 py-3 pr-6 text-xs">
         <a href="https://supervision2.co.uk/guide" target="_blank" rel="noopener noreferrer" className="text-[#1E3A8A] hover:underline font-medium">Free supervision guide</a>
       </footer>
     </div>
