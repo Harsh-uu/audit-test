@@ -495,7 +495,7 @@ async def carry_forward_missed(
 
     coverage = prep_record.get("coverage_results", {})
     if not coverage:
-        raise HTTPException(status_code=400, detail="Coverage check not complete yet — please wait and try again")
+        raise HTTPException(status_code=400, detail="Coverage check hasn't run yet — process the meeting first, then try again")
 
     # Collect missed questions
     missed = []

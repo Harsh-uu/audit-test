@@ -459,9 +459,10 @@ export default function RecordingScreen() {
         {/* Session Guide — shows Prep Agenda if available, else static template */}
         {(prep || (template && template.steps?.length > 0)) && (
           <div className="mb-5 bg-indigo-50 border border-indigo-200 rounded-lg overflow-hidden" data-testid="session-guide">
-            <button
+            {/* Header: title + progress + toggle */}
+            <div
               onClick={() => setGuideOpen(o => !o)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left"
+              className="w-full flex items-center justify-between px-4 py-3 cursor-pointer select-none"
             >
               <div className="flex items-center gap-2">
                 {prep && prepMode ? <Sparkles className="w-4 h-4 text-indigo-600" /> : <BookOpen className="w-4 h-4 text-indigo-600" />}
