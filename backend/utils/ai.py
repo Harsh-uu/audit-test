@@ -1143,3 +1143,65 @@ Remember: all questions must be open-ended and behavioural. Use the specific con
             "sections": [{"section_id": s["id"], "label": s["label"], "questions": []} for s in PREP_SECTIONS],
             "gen_status": "failed",
         }
+
+
+async def check_prep_coverage(transcript_text: str, questions: list) -> dict:
+    """After transcription, classify each prep question as covered / partial / missed.
+
+    questions: list of {"id": str, "text": str}
+    Returns: {"results": {question_id: {"status": "covered"|"partial"|"missed", "evidence": str}}, "checked_at": str}
+    """
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        return {"results": {}, "checked_at": None}
+    if not questions or not transcript_text:
+        return {"results": {}, "checked_at": None}
+
+    questions_list = "\n".join([f'  Q{i+1} (id={q["id"]}): {q["text"]}' for i, q in enumerate(questions[:20])])
+
+    system_prompt = """You are an expert supervision quality assessor. 
+You will be given a supervision meeting transcript and a list of preparation questions.
+For each question, assess how thoroughly it was discussed:
+- "covered": clearly and substantively discussed
+- "partial": mentioned but not fully explored
+- "missed": not discussed at all
+
+Return ONLY valid JSON in this format:
+{
+  "results": {
+    "<question_id>": {"status": "covered"|"partial"|"missed", "evidence": "<short quote or phrase from transcript, or empty string if missed>"}
+  }
+}"""
+
+    user_prompt = f"""PREP QUESTIONS:
+{questions_list}
+
+TRANSCRIPT (first 6000 chars):
+{transcript_text[:6000]}
+
+Assess each question's coverage in the transcript. Return JSON only."""
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"cov_{uuid.uuid4().hex[:8]}",
+            system_message=system_prompt,
+        ).with_model("openai", "gpt-4o")
+
+        response = await chat.send_message(UserMessage(text=user_prompt))
+        full_response = response.text.strip() if hasattr(response, "text") else str(response)
+
+        if "```" in full_response:
+            import re as _re
+            m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", full_response)
+            if m:
+                full_response = m.group(1).strip()
+
+        data = json.loads(full_response)
+        return {
+            "results": data.get("results", {}),
+            "checked_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        logger.error(f"Coverage check failed: {exc}")
+        return {"results": {}, "checked_at": None}

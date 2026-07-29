@@ -759,9 +759,16 @@ const SECTION_COLORS = {
   aob:                  "text-gray-600 bg-gray-50",
 };
 
+const COVERAGE_CONFIG = {
+  covered: { label: "Covered",  cls: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500" },
+  partial: { label: "Partial",  cls: "bg-amber-100 text-amber-700",    dot: "bg-amber-400" },
+  missed:  { label: "Missed",   cls: "bg-red-100 text-red-600",        dot: "bg-red-500" },
+};
+
 function PrepAgendaTab({ meetingId, API, getAuthConfig, role, navigate }) {
   const [prep, setPrep] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const [carryingForward, setCarryingForward] = React.useState(false);
 
   React.useEffect(() => {
     axios.get(`${API}/prep/${meetingId}`, getAuthConfig())
@@ -791,17 +798,83 @@ function PrepAgendaTab({ meetingId, API, getAuthConfig, role, navigate }) {
     );
   }
 
+  const coverage = prep.coverage_results || {};
+  const hasCoverage = Object.keys(coverage).length > 0;
+  const missedQuestions = [];
+
+  if (hasCoverage) {
+    prep.sections?.forEach(section => {
+      section.questions?.forEach(q => {
+        if (q.included !== false && coverage[q.id]?.status === "missed") {
+          missedQuestions.push({ ...q, section_label: section.label });
+        }
+      });
+    });
+  }
+
+  const handleCarryForward = async () => {
+    if (!missedQuestions.length) return;
+    setCarryingForward(true);
+    try {
+      // Convert each missed question to an action via the review endpoint
+      await axios.post(`${API}/prep/${meetingId}/carry-forward-missed`, {}, getAuthConfig());
+      toast.success(`${missedQuestions.length} missed question${missedQuestions.length > 1 ? "s" : ""} added as actions.`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to carry forward");
+    } finally { setCarryingForward(false); }
+  };
+
   return (
     <div className="space-y-4">
-      {prep.focus_topic && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-          <span className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Focus:</span>
-          <span className="text-sm text-indigo-800">{prep.focus_topic}</span>
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {prep.focus_topic && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200">
+              <span className="text-xs font-semibold text-indigo-700">Focus:</span>
+              <span className="text-sm text-indigo-800">{prep.focus_topic}</span>
+            </div>
+          )}
+          {hasCoverage && (
+            <div className="flex items-center gap-2 text-xs">
+              {["covered","partial","missed"].map(s => {
+                const count = Object.values(coverage).filter(r => r.status === s).length;
+                if (!count) return null;
+                const cfg = COVERAGE_CONFIG[s];
+                return <span key={s} className={`px-2 py-0.5 rounded-full font-medium ${cfg.cls}`}>{count} {cfg.label}</span>;
+              })}
+            </div>
+          )}
+        </div>
+        {(role === "manager" || role === "admin") && (
+          <button onClick={() => navigate(`/meetings/${meetingId}/prepare`)} className="text-xs text-indigo-600 hover:underline">
+            Edit prep →
+          </button>
+        )}
+      </div>
+
+      {/* Missed questions carry-forward banner */}
+      {hasCoverage && missedQuestions.length > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+          <span className="text-xs text-amber-800 flex-1">
+            <strong>{missedQuestions.length} question{missedQuestions.length > 1 ? "s" : ""}</strong> weren't covered in this session.
+          </span>
+          <button
+            onClick={handleCarryForward}
+            disabled={carryingForward}
+            className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-60 transition-colors"
+            data-testid="carry-forward-btn"
+          >
+            {carryingForward ? "Adding…" : "Carry forward as actions"}
+          </button>
         </div>
       )}
-      {!prep.shared_with_attendees && (role === "attendee") && (
-        <p className="text-xs text-gray-400 italic">The prep agenda hasn't been shared yet.</p>
+
+      {!prep.shared_with_attendees && role === "attendee" && (
+        <p className="text-xs text-gray-400 italic">The prep agenda hasn't been shared with you yet.</p>
       )}
+
+      {/* Sections */}
       {prep.sections.map(section => {
         const included = (section.questions || []).filter(q => q.included !== false);
         if (!included.length) return null;
@@ -809,25 +882,32 @@ function PrepAgendaTab({ meetingId, API, getAuthConfig, role, navigate }) {
         return (
           <div key={section.section_id} className="space-y-2">
             <h3 className={`text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded-md inline-block ${colorCls}`}>{section.label}</h3>
-            <ul className="space-y-1.5 pl-1">
-              {included.map(q => (
-                <li key={q.id} className="flex items-start gap-2 text-sm text-gray-700">
-                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0" />
-                  {q.text}
-                </li>
-              ))}
+            <ul className="space-y-2 pl-1">
+              {included.map(q => {
+                const cov = coverage[q.id];
+                const cfg = cov ? COVERAGE_CONFIG[cov.status] : null;
+                return (
+                  <li key={q.id} className="flex items-start gap-2.5">
+                    {cfg && (
+                      <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} title={cfg.label} />
+                    )}
+                    {!cfg && <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-300 flex-shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-700 leading-relaxed">{q.text}</p>
+                      {cov?.evidence && (
+                        <p className="text-xs text-gray-400 italic mt-0.5">"{cov.evidence}"</p>
+                      )}
+                    </div>
+                    {cfg && (
+                      <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${cfg.cls}`}>{cfg.label}</span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         );
       })}
-      {(role === "manager" || role === "admin") && (
-        <button
-          onClick={() => navigate(`/meetings/${meetingId}/prepare`)}
-          className="mt-2 text-xs text-indigo-600 hover:underline"
-        >
-          Edit prep agenda →
-        </button>
-      )}
     </div>
   );
 }

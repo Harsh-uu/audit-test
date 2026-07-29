@@ -101,8 +101,10 @@ export default function RecordingScreen() {
   const [checkingBackup, setCheckingBackup] = useState(false);
   const [inIframe, setInIframe] = useState(false);
   const [template, setTemplate] = useState(null);
+  const [prep, setPrep] = useState(null);
   const [completedSteps, setCompletedSteps] = useState({});
   const [guideOpen, setGuideOpen] = useState(() => window.innerWidth >= 768);
+  const [prepMode, setPrepMode] = useState(true); // true = show prep agenda, false = static template
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
@@ -115,6 +117,10 @@ export default function RecordingScreen() {
     setInIframe(isInIframe());
     axios.get(`${API}/admin/template`, getAuthConfig())
       .then(r => { if (r.data?.steps?.length > 0) setTemplate(r.data); })
+      .catch(() => {});
+    // Load prep agenda if it exists
+    axios.get(`${API}/prep/${meetingId}`, getAuthConfig())
+      .then(r => { if (r.data?.sections?.length > 0) setPrep(r.data); })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -450,41 +456,96 @@ export default function RecordingScreen() {
           </div>
         )}
 
-        {/* Session Guide (from org supervision template) */}
-        {template && template.steps?.length > 0 && (
+        {/* Session Guide — shows Prep Agenda if available, else static template */}
+        {(prep || (template && template.steps?.length > 0)) && (
           <div className="mb-5 bg-indigo-50 border border-indigo-200 rounded-lg overflow-hidden" data-testid="session-guide">
             <button
               onClick={() => setGuideOpen(o => !o)}
               className="w-full flex items-center justify-between px-4 py-3 text-left"
             >
               <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-indigo-600" />
-                <span className="text-sm font-semibold text-indigo-800">{template.name || "Session Guide"}</span>
+                {prep && prepMode ? <Sparkles className="w-4 h-4 text-indigo-600" /> : <BookOpen className="w-4 h-4 text-indigo-600" />}
+                <span className="text-sm font-semibold text-indigo-800">
+                  {prep && prepMode ? "Prep Agenda" : (template?.name || "Session Guide")}
+                </span>
                 <span className="text-xs text-indigo-500">
-                  {Object.values(completedSteps).filter(Boolean).length}/{template.steps.length} covered
+                  {prep && prepMode
+                    ? `${Object.values(completedSteps).filter(Boolean).length}/${prep.sections.reduce((n, s) => n + s.questions.filter(q => q.included !== false).length, 0)} covered`
+                    : `${Object.values(completedSteps).filter(Boolean).length}/${template?.steps?.length || 0} covered`
+                  }
                 </span>
               </div>
-              {guideOpen ? <ChevronUp className="w-4 h-4 text-indigo-500" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
+              <div className="flex items-center gap-2">
+                {/* Toggle between prep and template if both exist */}
+                {prep && template?.steps?.length > 0 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setPrepMode(m => !m); }}
+                    className="text-xs text-indigo-500 hover:text-indigo-700 border border-indigo-300 rounded px-2 py-0.5"
+                  >
+                    {prepMode ? "Template" : "Prep Agenda"}
+                  </button>
+                )}
+                {guideOpen ? <ChevronUp className="w-4 h-4 text-indigo-500" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
+              </div>
             </button>
+
             {guideOpen && (
-              <div className="border-t border-indigo-100 px-4 py-3 space-y-2">
-                {template.description && <p className="text-xs text-indigo-600 mb-3">{template.description}</p>}
-                {template.steps.map((step, i) => (
-                  <label key={step.id || i} className="flex items-start gap-3 cursor-pointer group" data-testid={`guide-step-${i}`}>
-                    <div
-                      onClick={() => setCompletedSteps(cs => ({ ...cs, [step.id || i]: !cs[step.id || i] }))}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${completedSteps[step.id || i] ? "bg-indigo-600 border-indigo-600 text-white" : "border-indigo-300 group-hover:border-indigo-500"}`}
-                    >
-                      {completedSteps[step.id || i] && <CheckSquare className="w-3.5 h-3.5" />}
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-sm font-medium transition-colors ${completedSteps[step.id || i] ? "line-through text-indigo-400" : "text-indigo-900"}`}>
-                        {i + 1}. {step.title}
+              <div className="border-t border-indigo-100 px-4 py-3 space-y-3">
+                {/* Prep Agenda view */}
+                {prep && prepMode && (
+                  <>
+                    {prep.focus_topic && (
+                      <p className="text-xs font-medium text-indigo-700 bg-indigo-100 px-2.5 py-1.5 rounded-lg">
+                        Focus: {prep.focus_topic}
                       </p>
-                      {step.description && <p className="text-xs text-indigo-500 mt-0.5">{step.description}</p>}
-                    </div>
-                  </label>
-                ))}
+                    )}
+                    {prep.sections.map((section) => {
+                      const includedQs = section.questions.filter(q => q.included !== false);
+                      if (!includedQs.length) return null;
+                      return (
+                        <div key={section.section_id} className="space-y-1.5">
+                          <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">{section.label}</p>
+                          {includedQs.map((q) => (
+                            <label key={q.id} className="flex items-start gap-3 cursor-pointer group" data-testid={`prep-q-${q.id}`}>
+                              <div
+                                onClick={() => setCompletedSteps(cs => ({ ...cs, [q.id]: !cs[q.id] }))}
+                                className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${completedSteps[q.id] ? "bg-indigo-600 border-indigo-600 text-white" : "border-indigo-300 group-hover:border-indigo-500"}`}
+                              >
+                                {completedSteps[q.id] && <CheckSquare className="w-3.5 h-3.5" />}
+                              </div>
+                              <p className={`text-sm leading-snug transition-colors ${completedSteps[q.id] ? "line-through text-indigo-400" : "text-indigo-900"}`}>
+                                {q.text}
+                              </p>
+                            </label>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* Static template view */}
+                {(!prep || !prepMode) && template?.steps?.length > 0 && (
+                  <>
+                    {template.description && <p className="text-xs text-indigo-600 mb-3">{template.description}</p>}
+                    {template.steps.map((step, i) => (
+                      <label key={step.id || i} className="flex items-start gap-3 cursor-pointer group" data-testid={`guide-step-${i}`}>
+                        <div
+                          onClick={() => setCompletedSteps(cs => ({ ...cs, [step.id || i]: !cs[step.id || i] }))}
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${completedSteps[step.id || i] ? "bg-indigo-600 border-indigo-600 text-white" : "border-indigo-300 group-hover:border-indigo-500"}`}
+                        >
+                          {completedSteps[step.id || i] && <CheckSquare className="w-3.5 h-3.5" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-sm font-medium transition-colors ${completedSteps[step.id || i] ? "line-through text-indigo-400" : "text-indigo-900"}`}>
+                            {i + 1}. {step.title}
+                          </p>
+                          {step.description && <p className="text-xs text-indigo-500 mt-0.5">{step.description}</p>}
+                        </div>
+                      </label>
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -472,3 +472,57 @@ async def share_prep(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="No prep found — generate questions first")
     return {"message": "Prep shared with attendees"}
+
+
+@router.post("/{meeting_id}/carry-forward-missed")
+async def carry_forward_missed(
+    meeting_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Convert all missed prep questions into actions on the meeting analysis."""
+    if current_user["role"] not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
+
+    meeting = await _get_meeting_guarded(meeting_id, current_user, db)
+    analysis_id = meeting.get("analysis_id")
+    if not analysis_id:
+        raise HTTPException(status_code=400, detail="No analysis found for this meeting")
+
+    prep_record = await db.meeting_prep.find_one({"meeting_id": meeting_id})
+    if not prep_record:
+        raise HTTPException(status_code=404, detail="No prep found")
+
+    coverage = prep_record.get("coverage_results", {})
+    if not coverage:
+        raise HTTPException(status_code=400, detail="Coverage check not complete yet — please wait and try again")
+
+    # Collect missed questions
+    missed = []
+    for section in prep_record.get("sections", []):
+        for q in section.get("questions", []):
+            if q.get("included", True) and coverage.get(q["id"], {}).get("status") == "missed":
+                missed.append({
+                    "id": f"cf_{q['id']}",
+                    "text": q["text"],
+                    "action": f"[Carry forward] {q['text']}",
+                    "assigned_to": None,
+                    "due_date": None,
+                    "completed": False,
+                    "completed_at": None,
+                    "source": "carry_forward_prep",
+                })
+
+    if not missed:
+        return {"message": "No missed questions to carry forward"}
+
+    analysis = await db.analyses.find_one({"_id": _oid(analysis_id)})
+    existing_actions = analysis.get("actions", [])
+    existing_ids = {a.get("id") for a in existing_actions}
+    new_actions = [a for a in missed if a["id"] not in existing_ids]
+
+    await db.analyses.update_one(
+        {"_id": _oid(analysis_id)},
+        {"$push": {"actions": {"$each": new_actions}}}
+    )
+    return {"message": f"{len(new_actions)} action(s) added", "added": len(new_actions)}

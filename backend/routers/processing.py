@@ -270,6 +270,27 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         )
         logger.info(f"Analysis complete for meeting {meeting_id}")
 
+        # Phase 4: run prep coverage check if a prep agenda exists for this meeting
+        try:
+            prep_record = await db.meeting_prep.find_one({"meeting_id": meeting_id})
+            if prep_record and prep_record.get("sections"):
+                from utils.ai import check_prep_coverage
+                # Collect all included questions across all sections
+                all_questions = []
+                for section in prep_record["sections"]:
+                    for q in section.get("questions", []):
+                        if q.get("included", True) and q.get("text"):
+                            all_questions.append({"id": q["id"], "text": q["text"]})
+                if all_questions:
+                    coverage = await check_prep_coverage(transcript_text, all_questions)
+                    await db.meeting_prep.update_one(
+                        {"meeting_id": meeting_id},
+                        {"$set": {"coverage_results": coverage.get("results", {}), "coverage_checked_at": coverage.get("checked_at")}}
+                    )
+                    logger.info(f"Prep coverage check saved for meeting {meeting_id}: {len(coverage.get('results', {}))} questions assessed")
+        except Exception as cov_exc:
+            logger.warning(f"Prep coverage check non-fatal failure for {meeting_id}: {cov_exc}")
+
     except Exception as e:
         logger.error(f"Processing failed for meeting {meeting_id}: {e}")
         await db.meetings.update_one(
