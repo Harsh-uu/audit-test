@@ -3,13 +3,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, ChevronRight } from "lucide-react";
+import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, ChevronRight, Sparkles } from "lucide-react";
 
 export default function NewMeeting() {
   const { getAuthConfig, API } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState(1); // 1: details, 2: attendees + manager
+  const [step, setStep] = useState(1); // 1: details, 2: attendees + manager, 3: prepare (redirect)
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -61,7 +61,7 @@ export default function NewMeeting() {
     setError("");
     try {
       const { data } = await axios.post(`${API}/meetings/`, form, getAuthConfig());
-      navigate(`/meetings/${data.id}/record`);
+      navigate(`/meetings/${data.id}/prepare?from=new`);
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to create meeting");
       setLoading(false);
@@ -80,14 +80,18 @@ export default function NewMeeting() {
         <p className="text-sm text-gray-500 mb-6">Set up your supervision meeting before recording</p>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-3 mb-8">
-          {[1, 2].map(s => (
-            <React.Fragment key={s}>
-              <div className={`flex items-center gap-2 text-sm font-medium ${step >= s ? "text-[#1E3A8A]" : "text-gray-400"}`}>
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${step >= s ? "bg-[#1E3A8A] text-white" : "bg-gray-200 text-gray-500"}`}>{s}</div>
-                <span>{s === 1 ? "Meeting Details" : "Attendees & Manager"}</span>
+        <div className="flex items-center gap-2 mb-8 flex-wrap">
+          {[
+            { n: 1, label: "Meeting Details" },
+            { n: 2, label: "Attendees & Manager" },
+            { n: 3, label: "Prepare", icon: <Sparkles className="w-3 h-3 inline mr-0.5" /> },
+          ].map(({ n, label, icon }) => (
+            <React.Fragment key={n}>
+              <div className={`flex items-center gap-2 text-sm font-medium ${step >= n ? "text-[#1E3A8A]" : "text-gray-400"}`}>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${step >= n ? "bg-[#1E3A8A] text-white" : "bg-gray-200 text-gray-500"}`}>{n}</div>
+                <span>{icon}{label}</span>
               </div>
-              {s < 2 && <ChevronRight className="w-4 h-4 text-gray-300" />}
+              {n < 3 && <ChevronRight className="w-4 h-4 text-gray-300" />}
             </React.Fragment>
           ))}
         </div>
@@ -253,7 +257,8 @@ export default function NewMeeting() {
                 data-testid="create-meeting-btn"
               >
                 {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></div>}
-                Create Meeting &amp; Record
+                <Sparkles className="w-4 h-4" />
+                Continue to Prepare
               </button>
             </div>
           </div>

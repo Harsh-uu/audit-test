@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import {
   Sparkles, ChevronDown, ChevronUp, Plus, Trash2, Edit2,
   Check, X, Share2, ArrowLeft, RefreshCw, BookOpen,
-  FileText, Users, Building2, Target, Loader, Eye, EyeOff,
+  FileText, Users, Building2, Target, Loader, Eye, EyeOff, ChevronRight, Mic,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -209,6 +209,8 @@ function SourceCard({ source, included, onToggle }) {
 export default function MeetingPrep() {
   const { meetingId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromNew = searchParams.get("from") === "new"; // came from New Meeting wizard step 3
   const { API, getAuthConfig, user } = useAuth();
 
   const [meeting, setMeeting] = useState(null);
@@ -301,7 +303,7 @@ export default function MeetingPrep() {
     }
   };
 
-  const handleSave = async (share = false) => {
+  const handleSave = async (share = false, goRecord = false) => {
     setSaving(true);
     try {
       await axios.put(`${API}/prep/${meetingId}`, {
@@ -321,6 +323,7 @@ export default function MeetingPrep() {
       } else {
         toast.success("Prep saved.");
       }
+      if (goRecord) navigate(`/meetings/${meetingId}/record`);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Save failed");
     } finally { setSaving(false); }
@@ -344,14 +347,27 @@ export default function MeetingPrep() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      {/* Step breadcrumb when coming from New Meeting wizard */}
+      {fromNew && (
+        <div className="flex items-center gap-2 text-sm mb-2">
+          <span className="text-gray-400 flex items-center gap-1"><span className="w-5 h-5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-xs font-semibold">1</span> Meeting Details</span>
+          <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+          <span className="text-gray-400 flex items-center gap-1"><span className="w-5 h-5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-xs font-semibold">2</span> Attendees & Manager</span>
+          <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+          <span className="text-[#1E3A8A] font-semibold flex items-center gap-1"><span className="w-5 h-5 rounded-full bg-[#1E3A8A] text-white flex items-center justify-center text-xs font-semibold">3</span> <Sparkles className="w-3 h-3 text-indigo-600" /> Prepare</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start gap-4">
-        <button
-          onClick={() => navigate(-1)}
-          className="mt-1 p-2 rounded-lg border hover:bg-gray-50 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4 text-gray-600" />
-        </button>
+        {!fromNew && (
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-1 p-2 rounded-lg border hover:bg-gray-50 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 text-gray-600" />
+          </button>
+        )}
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-0.5">
             <Sparkles className="w-5 h-5 text-indigo-600" />
@@ -477,26 +493,62 @@ export default function MeetingPrep() {
           })}
 
           {sections.length > 0 && (
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center gap-3 pt-2 flex-wrap">
+              {fromNew ? (
+                <>
+                  <button
+                    onClick={() => handleSave(false, true)}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
+                    data-testid="save-and-record-btn"
+                  >
+                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                    Save Prep & Start Recording
+                  </button>
+                  <button
+                    onClick={() => navigate(`/meetings/${meetingId}/record`)}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors"
+                    data-testid="skip-prep-btn"
+                  >
+                    Skip — go straight to recording
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleSave(false)}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#1E3A8A] text-[#1E3A8A] rounded-xl font-medium text-sm hover:bg-indigo-50 transition-colors"
+                    data-testid="save-prep-btn"
+                  >
+                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Save for myself
+                  </button>
+                  <button
+                    onClick={() => handleSave(true)}
+                    disabled={saving || prep?.shared_with_attendees}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] disabled:opacity-60 transition-colors"
+                    data-testid="share-prep-btn"
+                  >
+                    {prep?.shared_with_attendees
+                      ? <><Eye className="w-4 h-4" /> Shared with {superviseeNames}</>
+                      : <><Share2 className="w-4 h-4" /> Share with supervisee</>
+                    }
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* fromNew footer — always visible for skip option even before generating */}
+          {fromNew && sections.length === 0 && !generating && (
+            <div className="pt-2 flex items-center gap-3">
               <button
-                onClick={() => handleSave(false)}
-                disabled={saving}
-                className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#1E3A8A] text-[#1E3A8A] rounded-xl font-medium text-sm hover:bg-indigo-50 transition-colors"
-                data-testid="save-prep-btn"
+                onClick={() => navigate(`/meetings/${meetingId}/record`)}
+                className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors"
+                data-testid="skip-prep-btn-empty"
               >
-                {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                Save for myself
-              </button>
-              <button
-                onClick={() => handleSave(true)}
-                disabled={saving || prep?.shared_with_attendees}
-                className="flex items-center gap-2 px-4 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] disabled:opacity-60 transition-colors"
-                data-testid="share-prep-btn"
-              >
-                {prep?.shared_with_attendees
-                  ? <><Eye className="w-4 h-4" /> Shared with {superviseeNames}</>
-                  : <><Share2 className="w-4 h-4" /> Share with supervisee</>
-                }
+                Skip prep — go straight to recording
               </button>
             </div>
           )}
