@@ -1038,7 +1038,7 @@ async def generate_prep_questions(
     if previous_meeting_summaries:
         parts = []
         for m in previous_meeting_summaries[:3]:
-            part = f"Meeting '{m.get('title', '?')}' ({m.get('date', '?')}):\n  Summary: {m.get('summary', '')[:400]}"
+            part = f"Meeting '{m.get('title', '?')}' ({m.get('date', '?')}):\n  Summary: {m.get('summary', '')[:600]}"
             actions = m.get("actions", [])
             if actions:
                 incomplete = [a.get("text", a.get("action", "")) for a in actions if not a.get("completed")]
@@ -1051,39 +1051,53 @@ async def generate_prep_questions(
     if uploaded_docs:
         parts = []
         for d in uploaded_docs[:6]:
-            parts.append(f"[{d.get('doc_type','Document').replace('_',' ').title()}] {d.get('label','')}:\n{d.get('content_snippet','')[:600]}")
-        docs_context = "UPLOADED DOCUMENTS:\n" + "\n\n".join(parts)
+            content = d.get('content_snippet', '').strip()
+            if content:
+                parts.append(
+                    f"[{d.get('doc_type','Document').replace('_',' ').title()}] \"{d.get('label','')}\"\n{content[:2500]}"
+                )
+        if parts:
+            docs_context = "UPLOADED DOCUMENTS (read carefully — questions MUST reference specific content from these):\n\n" + "\n\n---\n\n".join(parts)
 
     values_context = ""
     if org_values_snippets:
-        parts = [f"- {v.get('name','')}: {v.get('snippet','')[:300]}" for v in org_values_snippets[:4]]
+        parts = [f"- {v.get('name','')}: {v.get('snippet','')[:400]}" for v in org_values_snippets[:4]]
         values_context = "ORGANISATIONAL VALUES / STANDARDS:\n" + "\n".join(parts)
 
-    focus_line = f"THIS MONTH'S FOCUS TOPIC: {focus_topic}" if focus_topic else ""
+    focus_line = f"THIS SESSION'S FOCUS TOPIC: {focus_topic}" if focus_topic else ""
+
+    has_docs = bool(uploaded_docs and any(d.get("content_snippet", "").strip() for d in uploaded_docs))
+    has_prev = bool(previous_meeting_summaries)
 
     sections_spec = "\n".join([f'  "{s["id"]}": "{s["label"]}"' for s in PREP_SECTIONS])
 
-    system_prompt = f"""You are an expert UK adult social care supervision facilitator. 
-Your task is to generate personalised, open-ended supervision preparation questions for a manager 
+    system_prompt = f"""You are an expert UK adult social care supervision facilitator.
+Your task is to generate HIGHLY PERSONALISED, open-ended supervision preparation questions for a manager 
 to use in a one-to-one supervision session with {supervisee_name}.
 
-CRITICAL RULES FOR QUESTIONS:
+MANDATORY RULES — VIOLATION OF ANY RULE MAKES THE OUTPUT USELESS:
+
 1. NEVER write a question that can be answered with yes or no.
-2. Always use behavioural/reflective phrasing: 
+
+2. USE BEHAVIOURAL/REFLECTIVE PHRASING ONLY:
    - "Walk me through a time when..."
    - "Give me a specific example of how you..."
    - "Tell me about a situation where..."
    - "Describe how you approached..."
    - "What did you do when..."
-   - "How have you demonstrated..."
-3. Ground questions in the actual context provided (previous meetings, documents, values).
-4. Keep questions concise and conversational — a manager can read them naturally.
-5. Generate 2-3 questions per section. The AOB section should have 1-2 open prompts.
+
+3. {"EVERY question MUST directly reference specific content, responsibilities, incidents, or themes from the uploaded documents provided. If the job description lists a specific responsibility, ask about it by name. If an incident report describes an event, follow up on it specifically. Do NOT write questions that could apply to any staff member — they must only make sense for someone whose documents you have read." if has_docs else "Use the focus topic and context to make questions as specific as possible."}
+
+4. {"Follow up on outstanding actions and themes from the previous supervision notes. Do not ignore them." if has_prev else "Use the focus topic to frame questions."}
+
+5. Make questions feel like a natural, caring conversation — not a performance review interrogation.
+
+6. Generate 2 questions per section. AOB section: 1 open prompt.
 
 SECTIONS TO POPULATE:
 {sections_spec}
 
-Return ONLY valid JSON in this exact structure:
+Return ONLY valid JSON — no commentary, no markdown fences:
 {{
   "sections": [
     {{
@@ -1106,7 +1120,8 @@ Return ONLY valid JSON in this exact structure:
 
 {values_context}
 
-Remember: all questions must be open-ended and behavioural. Use the specific context above to make them relevant and personalised to {supervisee_name}."""
+REMINDER: {"Reference the specific documents above in your questions — mention actual responsibilities, incidents or themes from those documents. Generic questions that could apply to any care worker are NOT acceptable." if has_docs else "Make questions specific to the focus topic and any context provided."}
+Questions must be open-ended and behavioural. Generate them now."""
 
     chat = LlmChat(
         api_key=api_key,

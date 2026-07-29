@@ -224,6 +224,7 @@ async def get_prep_context(
     async for doc in db.supervision_uploads.find(
         {"staff_id": {"$in": supervisee_ids}, "status": {"$in": ["text_ready", "done"]}}
     ).sort("meeting_date", -1).limit(10):
+        content = doc.get("full_text") or doc.get("extracted_text_preview") or ""
         sources.append({
             "source_id": str(doc["_id"]),
             "source_type": "doc_upload",
@@ -232,7 +233,7 @@ async def get_prep_context(
             "date": doc.get("meeting_date", ""),
             "status": doc.get("status", "done"),
             "included": True,
-            "content_snippet": (doc.get("full_text") or "")[:800],
+            "content_snippet": content[:800],
         })
 
     # 3. Org-level standards documents (values, objectives, etc.)
@@ -327,16 +328,18 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
                     "actions": (analysis.get("actions", []) if analysis else [])[:8],
                 })
 
-        # Uploaded docs
+        # Uploaded docs — include text_ready too (text extracted, AI mapping may still be running)
         uploaded_docs = []
         async for doc in db.supervision_uploads.find(
-            {"staff_id": {"$in": supervisee_ids}, "status": "done"}
+            {"staff_id": {"$in": supervisee_ids}, "status": {"$in": ["text_ready", "done"]}}
         ).sort("meeting_date", -1).limit(6):
             if str(doc["_id"]) in included_source_ids or not included_source_ids:
+                # full_text for newer docs, fall back to extracted_text_preview for legacy
+                content = doc.get("full_text") or doc.get("extracted_text_preview") or ""
                 uploaded_docs.append({
                     "label": doc.get("label", ""),
                     "doc_type": doc.get("doc_type", "other"),
-                    "content_snippet": (doc.get("full_text") or "")[:800],
+                    "content_snippet": content[:2500],
                 })
 
         # Org standards docs
