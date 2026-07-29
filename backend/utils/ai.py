@@ -1086,13 +1086,24 @@ MANDATORY RULES — VIOLATION OF ANY RULE MAKES THE OUTPUT USELESS:
    - "Describe how you approached..."
    - "What did you do when..."
 
-3. {"EVERY question MUST directly reference specific content, responsibilities, incidents, or themes from the uploaded documents provided. If the job description lists a specific responsibility, ask about it by name. If an incident report describes an event, follow up on it specifically. Do NOT write questions that could apply to any staff member — they must only make sense for someone whose documents you have read." if has_docs else "Use the focus topic and context to make questions as specific as possible."}
+3. {"EVERY question MUST reference specific content from the uploaded documents. Follow these rules by document type:" if has_docs else "Use the focus topic and context to make questions as specific as possible."}
+{"   - JOB DESCRIPTION: Read every listed responsibility, competency and required skill. Write questions that probe whether the supervisee is actively fulfilling each one. Name the specific responsibility in the question. Example: if the JD says 'ensure accurate medication records', ask 'Walk me through how you ensure medication records are completed accurately after each administration.' Do not write generic competency questions." if has_docs else ""}
+{"   - SUPERVISION RECORD / PREVIOUS MEETING: Follow up directly on named incidents, actions, concerns or themes. Reference them explicitly. Example: 'Last time we discussed the staffing shortage on night shifts — describe how you have managed that since then.'" if has_docs else ""}
+{"   - OTHER DOCUMENTS: Extract key themes, requirements and named processes. Ask questions only answerable by someone familiar with that specific content." if has_docs else ""}
+{"   Any question that could apply to ANY care worker without reading the documents is REJECTED." if has_docs else ""}
 
-4. {"Follow up on outstanding actions and themes from the previous supervision notes. Do not ignore them." if has_prev else "Use the focus topic to frame questions."}
+4. {"Follow up on every outstanding action from previous supervision notes." if has_prev else "Use the focus topic to frame questions."}
 
-5. Make questions feel like a natural, caring conversation — not a performance review interrogation.
+5. AOB SECTION — THIS IS NOT A FILLER. Rules:
+   - Do NOT write "Is there anything else you'd like to discuss?" or any variation of it.
+   - Look at the context and identify: an unresolved concern, an upcoming challenge, a recurring theme, or something the supervisee has been working toward.
+   - Write one closing question that directly names that thing and invites reflection or forward planning.
+   - Good example: "Given the handover issues raised last session, describe what you are planning to put in place before the next shift changeover."
+   - If no specific context: ask about a goal they want to set or something they want to develop in the next period.
 
-6. Generate 2 questions per section. AOB section: 1 open prompt.
+6. Make questions feel like a natural, caring conversation — not a performance review interrogation.
+
+7. Generate exactly 2 questions per section, except AOB (exactly 1 question).
 
 SECTIONS TO POPULATE:
 {sections_spec}
@@ -1120,8 +1131,10 @@ Return ONLY valid JSON — no commentary, no markdown fences:
 
 {values_context}
 
-REMINDER: {"Reference the specific documents above in your questions — mention actual responsibilities, incidents or themes from those documents. Generic questions that could apply to any care worker are NOT acceptable." if has_docs else "Make questions specific to the focus topic and any context provided."}
-Questions must be open-ended and behavioural. Generate them now."""
+FINAL CHECKS BEFORE GENERATING:
+{"- Re-read every document above. Name specific responsibilities, incidents and skills from them in your questions." if has_docs else "- Make questions specific to the focus topic and any context provided."}
+- The AOB question MUST be grounded in a real theme or concern from the context — identify it now before writing.
+- All questions must be open-ended and behavioural. Generate them now."""
 
     chat = LlmChat(
         api_key=api_key,
