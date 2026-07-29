@@ -665,10 +665,9 @@ export default function RecordingScreen() {
             {/* Dynamic Prep shortcut — shown before recording starts */}
             {(user?.role === "manager" || user?.role === "admin") && !prep && (
               <button
-                onClick={() => navigate(`/meetings/${meetingId}/prepare`)}
+                onClick={() => navigate(`/meetings/${meetingId}/prepare?from=record`)}
                 className="w-full mt-3 flex items-center justify-center gap-2 text-indigo-700 bg-indigo-50 border border-indigo-200 py-2 rounded-md text-sm font-medium hover:bg-indigo-100 transition-colors"
-                data-testid="prepare-from-notice-btn"
-              >
+                data-testid="prepare-from-notice-btn"              >
                 <Sparkles className="w-4 h-4" />
                 Generate a prep agenda first (optional)
               </button>
@@ -722,7 +721,7 @@ export default function RecordingScreen() {
                   {/* Dynamic Prep shortcut — visible to managers/admins before start */}
                   {(user?.role === "manager" || user?.role === "admin") && (
                     <button
-                      onClick={() => navigate(`/meetings/${meetingId}/prepare`)}
+                      onClick={() => navigate(`/meetings/${meetingId}/prepare?from=record`)}
                       className="flex flex-col items-center justify-center gap-1.5 border-2 border-indigo-300 text-indigo-700 bg-indigo-50 rounded-2xl px-5 py-4 hover:bg-indigo-100 transition-all"
                       data-testid="prepare-meeting-btn"
                     >

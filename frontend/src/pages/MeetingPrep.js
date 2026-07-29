@@ -240,7 +240,8 @@ export default function MeetingPrep() {
   const { meetingId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const fromNew = searchParams.get("from") === "new"; // came from New Meeting wizard step 3
+  const fromNew = searchParams.get("from") === "new";    // came from New Meeting wizard step 3
+  const fromRecord = searchParams.get("from") === "record"; // came from Recording Screen
   const { API, getAuthConfig, user } = useAuth();
 
   const [meeting, setMeeting] = useState(null);
@@ -454,8 +455,9 @@ export default function MeetingPrep() {
       <div className="flex items-start gap-4">
         {!fromNew && (
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => fromRecord ? navigate(`/meetings/${meetingId}/record`) : navigate(-1)}
             className="mt-1 p-2 rounded-lg border hover:bg-gray-50 transition-colors"
+            title={fromRecord ? "Back to Recording" : "Back"}
           >
             <ArrowLeft className="w-4 h-4 text-gray-600" />
           </button>
@@ -642,6 +644,7 @@ export default function MeetingPrep() {
           {sections.length > 0 && (
             <div className="flex items-center gap-3 pt-2 flex-wrap">
               {fromNew ? (
+                // Step 3 wizard — Save & go straight into recording
                 <button
                   onClick={() => handleSave(false, true)}
                   disabled={saving}
@@ -651,6 +654,30 @@ export default function MeetingPrep() {
                   {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
                   Save Prep & Start Recording
                 </button>
+              ) : fromRecord ? (
+                // Came from recording screen — save and go back
+                <>
+                  <button
+                    onClick={() => handleSave(false, true)}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
+                    data-testid="save-and-record-btn"
+                  >
+                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                    Save & Return to Recording
+                  </button>
+                  <button
+                    onClick={() => handleSave(true)}
+                    disabled={saving || prep?.shared_with_attendees}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-indigo-300 text-indigo-700 rounded-xl font-medium text-sm hover:bg-indigo-50 disabled:opacity-60 transition-colors"
+                    data-testid="share-prep-btn"
+                  >
+                    {prep?.shared_with_attendees
+                      ? <><Eye className="w-4 h-4" /> Shared with {superviseeNames}</>
+                      : <><Share2 className="w-4 h-4" /> Share with supervisee</>
+                    }
+                  </button>
+                </>
               ) : (
                 <>
                   <button
@@ -678,15 +705,15 @@ export default function MeetingPrep() {
             </div>
           )}
 
-          {/* Skip only shown before questions are generated */}
-          {fromNew && sections.length === 0 && !generating && (
+          {/* Skip / back — only before questions are generated */}
+          {(fromNew || fromRecord) && sections.length === 0 && !generating && (
             <div className="pt-2">
               <button
                 onClick={() => navigate(`/meetings/${meetingId}/record`)}
                 className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors"
                 data-testid="skip-prep-btn-empty"
               >
-                Skip prep — go straight to recording
+                {fromRecord ? "Return to Recording without saving" : "Skip prep — go straight to recording"}
               </button>
             </div>
           )}
