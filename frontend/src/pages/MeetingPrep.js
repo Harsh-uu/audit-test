@@ -642,24 +642,15 @@ export default function MeetingPrep() {
           {sections.length > 0 && (
             <div className="flex items-center gap-3 pt-2 flex-wrap">
               {fromNew ? (
-                <>
-                  <button
-                    onClick={() => handleSave(false, true)}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
-                    data-testid="save-and-record-btn"
-                  >
-                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                    Save Prep & Start Recording
-                  </button>
-                  <button
-                    onClick={() => navigate(`/meetings/${meetingId}/record`)}
-                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors"
-                    data-testid="skip-prep-btn"
-                  >
-                    Skip — go straight to recording
-                  </button>
-                </>
+                <button
+                  onClick={() => handleSave(false, true)}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
+                  data-testid="save-and-record-btn"
+                >
+                  {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                  Save Prep & Start Recording
+                </button>
               ) : (
                 <>
                   <button
@@ -687,9 +678,9 @@ export default function MeetingPrep() {
             </div>
           )}
 
-          {/* fromNew footer — always visible for skip option even before generating */}
+          {/* Skip only shown before questions are generated */}
           {fromNew && sections.length === 0 && !generating && (
-            <div className="pt-2 flex items-center gap-3">
+            <div className="pt-2">
               <button
                 onClick={() => navigate(`/meetings/${meetingId}/record`)}
                 className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors"
