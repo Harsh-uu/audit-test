@@ -475,41 +475,36 @@ export default function MeetingPrep() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: context + focus */}
+        {/* Left: focus topic + context sources */}
         <div className="lg:col-span-1 space-y-4">
 
-          {/* Focus topic */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+          {/* Focus topic — compact single line */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
             <div className="flex items-center gap-2">
               <Target className="w-4 h-4 text-indigo-600" />
               <h3 className="text-sm font-semibold text-gray-800">Focus Topic</h3>
             </div>
-            {currentFocusTopic && currentFocusTopic.topic !== focusTopic ? (
+            {currentFocusTopic && currentFocusTopic.topic !== focusTopic && (
               <button
                 onClick={() => setFocusTopic(currentFocusTopic.topic)}
-                className="w-full text-left text-xs px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700"
+                className="w-full text-left text-xs px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700"
               >
                 <span className="font-medium">Org focus:</span> {currentFocusTopic.topic}
                 <span className="ml-2 text-indigo-500 underline">use this</span>
               </button>
-            ) : null}
-            <textarea
+            )}
+            <input
+              type="text"
               value={focusTopic}
               onChange={e => setFocusTopic(e.target.value)}
-              placeholder="e.g. Medication management, Personal development, Safeguarding…"
-              rows={2}
-              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              placeholder="e.g. Medication management, Safeguarding…"
+              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               data-testid="focus-topic-input"
             />
             {focusTopics.filter(t => !t.is_current).length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-gray-500">Previous focus topics:</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
                 {focusTopics.filter(t => !t.is_current).slice(0, 3).map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setFocusTopic(t.topic)}
-                    className="block text-xs text-indigo-600 hover:underline text-left"
-                  >
+                  <button key={t.id} onClick={() => setFocusTopic(t.topic)} className="text-xs text-indigo-500 hover:underline">
                     {t.topic}
                   </button>
                 ))}
@@ -517,7 +512,7 @@ export default function MeetingPrep() {
             )}
           </div>
 
-          {/* Context sources */}
+          {/* Context sources — scrollable so it never pushes Generate off-screen */}
           <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-indigo-600" />
@@ -527,8 +522,7 @@ export default function MeetingPrep() {
             {allSources.length === 0 && pendingUploads.length === 0 && (
               <p className="text-xs text-gray-400 italic">No previous supervisions or uploaded documents found for this supervisee.</p>
             )}
-            <div className="space-y-2">
-              {/* Pending (optimistic) uploads shown first */}
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
               {pendingUploads.map(item => (
                 <PendingUploadCard key={item.id} item={item} />
               ))}
@@ -601,24 +595,24 @@ export default function MeetingPrep() {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Generate button */}
+        {/* Right: Generate CTA at top, then questions */}
+        <div className="lg:col-span-2 space-y-3">
+
+          {/* Generate button — always at top of right panel */}
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors shadow-sm"
             data-testid="generate-questions-btn"
           >
             {generating ? (
-              <><Loader className="w-4 h-4 animate-spin" /> Generating…</>
+              <><Loader className="w-4 h-4 animate-spin" /> Generating personalised questions…</>
             ) : (
               <><Sparkles className="w-4 h-4" /> {sections.length ? "Regenerate Questions" : "Generate Questions"}</>
             )}
           </button>
-        </div>
-
-        {/* Right: question sections */}
-        <div className="lg:col-span-2 space-y-3">
           {generating && sections.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 py-16 bg-white rounded-xl border border-dashed border-indigo-200">
               <Loader className="w-8 h-8 text-indigo-400 animate-spin" />
@@ -627,11 +621,9 @@ export default function MeetingPrep() {
           )}
 
           {sections.length === 0 && !generating && (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 bg-white rounded-xl border border-dashed border-gray-200">
-              <Sparkles className="w-8 h-8 text-gray-300" />
-              <p className="text-sm text-gray-400 text-center max-w-xs">
-                Select your context sources and click <strong>Generate Questions</strong> to get personalised, open-ended supervision questions.
-              </p>
+            <div className="flex items-center justify-center gap-2 py-8 bg-white rounded-xl border border-dashed border-gray-200 text-sm text-gray-400">
+              <Sparkles className="w-4 h-4 text-gray-300" />
+              Select sources on the left, then click Generate
             </div>
           )}
 
