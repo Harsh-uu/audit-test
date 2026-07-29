@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 import asyncio
 import logging
+import os
 import re
 import uuid
 from deps import get_db, get_current_user
@@ -1186,36 +1187,41 @@ async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_
     if meeting.get("status") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="Meeting must be signed off")
 
-    try:
-        import resend
-        import os
-        resend.api_key = os.environ.get("RESEND_API_KEY", "")
+    import resend
+    import asyncio
 
-        backend_url = os.environ.get("FRONTEND_URL", "")
-        html = f"""
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Email service not configured — RESEND_API_KEY is missing.")
+
+    resend.api_key = api_key
+    frontend_url = os.environ.get("FRONTEND_URL", "")
+    html = f"""
 <html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
 <h2 style="color: #1E3A8A;">Supervision Meeting Report</h2>
 <p><strong>Meeting:</strong> {meeting.get('title')}</p>
 <p><strong>Date:</strong> {meeting.get('date')}</p>
 <p><strong>Status:</strong> Signed Off</p>
 <p>{data.message or 'Please review the meeting report linked below.'}</p>
-<p><a href="{backend_url}/meetings/{meeting_id}/report" style="background:#1E3A8A;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;">View Report</a></p>
+<p><a href="{frontend_url}/meetings/{meeting_id}/report" style="background:#1E3A8A;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;">View Report</a></p>
 <hr/>
 <p style="color:#666;font-size:12px;">Supervision 2.0 - Compliance Evidence Platform</p>
 </body></html>"""
 
-        import asyncio
-        params = {
-            "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
-            "to": data.recipients,
-            "subject": f"Meeting Report: {meeting.get('title')}",
-            "html": html,
-        }
+    params = {
+        "from": os.environ.get("SENDER_EMAIL", "noreply@1two.one"),
+        "to": data.recipients,
+        "subject": f"Meeting Report: {meeting.get('title')}",
+        "html": html,
+    }
+    try:
         await asyncio.to_thread(resend.Emails.send, params)
-        return {"message": f"Email sent to {len(data.recipients)} recipient(s)"}
     except Exception as e:
-        logger.error(f"Email send failed: {e}")
-        return {"message": "Email sending requires Resend API key configuration", "error": str(e)}
+        logger.error(f"Email send failed for meeting {meeting_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"Email delivery failed: {str(e)}")
+
+    logger.info(f"Report email sent for meeting {meeting_id} to {len(data.recipients)} recipient(s)")
+    return {"message": f"Email sent to {len(data.recipients)} recipient(s)"}
 
 
 @router.get("/{meeting_id}/export-pdf")

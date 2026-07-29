@@ -374,9 +374,10 @@ export default function MeetingReport() {
       await axios.post(`${API}/review/${meetingId}/send-email`, { recipients, message: emailMessage }, getAuthConfig());
       setShowEmailModal(false);
       setEmailMessage("");
-      setActionMessage("Report emailed successfully.");
-    } catch (err) { alert("Failed to send email: " + (err.response?.data?.detail || err.message)); }
-    finally { setSendingEmail(false); }
+      toast.success(`Report emailed to ${recipients.length} recipient${recipients.length > 1 ? "s" : ""}.`);
+    } catch (err) {
+      toast.error("Email failed: " + (err.response?.data?.detail || err.message));
+    } finally { setSendingEmail(false); }
   };
 
   if (loading) {
