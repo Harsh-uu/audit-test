@@ -258,7 +258,7 @@ export default function NewMeeting() {
               >
                 {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></div>}
                 <Sparkles className="w-4 h-4" />
-                Continue to Prepare
+                Next
               </button>
             </div>
           </div>
