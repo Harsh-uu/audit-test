@@ -662,6 +662,17 @@ export default function RecordingScreen() {
               I understand — Proceed to Recording
               <ArrowRight className="w-4 h-4" />
             </button>
+            {/* Dynamic Prep shortcut — shown before recording starts */}
+            {(user?.role === "manager" || user?.role === "admin") && !prep && (
+              <button
+                onClick={() => navigate(`/meetings/${meetingId}/prepare`)}
+                className="w-full mt-3 flex items-center justify-center gap-2 text-indigo-700 bg-indigo-50 border border-indigo-200 py-2 rounded-md text-sm font-medium hover:bg-indigo-100 transition-colors"
+                data-testid="prepare-from-notice-btn"
+              >
+                <Sparkles className="w-4 h-4" />
+                Generate a prep agenda first (optional)
+              </button>
+            )}
           </div>
         )}
 
