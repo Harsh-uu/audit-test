@@ -488,7 +488,7 @@ export default function RecordingScreen() {
                 )}
                 {guideOpen ? <ChevronUp className="w-4 h-4 text-indigo-500" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
               </div>
-            </button>
+            </div>
 
             {guideOpen && (
               <div className="border-t border-indigo-100 px-4 py-3 space-y-3">

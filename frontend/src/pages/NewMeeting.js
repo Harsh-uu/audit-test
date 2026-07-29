@@ -36,16 +36,23 @@ export default function NewMeeting() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const managers = users.filter(u => ["manager", "admin"].includes(u.role));
   const attendees = users.filter(u => u.role !== "shared_reviewer");
+  // Only managers/admins who are already selected as attendees can be the sign-off manager
+  const managers = users.filter(
+    u => ["manager", "admin"].includes(u.role) && form.attendee_ids.includes(u.id)
+  );
 
   const toggleAttendee = (userId) => {
-    setForm(f => ({
-      ...f,
-      attendee_ids: f.attendee_ids.includes(userId)
+    setForm(f => {
+      const newAttendeeIds = f.attendee_ids.includes(userId)
         ? f.attendee_ids.filter(id => id !== userId)
-        : [...f.attendee_ids, userId],
-    }));
+        : [...f.attendee_ids, userId];
+      // Clear sign-off manager if they were just un-ticked
+      const newManagerId = newAttendeeIds.includes(f.sign_off_manager_id)
+        ? f.sign_off_manager_id
+        : "";
+      return { ...f, attendee_ids: newAttendeeIds, sign_off_manager_id: newManagerId };
+    });
   };
 
   const submit = async () => {
@@ -220,12 +227,18 @@ export default function NewMeeting() {
                 onChange={e => setForm(f => ({...f, sign_off_manager_id: e.target.value}))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
                 data-testid="manager-select"
+                disabled={managers.length === 0}
               >
-                <option value="">Select responsible manager...</option>
+                <option value="">
+                  {managers.length === 0 ? "Select a manager as an attendee first..." : "Select responsible manager..."}
+                </option>
                 {managers.map(m => (
                   <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
                 ))}
               </select>
+              {managers.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">Tick a manager or admin in the attendees list above to enable this.</p>
+              )}
               <p className="text-xs text-gray-500 mt-2">The assigned manager will be responsible for final sign-off after all attendees have reviewed.</p>
             </div>
 
