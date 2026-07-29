@@ -11,6 +11,7 @@ import Dashboard from "@/pages/Dashboard";
 import NewMeeting from "@/pages/NewMeeting";
 import RecordingScreen from "@/pages/RecordingScreen";
 import MeetingReport from "@/pages/MeetingReport";
+import MeetingPrep from "@/pages/MeetingPrep";
 import AdminLibrary from "@/pages/AdminLibrary";
 import UploadSupervision from "@/pages/UploadSupervision";
 import DocUploadReport from "@/pages/DocUploadReport";
@@ -46,6 +47,7 @@ function App() {
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/meetings/new" element={<ProtectedRoute><NewMeeting /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/record" element={<ProtectedRoute><RecordingScreen /></ProtectedRoute>} />
+          <Route path="/meetings/:meetingId/prepare" element={<ProtectedRoute roles={["admin","manager"]}><MeetingPrep /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/report" element={<ProtectedRoute><MeetingReport /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute roles={["admin", "manager"]}><AdminLibrary /></ProtectedRoute>} />
           <Route path="/upload-supervision" element={<ProtectedRoute roles={["admin", "manager"]}><UploadSupervision /></ProtectedRoute>} />

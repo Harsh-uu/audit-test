@@ -1,15 +1,127 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { FileText, Download, Palette, CheckCircle, AlertCircle, X } from "lucide-react";
+import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star } from "lucide-react";
 import { TemplateTab } from "@/components/admin/TemplateTab";
 import { ExportTab } from "@/components/admin/ExportTab";
 import { BrandingTab } from "@/components/admin/BrandingTab";
 import { TranscriptExportTab } from "@/components/admin/TranscriptExportTab";
+import { toast } from "sonner";
 
-function TabBtn({ active, onClick, children }) {
+function FocusTopicsTab({ API, getAuthConfig }) {
+  const [topics, setTopics]   = useState([]);
+  const [newTopic, setNewTopic] = useState("");
+  const [saving, setSaving]   = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/prep/focus-topics`, getAuthConfig());
+      setTopics(data || []);
+    } catch { toast.error("Failed to load focus topics"); }
+  }, [API, getAuthConfig]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleAdd = async () => {
+    if (!newTopic.trim()) return;
+    setSaving(true);
+    try {
+      await axios.post(`${API}/prep/focus-topics`, { topic: newTopic.trim(), is_current: topics.length === 0 }, getAuthConfig());
+      setNewTopic("");
+      await load();
+      toast.success("Focus topic added");
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to add"); }
+    finally { setSaving(false); }
+  };
+
+  const handleSetCurrent = async (topic) => {
+    try {
+      await axios.put(`${API}/prep/focus-topics/${topic.id}`, { topic: topic.topic, is_current: true }, getAuthConfig());
+      await load();
+      toast.success("Current focus topic updated");
+    } catch { toast.error("Failed to update"); }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await axios.delete(`${API}/prep/focus-topics/${id}`, getAuthConfig());
+      setTopics(t => t.filter(x => x.id !== id));
+    } catch { toast.error("Failed to delete"); }
+  };
+
   return (
+    <div className="space-y-5 max-w-xl">
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 mb-0.5">Organisational Focus Topics</h3>
+        <p className="text-xs text-gray-500">
+          Set the current supervision focus for your whole organisation. Managers will see this as a suggestion in Dynamic Supervision Prep — the active topic is locked and cannot be changed by individual supervisors.
+        </p>
+      </div>
+
+      {/* Add new */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newTopic}
+          onChange={e => setNewTopic(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleAdd()}
+          placeholder="e.g. Medication management, Safeguarding, Personal development…"
+          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          data-testid="new-focus-topic-input"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={saving || !newTopic.trim()}
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#1E3A8A] text-white text-sm font-medium rounded-lg hover:bg-[#1E40AF] disabled:opacity-60 transition-colors"
+          data-testid="add-focus-topic-btn"
+        >
+          <Plus className="w-4 h-4" /> Add
+        </button>
+      </div>
+
+      {/* Topic list */}
+      {topics.length === 0 && (
+        <p className="text-xs text-gray-400 italic">No focus topics yet — add the first one above.</p>
+      )}
+      <div className="space-y-2">
+        {topics.map(t => (
+          <div
+            key={t.id}
+            className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+              t.is_current ? "border-indigo-300 bg-indigo-50" : "border-gray-200 bg-white"
+            }`}
+            data-testid={`focus-topic-row-${t.id}`}
+          >
+            {t.is_current && <Star className="w-4 h-4 text-indigo-600 flex-shrink-0" fill="currentColor" />}
+            <span className={`flex-1 text-sm ${t.is_current ? "font-semibold text-indigo-800" : "text-gray-700"}`}>{t.topic}</span>
+            {t.is_current && <span className="text-xs font-medium text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">Current</span>}
+            {!t.is_current && (
+              <button
+                onClick={() => handleSetCurrent(t)}
+                className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 px-2.5 py-1 rounded-lg transition-colors"
+                data-testid={`set-current-topic-${t.id}`}
+              >
+                Set as current
+              </button>
+            )}
+            <button
+              onClick={() => handleDelete(t.id)}
+              className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+              data-testid={`delete-topic-${t.id}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+
+function TabBtn({ active, onClick, children }) {  return (
     <button
       onClick={onClick}
       className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
@@ -202,6 +314,9 @@ export default function OrgSettings() {
               <Palette className="w-3.5 h-3.5" />Branding
             </TabBtn>
           )}
+          <TabBtn active={tab === "focus"} onClick={() => setTab("focus")}>
+            <Target className="w-3.5 h-3.5" />Focus Topics
+          </TabBtn>
         </div>
 
         {tab === "template" && (
@@ -261,6 +376,8 @@ export default function OrgSettings() {
         )}
 
         {tab === "branding" && canBrand && <BrandingTab />}
+
+        {tab === "focus" && <FocusTopicsTab API={API} getAuthConfig={getAuthConfig} />}
       </div>
     </Layout>
   );

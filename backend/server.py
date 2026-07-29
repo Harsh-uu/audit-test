@@ -18,6 +18,7 @@ from routers.org import router as org_router  # noqa: E402
 from routers.super_admin import router as super_admin_router  # noqa: E402
 from routers.schedules import router as schedules_router  # noqa: E402
 from routers.doc_uploads import router as doc_uploads_router  # noqa: E402
+from routers.prep import router as prep_router  # noqa: E402
 from utils.storage import init_storage  # noqa: E402
 from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions, seed_super_admin, seed_default_org, seed_quality_statements_migration, migrate_standards_entries_system_flag  # noqa: E402,E501
 
@@ -51,6 +52,7 @@ api_router.include_router(org_router, prefix="/org", tags=["org"])
 api_router.include_router(super_admin_router, prefix="/super-admin", tags=["super-admin"])
 api_router.include_router(schedules_router, prefix="/schedules", tags=["schedules"])
 api_router.include_router(doc_uploads_router, prefix="/doc-uploads", tags=["doc-uploads"])
+api_router.include_router(prep_router, tags=["prep"])
 app.include_router(api_router)
 
 

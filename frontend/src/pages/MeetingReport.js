@@ -56,8 +56,8 @@ const PROCESSING_STAGES = {
 
 export default function MeetingReport() {
   const { meetingId } = useParams();
-  const { getAuthConfig, API, user } = useAuth();
   const navigate = useNavigate();
+  const { getAuthConfig, API, user } = useAuth();
   const [meeting, setMeeting] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("evidence");
@@ -585,6 +585,7 @@ export default function MeetingReport() {
                 </button>
                 <button onClick={() => setActiveTab("audit")} className={tabBtnCls("audit")} data-testid="audit-trail-tab">Audit Trail</button>
                 <button onClick={() => setActiveTab("compliance")} className={`${tabBtnCls("compliance")} lg:hidden`} data-testid="compliance-tab">Compliance</button>
+                <button onClick={() => setActiveTab("prep")} className={tabBtnCls("prep")} data-testid="prep-tab">Prep Agenda</button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6">
@@ -665,6 +666,9 @@ export default function MeetingReport() {
                     />
                   </div>
                 )}
+                {activeTab === "prep" && (
+                  <PrepAgendaTab meetingId={meetingId} API={API} getAuthConfig={getAuthConfig} role={user?.role} navigate={navigate} />
+                )}
               </div>
             </div>
 
@@ -741,5 +745,89 @@ export default function MeetingReport() {
         })()}
       </div>
     </Layout>
+  );
+}
+
+
+// ── Prep Agenda Tab (inline view for report page) ───────────────────────────
+const SECTION_COLORS = {
+  wellbeing:            "text-sky-600 bg-sky-50",
+  working_well:         "text-emerald-600 bg-emerald-50",
+  needs_attention:      "text-amber-600 bg-amber-50",
+  learning_development: "text-purple-600 bg-purple-50",
+  achievements:         "text-rose-600 bg-rose-50",
+  aob:                  "text-gray-600 bg-gray-50",
+};
+
+function PrepAgendaTab({ meetingId, API, getAuthConfig, role, navigate }) {
+  const [prep, setPrep] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    axios.get(`${API}/prep/${meetingId}`, getAuthConfig())
+      .then(r => setPrep(r.data))
+      .catch(() => setPrep(null))
+      .finally(() => setLoading(false));
+  }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) return <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" /></div>;
+
+  if (!prep?.sections?.length) {
+    return (
+      <div className="text-center py-12 space-y-3">
+        <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mx-auto">
+          <span className="text-2xl">✨</span>
+        </div>
+        <p className="text-sm text-gray-500">No prep agenda for this meeting yet.</p>
+        {(role === "manager" || role === "admin") && (
+          <button
+            onClick={() => navigate(`/meetings/${meetingId}/prepare`)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Create prep agenda
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {prep.focus_topic && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
+          <span className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Focus:</span>
+          <span className="text-sm text-indigo-800">{prep.focus_topic}</span>
+        </div>
+      )}
+      {!prep.shared_with_attendees && (role === "attendee") && (
+        <p className="text-xs text-gray-400 italic">The prep agenda hasn't been shared yet.</p>
+      )}
+      {prep.sections.map(section => {
+        const included = (section.questions || []).filter(q => q.included !== false);
+        if (!included.length) return null;
+        const colorCls = SECTION_COLORS[section.section_id] || "text-gray-600 bg-gray-50";
+        return (
+          <div key={section.section_id} className="space-y-2">
+            <h3 className={`text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded-md inline-block ${colorCls}`}>{section.label}</h3>
+            <ul className="space-y-1.5 pl-1">
+              {included.map(q => (
+                <li key={q.id} className="flex items-start gap-2 text-sm text-gray-700">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-400 flex-shrink-0" />
+                  {q.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+      {(role === "manager" || role === "admin") && (
+        <button
+          onClick={() => navigate(`/meetings/${meetingId}/prepare`)}
+          className="mt-2 text-xs text-indigo-600 hover:underline"
+        >
+          Edit prep agenda →
+        </button>
+      )}
+    </div>
   );
 }

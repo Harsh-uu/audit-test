@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles } from "lucide-react";
 
 const STATUS_CONFIG = {
   draft:             { label: "Draft",        color: "bg-gray-100 text-gray-700 border-gray-200",       icon: FileText },
@@ -490,6 +490,17 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Dynamic Prep shortcut — only for draft/stopped meetings, manager/admin */}
+                    {(user?.role === "manager" || user?.role === "admin") && ["draft", "stopped"].includes(meeting.status) && (
+                      <button
+                        onClick={e => { e.stopPropagation(); navigate(`/meetings/${meeting.id}/prepare`); }}
+                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
+                        title="Dynamic Supervision Prep"
+                        data-testid={`prepare-btn-${meeting.id}`}
+                      >
+                        <Sparkles className="w-3 h-3" /> Prepare
+                      </button>
+                    )}
                     <StatusBadge status={meeting.status} />
                     {canDelete && (
                       deletingId === meeting.id ? (

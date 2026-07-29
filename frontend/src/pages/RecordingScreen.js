@@ -4,7 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  Mic, MicOff, Pause, Play, Square, AlertTriangle, Clock, Info, Upload, ArrowRight, Users, ExternalLink, CheckSquare, ChevronDown, ChevronUp, BookOpen
+  Mic, MicOff, Pause, Play, Square, AlertTriangle, Clock, Info, Upload, ArrowRight, Users, ExternalLink, CheckSquare, ChevronDown, ChevronUp, BookOpen, Sparkles
 } from "lucide-react";
 
 function formatDuration(seconds) {
@@ -86,7 +86,7 @@ async function clearAudioBackup(meetingId) {
 
 export default function RecordingScreen() {
   const { meetingId } = useParams();
-  const { getAuthConfig, API, silentRefresh } = useAuth();
+  const { getAuthConfig, API, silentRefresh, user } = useAuth();
   const navigate = useNavigate();
   const [meeting, setMeeting] = useState(null);
   const [stage, setStage] = useState("notice"); // notice | ready | recording | paused | stopped | uploading | processing
@@ -645,14 +645,27 @@ export default function RecordingScreen() {
             {/* Controls */}
             <div className="flex items-center justify-center gap-4 sm:gap-6">
               {stage === "ready" && (
-                <button
-                  onClick={startRecording}
-                  className="flex flex-col items-center justify-center gap-2 bg-[#DC2626] text-white rounded-full w-28 h-28 sm:w-32 sm:h-32 shadow-lg hover:bg-red-700 active:scale-95 transition-all touch-manipulation"
-                  data-testid="start-recording-btn"
-                >
-                  <Mic className="w-9 h-9 sm:w-10 sm:h-10" />
-                  <span className="text-xs font-semibold tracking-wide">TAP TO START</span>
-                </button>
+                <>
+                  {/* Dynamic Prep shortcut — visible to managers/admins before start */}
+                  {(user?.role === "manager" || user?.role === "admin") && (
+                    <button
+                      onClick={() => navigate(`/meetings/${meetingId}/prepare`)}
+                      className="flex flex-col items-center justify-center gap-1.5 border-2 border-indigo-300 text-indigo-700 bg-indigo-50 rounded-2xl px-5 py-4 hover:bg-indigo-100 transition-all"
+                      data-testid="prepare-meeting-btn"
+                    >
+                      <Sparkles className="w-6 h-6" />
+                      <span className="text-xs font-semibold">Prepare</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={startRecording}
+                    className="flex flex-col items-center justify-center gap-2 bg-[#DC2626] text-white rounded-full w-28 h-28 sm:w-32 sm:h-32 shadow-lg hover:bg-red-700 active:scale-95 transition-all touch-manipulation"
+                    data-testid="start-recording-btn"
+                  >
+                    <Mic className="w-9 h-9 sm:w-10 sm:h-10" />
+                    <span className="text-xs font-semibold tracking-wide">TAP TO START</span>
+                  </button>
+                </>
               )}
 
               {stage === "recording" && (

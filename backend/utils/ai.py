@@ -1001,3 +1001,145 @@ Provide your analysis as JSON. Only map regulations/standards where there is act
             "care_cert_mappings": [],
             "custom_mappings": [],
         }
+
+
+
+PREP_SECTIONS = [
+    {"id": "wellbeing",            "label": "Wellbeing"},
+    {"id": "working_well",         "label": "What's Working Well"},
+    {"id": "needs_attention",      "label": "What Needs Attention"},
+    {"id": "learning_development", "label": "Learning & Development"},
+    {"id": "achievements",         "label": "Achievements"},
+    {"id": "aob",                  "label": "Any Other Business"},
+]
+
+
+async def generate_prep_questions(
+    supervisee_name: str,
+    focus_topic: str,
+    previous_meeting_summaries: list,      # list of {"title", "date", "summary", "actions"}
+    uploaded_docs: list,                    # list of {"label", "doc_type", "content_snippet"}
+    org_values_snippets: list,              # list of {"name", "snippet"}
+) -> dict:
+    """Generate open-ended, behavioural supervision prep questions for each section.
+
+    Questions must be:
+    - Open-ended (never yes/no)
+    - Behavioural: phrased as 'Walk me through...', 'Give me an example of...', 'Tell me about a time when...'
+    - Grounded in the provided context (previous meetings, JD, values, focus topic)
+    Returns: {"sections": [...], "gen_status": "done"}
+    """
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise ValueError("EMERGENT_LLM_KEY not set")
+
+    # Build context blocks
+    prev_context = ""
+    if previous_meeting_summaries:
+        parts = []
+        for m in previous_meeting_summaries[:3]:
+            part = f"Meeting '{m.get('title', '?')}' ({m.get('date', '?')}):\n  Summary: {m.get('summary', '')[:400]}"
+            actions = m.get("actions", [])
+            if actions:
+                incomplete = [a.get("text", a.get("action", "")) for a in actions if not a.get("completed")]
+                if incomplete:
+                    part += f"\n  Outstanding actions: {'; '.join(incomplete[:5])}"
+            parts.append(part)
+        prev_context = "PREVIOUS SUPERVISION MEETINGS:\n" + "\n\n".join(parts)
+
+    docs_context = ""
+    if uploaded_docs:
+        parts = []
+        for d in uploaded_docs[:6]:
+            parts.append(f"[{d.get('doc_type','Document').replace('_',' ').title()}] {d.get('label','')}:\n{d.get('content_snippet','')[:600]}")
+        docs_context = "UPLOADED DOCUMENTS:\n" + "\n\n".join(parts)
+
+    values_context = ""
+    if org_values_snippets:
+        parts = [f"- {v.get('name','')}: {v.get('snippet','')[:300]}" for v in org_values_snippets[:4]]
+        values_context = "ORGANISATIONAL VALUES / STANDARDS:\n" + "\n".join(parts)
+
+    focus_line = f"THIS MONTH'S FOCUS TOPIC: {focus_topic}" if focus_topic else ""
+
+    sections_spec = "\n".join([f'  "{s["id"]}": "{s["label"]}"' for s in PREP_SECTIONS])
+
+    system_prompt = f"""You are an expert UK adult social care supervision facilitator. 
+Your task is to generate personalised, open-ended supervision preparation questions for a manager 
+to use in a one-to-one supervision session with {supervisee_name}.
+
+CRITICAL RULES FOR QUESTIONS:
+1. NEVER write a question that can be answered with yes or no.
+2. Always use behavioural/reflective phrasing: 
+   - "Walk me through a time when..."
+   - "Give me a specific example of how you..."
+   - "Tell me about a situation where..."
+   - "Describe how you approached..."
+   - "What did you do when..."
+   - "How have you demonstrated..."
+3. Ground questions in the actual context provided (previous meetings, documents, values).
+4. Keep questions concise and conversational — a manager can read them naturally.
+5. Generate 2-3 questions per section. The AOB section should have 1-2 open prompts.
+
+SECTIONS TO POPULATE:
+{sections_spec}
+
+Return ONLY valid JSON in this exact structure:
+{{
+  "sections": [
+    {{
+      "section_id": "<section_id>",
+      "label": "<section label>",
+      "questions": [
+        {{"id": "q1", "text": "<question text>", "generated": true}}
+      ]
+    }}
+  ]
+}}"""
+
+    user_prompt = f"""Generate supervision preparation questions for: {supervisee_name}
+
+{focus_line}
+
+{prev_context}
+
+{docs_context}
+
+{values_context}
+
+Remember: all questions must be open-ended and behavioural. Use the specific context above to make them relevant and personalised to {supervisee_name}."""
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"prep_{uuid.uuid4().hex[:8]}",
+        system_message=system_prompt,
+    ).with_model("openai", "gpt-4o")
+
+    response = await chat.send_message(UserMessage(text=user_prompt))
+    full_response = response.text.strip() if hasattr(response, "text") else str(response)
+
+    # Strip markdown fences
+    if "```" in full_response:
+        import re as _re
+        m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", full_response)
+        if m:
+            full_response = m.group(1).strip()
+
+    try:
+        data = json.loads(full_response)
+        # Validate / fill IDs
+        seen_ids: set = set()
+        for section in data.get("sections", []):
+            for q in section.get("questions", []):
+                if not q.get("id") or q["id"] in seen_ids:
+                    q["id"] = uuid.uuid4().hex[:8]
+                q.setdefault("generated", True)
+                q.setdefault("included", True)
+                seen_ids.add(q["id"])
+        return {"sections": data.get("sections", []), "gen_status": "done"}
+    except (json.JSONDecodeError, KeyError) as exc:
+        logger.error(f"Failed to parse prep questions response: {exc}\nResponse: {full_response[:500]}")
+        # Return empty sections so the UI can still add manual questions
+        return {
+            "sections": [{"section_id": s["id"], "label": s["label"], "questions": []} for s in PREP_SECTIONS],
+            "gen_status": "failed",
+        }
