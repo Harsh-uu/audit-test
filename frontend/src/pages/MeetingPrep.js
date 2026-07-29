@@ -178,6 +178,7 @@ function SectionPanel({ section, sectionMeta, onChange }) {
 function SourceCard({ source, included, onToggle }) {
   const Icon = SOURCE_ICONS[source.source_type] || FileText;
   const typeLabel = source.doc_type ? (DOC_TYPE_LABELS[source.doc_type] || source.doc_type) : null;
+  const isProcessing = source.status === "text_ready"; // AI mapping still running
 
   return (
     <div
@@ -196,11 +197,39 @@ function SourceCard({ source, included, onToggle }) {
           {typeLabel && <span className="mr-1.5">{typeLabel}</span>}
           {source.date && <span>{source.date}</span>}
         </p>
+        {isProcessing && (
+          <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
+            <Loader className="w-3 h-3 animate-spin" /> Indexing… will be ready shortly
+          </p>
+        )}
       </div>
       <div className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 ${
         included ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"
       }`}>
         {included && <Check className="w-3 h-3" />}
+      </div>
+    </div>
+  );
+}
+
+// ── Pending upload card (optimistic UI) ───────────────────────────────────────
+function PendingUploadCard({ item }) {
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/50 opacity-80">
+      <div className="mt-0.5 p-1.5 rounded-lg bg-indigo-100">
+        <FileText className="w-4 h-4 text-indigo-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-700 truncate">{item.label}</p>
+        <div className="mt-1.5 w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+          <div
+            className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
+            style={{ width: `${item.status === "extracting" ? 100 : item.progress}%` }}
+          />
+        </div>
+        <p className="text-xs text-indigo-600 mt-1">
+          {item.status === "uploading" ? `Uploading… ${item.progress}%` : "Extracting text…"}
+        </p>
       </div>
     </div>
   );
@@ -229,6 +258,8 @@ export default function MeetingPrep() {
   const [uploadDocType, setUploadDocType] = useState("other");
   const [uploadLabel, setUploadLabel] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0); // 0-100
+  const [pendingUploads, setPendingUploads] = useState([]); // optimistic UI items
   const pollRef = useRef(null);
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -299,27 +330,52 @@ export default function MeetingPrep() {
 
   const handleUploadContext = async () => {
     if (!uploadFile || !superviseeId) return;
+    const label = uploadLabel || uploadFile.name;
+    // Add optimistic pending entry immediately
+    const tempId = `pending_${Date.now()}`;
+    setPendingUploads(p => [...p, { id: tempId, label, docType: uploadDocType, progress: 0, status: "uploading" }]);
     setUploading(true);
+    setUploadProgress(0);
+    setUploadOpen(false);
+    setUploadFile(null);
+    setUploadLabel("");
+    setUploadDocType("other");
     try {
       const fd = new FormData();
       fd.append("file", uploadFile);
       fd.append("staff_id", superviseeId);
       fd.append("doc_type", uploadDocType);
-      fd.append("label", uploadLabel || uploadFile.name);
+      fd.append("label", label);
       fd.append("meeting_date", new Date().toISOString().slice(0, 10));
       await axios.post(`${API}/doc-uploads/`, fd, {
         ...getAuthConfig(),
         headers: { ...getAuthConfig().headers, "Content-Type": "multipart/form-data" },
+        onUploadProgress: (e) => {
+          const pct = e.total ? Math.round((e.loaded / e.total) * 100) : 50;
+          setUploadProgress(pct);
+          setPendingUploads(p => p.map(u => u.id === tempId ? { ...u, progress: pct } : u));
+        },
       });
-      toast.success("Document uploaded — it will appear in context sources shortly.");
-      setUploadOpen(false);
-      setUploadFile(null);
-      setUploadLabel("");
-      setUploadDocType("other");
-      setTimeout(loadAll, 3000); // refresh after brief parse delay
+      // Upload complete — now waiting for text extraction
+      setPendingUploads(p => p.map(u => u.id === tempId ? { ...u, status: "extracting", progress: 100 } : u));
+      // Poll until doc appears in context (text_ready or done)
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        await loadAll();
+        // loadAll updates context; if source appears, remove from pending
+        const ctx = await axios.get(`${API}/prep/${meetingId}/context`, getAuthConfig());
+        const appeared = ctx.data.sources?.some(s => s.source_type === "doc_upload" && s.label === label);
+        if (appeared || attempts >= 12) {
+          clearInterval(poll);
+          setPendingUploads(p => p.filter(u => u.id !== tempId));
+          if (appeared) toast.success(`"${label}" is ready as a context source.`);
+        }
+      }, 5000);
     } catch (err) {
+      setPendingUploads(p => p.filter(u => u.id !== tempId));
       toast.error(err.response?.data?.detail || "Upload failed");
-    } finally { setUploading(false); }
+    } finally { setUploading(false); setUploadProgress(0); }
   };
 
   const handleGenerate = async () => {
@@ -468,10 +524,14 @@ export default function MeetingPrep() {
               <h3 className="text-sm font-semibold text-gray-800">Context Sources</h3>
               <span className="ml-auto text-xs text-gray-400">{effectiveIds.length}/{allSources.length} selected</span>
             </div>
-            {allSources.length === 0 && (
+            {allSources.length === 0 && pendingUploads.length === 0 && (
               <p className="text-xs text-gray-400 italic">No previous supervisions or uploaded documents found for this supervisee.</p>
             )}
             <div className="space-y-2">
+              {/* Pending (optimistic) uploads shown first */}
+              {pendingUploads.map(item => (
+                <PendingUploadCard key={item.id} item={item} />
+              ))}
               {allSources.map(s => (
                 <SourceCard
                   key={s.source_id}

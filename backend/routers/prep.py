@@ -220,9 +220,9 @@ async def get_prep_context(
             ][:10],
         })
 
-    # 2. Uploaded documents for these supervisees
+    # 2. Uploaded documents for these supervisees (text_ready = text extracted, done = AI mapping complete)
     async for doc in db.supervision_uploads.find(
-        {"staff_id": {"$in": supervisee_ids}, "status": "done"}
+        {"staff_id": {"$in": supervisee_ids}, "status": {"$in": ["text_ready", "done"]}}
     ).sort("meeting_date", -1).limit(10):
         sources.append({
             "source_id": str(doc["_id"]),
@@ -230,6 +230,7 @@ async def get_prep_context(
             "label": doc.get("label") or doc.get("filename", "Document"),
             "doc_type": doc.get("doc_type", "other"),
             "date": doc.get("meeting_date", ""),
+            "status": doc.get("status", "done"),
             "included": True,
             "content_snippet": (doc.get("full_text") or "")[:800],
         })

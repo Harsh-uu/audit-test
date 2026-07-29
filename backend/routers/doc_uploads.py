@@ -168,6 +168,16 @@ async def process_upload_background(
             )
             return
 
+        # ── Phase 1: text extracted — make document available in context sources immediately ──
+        await db.supervision_uploads.update_one(
+            {"_id": ObjectId(upload_id)},
+            {"$set": {
+                "full_text": text,
+                "status": "text_ready",
+            }},
+        )
+
+        # ── Phase 2: run AI evidence mapping (slow) ──────────────────────────
         cqc_stds, care_cert_stds, custom_stds = [], [], []
         async for s in db.standards_entries.find({"type": "cqc", "is_active": True}).sort("reference", 1):
             cqc_stds.append(doc_to_dict(s))
@@ -185,7 +195,6 @@ async def process_upload_background(
             {"_id": ObjectId(upload_id)},
             {"$set": {
                 "status": "done",
-                "extracted_text_preview": text[:2000],
                 "cqc_mappings": result.get("cqc_mappings", []),
                 "care_cert_mappings": result.get("care_cert_mappings", []),
                 "custom_mappings": result.get("custom_mappings", []),
