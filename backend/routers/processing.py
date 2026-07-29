@@ -13,21 +13,38 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def _get_rolled_actions(db, attendee_ids: list, current_meeting_id: str) -> list:
-    """Return incomplete actions from previous meetings for these attendees, de-duped."""
+async def _get_rolled_actions(db, attendee_ids: list, current_meeting_id: str, manager_id: str = None, attendee_names: list = None) -> list:
+    """Return incomplete actions from previous meetings that are relevant to these supervisees.
+
+    Rules:
+    1. Only match on SUPERVISEE user IDs — the manager (sign_off_manager_id) is excluded from
+       the lookup so they don't accidentally link unrelated meetings together.
+    2. An action is rolled over only if:
+       - Its assigned_to name matches (case-insensitive) an attendee name in the new meeting, OR
+       - It has no assigned_to (general meeting action) AND the source meeting's supervisees
+         overlap with the new meeting's supervisees.
+    3. Already-completed and already-rolled-over actions are skipped.
+    """
     if not attendee_ids:
         return []
+
+    # Exclude the manager from the match — only supervisee overlap drives rollover
+    supervisee_ids = [uid for uid in attendee_ids if uid and uid != manager_id]
+    if not supervisee_ids:
+        return []
+
+    # Attendee names for assigned_to matching (lowercase for case-insensitive compare)
+    new_attendee_names_lower = {n.lower() for n in (attendee_names or []) if n}
 
     rolled = []
     seen_sources = set()
 
-    # Query meetings with attendee overlap directly — avoids unbounded analyses scan
     prev_meetings_cursor = db.meetings.find(
         {
-            "attendees.user_id": {"$in": attendee_ids},
+            "attendees.user_id": {"$in": supervisee_ids},
             "analysis_id": {"$exists": True, "$ne": None},
         },
-        {"_id": 1, "attendees": 1, "analysis_id": 1, "title": 1}
+        {"_id": 1, "attendees": 1, "analysis_id": 1, "title": 1, "sign_off_manager_id": 1}
     ).limit(50)
 
     async for prev_meeting in prev_meetings_cursor:
@@ -35,6 +52,17 @@ async def _get_rolled_actions(db, attendee_ids: list, current_meeting_id: str) -
             continue
         analysis_id = prev_meeting.get("analysis_id")
         if not analysis_id:
+            continue
+
+        # Build supervisee IDs for the SOURCE meeting (exclude its own manager)
+        source_manager_id = prev_meeting.get("sign_off_manager_id")
+        source_supervisee_ids = {
+            a.get("user_id")
+            for a in prev_meeting.get("attendees", [])
+            if a.get("user_id") and a.get("user_id") != source_manager_id
+        }
+        # Only proceed if at least one supervisee genuinely overlaps
+        if not source_supervisee_ids.intersection(set(supervisee_ids)):
             continue
 
         analysis = await db.analyses.find_one(
@@ -50,6 +78,12 @@ async def _get_rolled_actions(db, attendee_ids: list, current_meeting_id: str) -
             key = (str(prev_meeting["_id"]), action.get("id", ""))
             if key in seen_sources:
                 continue
+
+            # Gate: if action is assigned to a specific person, they must be in the new meeting
+            assigned = (action.get("assigned_to") or "").strip().lower()
+            if assigned and new_attendee_names_lower and assigned not in new_attendee_names_lower:
+                continue  # Action belongs to someone not in this meeting — skip it
+
             seen_sources.add(key)
             rolled.append({
                 **action,
@@ -147,9 +181,11 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         if tmpl_doc and tmpl_doc.get("steps"):
             supervision_template = tmpl_doc
 
-        # Fetch rolled-over outstanding actions from previous meetings for same attendees
+        # Fetch rolled-over outstanding actions from previous meetings for same supervisees
         attendee_ids = [a.get("user_id") for a in meeting.get("attendees", [])]
-        rolled_actions = await _get_rolled_actions(db, attendee_ids, meeting_id)
+        attendee_names = [a.get("name") for a in meeting.get("attendees", [])]
+        manager_id = meeting.get("sign_off_manager_id")
+        rolled_actions = await _get_rolled_actions(db, attendee_ids, meeting_id, manager_id=manager_id, attendee_names=attendee_names)
 
         # Run analysis + speaker diarization in parallel
         manager_name = meeting.get("sign_off_manager_name") or "Manager"
