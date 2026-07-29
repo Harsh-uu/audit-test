@@ -3,10 +3,11 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
+import Layout from "@/components/Layout";
 import {
   Sparkles, ChevronDown, ChevronUp, Plus, Trash2, Edit2,
   Check, X, Share2, ArrowLeft, RefreshCw, BookOpen,
-  FileText, Users, Building2, Target, Loader, Eye, EyeOff, ChevronRight, Mic,
+  FileText, Users, Building2, Target, Loader, Eye, EyeOff, ChevronRight, Mic, Upload,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -223,6 +224,11 @@ export default function MeetingPrep() {
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadDocType, setUploadDocType] = useState("other");
+  const [uploadLabel, setUploadLabel] = useState("");
+  const [uploading, setUploading] = useState(false);
   const pollRef = useRef(null);
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -289,6 +295,33 @@ export default function MeetingPrep() {
     });
   };
 
+  const superviseeId = context?.supervisees?.[0]?.user_id;
+
+  const handleUploadContext = async () => {
+    if (!uploadFile || !superviseeId) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      fd.append("staff_id", superviseeId);
+      fd.append("doc_type", uploadDocType);
+      fd.append("label", uploadLabel || uploadFile.name);
+      fd.append("meeting_date", new Date().toISOString().slice(0, 10));
+      await axios.post(`${API}/doc-uploads/`, fd, {
+        ...getAuthConfig(),
+        headers: { ...getAuthConfig().headers, "Content-Type": "multipart/form-data" },
+      });
+      toast.success("Document uploaded — it will appear in context sources shortly.");
+      setUploadOpen(false);
+      setUploadFile(null);
+      setUploadLabel("");
+      setUploadDocType("other");
+      setTimeout(loadAll, 3000); // refresh after brief parse delay
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Upload failed");
+    } finally { setUploading(false); }
+  };
+
   const handleGenerate = async () => {
     try {
       await axios.post(
@@ -337,15 +370,18 @@ export default function MeetingPrep() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Loader className="w-8 h-8 text-indigo-600 animate-spin" />
-    </div>
+    <Layout>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader className="w-8 h-8 text-indigo-600 animate-spin" />
+      </div>
+    </Layout>
   );
 
   const superviseeNames = context?.supervisees?.map(s => s.name).join(", ") || "supervisee";
   const currentFocusTopic = focusTopics.find(t => t.is_current);
 
   return (
+    <Layout>
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       {/* Step breadcrumb when coming from New Meeting wizard */}
       {fromNew && (
@@ -445,6 +481,65 @@ export default function MeetingPrep() {
                 />
               ))}
             </div>
+
+            {/* Upload additional document */}
+            {superviseeId && (
+              <div className="border-t border-gray-100 pt-3">
+                {!uploadOpen ? (
+                  <button
+                    onClick={() => setUploadOpen(true)}
+                    className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"
+                    data-testid="upload-context-btn"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Upload additional document
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-700">Upload PDF or DOCX</p>
+                    <input
+                      type="file"
+                      accept=".pdf,.docx"
+                      onChange={e => setUploadFile(e.target.files[0] || null)}
+                      className="block w-full text-xs text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                      data-testid="upload-context-file"
+                    />
+                    <select
+                      value={uploadDocType}
+                      onChange={e => setUploadDocType(e.target.value)}
+                      className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
+                    >
+                      <option value="supervision_record">Previous Supervision Record</option>
+                      <option value="job_description">Job Description</option>
+                      <option value="other">Other Document</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={uploadLabel}
+                      onChange={e => setUploadLabel(e.target.value)}
+                      placeholder="Label (optional)"
+                      className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleUploadContext}
+                        disabled={!uploadFile || uploading}
+                        className="flex items-center gap-1 text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg disabled:opacity-50"
+                        data-testid="upload-context-submit"
+                      >
+                        {uploading ? <Loader className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                        {uploading ? "Uploading…" : "Upload"}
+                      </button>
+                      <button
+                        onClick={() => { setUploadOpen(false); setUploadFile(null); setUploadLabel(""); }}
+                        className="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Generate button */}
@@ -555,5 +650,6 @@ export default function MeetingPrep() {
         </div>
       </div>
     </div>
+    </Layout>
   );
 }
