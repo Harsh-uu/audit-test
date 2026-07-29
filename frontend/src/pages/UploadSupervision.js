@@ -8,6 +8,18 @@ import {
   Calendar, Tag, X, ChevronRight, FileUp, Clock
 } from "lucide-react";
 
+const DOC_TYPE_OPTIONS = [
+  { value: "supervision_record", label: "Previous Supervision Record" },
+  { value: "job_description", label: "Job Description" },
+  { value: "service_user_feedback", label: "Service User Feedback" },
+  { value: "family_carer_feedback", label: "Family / Carer Feedback" },
+  { value: "peer_staff_feedback", label: "Peer / Staff Feedback" },
+  { value: "observation_record", label: "Observation Record" },
+  { value: "performance_review", label: "Performance Review" },
+  { value: "training_record", label: "Training Record" },
+  { value: "other", label: "Other" },
+];
+
 const STATUS_CONFIG = {
   processing: { icon: Loader, color: "text-amber-600", bg: "bg-amber-50 border-amber-200", label: "Analysing…", spin: true },
   done:       { icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", label: "Analysis complete" },
@@ -31,7 +43,14 @@ function UploadCard({ upload, onDelete, navigate }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900 truncate">{upload.label || upload.filename}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{upload.staff_name} · {upload.meeting_date}</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          {upload.staff_name} · {upload.meeting_date}
+          {upload.doc_type && upload.doc_type !== "other" && (
+            <span className="ml-1.5 px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px] font-medium capitalize">
+              {DOC_TYPE_OPTIONS.find(o => o.value === upload.doc_type)?.label || upload.doc_type}
+            </span>
+          )}
+        </p>
         <div className={`inline-flex items-center gap-1.5 mt-2 px-2 py-0.5 rounded-full border text-xs font-medium ${cfg.bg} ${cfg.color}`}>
           <Icon className={`w-3 h-3 ${cfg.spin ? "animate-spin" : ""}`} />
           {cfg.label}
@@ -92,6 +111,8 @@ export default function UploadSupervision() {
 
   const [staffId, setStaffId] = useState("");
   const [label, setLabel] = useState("");
+  const [docType, setDocType] = useState("supervision_record");
+  const [customDocType, setCustomDocType] = useState("");
   const [meetingDate, setMeetingDate] = useState(new Date().toISOString().slice(0, 10));
   const [file, setFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
@@ -169,6 +190,7 @@ export default function UploadSupervision() {
     form.append("staff_id", staffId);
     form.append("label", label);
     form.append("meeting_date", meetingDate);
+    form.append("doc_type", docType === "other" && customDocType.trim() ? customDocType.trim() : docType);
 
     const token = localStorage.getItem("supervision_token");
     try {
@@ -181,6 +203,8 @@ export default function UploadSupervision() {
       setFile(null);
       setLabel("");
       setStaffId("");
+      setDocType("supervision_record");
+      setCustomDocType("");
       setMeetingDate(new Date().toISOString().slice(0, 10));
       fetchUploads();
     } catch (err) {
@@ -211,7 +235,7 @@ export default function UploadSupervision() {
             <h1 className="text-2xl font-semibold text-gray-900 font-display">Import Supervision Document</h1>
           </div>
           <p className="text-sm text-gray-500 ml-11">
-            Upload a previous supervision record (PDF or Word) to scan it for CQC and Care Certificate evidence.
+            Upload any document for a staff member — supervision records, job descriptions, feedback, observations and more — to scan for CQC and Care Certificate evidence.
           </p>
         </div>
 
@@ -274,6 +298,33 @@ export default function UploadSupervision() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   data-testid="label-input"
                 />
+              </div>
+
+              {/* Document type */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
+                  <Tag className="w-3.5 h-3.5" /> Document type
+                </label>
+                <select
+                  value={docType}
+                  onChange={e => setDocType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  data-testid="doc-type-select"
+                >
+                  {DOC_TYPE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                {docType === "other" && (
+                  <input
+                    type="text"
+                    value={customDocType}
+                    onChange={e => setCustomDocType(e.target.value)}
+                    placeholder="Describe the document type…"
+                    className="w-full mt-1.5 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    data-testid="custom-doc-type-input"
+                  />
+                )}
               </div>
 
               {/* File upload zone */}

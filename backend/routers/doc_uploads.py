@@ -35,6 +35,7 @@ async def upload_supervision_doc(
     staff_id: str = Form(...),
     label: str = Form(""),
     meeting_date: str = Form(""),
+    doc_type: str = Form(""),
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -70,6 +71,7 @@ async def upload_supervision_doc(
         "staff_name": staff.get("name", ""),
         "filename": file.filename,
         "label": label.strip() or file.filename,
+        "doc_type": doc_type.strip() or "other",
         "meeting_date": meeting_date or now[:10],
         "file_ext": file_ext,
         "size_bytes": len(file_data),

@@ -569,13 +569,14 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         cqc_standards = await db.standards.find({"type": "cqc", "is_active": True}).to_list(100)
         care_cert_standards = await db.standards.find({"type": "care_cert", "is_active": True}).to_list(50)
 
-        # Merge any user-managed custom library entries not already in the system set
+        # Merge any org-specific or system entries from standards_entries not already in the system set
+        _org_std_filter = lambda t: {"type": t, "is_active": True, "$or": [{"is_system": True}, {"org_id": meeting_org_id}]}
         system_refs = {s.get("reference") for s in cqc_standards}
-        async for doc in db.standards_entries.find({"type": "cqc", "is_active": True}):
+        async for doc in db.standards_entries.find(_org_std_filter("cqc")):
             if doc.get("reference") not in system_refs:
                 cqc_standards.append(doc)
         cc_refs = {s.get("reference") for s in care_cert_standards}
-        async for doc in db.standards_entries.find({"type": "care_cert", "is_active": True}):
+        async for doc in db.standards_entries.find(_org_std_filter("care_cert")):
             if doc.get("reference") not in cc_refs:
                 care_cert_standards.append(doc)
 

@@ -19,7 +19,7 @@ from routers.super_admin import router as super_admin_router  # noqa: E402
 from routers.schedules import router as schedules_router  # noqa: E402
 from routers.doc_uploads import router as doc_uploads_router  # noqa: E402
 from utils.storage import init_storage  # noqa: E402
-from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions, seed_super_admin, seed_default_org, seed_quality_statements_migration  # noqa: E402,E501
+from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions, seed_super_admin, seed_default_org, seed_quality_statements_migration, migrate_standards_entries_system_flag  # noqa: E402,E501
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -75,6 +75,7 @@ async def startup():
     await migrate_standard_outcomes(db)
     await migrate_cqc_key_questions(db)
     await migrate_analyses_key_questions(db)
+    await migrate_standards_entries_system_flag(db)
     await seed_default_org(db)
 
     try:

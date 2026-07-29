@@ -157,14 +157,15 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         # Get meeting for context
         meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
         paused_periods = meeting.get("paused_periods", [])
+        meeting_org_id = meeting.get("org_id")
 
-        # Load standards
-        cqc_standards = await db.standards_entries.find({"type": "cqc", "is_active": True}).to_list(50)
-        care_cert_standards = await db.standards_entries.find({"type": "care_cert", "is_active": True}).to_list(20)
+        # Load standards — system-wide plus this org's custom entries
+        _std_filter = lambda t: {"type": t, "is_active": True, "$or": [{"is_system": True}, {"org_id": meeting_org_id}]}
+        cqc_standards = await db.standards_entries.find(_std_filter("cqc")).to_list(50)
+        care_cert_standards = await db.standards_entries.find(_std_filter("care_cert")).to_list(20)
 
         # Load active parsed library documents — scoped to this org only
         custom_standards = []
-        meeting_org_id = meeting.get("org_id")
         std_doc_query = {"is_active": True, "parse_status": "parsed"}
         if meeting_org_id:
             std_doc_query["org_id"] = meeting_org_id

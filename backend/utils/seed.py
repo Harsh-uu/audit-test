@@ -572,6 +572,20 @@ async def migrate_analyses_key_questions(db):
         logger.info(f"Back-filled key_questions on {updated} existing analysis documents")
 
 
+async def migrate_standards_entries_system_flag(db):
+    """Mark existing seeded standards_entries (no org_id) as is_system=True.
+
+    This prevents them being treated as org-specific custom entries and ensures
+    all orgs can still read them after the org-scoping fix was applied.
+    """
+    result = await db.standards_entries.update_many(
+        {"org_id": {"$exists": False}},
+        {"$set": {"is_system": True}}
+    )
+    if result.modified_count:
+        logger.info(f"Marked {result.modified_count} legacy standards_entries as is_system=True")
+
+
 async def seed_super_admin(db):
     """Create the single super admin account from environment variables."""
     from routers.auth import hash_password

@@ -128,26 +128,30 @@ async def reset_user_password(user_id: str, data: ResetPasswordRequest, db=Depen
 
 @router.get("/standards")
 async def list_standards(type: Optional[str] = None, db=Depends(get_db), current_user=Depends(get_current_user)):
-    query: dict = {"is_active": True}
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
+    org_id = current_user.get("org_id")
+    # Include system-wide entries (is_system: True, legacy seeds) + this org's custom entries
+    base_filter: dict = {"is_active": True, "$or": [{"is_system": True}, {"org_id": org_id}]}
     if type:
-        query["type"] = type
+        base_filter["type"] = type
 
-    # User-managed entries (org library)
+    # User-managed entries (system seeds + org custom)
     standards = []
     seen_refs: set = set()
-    async for doc in db.standards_entries.find(query).sort([("type", 1), ("reference", 1)]):
+    async for doc in db.standards_entries.find(base_filter).sort([("type", 1), ("reference", 1)]):
         d = doc_to_dict(doc)
         standards.append(d)
         seen_refs.add(d.get("reference", ""))
 
-    # System-seeded standards (regulations + quality statements) — read-only in library
+    # Newer system-seeded standards (regulations + quality statements) — read-only
     sys_query: dict = {"is_active": True}
     if type:
         sys_query["type"] = type
     async for doc in db.standards.find(sys_query).sort([("key_questions", 1), ("reference", 1)]):
         d = doc_to_dict(doc)
         if d.get("reference", "") not in seen_refs:
-            d["system"] = True  # non-deletable flag used by the frontend
+            d["system"] = True
             standards.append(d)
     return standards
 
@@ -165,6 +169,8 @@ async def create_standard(data: CreateStandardRequest, db=Depends(get_db), curre
         "keywords": data.keywords,
         "source": data.source or "",
         "is_active": True,
+        "is_system": False,
+        "org_id": current_user.get("org_id"),
         "created_at": now,
         "created_by": current_user["id"],
     }
@@ -178,7 +184,18 @@ async def create_standard(data: CreateStandardRequest, db=Depends(get_db), curre
 async def delete_standard(standard_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
-    await db.standards_entries.update_one({"_id": ObjectId(standard_id)}, {"$set": {"is_active": False}})
+    # Prevent deletion of system-seeded standards
+    entry = await db.standards_entries.find_one({"_id": ObjectId(standard_id)})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Standard not found")
+    if entry.get("is_system"):
+        raise HTTPException(status_code=403, detail="System standards cannot be deleted")
+    result = await db.standards_entries.update_one(
+        {"_id": ObjectId(standard_id), "org_id": current_user.get("org_id")},
+        {"$set": {"is_active": False}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Standard not found in your organisation")
     return {"message": "Standard deactivated"}
 
 
@@ -424,9 +441,9 @@ async def get_team_insights(
     cqc_stds, cc_stds = [], []
     # Build Care Cert sub-outcomes lookup: standard_ref → list of sub-outcome refs
     cc_sub_outcomes: dict = {}  # "Standard 2" → ["2.1a", "2.1b", ...]
-    async for s in db.standards_entries.find({"type": "cqc", "is_active": True}).sort("reference", 1):
+    async for s in db.standards_entries.find({"type": "cqc", "is_active": True, "$or": [{"is_system": True}, {"org_id": org_id}]}).sort("reference", 1):
         cqc_stds.append({"ref": s["reference"], "name": s.get("name", "")})
-    async for s in db.standards_entries.find({"type": "care_cert", "is_active": True}).sort("reference", 1):
+    async for s in db.standards_entries.find({"type": "care_cert", "is_active": True, "$or": [{"is_system": True}, {"org_id": org_id}]}).sort("reference", 1):
         cc_stds.append({"ref": s["reference"], "name": s.get("name", "")})
         subs = s.get("sub_outcomes", [])
         if subs:
@@ -1438,7 +1455,9 @@ async def get_stats(db=Depends(get_db), current_user=Depends(get_current_user)):
     signed_off = await db.meetings.count_documents({"status": "signed_off", **org_filter})
     in_review = await db.meetings.count_documents({"status": {"$in": ["in_review", "reviewed"]}, **org_filter})
     total_users = await db.users.count_documents({**org_filter})
-    total_standards = await db.standards_entries.count_documents({"is_active": True})
+    total_standards = await db.standards_entries.count_documents(
+        {"is_active": True, "$or": [{"is_system": True}, {"org_id": org_id}]}
+    )
     return {
         "total_meetings": total_meetings,
         "signed_off": signed_off,
