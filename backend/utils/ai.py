@@ -79,7 +79,16 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
     {"id": "unique_id", "text": "action description", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
   ],
   "risks": [
-    {"id": "unique_id", "text": "risk or concern description", "severity": "high|medium|low"}
+    {
+      "id": "unique_id",
+      "text": "concise risk or concern description (max 20 words)",
+      "severity": "high|medium|low",
+      "transcript_excerpt": "exact short quote from the transcript that evidences this risk (max 60 words)",
+      "suggested_resolutions": [
+        "specific actionable suggestion one",
+        "specific actionable suggestion two"
+      ]
+    }
   ],
   "cqc_mappings": [
     {
@@ -1250,3 +1259,55 @@ Assess each question's coverage in the transcript. Return JSON only."""
     except Exception as exc:
         logger.error(f"Coverage check failed: {exc}")
         return {"results": {}, "checked_at": None}
+
+
+
+async def generate_risk_suggestions(risk_text: str, severity: str, transcript_text: str) -> dict:
+    """Generate a transcript excerpt and resolution suggestions for an existing risk."""
+    api_key = os.environ.get("LLM_API_KEY", "")
+    if not api_key:
+        return {"transcript_excerpt": "", "suggested_resolutions": []}
+
+    system_prompt = """You are an expert UK adult social care safeguarding and risk management advisor.
+Given a risk or concern identified in a supervision meeting, your job is to:
+1. Find the most relevant short excerpt from the transcript that evidences this risk (max 60 words, exact quote)
+2. Provide 2-3 specific, actionable resolution suggestions tailored to adult social care
+
+Return ONLY valid JSON:
+{
+  "transcript_excerpt": "exact quote from transcript (or empty string if not locatable)",
+  "suggested_resolutions": [
+    "specific actionable suggestion one",
+    "specific actionable suggestion two"
+  ]
+}"""
+
+    user_prompt = f"""Risk/Concern ({severity.upper()} severity): {risk_text}
+
+Transcript:
+{transcript_text}
+
+Find the transcript excerpt evidencing this risk and provide resolution suggestions."""
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"risk_{uuid.uuid4().hex[:8]}",
+            system_message=system_prompt,
+        ).with_model("openai", "gpt-4o")
+        msg = UserMessage(text=user_prompt)
+        response = await chat.send_message(msg)
+        full_response = response.text.strip()
+        if "```" in full_response:
+            import re as _re
+            m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", full_response)
+            if m:
+                full_response = m.group(1).strip()
+        data = json.loads(full_response)
+        return {
+            "transcript_excerpt": data.get("transcript_excerpt", ""),
+            "suggested_resolutions": data.get("suggested_resolutions", []),
+        }
+    except Exception as exc:
+        logger.error(f"Risk suggestions failed: {exc}")
+        return {"transcript_excerpt": "", "suggested_resolutions": []}

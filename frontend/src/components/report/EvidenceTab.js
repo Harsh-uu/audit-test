@@ -3,10 +3,183 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
+  ChevronDown, ChevronUp, Loader, Quote, Lightbulb, CheckSquare, Square, Zap,
 } from "lucide-react";
+
+// ── Severity config ──────────────────────────────────────────────────────────
+const SEV = {
+  high:   { bg: "bg-red-50",    border: "border-red-300",   text: "text-red-700",   badge: "bg-red-100 text-red-700",   icon: "text-red-500"   },
+  medium: { bg: "bg-amber-50",  border: "border-amber-300", text: "text-amber-800", badge: "bg-amber-100 text-amber-700", icon: "text-amber-500" },
+  low:    { bg: "bg-gray-50",   border: "border-gray-200",  text: "text-gray-700",  badge: "bg-gray-100 text-gray-600",  icon: "text-gray-400"  },
+};
+
+// ── Single risk card ──────────────────────────────────────────────────────────
+function RiskCard({ risk, meetingId, canEdit, onToggleResolved, onCreateAction }) {
+  const { getAuthConfig, API } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [loadingSugg, setLoadingSugg] = useState(false);
+  const [excerpt, setExcerpt] = useState(risk.transcript_excerpt || null);
+  const [suggestions, setSuggestions] = useState(risk.suggested_resolutions || null);
+  const sev = SEV[risk.severity?.toLowerCase()] || SEV.low;
+
+  const handleDrillIn = async () => {
+    const willOpen = !open;
+    setOpen(willOpen);
+    if (!willOpen || (excerpt !== null && suggestions !== null)) return;
+    setLoadingSugg(true);
+    try {
+      const { data } = await axios.post(`${API}/review/${meetingId}/risks/${risk.id}/suggestions`, null, getAuthConfig());
+      setExcerpt(data.transcript_excerpt || "");
+      setSuggestions(data.suggested_resolutions || []);
+    } catch { setSuggestions([]); setExcerpt(""); }
+    finally { setLoadingSugg(false); }
+  };
+
+  return (
+    <div className={`rounded-lg border-2 ${sev.border} ${risk.is_resolved ? "opacity-60" : ""} transition-opacity`} data-testid={`risk-card-${risk.id}`}>
+      {/* Header row */}
+      <div className={`flex items-start gap-3 p-3 ${sev.bg} rounded-t-lg`}>
+        {/* Tick */}
+        <button
+          onClick={() => canEdit && onToggleResolved(risk.id, !risk.is_resolved)}
+          className={`flex-shrink-0 mt-0.5 ${canEdit ? "cursor-pointer" : "cursor-default"}`}
+          title={risk.is_resolved ? "Mark unresolved" : "Mark resolved"}
+          data-testid={`risk-toggle-${risk.id}`}
+        >
+          {risk.is_resolved
+            ? <CheckSquare className="w-4 h-4 text-emerald-600" />
+            : <Square className={`w-4 h-4 ${sev.icon}`} />}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-medium ${risk.is_resolved ? "line-through text-gray-400" : "text-gray-800"}`}>{risk.text}</p>
+          {risk.is_resolved && risk.resolved_by && (
+            <p className="text-xs text-emerald-600 mt-0.5">Resolved by {risk.resolved_by}</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sev.badge}`}>
+            {(risk.severity || "low").toUpperCase()}
+          </span>
+          <button
+            onClick={handleDrillIn}
+            className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+            data-testid={`risk-expand-${risk.id}`}
+          >
+            {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {open ? "Less" : "Detail"}
+          </button>
+        </div>
+      </div>
+
+      {/* Drill-in panel */}
+      {open && (
+        <div className="p-4 space-y-4 border-t border-gray-200 bg-white rounded-b-lg">
+          {loadingSugg ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader className="w-4 h-4 animate-spin text-indigo-400" />
+              Analysing transcript for context…
+            </div>
+          ) : (
+            <>
+              {/* Transcript excerpt */}
+              {excerpt && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Quote className="w-3 h-3" /> From the transcript
+                  </div>
+                  <blockquote className="text-sm text-gray-700 italic border-l-4 border-indigo-200 pl-3 py-1 bg-indigo-50 rounded-r-md">
+                    "{excerpt}"
+                  </blockquote>
+                </div>
+              )}
+
+              {/* Suggested resolutions */}
+              {suggestions?.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Lightbulb className="w-3 h-3" /> Suggested resolutions
+                  </div>
+                  <ul className="space-y-1.5">
+                    {suggestions.map((s, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {!excerpt && !suggestions?.length && (
+                <p className="text-xs text-gray-400 italic">No additional detail available.</p>
+              )}
+
+              {/* Create Action button */}
+              {canEdit && !risk.is_resolved && (
+                <button
+                  onClick={() => onCreateAction(risk)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+                  data-testid={`risk-create-action-${risk.id}`}
+                >
+                  <Zap className="w-3 h-3" /> Create Action from this Risk
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Risks section ─────────────────────────────────────────────────────────────
+function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit }) {
+  const { getAuthConfig, API } = useAuth();
+
+  const handleToggleResolved = async (riskId, resolved) => {
+    const { data } = await axios.patch(`${API}/review/${meetingId}/risks/${riskId}`, { is_resolved: resolved }, getAuthConfig());
+    onRisksChange?.(data.risks);
+  };
+
+  const open = risks.filter(r => !r.is_resolved);
+  const resolved = risks.filter(r => r.is_resolved);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900 text-sm font-display flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500" /> Risks &amp; Concerns
+        </h3>
+        <span className="text-xs text-gray-400">{open.length} open · {resolved.length} resolved</span>
+      </div>
+      <div className="space-y-2" data-testid="risks-list">
+        {open.map(risk => (
+          <RiskCard key={risk.id || risk.text} risk={risk} meetingId={meetingId} canEdit={canEdit}
+            onToggleResolved={handleToggleResolved} onCreateAction={onCreateAction} />
+        ))}
+        {resolved.length > 0 && (
+          <details className="mt-2">
+            <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+              {resolved.length} resolved risk{resolved.length > 1 ? "s" : ""}
+            </summary>
+            <div className="mt-2 space-y-2">
+              {resolved.map(risk => (
+                <RiskCard key={risk.id || risk.text} risk={risk} meetingId={meetingId} canEdit={canEdit}
+                  onToggleResolved={handleToggleResolved} onCreateAction={onCreateAction} />
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Renders the AI-generated summary which follows the format:
+ *
  *   Intro sentence one. Intro sentence two.
  *
  *   - Bullet one
@@ -68,9 +241,17 @@ export function EvidenceTab({
   toggleActionComplete,
   actionMessage,
   onSummaryRegenerated,
+  onAnalysisChange,
 }) {
+  const canEdit = canReview;
   const { getAuthConfig, API } = useAuth();
-  const [regenerating, setRegenerating] = useState(false);
+
+  const handleCreateActionFromRisk = (risk) => {
+    setNewAction(`[Risk] ${risk.text}`);
+    setAddingAction(true);
+    // Scroll to actions section
+    setTimeout(() => document.getElementById("actions-section")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+  };  const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState("");
 
   const handleRegenerate = async () => {
@@ -147,7 +328,7 @@ export function EvidenceTab({
 
       {/* Actions */}
       {(analysis.actions?.length > 0 || canReview) && (
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+        <div id="actions-section" className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-900 text-sm font-display">
               Action Items
@@ -228,19 +409,15 @@ export function EvidenceTab({
         </div>
       )}
 
-      {/* Risks */}
+      {/* Risks & Concerns */}
       {analysis.risks?.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-          <h3 className="font-semibold text-gray-900 text-sm mb-3 font-display">Risks &amp; Concerns</h3>
-          <div className="space-y-2" data-testid="risks-list">
-            {analysis.risks.map((risk, i) => (
-              <div key={risk.text?.slice(0, 40) || i} className={`flex items-start gap-2 p-2.5 rounded-md border ${risk.severity === "high" ? "bg-red-50 border-red-200" : risk.severity === "medium" ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-gray-200"}`}>
-                <AlertTriangle className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${risk.severity === "high" ? "text-red-500" : risk.severity === "medium" ? "text-amber-500" : "text-gray-400"}`} />
-                <p className="text-sm text-gray-800">{risk.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <RisksSection
+          risks={analysis.risks}
+          meetingId={meeting.id}
+          onRisksChange={updatedRisks => onAnalysisChange?.({ ...analysis, risks: updatedRisks })}
+          onCreateAction={handleCreateActionFromRisk}
+          canEdit={canEdit}
+        />
       )}
 
       {/* Attendees review status */}

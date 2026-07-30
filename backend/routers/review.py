@@ -37,6 +37,11 @@ class UpdateEvidenceRequest(BaseModel):
     status: Optional[str] = None  # accepted|rejected|needs_followup|pending
 
 
+class UpdateRiskRequest(BaseModel):
+    is_resolved: Optional[bool] = None
+    notes: Optional[str] = None
+
+
 class ShareRequest(BaseModel):
     user_ids: List[str]
 
@@ -304,7 +309,72 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
     return {"message": "Evidence updated"}
 
 
-@router.post("/{meeting_id}/mark-reviewed")
+# ── Risk management endpoints ─────────────────────────────────────────────────
+
+@router.patch("/{meeting_id}/risks/{risk_id}")
+async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    """Toggle resolved status or add notes to a risk/concern."""
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    analysis = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    risks = analysis.get("risks", [])
+    updated = False
+    for i, r in enumerate(risks):
+        if r.get("id") == risk_id:
+            if data.is_resolved is not None:
+                risks[i]["is_resolved"] = data.is_resolved
+                risks[i]["resolved_at"] = datetime.now(timezone.utc).isoformat() if data.is_resolved else None
+                risks[i]["resolved_by"] = current_user.get("name") if data.is_resolved else None
+            if data.notes is not None:
+                risks[i]["notes"] = data.notes
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=404, detail="Risk not found")
+
+    await db.analyses.update_one({"_id": ObjectId(meeting["analysis_id"])}, {"$set": {"risks": risks}})
+    return {"message": "Risk updated", "risks": risks}
+
+
+@router.post("/{meeting_id}/risks/{risk_id}/suggestions")
+async def get_risk_suggestions(meeting_id: str, risk_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+    """On-demand: generate transcript excerpt + resolution suggestions for an existing risk."""
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    analysis = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    risk = next((r for r in analysis.get("risks", []) if r.get("id") == risk_id), None)
+    if not risk:
+        raise HTTPException(status_code=404, detail="Risk not found")
+
+    # Already has rich data
+    if risk.get("suggested_resolutions") and risk.get("transcript_excerpt"):
+        return {"transcript_excerpt": risk["transcript_excerpt"], "suggested_resolutions": risk["suggested_resolutions"]}
+
+    # Generate on demand
+    transcript = await db.transcripts.find_one({"meeting_id": meeting_id})
+    transcript_text = (transcript or {}).get("speaker_text") or (transcript or {}).get("text", "")
+
+    from utils.ai import generate_risk_suggestions
+    result = await generate_risk_suggestions(risk["text"], risk.get("severity", "medium"), transcript_text[:6000])
+
+    # Persist back to analysis
+    risks = analysis.get("risks", [])
+    for i, r in enumerate(risks):
+        if r.get("id") == risk_id:
+            risks[i]["transcript_excerpt"] = result.get("transcript_excerpt", "")
+            risks[i]["suggested_resolutions"] = result.get("suggested_resolutions", [])
+            break
+    await db.analyses.update_one({"_id": ObjectId(meeting["analysis_id"])}, {"$set": {"risks": risks}})
+
+    return result
 async def mark_reviewed(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:

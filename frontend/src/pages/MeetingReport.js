@@ -611,6 +611,7 @@ export default function MeetingReport() {
                       setMeeting(m => ({ ...m, analysis: { ...m.analysis, summary: newSummary } }));
                       setSummaryText(newSummary);
                     }}
+                    onAnalysisChange={updatedAnalysis => setAnalysis(updatedAnalysis)}
                   />
                 )}
                 {/* TranscriptTab stays mounted to preserve unsaved speaker edits
