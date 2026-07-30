@@ -1086,6 +1086,8 @@ MANDATORY RULES — VIOLATION OF ANY RULE MAKES THE OUTPUT USELESS:
    - "Describe how you approached..."
    - "What did you do when..."
 
+3. CONCISENESS — every question must be under 25 words. Cut all filler phrases like "I'd like to understand...", "Could you help me explore...", "In the context of your role...". Start directly with the behavioural prompt. One sentence only.
+
 3. {"EVERY question MUST reference specific content from the uploaded documents. Follow these rules by document type:" if has_docs else "Use the focus topic and context to make questions as specific as possible."}
 {"   - JOB DESCRIPTION: Read every listed responsibility, competency and required skill. Write questions that probe whether the supervisee is actively fulfilling each one. Name the specific responsibility in the question. Example: if the JD says 'ensure accurate medication records', ask 'Walk me through how you ensure medication records are completed accurately after each administration.' Do not write generic competency questions." if has_docs else ""}
 {"   - SUPERVISION RECORD / PREVIOUS MEETING: Follow up directly on named incidents, actions, concerns or themes. Reference them explicitly. Example: 'Last time we discussed the staffing shortage on night shifts — describe how you have managed that since then.'" if has_docs else ""}
