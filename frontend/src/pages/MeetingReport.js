@@ -273,13 +273,17 @@ export default function MeetingReport() {
     }
   };
 
-  const rescanEvidence = async () => {
+  const rescanEvidence = async (customPrompt = "") => {
     if (speakersDirty) {
       toast.error("You have unsaved transcript changes. Save them in the Transcript tab first, then re-scan.");
       return;
     }
     try {
-      const { data } = await axios.post(`${API}/review/${meetingId}/rescan-evidence`, {}, getAuthConfig());
+      const { data } = await axios.post(
+        `${API}/review/${meetingId}/rescan-evidence`,
+        { custom_prompt: customPrompt || null },
+        getAuthConfig()
+      );
 
       if (data.status === "processing") {
         // Background task started — mark locally so polling and completion toast fire

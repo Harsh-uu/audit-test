@@ -907,6 +907,7 @@ async def analyze_meeting(
     paused_periods: list,
     custom_standards: list = None,
     supervision_template: dict = None,
+    custom_prompt: str = None,
 ) -> dict:
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
@@ -963,6 +964,10 @@ async def analyze_meeting(
     if paused_periods:
         pause_note = f"\n\nNOTE: The recording was paused {len(paused_periods)} time(s) during this meeting. Paused sections are not included in the transcript."
 
+    custom_prompt_note = ""
+    if custom_prompt and custom_prompt.strip():
+        custom_prompt_note = f"\n\nADDITIONAL GUIDANCE FROM MANAGER (prioritise this when mapping evidence): {custom_prompt.strip()}"
+
     user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
 
 TRANSCRIPT:{pause_note}
@@ -972,7 +977,7 @@ CQC REGULATIONS TO MAP AGAINST:
 {cqc_context}
 
 CARE CERTIFICATE STANDARDS TO MAP AGAINST:
-{cc_context}{custom_context}{template_context}
+{cc_context}{custom_context}{template_context}{custom_prompt_note}
 
 Provide your analysis as JSON. Only map regulations/standards where there is actual evidence in the transcript."""
 

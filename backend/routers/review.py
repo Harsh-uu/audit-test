@@ -69,6 +69,10 @@ class SpeakerTextUpdateRequest(BaseModel):
     speaker_colors: Optional[dict] = None
 
 
+class RescanRequest(BaseModel):
+    custom_prompt: Optional[str] = None
+
+
 class EmailRequest(BaseModel):
     recipients: List[str]
     message: Optional[str] = None
@@ -613,11 +617,13 @@ async def find_replace_transcript(
 @router.post("/{meeting_id}/rescan-evidence")
 async def rescan_evidence(
     meeting_id: str,
+    data: RescanRequest,
     background_tasks: BackgroundTasks,
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """Re-run AI compliance mapping using the current (possibly edited) transcript.
+    Accepts an optional custom_prompt to steer the AI (e.g. "Focus on medication management").
     Runs in the background to avoid gateway timeouts on large standard sets.
     Only regenerates CQC/Care Cert/Custom evidence mappings — preserves summary, actions, and risks."""
     if current_user["role"] not in ["manager", "admin"]:
@@ -641,6 +647,8 @@ async def rescan_evidence(
     if not transcript_text.strip():
         raise HTTPException(status_code=400, detail="Transcript is empty")
 
+    custom_prompt = (data.custom_prompt or "").strip() or None
+
     # Mark as processing immediately so the frontend can show a spinner
     await db.meetings.update_one(
         {"_id": ObjectId(meeting_id)},
@@ -649,13 +657,13 @@ async def rescan_evidence(
 
     background_tasks.add_task(
         _run_rescan_background,
-        meeting_id, meeting, transcript_text, str(current_user["id"]), current_user["name"], db
+        meeting_id, meeting, transcript_text, str(current_user["id"]), current_user["name"], db, custom_prompt
     )
 
     return {"status": "processing", "message": "Re-scanning evidence in the background — this takes 1–2 minutes. The page will update automatically."}
 
 
-async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text: str, user_id: str, user_name: str, db):
+async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text: str, user_id: str, user_name: str, db, custom_prompt: str = None):
     """Background worker: re-runs AI compliance mapping and updates the analysis record."""
     from utils.ai import analyze_meeting as _analyze_meeting
     try:
@@ -694,7 +702,8 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         paused_periods = meeting.get("paused_periods", [])
 
         analysis_result = await _analyze_meeting(
-            transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template
+            transcript_text, cqc_standards, care_cert_standards, paused_periods,
+            custom_standards, supervision_template, custom_prompt
         )
 
         cqc_kq_map = {s.get("reference"): s.get("key_questions", []) for s in cqc_standards}
@@ -737,7 +746,7 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             "editor_id": user_id,
             "editor_name": user_name,
             "edit_type": "evidence_rescan",
-            "content": "Compliance evidence re-scanned from corrected transcript",
+            "content": f"Compliance evidence re-scanned{' with guidance: ' + custom_prompt if custom_prompt else ' from corrected transcript'}",
             "created_at": now,
         })
         logger.info(f"Rescan complete for meeting {meeting_id} — {len(analysis_result.get('cqc_mappings',[]))} CQC, {len(analysis_result.get('care_cert_mappings',[]))} CC mappings")

@@ -1,0 +1,33 @@
+{
+  "summary": "Tested 'Guided Re-scan' feature end-to-end. All 6 backend tests pass. All UI flows verified via Playwright. Feature works correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_guided_rescan.py",
+    "/app/test_reports/pytest/guided_rescan_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MeetingReport.js line 619: `onAnalysisChange={updatedAnalysis => setAnalysis(updatedAnalysis)}` — `setAnalysis` is undefined (no such state setter). This is a pre-existing issue in EvidenceTab that should be checked if analysis updates are needed from that tab."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_guided_rescan.py"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 passed)",
+    "frontend": "100% (all checks passed)"
+  },
+  "test_credentials": "jane@sunrisecare.com / Jane1two1! (Manager at Sunrise Care Ltd) — has signed_off meeting 6a46da6d1936c45e856ce791 with transcript and analysis",
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Jane@sunrisecare.com / Jane1two1! has meeting 6a46da6d1936c45e856ce791 signed_off with analysis/transcript. manager@supervision.com has no eligible meetings for rescan testing. Guided Re-scan feature fully tested and working.",
+  "rca_of_issue": null
+}
