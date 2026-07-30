@@ -310,6 +310,23 @@ export default function MeetingPrep() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // ── Continuous context refresh while any source is still indexing ─────────
+  // Runs when pendingUploads exist OR any source has text_ready status.
+  // Self-terminates once everything is settled.
+  const indexingPollRef = useRef(null);
+  const hasIndexingSources = (context?.sources || []).some(s => s.status === "text_ready");
+  const hasPending = pendingUploads.length > 0;
+
+  useEffect(() => {
+    if (!hasIndexingSources && !hasPending) {
+      clearInterval(indexingPollRef.current);
+      return;
+    }
+    // Refresh every 4 seconds
+    indexingPollRef.current = setInterval(() => loadAll(), 4000);
+    return () => clearInterval(indexingPollRef.current);
+  }, [hasIndexingSources, hasPending, loadAll]);
+
   // ── Poll while generating ──────────────────────────────────────────────────
   useEffect(() => {
     const status = prep?.gen_status;
@@ -375,22 +392,22 @@ export default function MeetingPrep() {
           setPendingUploads(p => p.map(u => u.id === tempId ? { ...u, progress: pct } : u));
         },
       });
-      // Upload complete — now waiting for text extraction
+      // Upload complete — now waiting for text extraction (indexing poller takes over)
       setPendingUploads(p => p.map(u => u.id === tempId ? { ...u, status: "extracting", progress: 100 } : u));
-      // Poll until doc appears in context (text_ready or done)
+
+      // Remove pending card once the doc appears in allSources (count increases)
+      const prevCount = (context?.sources || []).filter(s => s.source_type === "doc_upload").length;
       let attempts = 0;
-      const poll = setInterval(async () => {
+      const waitForDoc = setInterval(async () => {
         attempts++;
-        await loadAll();
-        // loadAll updates context; if source appears, remove from pending
         const ctx = await axios.get(`${API}/prep/${meetingId}/context`, getAuthConfig());
-        const appeared = ctx.data.sources?.some(s => s.source_type === "doc_upload" && s.label === label);
-        if (appeared || attempts >= 12) {
-          clearInterval(poll);
+        const newCount = (ctx.data.sources || []).filter(s => s.source_type === "doc_upload").length;
+        if (newCount > prevCount || attempts >= 15) {
+          clearInterval(waitForDoc);
           setPendingUploads(p => p.filter(u => u.id !== tempId));
-          if (appeared) toast.success(`"${label}" is ready as a context source.`);
+          if (newCount > prevCount) toast.success(`"${label}" added — indexing in the background.`);
         }
-      }, 5000);
+      }, 4000);
     } catch (err) {
       setPendingUploads(p => p.filter(u => u.id !== tempId));
       toast.error(err.response?.data?.detail || "Upload failed");
