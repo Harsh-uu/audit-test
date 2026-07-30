@@ -705,15 +705,15 @@ export default function MeetingPrep() {
             </div>
           )}
 
-          {/* Skip / back — only before questions are generated */}
-          {(fromNew || fromRecord) && sections.length === 0 && !generating && (
+          {/* Skip only shown before questions are generated — not in wizard flow */}
+          {fromRecord && sections.length === 0 && !generating && (
             <div className="pt-2">
               <button
                 onClick={() => navigate(`/meetings/${meetingId}/record`)}
                 className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors"
                 data-testid="skip-prep-btn-empty"
               >
-                {fromRecord ? "Return to Recording without saving" : "Skip prep — go straight to recording"}
+                Return to Recording without saving
               </button>
             </div>
           )}
