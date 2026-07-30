@@ -17,6 +17,7 @@ const SECTIONS = [
   { id: "learning_development", label: "Learning & Development",   color: "bg-purple-50 border-purple-200", dot: "bg-purple-400" },
   { id: "achievements",         label: "Achievements",             color: "bg-rose-50 border-rose-200",   dot: "bg-rose-400" },
   { id: "aob",                  label: "Any Other Business",       color: "bg-gray-50 border-gray-200",   dot: "bg-gray-400" },
+  { id: "bonus",                label: "We thought you might also want to ask this", color: "bg-amber-50 border-amber-300", dot: "bg-amber-400" },
 ];
 
 const SOURCE_ICONS = {
@@ -94,7 +95,7 @@ function QuestionRow({ question, onToggle, onEdit, onDelete }) {
 }
 
 // ── Section panel ─────────────────────────────────────────────────────────────
-function SectionPanel({ section, sectionMeta, onChange }) {
+function SectionPanel({ section, sectionMeta, onChange, hideHeader = false }) {
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState("");
@@ -117,6 +118,23 @@ function SectionPanel({ section, sectionMeta, onChange }) {
     onChange({ ...section, questions: [...questions, q] });
     setNewText(""); setAdding(false);
   };
+
+  if (hideHeader) {
+    // Render questions only, no collapsible header (used inside bonus card)
+    return (
+      <div className="space-y-2">
+        {questions.map(q => (
+          <QuestionRow
+            key={q.id}
+            question={q}
+            onToggle={handleToggle}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded-xl border-2 ${sectionMeta.color} overflow-hidden`}>
@@ -706,15 +724,39 @@ export default function MeetingPrep() {
               )}
             </button>
 
-          {sections.map((section, idx) => {
+          {/* Standard sections */}
+          {sections.filter(s => s.section_id !== "bonus").map((section, idx) => {
             const meta = SECTIONS.find(s => s.id === section.section_id) || SECTIONS[5];
+            const realIdx = sections.findIndex(s => s.section_id === section.section_id);
             return (
               <SectionPanel
                 key={section.section_id}
                 section={section}
                 sectionMeta={meta}
-                onChange={updated => handleSectionChange(idx, updated)}
+                onChange={updated => handleSectionChange(realIdx, updated)}
               />
+            );
+          })}
+
+          {/* Bonus insight section — distinct gold card */}
+          {sections.filter(s => s.section_id === "bonus").map(section => {
+            const realIdx = sections.findIndex(s => s.section_id === "bonus");
+            return (
+              <div key="bonus" className="bg-amber-50 border-2 border-amber-300 rounded-xl overflow-hidden shadow-sm">
+                <div className="flex items-center gap-2 px-4 py-3 bg-amber-100 border-b border-amber-200">
+                  <Sparkles className="w-4 h-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-900">We thought you might also want to ask this</span>
+                  <span className="ml-auto text-xs text-amber-600 bg-amber-200 px-2 py-0.5 rounded-full">Bonus Insight</span>
+                </div>
+                <div className="p-4">
+                  <SectionPanel
+                    section={section}
+                    sectionMeta={SECTIONS.find(s => s.id === "bonus")}
+                    onChange={updated => handleSectionChange(realIdx, updated)}
+                    hideHeader
+                  />
+                </div>
+              </div>
             );
           })}
 

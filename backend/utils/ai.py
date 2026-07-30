@@ -1105,7 +1105,15 @@ MANDATORY RULES — VIOLATION OF ANY RULE MAKES THE OUTPUT USELESS:
 
 7. Generate exactly 2 questions per section, except AOB (exactly 1 question).
 
-SECTIONS TO POPULATE:
+8. BONUS INSIGHT — After all standard sections, add one extra section with section_id "bonus":
+   - Reason deeply through ALL context: documents, previous meetings, outstanding actions, focus topic.
+   - Find ONE question that does NOT fit neatly into any standard section but is genuinely valuable — something a less attentive manager would miss entirely.
+   - This could be: a pattern across multiple documents, a risk hiding in plain sight, a development opportunity the supervisee hasn't named, a pastoral concern suggested by the tone of previous notes, or an unexpected connection between pieces of context.
+   - Label this section exactly: "We thought you might also want to ask this"
+   - Generate exactly 1 question. It should be the most insightful, surprising, or revealing question on the page.
+   - If you genuinely find nothing from context, still include the section with a thoughtful forward-looking question.
+
+SECTIONS TO POPULATE (standard sections only — bonus is always appended separately):
 {sections_spec}
 
 Return ONLY valid JSON — no commentary, no markdown fences:
@@ -1116,6 +1124,13 @@ Return ONLY valid JSON — no commentary, no markdown fences:
       "label": "<section label>",
       "questions": [
         {{"id": "q1", "text": "<question text>", "generated": true}}
+      ]
+    }},
+    {{
+      "section_id": "bonus",
+      "label": "We thought you might also want to ask this",
+      "questions": [
+        {{"id": "bonus_q1", "text": "<the insightful discovery question>", "generated": true}}
       ]
     }}
   ]
@@ -1140,7 +1155,7 @@ FINAL CHECKS BEFORE GENERATING:
         api_key=api_key,
         session_id=f"prep_{uuid.uuid4().hex[:8]}",
         system_message=system_prompt,
-    ).with_model("openai", "gpt-4o")
+    ).with_model("openai", "o4-mini").with_params(reasoning_effort="high")
 
     response = await chat.send_message(UserMessage(text=user_prompt))
     full_response = response.text.strip() if hasattr(response, "text") else str(response)
