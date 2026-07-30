@@ -247,6 +247,9 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
+    meeting_status = meeting.get("status", "")
+    is_finalised = meeting_status in ["signed_off", "shared"]
+
     analysis_id = meeting.get("analysis_id")
     if not analysis_id:
         raise HTTPException(status_code=400, detail="No analysis found")
@@ -256,15 +259,26 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
         raise HTTPException(status_code=404, detail="Analysis not found")
 
     update_data = {}
+    changed_fields = []
     for mapping_type in ["cqc_mappings", "care_cert_mappings", "custom_mappings"]:
         mappings = analysis.get(mapping_type, [])
         for i, m in enumerate(mappings):
             if m.get("id") == evidence_id:
+                # Block status changes on finalised meetings — status changes require re-opening
+                if data.status is not None and data.status != m.get("status") and is_finalised:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Cannot change evidence status on a {meeting_status} meeting. Ask the sign-off manager to re-open the meeting first."
+                    )
                 if data.edited_evidence_summary is not None:
+                    old_val = m.get("edited_evidence_summary") or m.get("evidence_summary", "")
                     mappings[i]["edited_evidence_summary"] = data.edited_evidence_summary
+                    changed_fields.append(f"evidence_summary changed from '{old_val[:80]}' to '{data.edited_evidence_summary[:80]}'")
                 if data.notes is not None:
                     mappings[i]["notes"] = data.notes
-                if data.status is not None:
+                    changed_fields.append(f"notes updated")
+                if data.status is not None and data.status != m.get("status"):
+                    changed_fields.append(f"status changed from '{m.get('status')}' to '{data.status}'")
                     mappings[i]["status"] = data.status
                 update_data[mapping_type] = mappings
                 break
@@ -274,6 +288,18 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
         update_data["last_edited_at"] = now
         update_data["last_edited_by"] = current_user["id"]
         await db.analyses.update_one({"_id": ObjectId(analysis_id)}, {"$set": update_data})
+
+        # Always log evidence edits — critical for audit trail
+        await db.review_edits.insert_one({
+            "meeting_id": meeting_id,
+            "editor_id": current_user["id"],
+            "editor_name": current_user.get("name", ""),
+            "edit_type": "post_signoff_evidence_edit" if is_finalised else "evidence",
+            "evidence_id": evidence_id,
+            "content": "; ".join(changed_fields) if changed_fields else "evidence updated",
+            "meeting_status_at_edit": meeting_status,
+            "created_at": now,
+        })
 
     return {"message": "Evidence updated"}
 
@@ -1091,15 +1117,19 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
         "actions": "Action items updated",
         "evidence": "Evidence item updated",
         "transcript_anonymise": "Transcript anonymised (manual)",
+        "evidence_rescan": "Evidence re-scanned",
+        "post_signoff_evidence_edit": "Evidence edited after sign-off",
     }
     async for edit in db.review_edits.find({"meeting_id": meeting_id}).sort("created_at", 1):
         edit_type = edit.get("edit_type", "unknown")
+        is_post_signoff = edit_type == "post_signoff_evidence_edit"
         events.append({
             "type": f"edit_{edit_type}",
             "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
             "actor": edit.get("editor_name", "Unknown"),
             "timestamp": edit.get("created_at", ""),
-            "detail": None,
+            "detail": edit.get("content") if is_post_signoff else None,
+            "flagged": is_post_signoff,  # highlighted in UI
         })
 
     # 6. Attendees marked as reviewed

@@ -1,5 +1,5 @@
 import React from "react";
-import { History, Loader } from "lucide-react";
+import { History, Loader, AlertTriangle } from "lucide-react";
 
 const AUDIT_EVENT_CONFIG = {
   meeting_created:   { color: "bg-blue-100 text-blue-700", dot: "bg-blue-400" },
@@ -13,6 +13,7 @@ const AUDIT_EVENT_CONFIG = {
   edit_summary:      { color: "bg-blue-50 text-blue-600", dot: "bg-blue-300" },
   edit_actions:      { color: "bg-blue-50 text-blue-600", dot: "bg-blue-300" },
   edit_evidence:     { color: "bg-blue-50 text-blue-600", dot: "bg-blue-300" },
+  edit_post_signoff_evidence_edit: { color: "bg-red-100 text-red-700 font-semibold", dot: "bg-red-500" },
   mark_reviewed:     { color: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-400" },
   signed_off:        { color: "bg-emerald-100 text-emerald-800 font-semibold", dot: "bg-emerald-600" },
   comment_added:     { color: "bg-gray-100 text-gray-700", dot: "bg-gray-400" },
@@ -21,18 +22,22 @@ const AUDIT_EVENT_CONFIG = {
 
 function AuditEvent({ event }) {
   const cfg = AUDIT_EVENT_CONFIG[event.type] || { color: "bg-gray-100 text-gray-600", dot: "bg-gray-400" };
+  const isPostSignoff = event.flagged;
   return (
     <div className="relative">
       <div className={`absolute -left-5 w-2.5 h-2.5 rounded-full border-2 border-white ${cfg.dot}`} style={{ top: "0.35rem" }} />
-      <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+      <div className={`border rounded-lg p-3 shadow-sm ${isPostSignoff ? "bg-red-50 border-red-200" : "bg-white border-gray-200"}`}>
         <div className="flex items-start justify-between gap-2">
-          <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${cfg.color}`}>{event.label}</span>
+          <div className="flex items-center gap-1.5">
+            {isPostSignoff && <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${cfg.color}`}>{event.label}</span>
+          </div>
           <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
             {event.timestamp ? new Date(event.timestamp).toLocaleString("en-GB") : "—"}
           </span>
         </div>
         <p className="text-xs text-gray-500 mt-1">by <strong className="text-gray-700">{event.actor}</strong></p>
-        {event.detail && <p className="text-xs text-gray-500 mt-1 italic">"{event.detail}"</p>}
+        {event.detail && <p className="text-xs text-gray-600 mt-1 italic">"{event.detail}"</p>}
       </div>
     </div>
   );
