@@ -476,55 +476,117 @@ export default function MeetingPrep() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: focus topic + context sources */}
-        <div className="lg:col-span-1 space-y-4">
+      {/* ── PHASE 1: Full-width source selection (before generating) ──────── */}
+      {sections.length === 0 && !generating && (
+        <div className="space-y-5">
 
-          {/* Focus topic — compact single line */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-semibold text-gray-800">Focus Topic</h3>
-            </div>
-            {currentFocusTopic && currentFocusTopic.topic !== focusTopic && (
-              <button
-                onClick={() => setFocusTopic(currentFocusTopic.topic)}
-                className="w-full text-left text-xs px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700"
-              >
-                <span className="font-medium">Org focus:</span> {currentFocusTopic.topic}
-                <span className="ml-2 text-indigo-500 underline">use this</span>
-              </button>
-            )}
-            <input
-              type="text"
-              value={focusTopic}
-              onChange={e => setFocusTopic(e.target.value)}
-              placeholder="e.g. Medication management, Safeguarding…"
-              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              data-testid="focus-topic-input"
-            />
-            {focusTopics.filter(t => !t.is_current).length > 0 && (
-              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
-                {focusTopics.filter(t => !t.is_current).slice(0, 3).map(t => (
-                  <button key={t.id} onClick={() => setFocusTopic(t.topic)} className="text-xs text-indigo-500 hover:underline">
-                    {t.topic}
-                  </button>
-                ))}
+          {/* Focus topic — full width, compact */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Target className="w-4 h-4 text-indigo-600" />
+                <span className="text-sm font-semibold text-gray-800">Focus Topic</span>
               </div>
-            )}
+              <div className="flex-1 min-w-48">
+                <input
+                  type="text"
+                  value={focusTopic}
+                  onChange={e => setFocusTopic(e.target.value)}
+                  placeholder="e.g. Medication management, Safeguarding…"
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  data-testid="focus-topic-input"
+                />
+              </div>
+              {currentFocusTopic && currentFocusTopic.topic !== focusTopic && (
+                <button
+                  onClick={() => setFocusTopic(currentFocusTopic.topic)}
+                  className="text-xs px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 whitespace-nowrap"
+                >
+                  Use org focus: <span className="font-medium">{currentFocusTopic.topic}</span>
+                </button>
+              )}
+              {focusTopics.filter(t => !t.is_current).slice(0, 3).map(t => (
+                <button key={t.id} onClick={() => setFocusTopic(t.topic)} className="text-xs text-indigo-500 hover:underline">
+                  {t.topic}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Context sources — scrollable so it never pushes Generate off-screen */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-semibold text-gray-800">Context Sources</h3>
-              <span className="ml-auto text-xs text-gray-400">{effectiveIds.length}/{allSources.length} selected</span>
+          {/* Context sources — full width grid */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-semibold text-gray-800">Context Sources</h3>
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{effectiveIds.length}/{allSources.length} selected</span>
+              </div>
+              {superviseeId && !uploadOpen && (
+                <button
+                  onClick={() => setUploadOpen(true)}
+                  className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                  data-testid="upload-context-btn"
+                >
+                  <Upload className="w-3.5 h-3.5" /> Upload document
+                </button>
+              )}
             </div>
-            {allSources.length === 0 && pendingUploads.length === 0 && (
-              <p className="text-xs text-gray-400 italic">No previous supervisions or uploaded documents found for this supervisee.</p>
+
+            {/* Upload form */}
+            {uploadOpen && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-medium text-indigo-800">Upload PDF or DOCX</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input
+                    type="file"
+                    accept=".pdf,.docx"
+                    onChange={e => setUploadFile(e.target.files[0] || null)}
+                    className="sm:col-span-1 block w-full text-xs text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:bg-white file:text-indigo-700 hover:file:bg-indigo-100 border border-indigo-200 rounded-lg"
+                    data-testid="upload-context-file"
+                  />
+                  <select
+                    value={uploadDocType}
+                    onChange={e => setUploadDocType(e.target.value)}
+                    className="text-sm border border-indigo-200 rounded-lg px-3 py-1.5 bg-white"
+                  >
+                    <option value="supervision_record">Previous Supervision Record</option>
+                    <option value="job_description">Job Description</option>
+                    <option value="other">Other Document</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={uploadLabel}
+                    onChange={e => setUploadLabel(e.target.value)}
+                    placeholder="Label (optional)"
+                    className="text-sm border border-indigo-200 rounded-lg px-3 py-1.5 bg-white"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleUploadContext}
+                    disabled={!uploadFile || uploading}
+                    className="flex items-center gap-1.5 text-sm px-4 py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 font-medium"
+                    data-testid="upload-context-submit"
+                  >
+                    {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {uploading ? "Uploading…" : "Upload"}
+                  </button>
+                  <button
+                    onClick={() => { setUploadOpen(false); setUploadFile(null); setUploadLabel(""); }}
+                    className="text-sm px-4 py-2 border border-indigo-200 text-indigo-700 rounded-lg bg-white"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             )}
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
+
+            {allSources.length === 0 && pendingUploads.length === 0 && (
+              <p className="text-sm text-gray-400 italic">No previous supervisions or uploaded documents found for this supervisee. Upload a document above to get started.</p>
+            )}
+
+            {/* Full-width grid of source cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {pendingUploads.map(item => (
                 <PendingUploadCard key={item.id} item={item} />
               ))}
@@ -537,97 +599,112 @@ export default function MeetingPrep() {
                 />
               ))}
             </div>
-
-            {/* Upload additional document */}
-            {superviseeId && (
-              <div className="border-t border-gray-100 pt-3">
-                {!uploadOpen ? (
-                  <button
-                    onClick={() => setUploadOpen(true)}
-                    className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"
-                    data-testid="upload-context-btn"
-                  >
-                    <Upload className="w-3.5 h-3.5" /> Upload additional document
-                  </button>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-700">Upload PDF or DOCX</p>
-                    <input
-                      type="file"
-                      accept=".pdf,.docx"
-                      onChange={e => setUploadFile(e.target.files[0] || null)}
-                      className="block w-full text-xs text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                      data-testid="upload-context-file"
-                    />
-                    <select
-                      value={uploadDocType}
-                      onChange={e => setUploadDocType(e.target.value)}
-                      className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
-                    >
-                      <option value="supervision_record">Previous Supervision Record</option>
-                      <option value="job_description">Job Description</option>
-                      <option value="other">Other Document</option>
-                    </select>
-                    <input
-                      type="text"
-                      value={uploadLabel}
-                      onChange={e => setUploadLabel(e.target.value)}
-                      placeholder="Label (optional)"
-                      className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleUploadContext}
-                        disabled={!uploadFile || uploading}
-                        className="flex items-center gap-1 text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg disabled:opacity-50"
-                        data-testid="upload-context-submit"
-                      >
-                        {uploading ? <Loader className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-                        {uploading ? "Uploading…" : "Upload"}
-                      </button>
-                      <button
-                        onClick={() => { setUploadOpen(false); setUploadFile(null); setUploadLabel(""); }}
-                        className="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
-        </div>
 
-        {/* Right: Generate CTA at top, then questions */}
-        <div className="lg:col-span-2 space-y-3">
-
-          {/* Generate button — always at top of right panel */}
+          {/* Generate button — full width, prominent */}
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors shadow-sm"
+            className="w-full flex items-center justify-center gap-2 px-4 py-4 bg-indigo-600 text-white rounded-xl font-semibold text-base hover:bg-indigo-700 disabled:opacity-60 transition-colors shadow-sm"
             data-testid="generate-questions-btn"
           >
-            {generating ? (
-              <><Loader className="w-4 h-4 animate-spin" /> Generating personalised questions…</>
-            ) : (
-              <><Sparkles className="w-4 h-4" /> {sections.length ? "Regenerate Questions" : "Generate Questions"}</>
-            )}
+            <Sparkles className="w-5 h-5" /> Generate Questions
           </button>
-          {generating && sections.length === 0 && (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 bg-white rounded-xl border border-dashed border-indigo-200">
-              <Loader className="w-8 h-8 text-indigo-400 animate-spin" />
-              <p className="text-sm text-gray-500">AI is crafting personalised questions…</p>
-            </div>
-          )}
+        </div>
+      )}
 
-          {sections.length === 0 && !generating && (
-            <div className="flex items-center justify-center gap-2 py-8 bg-white rounded-xl border border-dashed border-gray-200 text-sm text-gray-400">
-              <Sparkles className="w-4 h-4 text-gray-300" />
-              Select sources on the left, then click Generate
+      {/* ── Generating spinner ───────────────────────────────────────────────── */}
+      {generating && sections.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-4 py-24 bg-white rounded-xl border border-dashed border-indigo-200">
+          <Loader className="w-10 h-10 text-indigo-400 animate-spin" />
+          <p className="text-sm text-gray-500 font-medium">AI is crafting personalised questions…</p>
+        </div>
+      )}
+
+      {/* ── PHASE 2: Split layout once questions are generated ──────────────── */}
+      {sections.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: focus topic + scrollable context sources */}
+          <div className="lg:col-span-1 space-y-4">
+
+            {/* Focus topic */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-semibold text-gray-800">Focus Topic</h3>
+              </div>
+              <input
+                type="text"
+                value={focusTopic}
+                onChange={e => setFocusTopic(e.target.value)}
+                placeholder="e.g. Medication management, Safeguarding…"
+                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                data-testid="focus-topic-input"
+              />
             </div>
-          )}
+
+            {/* Context sources — compact scrollable */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-semibold text-gray-800">Context Sources</h3>
+                <span className="ml-auto text-xs text-gray-400">{effectiveIds.length}/{allSources.length}</span>
+              </div>
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
+                {pendingUploads.map(item => (
+                  <PendingUploadCard key={item.id} item={item} />
+                ))}
+                {allSources.map(s => (
+                  <SourceCard
+                    key={s.source_id}
+                    source={s}
+                    included={effectiveIds.includes(s.source_id)}
+                    onToggle={handleSourceToggle}
+                  />
+                ))}
+              </div>
+              {superviseeId && (
+                <div className="border-t border-gray-100 pt-3">
+                  {!uploadOpen ? (
+                    <button onClick={() => setUploadOpen(true)} className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800" data-testid="upload-context-btn">
+                      <Upload className="w-3.5 h-3.5" /> Upload document
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <input type="file" accept=".pdf,.docx" onChange={e => setUploadFile(e.target.files[0] || null)} className="block w-full text-xs text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-indigo-50 file:text-indigo-700" data-testid="upload-context-file" />
+                      <select value={uploadDocType} onChange={e => setUploadDocType(e.target.value)} className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+                        <option value="supervision_record">Previous Supervision Record</option>
+                        <option value="job_description">Job Description</option>
+                        <option value="other">Other Document</option>
+                      </select>
+                      <input type="text" value={uploadLabel} onChange={e => setUploadLabel(e.target.value)} placeholder="Label (optional)" className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5" />
+                      <div className="flex gap-2">
+                        <button onClick={handleUploadContext} disabled={!uploadFile || uploading} className="flex items-center gap-1 text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg disabled:opacity-50" data-testid="upload-context-submit">
+                          {uploading ? <Loader className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} {uploading ? "Uploading…" : "Upload"}
+                        </button>
+                        <button onClick={() => { setUploadOpen(false); setUploadFile(null); setUploadLabel(""); }} className="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Regenerate + questions */}
+          <div className="lg:col-span-2 space-y-3">
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors shadow-sm"
+              data-testid="generate-questions-btn"
+            >
+              {generating ? (
+                <><Loader className="w-4 h-4 animate-spin" /> Generating personalised questions…</>
+              ) : (
+                <><RefreshCw className="w-4 h-4" /> Regenerate Questions</>
+              )}
+            </button>
 
           {sections.map((section, idx) => {
             const meta = SECTIONS.find(s => s.id === section.section_id) || SECTIONS[5];
@@ -717,8 +794,9 @@ export default function MeetingPrep() {
               </button>
             </div>
           )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
     </Layout>
   );
