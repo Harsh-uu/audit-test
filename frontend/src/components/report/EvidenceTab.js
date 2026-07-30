@@ -3,7 +3,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
-  ChevronDown, ChevronUp, Loader, Quote, Lightbulb, CheckSquare, Square, Zap,
+  ChevronDown, ChevronUp, Loader, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock,
 } from "lucide-react";
 
 // ── Severity config ──────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ const SEV = {
 };
 
 // ── Single risk card ──────────────────────────────────────────────────────────
-function RiskCard({ risk, meetingId, canEdit, onToggleResolved, onCreateAction }) {
+function RiskCard({ risk, meetingId, canEdit, canToggle, onToggleResolved, onCreateAction }) {
   const { getAuthConfig, API } = useAuth();
   const [open, setOpen] = useState(false);
   const [loadingSugg, setLoadingSugg] = useState(false);
@@ -41,8 +41,8 @@ function RiskCard({ risk, meetingId, canEdit, onToggleResolved, onCreateAction }
       <div className={`flex items-start gap-3 p-3 ${sev.bg} rounded-t-lg`}>
         {/* Tick */}
         <button
-          onClick={() => canEdit && onToggleResolved(risk.id, !risk.is_resolved)}
-          className={`flex-shrink-0 mt-0.5 ${canEdit ? "cursor-pointer" : "cursor-default"}`}
+          onClick={() => canToggle && onToggleResolved(risk.id, !risk.is_resolved)}
+          className={`flex-shrink-0 mt-0.5 ${canToggle ? "cursor-pointer" : "cursor-default"}`}
           title={risk.is_resolved ? "Mark unresolved" : "Mark resolved"}
           data-testid={`risk-toggle-${risk.id}`}
         >
@@ -135,7 +135,7 @@ function RiskCard({ risk, meetingId, canEdit, onToggleResolved, onCreateAction }
 }
 
 // ── Risks section ─────────────────────────────────────────────────────────────
-function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit }) {
+function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit, canToggle }) {
   const { getAuthConfig, API } = useAuth();
 
   const handleToggleResolved = async (riskId, resolved) => {
@@ -156,7 +156,7 @@ function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit
       </div>
       <div className="space-y-2" data-testid="risks-list">
         {open.map(risk => (
-          <RiskCard key={risk.id || risk.text} risk={risk} meetingId={meetingId} canEdit={canEdit}
+          <RiskCard key={risk.id || risk.text} risk={risk} meetingId={meetingId} canEdit={canEdit} canToggle={canToggle || canEdit}
             onToggleResolved={handleToggleResolved} onCreateAction={onCreateAction} />
         ))}
         {resolved.length > 0 && (
@@ -166,7 +166,7 @@ function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit
             </summary>
             <div className="mt-2 space-y-2">
               {resolved.map(risk => (
-                <RiskCard key={risk.id || risk.text} risk={risk} meetingId={meetingId} canEdit={canEdit}
+                <RiskCard key={risk.id || risk.text} risk={risk} meetingId={meetingId} canEdit={canEdit} canToggle={canToggle || canEdit}
                   onToggleResolved={handleToggleResolved} onCreateAction={onCreateAction} />
               ))}
             </div>
@@ -242,9 +242,34 @@ export function EvidenceTab({
   actionMessage,
   onSummaryRegenerated,
   onAnalysisChange,
+  isLocked = false,
+  onReopenRequest,
+  onApproveReopen,
 }) {
   const canEdit = canReview;
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, user } = useAuth();
+  const [showReopenForm, setShowReopenForm] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [reopenSubmitting, setReopenSubmitting] = useState(false);
+
+  // Who can approve a reopen request? Listed attendees who are not the requester
+  const isReopenRequester = meeting?.reopen_requested_by === user?.id;
+  const isAttendee = meeting?.attendees?.some(a => a.user_id === user?.id);
+  const isDifferentManager = (user?.role === "manager" || user?.role === "admin") && !isReopenRequester;
+  const canApproveReopen = meeting?.reopen_requested && (isAttendee || isDifferentManager) && !isReopenRequester;
+  const canRequestReopen = isLocked && !meeting?.reopen_requested && (user?.role === "manager" || user?.role === "admin");
+
+  const handleReopenSubmit = async () => {
+    if (!reopenReason.trim()) return;
+    setReopenSubmitting(true);
+    try {
+      await onReopenRequest?.(reopenReason.trim());
+      setShowReopenForm(false);
+      setReopenReason("");
+    } finally {
+      setReopenSubmitting(false);
+    }
+  };
 
   const handleCreateActionFromRisk = (risk) => {
     setNewAction(`[Risk] ${risk.text}`);
@@ -417,6 +442,7 @@ export function EvidenceTab({
           onRisksChange={updatedRisks => onAnalysisChange?.({ ...analysis, risks: updatedRisks })}
           onCreateAction={handleCreateActionFromRisk}
           canEdit={canEdit}
+          canToggle={isLocked}
         />
       )}
 
@@ -445,6 +471,87 @@ export function EvidenceTab({
             <p className="text-sm font-medium text-emerald-800">Signed off by {meeting.sign_off_record.signed_by_name}</p>
           </div>
           <p className="text-xs text-emerald-600 mt-1">{new Date(meeting.sign_off_record.signed_at).toLocaleString("en-GB")}</p>
+        </div>
+      )}
+
+      {/* ── Re-open controls (mutual consent unlock) ───────────────────────── */}
+
+      {/* Approve re-open — shown to attendees (or different manager) when request is pending */}
+      {meeting?.reopen_requested && canApproveReopen && (
+        <div className="border border-amber-300 bg-amber-50 rounded-lg p-4" data-testid="reopen-approve-banner">
+          <div className="flex items-start gap-3">
+            <Unlock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-800">Re-open requested by {meeting.reopen_requested_by_name}</p>
+              {meeting.reopen_reason && (
+                <p className="text-xs text-amber-700 mt-1">Reason: <span className="italic">{meeting.reopen_reason}</span></p>
+              )}
+              <p className="text-xs text-amber-600 mt-1">Approving will unlock this report for editing. Both actions are recorded in the Audit Trail.</p>
+              <button
+                onClick={onApproveReopen}
+                className="mt-2 flex items-center gap-1.5 text-xs px-3 py-1.5 bg-amber-600 text-white rounded-md hover:bg-amber-700 font-medium transition-colors"
+                data-testid="approve-reopen-btn"
+              >
+                <Unlock className="w-3 h-3" /> Approve Re-open
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Waiting for approval — shown to the manager who requested it */}
+      {meeting?.reopen_requested && isReopenRequester && (
+        <div className="border border-blue-200 bg-blue-50 rounded-lg p-4" data-testid="reopen-waiting-banner">
+          <div className="flex items-center gap-2 text-sm text-blue-700">
+            <Lock className="w-4 h-4 flex-shrink-0" />
+            <p>Re-open request sent — waiting for an attendee to approve before this report can be edited again.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Request re-open — shown to manager when locked and no request pending */}
+      {canRequestReopen && !showReopenForm && (
+        <div className="text-center">
+          <button
+            onClick={() => setShowReopenForm(true)}
+            className="flex items-center gap-1.5 mx-auto text-xs text-gray-400 hover:text-gray-700 transition-colors"
+            data-testid="request-reopen-link"
+          >
+            <Unlock className="w-3 h-3" /> Request to re-open for editing
+          </button>
+        </div>
+      )}
+
+      {canRequestReopen && showReopenForm && (
+        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50" data-testid="reopen-form">
+          <p className="text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+            <Unlock className="w-3.5 h-3.5" /> Request to re-open for editing
+          </p>
+          <p className="text-xs text-gray-500 mb-2">The other party must approve before any changes can be made. Both consent events are logged to the Audit Trail.</p>
+          <textarea
+            value={reopenReason}
+            onChange={e => setReopenReason(e.target.value)}
+            placeholder="Reason for re-opening (e.g. incorrect action item text)…"
+            className="w-full text-xs px-2.5 py-2 border border-gray-300 rounded-md bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+            rows={2}
+            data-testid="reopen-reason-input"
+          />
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={handleReopenSubmit}
+              disabled={!reopenReason.trim() || reopenSubmitting}
+              className="text-xs px-3 py-1.5 bg-[#1E3A8A] text-white rounded-md font-medium hover:bg-[#1E40AF] disabled:opacity-40 transition-colors"
+              data-testid="submit-reopen-btn"
+            >
+              {reopenSubmitting ? "Sending…" : "Send Request"}
+            </button>
+            <button
+              onClick={() => { setShowReopenForm(false); setReopenReason(""); }}
+              className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-md hover:bg-white transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

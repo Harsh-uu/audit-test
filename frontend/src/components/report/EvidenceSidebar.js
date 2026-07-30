@@ -45,7 +45,7 @@ function KeyQuestionBadge({ label }) {
   );
 }
 
-function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type, onShowInTranscript }) {
+function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence, type, onShowInTranscript }) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(mapping.edited_evidence_summary || mapping.evidence_summary);
@@ -151,7 +151,7 @@ function EvidenceCard({ mapping, isReviewMode, onUpdateEvidence, type, onShowInT
               <button onClick={() => handleAction("needs_followup")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "needs_followup" ? "bg-amber-100 border-amber-300 text-amber-700" : "border-gray-200 text-gray-600 hover:bg-amber-50"}`} data-testid={`flag-evidence-${mapping.id}`}>
                 <Flag className="w-3 h-3" /> Flag
               </button>
-              {!editing && (
+              {canEditWording !== false && !editing && (
                 <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 ml-auto" data-testid={`edit-evidence-${mapping.id}`}>
                   <Edit3 className="w-3 h-3" /> Edit
                 </button>
@@ -272,7 +272,7 @@ function CareCertDrillDown({ mappings }) {
   );
 }
 
-export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence, onShowInTranscript }) {
+export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence, onShowInTranscript, isLocked = false }) {
   const totalCount = (analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0);
   const wrapperClass = className !== undefined ? className : "lg:col-span-5 bg-[#F8F9FA] overflow-y-auto";
   const [rescanning, setRescanning] = useState(false);
@@ -367,7 +367,7 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
               <span className="ml-auto text-xs text-gray-400">{analysis.cqc_mappings.length}</span>
             </div>
             {analysis.cqc_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="cqc" onShowInTranscript={onShowInTranscript} />
+              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="cqc" onShowInTranscript={onShowInTranscript} />
             ))}
           </div>
         )}
@@ -380,7 +380,7 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
               <span className="ml-auto text-xs text-gray-400">{analysis.care_cert_mappings.length}</span>
             </div>
             {analysis.care_cert_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="care_cert" onShowInTranscript={onShowInTranscript} />
+              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="care_cert" onShowInTranscript={onShowInTranscript} />
             ))}
             <CareCertDrillDown mappings={analysis.care_cert_mappings} />
           </div>
@@ -394,7 +394,7 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
               <span className="ml-auto text-xs text-gray-400">{analysis.custom_mappings.length}</span>
             </div>
             {analysis.custom_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview} onUpdateEvidence={updateEvidence} type="custom" onShowInTranscript={onShowInTranscript} />
+              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="custom" onShowInTranscript={onShowInTranscript} />
             ))}
           </div>
         )}

@@ -73,6 +73,10 @@ class RescanRequest(BaseModel):
     custom_prompt: Optional[str] = None
 
 
+class ReopenRequest(BaseModel):
+    reason: str
+
+
 class EmailRequest(BaseModel):
     recipients: List[str]
     message: Optional[str] = None
@@ -273,12 +277,19 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
         mappings = analysis.get(mapping_type, [])
         for i, m in enumerate(mappings):
             if m.get("id") == evidence_id:
-                # Block status changes on finalised meetings — status changes require re-opening
-                if data.status is not None and data.status != m.get("status") and is_finalised:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"Cannot change evidence status on a {meeting_status} meeting. Ask the sign-off manager to re-open the meeting first."
-                    )
+                # After sign-off: status changes (Accept/Reject/Flag) are allowed,
+                # but wording/notes edits are locked — re-open required for those.
+                if is_finalised:
+                    if data.edited_evidence_summary is not None:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Report is locked. Cannot edit evidence wording after sign-off. Request a re-open first."
+                        )
+                    if data.notes is not None:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Report is locked. Cannot edit evidence notes after sign-off. Request a re-open first."
+                        )
                 if data.edited_evidence_summary is not None:
                     old_val = m.get("edited_evidence_summary") or m.get("evidence_summary", "")
                     mappings[i]["edited_evidence_summary"] = data.edited_evidence_summary
@@ -327,8 +338,14 @@ async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, db
 
     risks = analysis.get("risks", [])
     updated = False
+    is_locked = meeting.get("status") in ["signed_off", "shared"]
     for i, r in enumerate(risks):
         if r.get("id") == risk_id:
+            if is_locked and data.notes is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Report is locked. Cannot edit risk notes after sign-off. Request a re-open first."
+                )
             if data.is_resolved is not None:
                 risks[i]["is_resolved"] = data.is_resolved
                 risks[i]["resolved_at"] = datetime.now(timezone.utc).isoformat() if data.is_resolved else None
@@ -504,6 +521,9 @@ async def anonymise_transcript(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
+    if meeting.get("status") in ["signed_off", "shared"]:
+        raise HTTPException(status_code=409, detail="Report is locked. Cannot anonymise transcript after sign-off. Request a re-open first.")
+
     transcript_id = meeting.get("transcript_id")
     if not transcript_id:
         raise HTTPException(status_code=404, detail="No transcript found for this meeting")
@@ -553,6 +573,9 @@ async def find_replace_transcript(
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
+
+    if meeting.get("status") in ["signed_off", "shared"]:
+        raise HTTPException(status_code=409, detail="Report is locked. Cannot edit transcript after sign-off. Request a re-open first.")
 
     transcript_id = meeting.get("transcript_id")
     if not transcript_id:
@@ -632,6 +655,8 @@ async def rescan_evidence(
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    if meeting.get("status") in ["signed_off", "shared"]:
+        raise HTTPException(status_code=409, detail="Report is locked. Cannot re-scan evidence after sign-off. Request a re-open first.")
     if not meeting.get("analysis_id"):
         raise HTTPException(status_code=400, detail="No analysis found — run initial processing first")
 
@@ -956,6 +981,9 @@ async def update_speaker_text(
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
+
+    if meeting.get("status") in ["signed_off", "shared"]:
+        raise HTTPException(status_code=409, detail="Report is locked. Cannot edit speaker labels after sign-off. Request a re-open first.")
 
     transcript_id = meeting.get("transcript_id")
     if not transcript_id:
@@ -1754,3 +1782,108 @@ def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: 
     story.append(Paragraph("1two.one — Transcript — Confidential", small_s))
     doc.build(story)
     return buf.getvalue()
+
+
+
+# ── Report re-open (mutual consent unlock) ───────────────────────────────────
+
+@router.post("/{meeting_id}/request-reopen")
+async def request_reopen(
+    meeting_id: str,
+    data: ReopenRequest,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Manager requests to re-open a signed-off meeting for editing. Awaits attendee approval."""
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can request a re-open")
+
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if meeting.get("status") not in ["signed_off", "shared"]:
+        raise HTTPException(status_code=400, detail="Meeting is not signed off")
+    if meeting.get("reopen_requested"):
+        raise HTTPException(status_code=409, detail="A re-open request is already pending — awaiting attendee approval")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id)},
+        {"$set": {
+            "reopen_requested": True,
+            "reopen_requested_by": current_user.get("id", ""),
+            "reopen_requested_by_name": current_user.get("name", ""),
+            "reopen_requested_at": now,
+            "reopen_reason": data.reason.strip(),
+        }}
+    )
+    await db.audit_logs.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": current_user.get("id", ""),
+        "user_name": current_user.get("name", ""),
+        "action": "reopen_requested",
+        "edit_type": "reopen_requested",
+        "detail": f"Re-open requested. Reason: {data.reason.strip()}",
+        "timestamp": now,
+    })
+    return {"message": "Re-open requested — awaiting attendee approval"}
+
+
+@router.post("/{meeting_id}/approve-reopen")
+async def approve_reopen(
+    meeting_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Attendee (or a different manager) approves the re-open request, unlocking the report."""
+    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if not meeting.get("reopen_requested"):
+        raise HTTPException(status_code=400, detail="No re-open request is pending for this meeting")
+
+    user_id = current_user.get("id", "")
+    attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
+    requester_id = meeting.get("reopen_requested_by", "")
+
+    is_attendee = user_id in attendee_ids
+    is_different_manager = current_user["role"] in ["manager", "admin"] and user_id != requester_id
+
+    if not (is_attendee or is_different_manager):
+        raise HTTPException(
+            status_code=403,
+            detail="Only meeting attendees or a different manager can approve the re-open request"
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    reopen_reason = meeting.get("reopen_reason", "")
+
+    await db.meetings.update_one(
+        {"_id": ObjectId(meeting_id)},
+        {
+            "$set": {
+                "status": "reviewed",
+                "reopen_requested": False,
+                "reopen_approved_by": user_id,
+                "reopen_approved_by_name": current_user.get("name", ""),
+                "reopen_approved_at": now,
+                "updated_at": now,
+            },
+            "$unset": {
+                "reopen_requested_by": "",
+                "reopen_requested_by_name": "",
+                "reopen_requested_at": "",
+                "reopen_reason": "",
+            }
+        }
+    )
+    await db.audit_logs.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": user_id,
+        "user_name": current_user.get("name", ""),
+        "action": "reopen_approved",
+        "edit_type": "reopen_approved",
+        "detail": f"Re-open approved by {current_user.get('name', '')}. Report unlocked for editing. Original reason: {reopen_reason}",
+        "timestamp": now,
+    })
+    return {"message": "Re-open approved — report is now unlocked for editing"}

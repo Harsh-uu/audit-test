@@ -88,11 +88,12 @@ export default function MeetingReport() {
   const isInReview = meeting?.status === "in_review";
   const isReviewed = meeting?.status === "reviewed";
   const isSignedOff = ["signed_off", "shared"].includes(meeting?.status);
+  const isLocked = isSignedOff;
   const canReview = isInReview || isReviewed;
   const canSignOff = user?.role === "manager" || user?.role === "admin";
-  const canEditSpeakers = user?.role === "manager" || user?.role === "admin";
+  const canEditSpeakers = (user?.role === "manager" || user?.role === "admin") && !isLocked;
   const canAddComment = isSignedOff || ["admin", "manager"].includes(user?.role);
-  const canAnonymise = ["manager", "admin"].includes(user?.role) && !!meeting?.transcript?.text;
+  const canAnonymise = ["manager", "admin"].includes(user?.role) && !!meeting?.transcript?.text && !isLocked;
 
   const userAttendee = meeting?.attendees?.find(a => a.user_id === user?.id);
   const hasReviewed = userAttendee?.reviewed || false;
@@ -303,6 +304,26 @@ export default function MeetingReport() {
       toast.success("Compliance evidence re-scanned successfully");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Re-scan failed. Please try again.");
+    }
+  };
+
+  const handleReopenRequest = async (reason) => {
+    try {
+      await axios.post(`${API}/review/${meetingId}/request-reopen`, { reason }, getAuthConfig());
+      toast.success("Re-open requested — the other party will see an approval prompt.");
+      fetchMeeting();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Failed to request re-open.");
+    }
+  };
+
+  const handleApproveReopen = async () => {
+    try {
+      await axios.post(`${API}/review/${meetingId}/approve-reopen`, {}, getAuthConfig());
+      toast.success("Re-open approved — report is now unlocked for editing.");
+      fetchMeeting();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Failed to approve re-open.");
     }
   };
 
@@ -616,6 +637,9 @@ export default function MeetingReport() {
                       setSummaryText(newSummary);
                     }}
                     onAnalysisChange={updatedAnalysis => setMeeting(m => ({ ...m, analysis: updatedAnalysis }))}
+                    isLocked={isLocked}
+                    onReopenRequest={handleReopenRequest}
+                    onApproveReopen={handleApproveReopen}
                   />
                 )}
                 {/* TranscriptTab stays mounted to preserve unsaved speaker edits
@@ -663,7 +687,8 @@ export default function MeetingReport() {
                       analysis={analysis}
                       canReview={canReview}
                       updateEvidence={updateEvidence}
-                      canRescan={canEditSpeakers && !!meeting?.transcript_id}
+                      isLocked={isLocked}
+                      canRescan={canEditSpeakers && !!meeting?.transcript_id && !isLocked}
                       onRescanEvidence={rescanEvidence}
                       onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setActiveTab("transcript"); }}
                       className="bg-[#F8F9FA]"
@@ -681,7 +706,8 @@ export default function MeetingReport() {
               analysis={analysis}
               canReview={canReview}
               updateEvidence={updateEvidence}
-              canRescan={canEditSpeakers && !!meeting?.transcript_id}
+              isLocked={isLocked}
+              canRescan={canEditSpeakers && !!meeting?.transcript_id && !isLocked}
               onRescanEvidence={rescanEvidence}
               onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setActiveTab("transcript"); }}
               className="hidden lg:block lg:col-span-5 bg-[#F8F9FA] overflow-y-auto"
