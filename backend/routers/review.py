@@ -1846,7 +1846,7 @@ async def approve_reopen(
     attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
     requester_id = meeting.get("reopen_requested_by", "")
 
-    is_attendee = user_id in attendee_ids
+    is_attendee = user_id in attendee_ids and user_id != requester_id
     is_different_manager = current_user["role"] in ["manager", "admin"] and user_id != requester_id
 
     if not (is_attendee or is_different_manager):
