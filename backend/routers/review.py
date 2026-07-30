@@ -1182,7 +1182,7 @@ async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depe
             "label": label_map_audit.get(action, action.replace("_", " ").title()),
             "actor": log.get("user_name", "System"),
             "timestamp": log.get("timestamp", ""),
-            "detail": None,
+            "detail": log.get("detail"),
         })
 
     # 9b. Audio deleted
