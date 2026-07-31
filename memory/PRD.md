@@ -301,7 +301,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - **2026-Jul** — Schedule pills right-aligned in Schedules page; status pills right-aligned in Dashboard meeting cards
 
 ## Changelog (Latest)
-- **2026-Jul** — Skip button restored on Meeting Prep Step 3 (`from=new` flow): Phase 1 (before questions generated) now shows "Skip and go straight to recording"; Phase 2 (after questions generated) shows "Skip without saving" link alongside "Save Prep & Start Recording" button.
+- **2026-Jul** — Email Modal redesigned: now shows each recipient's name + actual email address side-by-side; adds "Add another recipient" field for manual override; warns if some attendees have no email on record. `sendReport` updated to receive final recipient list from modal (not silently computed); error now uses `toast.error` instead of browser `alert`.
 
 ## Changelog (Continued)
 - **2026-Jun** — Mobile responsive fix: Added "Compliance" as a 5th mobile-only tab on Meeting Report page.
