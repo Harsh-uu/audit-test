@@ -47,6 +47,11 @@ class SectionUpdate(BaseModel):
     questions: List[QuestionUpdate]
 
 
+class GeneratePrepRequest(BaseModel):
+    focus_topic: Optional[str] = None
+    included_source_ids: Optional[List[str]] = None  # None = include all; [] = include none; [ids] = explicit selection
+
+
 class PrepSave(BaseModel):
     focus_topic: Optional[str] = None
     context_source_ids: Optional[List[str]] = None  # IDs of included context sources
@@ -305,8 +310,9 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
         ]
         supervisee_name = ", ".join(supervisee_names) if supervisee_names else "the supervisee"
 
-        # Previous meetings
+        # Previous meetings — include if source_ids is None (all) OR explicitly listed
         prev_summaries = []
+        include_all = included_source_ids is None
         async for prev in db.meetings.find(
             {
                 "attendees.user_id": {"$in": supervisee_ids},
@@ -316,7 +322,7 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
             },
             {"_id": 1, "title": 1, "date": 1, "analysis_id": 1}
         ).sort("date", -1).limit(3):
-            if str(prev["_id"]) in included_source_ids or not included_source_ids:
+            if include_all or str(prev["_id"]) in included_source_ids:
                 analysis = await db.analyses.find_one(
                     {"_id": ObjectId(prev["analysis_id"])},
                     {"summary": 1, "edited_summary": 1, "actions": 1}
@@ -333,7 +339,7 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
         async for doc in db.supervision_uploads.find(
             {"staff_id": {"$in": supervisee_ids}, "status": {"$in": ["text_ready", "done"]}}
         ).sort("meeting_date", -1).limit(6):
-            if str(doc["_id"]) in included_source_ids or not included_source_ids:
+            if include_all or str(doc["_id"]) in included_source_ids:
                 # full_text for newer docs, fall back to extracted_text_preview for legacy
                 content = doc.get("full_text") or doc.get("extracted_text_preview") or ""
                 uploaded_docs.append({
@@ -347,7 +353,7 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
         async for doc in db.standards_documents.find(
             {"org_id": org_id, "is_active": True, "parse_status": "parsed"}
         ).limit(4):
-            if str(doc["_id"]) in included_source_ids or not included_source_ids:
+            if include_all or str(doc["_id"]) in included_source_ids:
                 org_values.append({
                     "name": doc.get("label") or doc.get("filename", ""),
                     "snippet": (doc.get("full_text") or "")[:600],
@@ -385,9 +391,8 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
 @router.post("/{meeting_id}/generate")
 async def generate_prep(
     meeting_id: str,
+    data: GeneratePrepRequest,
     background_tasks: BackgroundTasks,
-    included_source_ids: Optional[List[str]] = None,
-    focus_topic: Optional[str] = None,
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -397,6 +402,13 @@ async def generate_prep(
     meeting = await _get_meeting_guarded(meeting_id, current_user, db)
     org_id = meeting.get("org_id")
 
+    focus_topic = (data.focus_topic or "").strip()
+    # Preserve None vs [] distinction:
+    #   None = no filter (include everything)
+    #   [] = user explicitly deselected all sources
+    #   [ids] = include only those IDs
+    included_source_ids = data.included_source_ids
+
     # Persist focus topic on the prep record immediately
     now = datetime.now(timezone.utc).isoformat()
     await db.meeting_prep.update_one(
@@ -405,8 +417,8 @@ async def generate_prep(
             "meeting_id": meeting_id,
             "org_id": org_id,
             "created_by": current_user["id"],
-            "focus_topic": focus_topic or "",
-            "included_source_ids": included_source_ids or [],
+            "focus_topic": focus_topic,
+            "included_source_ids": included_source_ids if included_source_ids is not None else [],
             "gen_status": "generating",
             "shared_with_attendees": False,
             "created_at": now,
@@ -416,7 +428,7 @@ async def generate_prep(
     )
 
     background_tasks.add_task(
-        _run_generate_prep, meeting_id, focus_topic or "", included_source_ids or [], org_id, db
+        _run_generate_prep, meeting_id, focus_topic, included_source_ids, org_id, db
     )
 
     return {"status": "generating", "message": "Question generation started — check back in a moment."}

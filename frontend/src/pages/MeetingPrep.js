@@ -418,8 +418,8 @@ export default function MeetingPrep() {
     try {
       await axios.post(
         `${API}/prep/${meetingId}/generate`,
-        null,
-        { ...getAuthConfig(), params: { focus_topic: focusTopic, included_source_ids: effectiveIds } }
+        { focus_topic: focusTopic, included_source_ids: effectiveIds },
+        getAuthConfig()
       );
       setPrep(p => ({ ...p, gen_status: "generating" }));
       toast.info("Generating questions… won't be long.");
@@ -645,6 +645,19 @@ export default function MeetingPrep() {
           >
             <Sparkles className="w-5 h-5" /> Generate Questions
           </button>
+
+          {/* Skip link — shown in recording flow before questions are generated */}
+          {fromRecord && (
+            <div className="text-center">
+              <button
+                onClick={() => navigate(`/meetings/${meetingId}/record`)}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                data-testid="skip-prep-btn"
+              >
+                Skip and return to recording without preparing
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -841,18 +854,6 @@ export default function MeetingPrep() {
             </div>
           )}
 
-          {/* Skip only shown before questions are generated — not in wizard flow */}
-          {fromRecord && sections.length === 0 && !generating && (
-            <div className="pt-2">
-              <button
-                onClick={() => navigate(`/meetings/${meetingId}/record`)}
-                className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors"
-                data-testid="skip-prep-btn-empty"
-              >
-                Return to Recording without saving
-              </button>
-            </div>
-          )}
           </div>
         </div>
       )}
