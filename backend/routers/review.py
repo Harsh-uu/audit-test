@@ -1332,8 +1332,24 @@ async def get_comments(meeting_id: str, db=Depends(get_db), current_user=Depends
     return comments
 
 
+async def _send_email_background(params: dict, meeting_id: str):
+    """Background task: sends email via Resend so the HTTP response isn't blocked."""
+    import resend
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    if not api_key:
+        logger.error(f"Email background task skipped for {meeting_id} — RESEND_API_KEY missing")
+        return
+    resend.api_key = api_key
+    try:
+        import asyncio
+        await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"Background email sent for meeting {meeting_id}")
+    except Exception as e:
+        logger.error(f"Background email failed for meeting {meeting_id}: {e}")
+
+
 @router.post("/{meeting_id}/send-email")
-async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def send_email_report(meeting_id: str, data: EmailRequest, background_tasks: BackgroundTasks, db=Depends(get_db), current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can email meeting reports")
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
@@ -1342,14 +1358,10 @@ async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_
     if meeting.get("status") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="Meeting must be signed off")
 
-    import resend
-    import asyncio
-
     api_key = os.environ.get("RESEND_API_KEY", "")
     if not api_key:
         raise HTTPException(status_code=503, detail="Email service not configured — RESEND_API_KEY is missing.")
 
-    resend.api_key = api_key
     frontend_url = os.environ.get("FRONTEND_URL", "")
     html = f"""
 <html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
@@ -1369,14 +1381,11 @@ async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_
         "subject": f"Meeting Report: {meeting.get('title')}",
         "html": html,
     }
-    try:
-        await asyncio.to_thread(resend.Emails.send, params)
-    except Exception as e:
-        logger.error(f"Email send failed for meeting {meeting_id}: {e}")
-        raise HTTPException(status_code=502, detail=f"Email delivery failed: {str(e)}")
 
-    logger.info(f"Report email sent for meeting {meeting_id} to {len(data.recipients)} recipient(s)")
-    return {"message": f"Email sent to {len(data.recipients)} recipient(s)"}
+    # Run in background so Cloudflare/proxy timeout doesn't affect the response
+    background_tasks.add_task(_send_email_background, params, meeting_id)
+    logger.info(f"Report email queued for meeting {meeting_id} to {len(data.recipients)} recipient(s)")
+    return {"message": f"Email sending to {len(data.recipients)} recipient(s) — this may take a moment."}
 
 
 @router.get("/{meeting_id}/export-pdf")
@@ -1385,7 +1394,7 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depen
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") != "signed_off":
+    if meeting.get("status") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="PDF export is only available for signed-off meetings")
 
     # Gather analysis

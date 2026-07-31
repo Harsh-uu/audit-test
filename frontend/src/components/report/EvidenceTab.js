@@ -456,7 +456,9 @@ export function EvidenceTab({
                 <span className="text-sm text-gray-700">{a.name}</span>
                 {a.reviewed
                   ? <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Reviewed</span>
-                  : <span className="text-xs text-amber-600 flex items-center gap-1"><Clock className="w-3 h-3" /> Pending</span>}
+                  : isLocked
+                    ? <span className="text-xs text-emerald-600 flex items-center gap-1"><Shield className="w-3 h-3" /> Signed Off</span>
+                    : <span className="text-xs text-amber-600 flex items-center gap-1"><Clock className="w-3 h-3" /> Pending</span>}
               </div>
             ))}
           </div>
