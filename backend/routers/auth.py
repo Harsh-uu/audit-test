@@ -223,7 +223,7 @@ async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_db)):
     sender = os.environ.get("SENDER_EMAIL", "noreply@1two.one")
     try:
         resend.Emails.send({
-            "from": f"1two.one <{sender}>",
+            "from": f"Supervision 2 <{sender}>",
             "to": [email],
             "subject": "Reset your password",
             "html": (

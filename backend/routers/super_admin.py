@@ -465,7 +465,7 @@ async def invite_org_admin(
         resend.api_key = os.environ.get("RESEND_API_KEY", "")
         html = _build_invite_email(data.name.strip(), org["name"], invite_link)
         await asyncio.to_thread(resend.Emails.send, {
-            "from": os.environ.get("SENDER_EMAIL", "onboarding@resend.dev"),
+            "from": os.environ.get("SENDER_EMAIL", "noreply@notify.1two.one"),
             "to": [data.email.lower()],
             "subject": f"You've been invited to join {org['name']} on 1two.one",
             "html": html,

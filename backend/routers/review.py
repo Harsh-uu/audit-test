@@ -1364,7 +1364,7 @@ async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_
 </body></html>"""
 
     params = {
-        "from": os.environ.get("SENDER_EMAIL", "noreply@1two.one"),
+        "from": os.environ.get("SENDER_EMAIL", "noreply@notify.1two.one"),
         "to": data.recipients,
         "subject": f"Meeting Report: {meeting.get('title')}",
         "html": html,
