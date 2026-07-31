@@ -301,7 +301,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - **2026-Jul** — Schedule pills right-aligned in Schedules page; status pills right-aligned in Dashboard meeting cards
 
 ## Changelog (Latest)
-- **2026-Jul** — Email Modal redesigned: now shows each recipient's name + actual email address side-by-side; adds "Add another recipient" field for manual override; warns if some attendees have no email on record. `sendReport` updated to receive final recipient list from modal (not silently computed); error now uses `toast.error` instead of browser `alert`.
+- **2026-Jul** — Email sending fully fixed: hardcoded `noreply@notify.1two.one` in `review.py` + `auth.py` (production had stale `noreply@1two.one` env var causing Resend 403). MongoDB migrated to Atlas (AWS Ireland). `FRONTEND_URL` → `https://1two.one`. Email date format humanised. Email Modal shows actual recipient emails + manual override. Attendee emails live-synced from user accounts. Skip button restored on Prep Step 3.
 
 ## Changelog (Continued)
 - **2026-Jun** — Mobile responsive fix: Added "Compliance" as a 5th mobile-only tab on Meeting Report page.
