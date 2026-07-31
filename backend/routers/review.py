@@ -1544,17 +1544,39 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         story.append(Spacer(1, 4*mm))
         story.append(section_header("Action Items"))
         story.append(Spacer(1, 2*mm))
-        action_rows = [["#", "Action", "Assigned To", "Due Date"]]
+        cell_style = ParagraphStyle("Cell", fontName="Helvetica", fontSize=9,
+                                    textColor=colors.HexColor("#374151"), leading=12)
+        done_style = ParagraphStyle("Done", fontName="Helvetica", fontSize=9,
+                                    textColor=MID_GRAY, leading=12)
+        hdr_style = ParagraphStyle("Hdr", fontName="Helvetica-Bold", fontSize=9,
+                                   textColor=colors.white, leading=12)
+        action_rows = [[
+            Paragraph("#", hdr_style),
+            Paragraph("Action", hdr_style),
+            Paragraph("Assigned To", hdr_style),
+            Paragraph("Due Date", hdr_style),
+            Paragraph("Done", hdr_style),
+        ]]
         for i, a in enumerate(actions, 1):
-            action_rows.append([str(i), a.get("text", ""), a.get("assigned_to") or "—", a.get("due_date") or "—"])
-        at = Table(action_rows, colWidths=[8*mm, 100*mm, 35*mm, 27*mm])
+            completed = a.get("completed", False)
+            st = done_style if completed else cell_style
+            tick = "\u2713" if completed else ""
+            action_rows.append([
+                Paragraph(str(i), st),
+                Paragraph(e(a.get("text", "")), st),
+                Paragraph(e(a.get("assigned_to") or "\u2014"), st),
+                Paragraph(e(a.get("due_date") or "\u2014"), st),
+                Paragraph(tick, st),
+            ])
+        at = Table(action_rows, colWidths=[8*mm, 93*mm, 38*mm, 24*mm, 7*mm])
         at.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY]),
             ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
             ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ]))
         story.append(at)
 
