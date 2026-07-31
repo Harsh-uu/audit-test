@@ -1517,7 +1517,26 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     story.append(section_header("Meeting Summary"))
     summary = analysis.get("edited_summary") or analysis.get("summary", "No summary available.")
     story.append(Spacer(1, 2*mm))
-    story.append(Paragraph(e(summary), body_style))
+
+    bullet_style = ParagraphStyle("Bullet", fontName="Helvetica", fontSize=9,
+                                  textColor=colors.HexColor("#374151"), spaceAfter=3,
+                                  leading=13, leftIndent=12, bulletIndent=0)
+
+    # Parse structured summary: intro paragraph / bullet lines / closing paragraph
+    sections = [s.strip() for s in summary.split("\n\n") if s.strip()]
+    for section in sections:
+        lines = section.splitlines()
+        bullet_lines = [l for l in lines if l.strip().startswith("- ")]
+        non_bullet_lines = [l for l in lines if not l.strip().startswith("- ")]
+        if bullet_lines and len(bullet_lines) >= len(lines) // 2:
+            # Bullet section
+            for bl in bullet_lines:
+                text = bl.lstrip("- ").strip()
+                story.append(Paragraph(f"\u2022  {e(text)}", bullet_style))
+        else:
+            # Plain paragraph (intro or closing)
+            full_text = " ".join(l.strip() for l in lines if l.strip())
+            story.append(Paragraph(e(full_text), body_style))
 
     # ── Actions ──────────────────────────────────────────────────────────
     actions = analysis.get("actions", [])
