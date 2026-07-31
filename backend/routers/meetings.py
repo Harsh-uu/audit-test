@@ -225,6 +225,21 @@ async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(
         except Exception:
             pass
 
+    # Re-sync attendee emails from live user accounts (emails may have been updated after meeting was created)
+    if meeting.get("attendees"):
+        enriched = []
+        for attendee in meeting["attendees"]:
+            uid = attendee.get("user_id")
+            if uid:
+                try:
+                    user = await db.users.find_one({"_id": ObjectId(uid)}, {"email": 1})
+                    if user and user.get("email"):
+                        attendee = {**attendee, "email": user["email"]}
+                except Exception:
+                    pass
+            enriched.append(attendee)
+        meeting["attendees"] = enriched
+
     return meeting
 
 
