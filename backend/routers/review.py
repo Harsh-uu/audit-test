@@ -1389,7 +1389,7 @@ async def send_email_report(meeting_id: str, data: EmailRequest, background_task
 </body></html>"""
 
     params = {
-        "from": os.environ.get("SENDER_EMAIL", "noreply@notify.1two.one"),
+        "from": "Supervision 2.0 <noreply@notify.1two.one>",
         "to": data.recipients,
         "subject": f"Meeting Report: {meeting.get('title')}",
         "html": html,

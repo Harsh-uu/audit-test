@@ -220,7 +220,7 @@ async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_db)):
     reset_link = f"{frontend_url}/reset-password?token={token}"
 
     resend.api_key = os.environ.get("RESEND_API_KEY", "")
-    sender = os.environ.get("SENDER_EMAIL", "noreply@1two.one")
+    sender = "Supervision 2.0 <noreply@notify.1two.one>"
     try:
         resend.Emails.send({
             "from": f"Supervision 2 <{sender}>",
