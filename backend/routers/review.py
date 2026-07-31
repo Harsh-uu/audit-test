@@ -1366,11 +1366,21 @@ async def send_email_report(meeting_id: str, data: EmailRequest, background_task
         raise HTTPException(status_code=503, detail="Email service not configured — RESEND_API_KEY is missing.")
 
     frontend_url = os.environ.get("FRONTEND_URL", "")
+
+    # Format date nicely: "2 Jul 2026" from ISO string
+    raw_date = meeting.get("date", "")
+    try:
+        from datetime import datetime as _dt
+        _d = _dt.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+        friendly_date = _d.strftime("%-d %b %Y")
+    except Exception:
+        friendly_date = str(raw_date)
+
     html = f"""
 <html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
 <h2 style="color: #1E3A8A;">Supervision Meeting Report</h2>
 <p><strong>Meeting:</strong> {meeting.get('title')}</p>
-<p><strong>Date:</strong> {meeting.get('date')}</p>
+<p><strong>Date:</strong> {friendly_date}</p>
 <p><strong>Status:</strong> Signed Off</p>
 <p>{data.message or 'Please review the meeting report linked below.'}</p>
 <p><a href="{frontend_url}/meetings/{meeting_id}/report" style="background:#1E3A8A;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;">View Report</a></p>
