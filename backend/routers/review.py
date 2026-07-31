@@ -138,7 +138,7 @@ async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depe
     if current_user.get("role") not in ["admin", "manager"]:
         attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
         shared_with  = meeting.get("shared_with", []) or []
-        if user_id not in attendee_ids and user_id not in shared_with and user_id != meeting.get("created_by", ""):
+        if user_id not in attendee_ids and not any(s.get("user_id") == user_id for s in shared_with) and user_id != meeting.get("created_by", ""):
             raise HTTPException(status_code=404, detail="Meeting not found")
 
     if meeting.get("transcript_id"):
@@ -916,7 +916,10 @@ async def complete_pii_review(
     return {"message": "PII review completed", "redactions_applied": len(clean_redactions)}
 
 
+@router.post("/{meeting_id}/share")
 async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can share meetings")
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -924,18 +927,30 @@ async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db),
         raise HTTPException(status_code=400, detail="Meeting must be signed off before sharing")
 
     now = datetime.now(timezone.utc).isoformat()
-    shared_with = meeting.get("shared_with", [])
+    shared_with = meeting.get("shared_with", []) or []
+    added = []
     for uid in data.user_ids:
         if not any(s.get("user_id") == uid for s in shared_with):
             user = await db.users.find_one({"_id": ObjectId(uid)})
             if user:
-                shared_with.append({"user_id": uid, "name": user["name"], "email": user["email"], "shared_at": now})
+                entry = {"user_id": uid, "name": user.get("name", ""), "email": user.get("email", ""), "shared_at": now}
+                shared_with.append(entry)
+                added.append(entry)
 
     await db.meetings.update_one(
         {"_id": ObjectId(meeting_id)},
         {"$set": {"status": "shared", "shared_with": shared_with, "updated_at": now}}
     )
-    return {"message": "Meeting shared", "shared_with": shared_with}
+    await db.audit_logs.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": current_user.get("id", ""),
+        "user_name": current_user.get("name", ""),
+        "action": "meeting_shared",
+        "edit_type": "meeting_shared",
+        "detail": f"Report shared with: {', '.join(e['name'] for e in added)}" if added else "No new users added",
+        "timestamp": now,
+    })
+    return {"message": f"Report shared with {len(added)} new user(s)", "shared_with": shared_with}
 
 
 @router.post("/{meeting_id}/comments")
@@ -1319,6 +1334,8 @@ async def get_comments(meeting_id: str, db=Depends(get_db), current_user=Depends
 
 @router.post("/{meeting_id}/send-email")
 async def send_email_report(meeting_id: str, data: EmailRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can email meeting reports")
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")

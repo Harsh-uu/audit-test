@@ -4,7 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader, Shield, Send, RefreshCw, Lock, Info,
+  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader, Shield, Send, RefreshCw, Lock, Info, Share2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EvidenceTab } from "@/components/report/EvidenceTab";
@@ -13,6 +13,7 @@ import { CommentsTab } from "@/components/report/CommentsTab";
 import { AuditTrailTab } from "@/components/report/AuditTrailTab";
 import { EvidenceSidebar } from "@/components/report/EvidenceSidebar";
 import { EmailModal } from "@/components/report/EmailModal";
+import { ShareModal } from "@/components/report/ShareModal";
 import { PIIReviewGate } from "@/components/PIIReviewGate";
 
 function RetryButton({ meetingId, onRetry, API, getAuthConfig }) {
@@ -77,6 +78,7 @@ export default function MeetingReport() {
   const [retranscribing, setRetranscribing] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [emailMessage, setEmailMessage] = useState("");
   const [showSignOffConfirm, setShowSignOffConfirm] = useState(false);
   const [speakersDirty, setSpeakersDirty] = useState(false);
@@ -544,6 +546,19 @@ export default function MeetingReport() {
                     <span className="hidden sm:inline">Send to Attendees</span>
                   </button>
                 )}
+                {isSignedOff && canSignOff && (
+                  <button
+                    onClick={() => setShowShareModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-indigo-700 bg-white border border-indigo-200 rounded-md shadow-sm hover:bg-indigo-50 transition-colors"
+                    data-testid="share-report-btn"
+                    title="Share with other team members"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">
+                      {meeting?.shared_with?.length ? `Shared (${meeting.shared_with.length})` : "Share"}
+                    </span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -723,6 +738,13 @@ export default function MeetingReport() {
           emailMessage={emailMessage}
           setEmailMessage={setEmailMessage}
           sendReport={sendReport}
+        />
+
+        <ShareModal
+          show={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          meeting={meeting}
+          onShared={(sharedWith) => setMeeting(m => ({ ...m, status: "shared", shared_with: sharedWith }))}
         />
 
         {/* Sign-off confirmation modal */}
