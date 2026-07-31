@@ -300,6 +300,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - **2026-Jul** — Meeting summary AI prompt updated: intro sentences + bullet points + closing sentences format; `SummaryBody` renderer in EvidenceTab parses and displays structured format
 - **2026-Jul** — Schedule pills right-aligned in Schedules page; status pills right-aligned in Dashboard meeting cards
 
+## Changelog (Latest)
+- **2026-Jul** — Skip button restored on Meeting Prep Step 3 (`from=new` flow): Phase 1 (before questions generated) now shows "Skip and go straight to recording"; Phase 2 (after questions generated) shows "Skip without saving" link alongside "Save Prep & Start Recording" button.
+
 ## Changelog (Continued)
 - **2026-Jun** — Mobile responsive fix: Added "Compliance" as a 5th mobile-only tab on Meeting Report page.
 - **2026-Jun** — Hidden mobile instruction box (yellow/amber) on TranscriptTab on small screens (`hidden sm:flex`).

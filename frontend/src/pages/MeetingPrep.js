@@ -646,15 +646,15 @@ export default function MeetingPrep() {
             <Sparkles className="w-5 h-5" /> Generate Questions
           </button>
 
-          {/* Skip link — shown in recording flow before questions are generated */}
-          {fromRecord && (
+          {/* Skip link — shown in both new-meeting wizard and recording flow */}
+          {(fromRecord || fromNew) && (
             <div className="text-center">
               <button
                 onClick={() => navigate(`/meetings/${meetingId}/record`)}
                 className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
                 data-testid="skip-prep-btn"
               >
-                Skip and return to recording without preparing
+                Skip and go straight to recording
               </button>
             </div>
           )}
@@ -794,15 +794,24 @@ export default function MeetingPrep() {
             <div className="flex items-center gap-3 pt-2 flex-wrap">
               {fromNew ? (
                 // Step 3 wizard — Save & go straight into recording
-                <button
-                  onClick={() => handleSave(false, true)}
-                  disabled={saving}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
-                  data-testid="save-and-record-btn"
-                >
-                  {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                  Save Prep & Start Recording
-                </button>
+                <>
+                  <button
+                    onClick={() => handleSave(false, true)}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
+                    data-testid="save-and-record-btn"
+                  >
+                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                    Save Prep & Start Recording
+                  </button>
+                  <button
+                    onClick={() => navigate(`/meetings/${meetingId}/record`)}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors ml-2"
+                    data-testid="skip-prep-phase2-btn"
+                  >
+                    Skip without saving
+                  </button>
+                </>
               ) : fromRecord ? (
                 // Came from recording screen — save and go back
                 <>
