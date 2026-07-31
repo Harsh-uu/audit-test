@@ -396,6 +396,9 @@ async def get_risk_suggestions(meeting_id: str, risk_id: str, db=Depends(get_db)
     await db.analyses.update_one({"_id": ObjectId(meeting["analysis_id"])}, {"$set": {"risks": risks}})
 
     return result
+
+
+@router.post("/{meeting_id}/mark-reviewed")
 async def mark_reviewed(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
     meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
     if not meeting:
