@@ -435,6 +435,37 @@ CREATE INDEX IF NOT EXISTS idx_schedules_org_id ON schedules(org_id);
 CREATE INDEX IF NOT EXISTS idx_meeting_types_org_id ON meeting_types(org_id);
 CREATE INDEX IF NOT EXISTS idx_supervision_uploads_org_id ON supervision_uploads(org_id);
 CREATE INDEX IF NOT EXISTS idx_supervision_uploads_staff_id ON supervision_uploads(staff_id);
+
+-- ── Schema patches (idempotent — safe to run on existing database) ─────────────
+ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS gen_status TEXT DEFAULT 'idle';
+ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS included_source_ids JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS shared_at TEXT;
+
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup TEXT;
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup_at TEXT;
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup_by TEXT;
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_edited_by_name TEXT;
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_edited_at TEXT;
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_colors JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS updated_at TEXT;
+
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS last_edited_by TEXT;
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS rescanned_at TEXT;
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS rescanned_by_name TEXT;
+
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_at TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by_name TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_skipped BOOLEAN DEFAULT FALSE;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_requested BOOLEAN DEFAULT FALSE;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_requested_by TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_requested_by_name TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_requested_at TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_reason TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_approved_by TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_approved_by_name TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_approved_at TEXT;
 """
 
 

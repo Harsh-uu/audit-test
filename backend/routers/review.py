@@ -1,54 +1,45 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel
-from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional, List
 import asyncio
+import json
 import logging
 import os
 import re
 import uuid
-from deps import get_db, get_current_user
+
+from deps import get_current_user
+import database
+from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
+from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def doc_to_dict(doc):
-    if doc is None:
-        return None
-    doc = dict(doc)
-    doc["id"] = str(doc["_id"])
-    del doc["_id"]
-    return doc
-
+# ── Pydantic models ───────────────────────────────────────────────────────────
 
 class UpdateSummaryRequest(BaseModel):
     summary: str
 
-
 class UpdateActionsRequest(BaseModel):
     actions: List[dict]
-
 
 class UpdateEvidenceRequest(BaseModel):
     edited_evidence_summary: Optional[str] = None
     notes: Optional[str] = None
-    status: Optional[str] = None  # accepted|rejected|needs_followup|pending
-
+    status: Optional[str] = None
 
 class UpdateRiskRequest(BaseModel):
     is_resolved: Optional[bool] = None
     notes: Optional[str] = None
 
-
 class ShareRequest(BaseModel):
     user_ids: List[str]
 
-
 class CommentRequest(BaseModel):
     text: str
-
 
 class PIIReviewRequest(BaseModel):
     redactions: List[dict] = []
@@ -58,8 +49,8 @@ class FindReplaceRequest(BaseModel):
     find: str
     replace: str
     case_sensitive: bool = False
-    replace_one: bool = False       # True = replace only one occurrence
-    occurrence_index: int = 0       # 0-based index of the occurrence to replace when replace_one=True
+    replace_one: bool = False
+    occurrence_index: int = 0
 
 class AnonymiseRequest(BaseModel):
     phrase: str
@@ -68,122 +59,132 @@ class SpeakerTextUpdateRequest(BaseModel):
     speaker_text: str
     speaker_colors: Optional[dict] = None
 
-
 class RescanRequest(BaseModel):
     custom_prompt: Optional[str] = None
 
-
 class ReopenRequest(BaseModel):
     reason: str
-
 
 class EmailRequest(BaseModel):
     recipients: List[str]
     message: Optional[str] = None
 
 
-async def delete_audio_after_grace(meeting_id: str, db):
-    """Background task: delete audio after 5 minute grace period"""
-    await asyncio.sleep(300)  # 5 minutes
-    try:
-        meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id)})
-        if not meeting or meeting.get("status") != "signed_off":
-            return
-
-        audio_file_id = meeting.get("audio_file_id")
-        if audio_file_id:
-            await db.audio_files.update_one(
-                {"_id": ObjectId(audio_file_id)},
-                {"$set": {"is_deleted": True, "deletion_status": "deleted", "deleted_at": datetime.now(timezone.utc).isoformat()}}
-            )
-
-        now = datetime.now(timezone.utc).isoformat()
-        await db.meetings.update_one(
-            {"_id": ObjectId(meeting_id)},
-            {"$set": {
-                "audio_deletion_status": "deleted",
-                "audio_deleted_at": now,
-                "updated_at": now,
-            }}
-        )
-        logger.info(f"Audio deleted for meeting {meeting_id}")
-    except Exception as e:
-        logger.error(f"Audio deletion failed for meeting {meeting_id}: {e}")
-
-
-from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
-from utils.redaction import apply_redactions_deep as _apply_redactions_deep
-
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _has_privileged_access(meeting: dict, user_id: str) -> bool:
-    """True if the user was present in the meeting (creator or listed attendee)."""
     if meeting.get("created_by") == user_id:
         return True
-    for a in meeting.get("attendees", []):
+    for a in (meeting.get("attendees") or []):
         if a.get("user_id") == user_id:
             return True
     return False
 
 
-@router.get("/{meeting_id}")
-async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    doc = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = doc_to_dict(doc)
+async def _log_edit(conn, meeting_id: str, org_id: str, action: str, user_id: str, user_name: str, detail: str = ""):
+    await conn.execute(
+        "INSERT INTO review_edits (id, meeting_id, org_id, action, user_id, user_name, detail, timestamp) "
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        str(uuid.uuid4()), meeting_id, org_id, action, user_id, user_name, detail,
+        datetime.now(timezone.utc).isoformat(),
+    )
 
-    # Non-managers can only access meetings they participated in or were shared with.
-    # Return 404 (not 403) to avoid confirming that the meeting ID exists.
+
+async def _audit(conn, meeting_id: str, org_id: str, action: str, user_id: str, user_name: str, detail: str = ""):
+    await conn.execute(
+        "INSERT INTO audit_logs (id, meeting_id, org_id, action, user_id, user_name, detail, timestamp) "
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        str(uuid.uuid4()), meeting_id, org_id, action, user_id, user_name, detail,
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+
+async def delete_audio_after_grace(meeting_id: str):
+    """Background task: delete audio after 5 minute grace period."""
+    await asyncio.sleep(300)
+    try:
+        async with database.with_admin() as conn:
+            meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
+        if not meeting_row or meeting_row["status"] != "signed_off":
+            return
+        meeting = dict(meeting_row)
+        audio_file_id = meeting.get("audio_file_id")
+        now = datetime.now(timezone.utc).isoformat()
+        if audio_file_id:
+            async with database.with_admin() as conn:
+                await conn.execute(
+                    "UPDATE audio_files SET is_deleted=TRUE, deletion_status='deleted', deleted_at=$1 WHERE id=$2",
+                    now, audio_file_id,
+                )
+        async with database.with_admin() as conn:
+            await conn.execute(
+                "UPDATE meetings SET audio_deletion_status='deleted', audio_deleted_at=$1, updated_at=$1 WHERE id=$2",
+                now, meeting_id,
+            )
+        logger.info(f"Audio deleted for meeting {meeting_id}")
+    except Exception as e:
+        logger.error(f"Audio deletion failed for meeting {meeting_id}: {e}")
+
+
+# ── Review data ───────────────────────────────────────────────────────────────
+
+@router.get("/{meeting_id}")
+async def get_review_data(meeting_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting = dict(row)
+
     user_id = current_user.get("id", "")
     if current_user.get("role") not in ["admin", "manager"]:
-        attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
-        shared_with  = meeting.get("shared_with", []) or []
-        if user_id not in attendee_ids and not any(s.get("user_id") == user_id for s in shared_with) and user_id != meeting.get("created_by", ""):
+        attendee_ids = [a.get("user_id", "") for a in (meeting.get("attendees") or [])]
+        shared_with = meeting.get("shared_with") or []
+        if (user_id not in attendee_ids
+                and not any(s.get("user_id") == user_id for s in shared_with)
+                and user_id != meeting.get("created_by", "")):
             raise HTTPException(status_code=404, detail="Meeting not found")
 
     if meeting.get("transcript_id"):
         try:
-            tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
-            if tdoc:
-                meeting["transcript"] = doc_to_dict(tdoc)
+            async with database.with_org(org_id) as conn:
+                t_row = await conn.fetchrow("SELECT * FROM transcripts WHERE id=$1", meeting["transcript_id"])
+            if t_row:
+                meeting["transcript"] = dict(t_row)
         except Exception:
             pass
 
     if meeting.get("analysis_id"):
         try:
-            adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
-            if adoc:
-                meeting["analysis"] = doc_to_dict(adoc)
+            async with database.with_org(org_id) as conn:
+                a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", meeting["analysis_id"])
+            if a_row:
+                meeting["analysis"] = dict(a_row)
         except Exception:
             pass
 
-    # Comments
-    comments = []
-    async for c in db.reviewer_comments.find({"meeting_id": meeting_id}).sort("created_at", 1):
-        comments.append(doc_to_dict(c))
-    meeting["comments"] = comments
+    async with database.with_org(org_id) as conn:
+        c_rows = await conn.fetch(
+            "SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC",
+            meeting_id,
+        )
+    meeting["comments"] = [dict(c) for c in c_rows]
 
-    # ── PII redaction access control ─────────────────────────────────────
-    user_id = current_user.get("id", "")
-    redactions = meeting.get("pii_redactions", [])
+    redactions = meeting.get("pii_redactions") or []
     privileged = _has_privileged_access(meeting, user_id)
 
     if redactions and meeting.get("transcript"):
         t = meeting["transcript"]
-        # Speaker view: ALWAYS apply redactions for every user.
         if t.get("speaker_text"):
             t["speaker_text"] = _apply_redactions_to_text(t["speaker_text"], redactions)
-        # Raw full text: only redact for non-privileged viewers.
         if not privileged and t.get("text"):
             t["text"] = _apply_redactions_to_text(t["text"], redactions)
 
-    # Analysis (evidence summaries, transcript excerpts): always redact for everyone.
-    # These quotes come from the transcript so they can contain PII names.
     if redactions and meeting.get("analysis"):
         meeting["analysis"] = _apply_redactions_deep(meeting["analysis"], redactions)
 
     if not privileged:
-        # Never expose the redactions array to non-participants (it contains the original PII text)
         meeting.pop("pii_redactions", None)
         if redactions:
             meeting["pii_redactions_count"] = len(redactions)
@@ -191,161 +192,150 @@ async def get_review_data(meeting_id: str, db=Depends(get_db), current_user=Depe
     return meeting
 
 
+# ── Summary & Actions ─────────────────────────────────────────────────────────
+
 @router.put("/{meeting_id}/summary")
-async def update_summary(meeting_id: str, data: UpdateSummaryRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def update_summary(meeting_id: str, data: UpdateSummaryRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can edit the summary")
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") not in ["in_review", "reviewed"]:
+    if m_row["status"] not in ["in_review", "reviewed"]:
         raise HTTPException(status_code=400, detail="Meeting not in review state")
-
-    analysis_id = meeting.get("analysis_id")
+    analysis_id = m_row["analysis_id"]
     if not analysis_id:
         raise HTTPException(status_code=400, detail="No analysis found")
 
     now = datetime.now(timezone.utc).isoformat()
-    await db.analyses.update_one(
-        {"_id": ObjectId(analysis_id)},
-        {"$set": {"edited_summary": data.summary, "last_edited_at": now, "last_edited_by": current_user["id"]}}
-    )
-
-    # Log edit
-    await db.review_edits.insert_one({
-        "meeting_id": meeting_id,
-        "editor_id": current_user["id"],
-        "editor_name": current_user["name"],
-        "edit_type": "summary",
-        "content": data.summary,
-        "created_at": now,
-    })
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            "UPDATE analyses SET edited_summary=$1, last_edited_at=$2, last_edited_by=$3 WHERE id=$4",
+            data.summary, now, current_user["id"], analysis_id,
+        )
+        await _log_edit(conn, meeting_id, org_id, "summary", current_user["id"], current_user.get("name", ""), data.summary[:200])
     return {"message": "Summary updated"}
 
 
 @router.put("/{meeting_id}/actions")
-async def update_actions(meeting_id: str, data: UpdateActionsRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def update_actions(meeting_id: str, data: UpdateActionsRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can edit action items")
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") not in ["in_review", "reviewed"]:
+    if m_row["status"] not in ["in_review", "reviewed"]:
         raise HTTPException(status_code=400, detail="Meeting not in review state")
-
-    analysis_id = meeting.get("analysis_id")
+    analysis_id = m_row["analysis_id"]
     if not analysis_id:
         raise HTTPException(status_code=400, detail="No analysis found")
 
     now = datetime.now(timezone.utc).isoformat()
-    await db.analyses.update_one(
-        {"_id": ObjectId(analysis_id)},
-        {"$set": {"actions": data.actions, "last_edited_at": now, "last_edited_by": current_user["id"]}}
-    )
-    await db.review_edits.insert_one({
-        "meeting_id": meeting_id,
-        "editor_id": current_user["id"],
-        "editor_name": current_user["name"],
-        "edit_type": "actions",
-        "created_at": now,
-    })
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            "UPDATE analyses SET actions=$1::jsonb, last_edited_at=$2, last_edited_by=$3 WHERE id=$4",
+            json.dumps(data.actions), now, current_user["id"], analysis_id,
+        )
+        await _log_edit(conn, meeting_id, org_id, "actions", current_user["id"], current_user.get("name", ""))
     return {"message": "Actions updated"}
 
 
 @router.put("/{meeting_id}/evidence/{evidence_id}")
-async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenceRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenceRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can edit evidence items")
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    meeting_status = meeting.get("status", "")
+    meeting_status = m_row["status"] or ""
     is_finalised = meeting_status in ["signed_off", "shared"]
-
-    analysis_id = meeting.get("analysis_id")
+    analysis_id = m_row["analysis_id"]
     if not analysis_id:
         raise HTTPException(status_code=400, detail="No analysis found")
 
-    analysis = await db.analyses.find_one({"_id": ObjectId(analysis_id)})
-    if not analysis:
+    async with database.with_org(org_id) as conn:
+        a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", analysis_id)
+    if not a_row:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    analysis = dict(a_row)
 
-    update_data = {}
+    update_cols = {}
     changed_fields = []
     for mapping_type in ["cqc_mappings", "care_cert_mappings", "custom_mappings"]:
-        mappings = analysis.get(mapping_type, [])
+        mappings = list(analysis.get(mapping_type) or [])
         for i, m in enumerate(mappings):
             if m.get("id") == evidence_id:
-                # After sign-off: status changes (Accept/Reject/Flag) are allowed,
-                # but wording/notes edits are locked — re-open required for those.
                 if is_finalised:
                     if data.edited_evidence_summary is not None:
-                        raise HTTPException(
-                            status_code=409,
-                            detail="Report is locked. Cannot edit evidence wording after sign-off. Request a re-open first."
-                        )
+                        raise HTTPException(409, "Report is locked. Cannot edit evidence wording after sign-off.")
                     if data.notes is not None:
-                        raise HTTPException(
-                            status_code=409,
-                            detail="Report is locked. Cannot edit evidence notes after sign-off. Request a re-open first."
-                        )
+                        raise HTTPException(409, "Report is locked. Cannot edit evidence notes after sign-off.")
                 if data.edited_evidence_summary is not None:
                     old_val = m.get("edited_evidence_summary") or m.get("evidence_summary", "")
                     mappings[i]["edited_evidence_summary"] = data.edited_evidence_summary
                     changed_fields.append(f"evidence_summary changed from '{old_val[:80]}' to '{data.edited_evidence_summary[:80]}'")
                 if data.notes is not None:
                     mappings[i]["notes"] = data.notes
-                    changed_fields.append(f"notes updated")
+                    changed_fields.append("notes updated")
                 if data.status is not None and data.status != m.get("status"):
                     changed_fields.append(f"status changed from '{m.get('status')}' to '{data.status}'")
                     mappings[i]["status"] = data.status
-                update_data[mapping_type] = mappings
+                update_cols[mapping_type] = mappings
                 break
 
-    if update_data:
+    if update_cols:
         now = datetime.now(timezone.utc).isoformat()
-        update_data["last_edited_at"] = now
-        update_data["last_edited_by"] = current_user["id"]
-        await db.analyses.update_one({"_id": ObjectId(analysis_id)}, {"$set": update_data})
-
-        # Always log evidence edits — critical for audit trail
-        await db.review_edits.insert_one({
-            "meeting_id": meeting_id,
-            "editor_id": current_user["id"],
-            "editor_name": current_user.get("name", ""),
-            "edit_type": "post_signoff_evidence_edit" if is_finalised else "evidence",
-            "evidence_id": evidence_id,
-            "content": "; ".join(changed_fields) if changed_fields else "evidence updated",
-            "meeting_status_at_edit": meeting_status,
-            "created_at": now,
-        })
+        set_parts = [f"last_edited_at=$1", f"last_edited_by=$2"]
+        values = [now, current_user["id"]]
+        idx = 3
+        for field, val in update_cols.items():
+            set_parts.append(f"{field}=${idx}::jsonb")
+            values.append(json.dumps(val))
+            idx += 1
+        values.append(analysis_id)
+        async with database.with_org(org_id) as conn:
+            await conn.execute(
+                f"UPDATE analyses SET {', '.join(set_parts)} WHERE id=${idx}",
+                *values,
+            )
+            edit_type = "post_signoff_evidence_edit" if is_finalised else "evidence"
+            detail = "; ".join(changed_fields) if changed_fields else "evidence updated"
+            await _log_edit(conn, meeting_id, org_id, edit_type, current_user["id"], current_user.get("name", ""), detail)
 
     return {"message": "Evidence updated"}
 
 
-# ── Risk management endpoints ─────────────────────────────────────────────────
+# ── Risk management ───────────────────────────────────────────────────────────
 
 @router.patch("/{meeting_id}/risks/{risk_id}")
-async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    """Toggle resolved status or add notes to a risk/concern."""
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    analysis = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
-    if not analysis:
+    if not m_row["analysis_id"]:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
-    risks = analysis.get("risks", [])
+    async with database.with_org(org_id) as conn:
+        a_row = await conn.fetchrow("SELECT id, risks FROM analyses WHERE id=$1", m_row["analysis_id"])
+    if not a_row:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    risks = list(a_row["risks"] or [])
+    is_locked = (m_row["status"] or "") in ["signed_off", "shared"]
     updated = False
-    is_locked = meeting.get("status") in ["signed_off", "shared"]
     for i, r in enumerate(risks):
         if r.get("id") == risk_id:
             if is_locked and data.notes is not None:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Report is locked. Cannot edit risk notes after sign-off. Request a re-open first."
-                )
+                raise HTTPException(409, "Report is locked. Cannot edit risk notes after sign-off.")
             if data.is_resolved is not None:
                 risks[i]["is_resolved"] = data.is_resolved
                 risks[i]["resolved_at"] = datetime.now(timezone.utc).isoformat() if data.is_resolved else None
@@ -357,60 +347,65 @@ async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, db
     if not updated:
         raise HTTPException(status_code=404, detail="Risk not found")
 
-    await db.analyses.update_one({"_id": ObjectId(meeting["analysis_id"])}, {"$set": {"risks": risks}})
+    async with database.with_org(org_id) as conn:
+        await conn.execute("UPDATE analyses SET risks=$1::jsonb WHERE id=$2", json.dumps(risks), a_row["id"])
     return {"message": "Risk updated", "risks": risks}
 
 
 @router.post("/{meeting_id}/risks/{risk_id}/suggestions")
-async def get_risk_suggestions(meeting_id: str, risk_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    """On-demand: generate transcript excerpt + resolution suggestions for an existing risk."""
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+async def get_risk_suggestions(meeting_id: str, risk_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row or not m_row["analysis_id"]:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    analysis = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
-    if not analysis:
-        raise HTTPException(status_code=404, detail="Analysis not found")
 
-    risk = next((r for r in analysis.get("risks", []) if r.get("id") == risk_id), None)
+    async with database.with_org(org_id) as conn:
+        a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", m_row["analysis_id"])
+    if not a_row:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    analysis = dict(a_row)
+    risk = next((r for r in (analysis.get("risks") or []) if r.get("id") == risk_id), None)
     if not risk:
         raise HTTPException(status_code=404, detail="Risk not found")
 
-    # Already has rich data
     if risk.get("suggested_resolutions") and risk.get("transcript_excerpt"):
         return {"transcript_excerpt": risk["transcript_excerpt"], "suggested_resolutions": risk["suggested_resolutions"]}
 
-    # Generate on demand
-    transcript = await db.transcripts.find_one({"meeting_id": meeting_id})
-    transcript_text = (transcript or {}).get("speaker_text") or (transcript or {}).get("text", "")
+    async with database.with_org(org_id) as conn:
+        t_row = await conn.fetchrow("SELECT speaker_text, text FROM transcripts WHERE meeting_id=$1", meeting_id)
+    transcript_text = (t_row["speaker_text"] or t_row["text"] or "") if t_row else ""
 
     from utils.ai import generate_risk_suggestions
     result = await generate_risk_suggestions(risk["text"], risk.get("severity", "medium"), transcript_text[:6000])
 
-    # Persist back to analysis
-    risks = analysis.get("risks", [])
+    risks = list(analysis.get("risks") or [])
     for i, r in enumerate(risks):
         if r.get("id") == risk_id:
             risks[i]["transcript_excerpt"] = result.get("transcript_excerpt", "")
             risks[i]["suggested_resolutions"] = result.get("suggested_resolutions", [])
             break
-    await db.analyses.update_one({"_id": ObjectId(meeting["analysis_id"])}, {"$set": {"risks": risks}})
-
+    async with database.with_org(org_id) as conn:
+        await conn.execute("UPDATE analyses SET risks=$1::jsonb WHERE id=$2", json.dumps(risks), m_row["analysis_id"])
     return result
 
 
+# ── Workflow ──────────────────────────────────────────────────────────────────
+
 @router.post("/{meeting_id}/mark-reviewed")
-async def mark_reviewed(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+async def mark_reviewed(meeting_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting = dict(m_row)
     if meeting.get("status") not in ["in_review"]:
         raise HTTPException(status_code=400, detail="Meeting not in review state")
 
     user_id = current_user["id"]
     now = datetime.now(timezone.utc).isoformat()
-
-    # Update attendee reviewed status
-    attendees = meeting.get("attendees", [])
+    attendees = list(meeting.get("attendees") or [])
     found = False
     for a in attendees:
         if a.get("user_id") == user_id:
@@ -418,80 +413,71 @@ async def mark_reviewed(meeting_id: str, db=Depends(get_db), current_user=Depend
             a["reviewed_at"] = now
             found = True
             break
+    if not found and meeting.get("created_by") != user_id:
+        raise HTTPException(status_code=403, detail="You are not an attendee of this meeting")
 
-    if not found:
-        # Allow the creator to also mark as reviewed
-        if meeting.get("created_by") != user_id:
-            raise HTTPException(status_code=403, detail="You are not an attendee of this meeting")
-
-    # Check if all attendees reviewed
     all_reviewed = all(a.get("reviewed", False) for a in attendees) if attendees else True
     new_status = "reviewed" if all_reviewed else "in_review"
 
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
-        {"$set": {"attendees": attendees, "status": new_status, "updated_at": now}}
-    )
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            "UPDATE meetings SET attendees=$1::jsonb, status=$2, updated_at=$3 WHERE id=$4",
+            json.dumps(attendees), new_status, now, meeting_id,
+        )
     return {"message": "Marked as reviewed", "all_reviewed": all_reviewed, "status": new_status}
 
 
 @router.post("/{meeting_id}/signoff")
-async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Must be the assigned manager
+    meeting = dict(m_row)
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can sign off")
-
     if meeting.get("sign_off_manager_id") and meeting.get("sign_off_manager_id") != current_user["id"]:
         if current_user["role"] != "admin":
             raise HTTPException(status_code=403, detail="You are not the assigned sign-off manager")
-
     if meeting.get("status") not in ["reviewed", "in_review"]:
         raise HTTPException(status_code=400, detail="Meeting must be reviewed before sign-off")
 
     now = datetime.now(timezone.utc).isoformat()
-    attendees = meeting.get("attendees", [])
+    attendees = list(meeting.get("attendees") or [])
     unreviewed_names = [a["name"] for a in attendees if not a.get("reviewed", False)]
-    sign_off_record = {
-        "signed_by": current_user["id"],
-        "signed_by_name": current_user["name"],
-        "signed_at": now,
-    }
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
-        {"$set": {
-            "status": "signed_off",
-            "sign_off_record": sign_off_record,
-            "audio_deletion_status": "grace_period",
-            "audio_grace_period_started_at": now,
-            "updated_at": now,
-        }}
-    )
+    sign_off_record = {"signed_by": current_user["id"], "signed_by_name": current_user["name"], "signed_at": now}
 
-    # Schedule audio deletion after 5 minutes
-    background_tasks.add_task(delete_audio_after_grace, meeting_id, db)
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            """UPDATE meetings SET status='signed_off', sign_off_record=$1::jsonb,
+               audio_deletion_status='grace_period', audio_grace_period_started_at=$2, updated_at=$2
+               WHERE id=$3""",
+            json.dumps(sign_off_record), now, meeting_id,
+        )
 
+    background_tasks.add_task(delete_audio_after_grace, meeting_id)
     return {"message": "Meeting signed off successfully", "signed_at": now, "unreviewed_attendees": unreviewed_names}
 
 
 @router.patch("/{meeting_id}/actions/{action_id}")
-async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, db=Depends(get_db), current_user=Depends(get_current_user)):
-    """Mark an action as complete or incomplete."""
+async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can toggle action completion")
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting or not meeting.get("analysis_id"):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row or not m_row["analysis_id"]:
         raise HTTPException(status_code=404, detail="Meeting or analysis not found")
-    analysis = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
-    if not analysis:
+
+    async with database.with_org(org_id) as conn:
+        a_row = await conn.fetchrow("SELECT id, actions FROM analyses WHERE id=$1", m_row["analysis_id"])
+    if not a_row:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
     completed = bool(data.get("completed", False))
     now = datetime.now(timezone.utc).isoformat()
-    actions = analysis.get("actions", [])
+    actions = list(a_row["actions"] or [])
     updated = False
     for a in actions:
         if a.get("id") == action_id:
@@ -502,37 +488,32 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, db
     if not updated:
         raise HTTPException(status_code=404, detail="Action not found")
 
-    await db.analyses.update_one(
-        {"_id": analysis["_id"]},
-        {"$set": {"actions": actions}}
-    )
+    async with database.with_org(org_id) as conn:
+        await conn.execute("UPDATE analyses SET actions=$1::jsonb WHERE id=$2", json.dumps(actions), a_row["id"])
     return {"message": "Updated", "completed": completed}
 
 
+# ── Transcript editing ────────────────────────────────────────────────────────
+
 @router.patch("/{meeting_id}/anonymise")
-async def anonymise_transcript(
-    meeting_id: str,
-    data: AnonymiseRequest,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Replace a phrase in the stored transcript with the speaker's first initial."""
+async def anonymise_transcript(meeting_id: str, data: AnonymiseRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can anonymise transcripts")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT transcript_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    if (m_row["status"] or "") in ["signed_off", "shared"]:
+        raise HTTPException(status_code=409, detail="Report is locked. Cannot anonymise transcript after sign-off.")
 
-    if meeting.get("status") in ["signed_off", "shared"]:
-        raise HTTPException(status_code=409, detail="Report is locked. Cannot anonymise transcript after sign-off. Request a re-open first.")
-
-    transcript_id = meeting.get("transcript_id")
+    transcript_id = m_row["transcript_id"]
     if not transcript_id:
         raise HTTPException(status_code=404, detail="No transcript found for this meeting")
 
-    transcript = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
-    if not transcript:
+    async with database.with_org(org_id) as conn:
+        t_row = await conn.fetchrow("SELECT id, text FROM transcripts WHERE id=$1", transcript_id)
+    if not t_row:
         raise HTTPException(status_code=404, detail="Transcript not found")
 
     phrase = data.phrase.strip()
@@ -540,52 +521,38 @@ async def anonymise_transcript(
         raise HTTPException(status_code=400, detail="Phrase cannot be empty")
 
     initial = phrase[0].upper() + "."
-    original_text = transcript.get("text", "")
+    original_text = t_row["text"] or ""
     updated_text = re.sub(re.escape(phrase), initial, original_text, flags=re.IGNORECASE)
-
     if updated_text == original_text:
         return {"message": "Phrase not found in transcript", "replaced": False}
 
     now = datetime.now(timezone.utc).isoformat()
-    await db.transcripts.update_one(
-        {"_id": ObjectId(transcript_id)},
-        {"$set": {"text": updated_text, "updated_at": now}},
-    )
-    await db.review_edits.insert_one({
-        "meeting_id": meeting_id,
-        "editor_id": current_user["id"],
-        "editor_name": current_user["name"],
-        "edit_type": "transcript_anonymise",
-        "content": f"Anonymised '{phrase}' → '{initial}'",
-        "created_at": now,
-    })
+    async with database.with_org(org_id) as conn:
+        await conn.execute("UPDATE transcripts SET text=$1, updated_at=$2 WHERE id=$3", updated_text, now, transcript_id)
+        await _log_edit(conn, meeting_id, org_id, "transcript_anonymise", current_user["id"],
+                        current_user.get("name", ""), f"Anonymised '{phrase}' → '{initial}'")
     return {"message": f"'{phrase}' replaced with '{initial}'", "replaced": True}
 
 
 @router.post("/{meeting_id}/find-replace")
-async def find_replace_transcript(
-    meeting_id: str,
-    data: FindReplaceRequest,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Replace all occurrences of a phrase in the stored full-text transcript."""
+async def find_replace_transcript(meeting_id: str, data: FindReplaceRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can edit the transcript")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT transcript_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    if (m_row["status"] or "") in ["signed_off", "shared"]:
+        raise HTTPException(status_code=409, detail="Report is locked. Cannot edit transcript after sign-off.")
 
-    if meeting.get("status") in ["signed_off", "shared"]:
-        raise HTTPException(status_code=409, detail="Report is locked. Cannot edit transcript after sign-off. Request a re-open first.")
-
-    transcript_id = meeting.get("transcript_id")
+    transcript_id = m_row["transcript_id"]
     if not transcript_id:
-        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
+        raise HTTPException(status_code=404, detail="No transcript found")
 
-    transcript = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
-    if not transcript:
+    async with database.with_org(org_id) as conn:
+        t_row = await conn.fetchrow("SELECT id, text, speaker_text FROM transcripts WHERE id=$1", transcript_id)
+    if not t_row:
         raise HTTPException(status_code=404, detail="Transcript not found")
 
     find = data.find.strip()
@@ -594,25 +561,21 @@ async def find_replace_transcript(
 
     flags = 0 if data.case_sensitive else re.IGNORECASE
     pattern = re.compile(re.escape(find), flags)
-
     updates = {}
     replaced = 0
 
     for field in ("text", "speaker_text"):
-        original = transcript.get(field, "")
+        original = t_row[field] or ""
         if not original:
             continue
         if data.replace_one:
-            # Full Text mode only — target the exact occurrence by index.
-            # speaker_text is managed client-side in Speaker View; skip it here.
             if field != "text":
                 continue
             all_matches = list(pattern.finditer(original))
             idx = data.occurrence_index
             if idx < len(all_matches):
                 m = all_matches[idx]
-                new_val = original[:m.start()] + data.replace + original[m.end():]
-                updates[field] = new_val
+                updates[field] = original[:m.start()] + data.replace + original[m.end():]
                 replaced += 1
         else:
             new_val, count = pattern.subn(data.replace, original)
@@ -625,116 +588,239 @@ async def find_replace_transcript(
 
     now = datetime.now(timezone.utc).isoformat()
     updates["updated_at"] = now
-    await db.transcripts.update_one({"_id": ObjectId(transcript_id)}, {"$set": updates})
 
-    await db.audit_logs.insert_one({
-        "meeting_id": meeting_id,
-        "user_id": current_user["id"],
-        "user_name": current_user.get("name", ""),
-        "action": "transcript_text_edited",
-        "edit_type": "transcript_text_edited",
-        "detail": f"Find & Replace: '{find}' → '{data.replace}' ({replaced} occurrence{'s' if replaced != 1 else ''})",
-        "timestamp": now,
-    })
+    set_parts = [f"{k}=${i+1}" for i, k in enumerate(updates.keys())]
+    values = list(updates.values())
+    values.append(transcript_id)
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            f"UPDATE transcripts SET {', '.join(set_parts)} WHERE id=${len(values)}",
+            *values,
+        )
+        await _audit(conn, meeting_id, org_id, "transcript_text_edited", current_user["id"],
+                     current_user.get("name", ""),
+                     f"Find & Replace: '{find}' → '{data.replace}' ({replaced} occurrence{'s' if replaced != 1 else ''})")
 
     return {"replaced_count": replaced, "message": f"Replaced {replaced} occurrence{'s' if replaced != 1 else ''}"}
 
 
+@router.patch("/{meeting_id}/speaker-text")
+async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can edit speaker labels")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT transcript_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if (m_row["status"] or "") in ["signed_off", "shared"]:
+        raise HTTPException(status_code=409, detail="Report is locked. Cannot edit speaker labels after sign-off.")
+
+    transcript_id = m_row["transcript_id"]
+    if not transcript_id:
+        raise HTTPException(status_code=404, detail="No transcript found")
+
+    async with database.with_org(org_id) as conn:
+        existing_t = await conn.fetchrow(
+            "SELECT speaker_text, speaker_text_edited_at, speaker_text_edited_by_name FROM transcripts WHERE id=$1",
+            transcript_id,
+        )
+    prev_text = existing_t["speaker_text"] if existing_t else ""
+    has_text_edit = False
+    if prev_text:
+        def _turn_bodies(s):
+            return [ln.split(":", 1)[-1].strip() for ln in s.strip().split("\n") if ":" in ln]
+        has_text_edit = _turn_bodies(prev_text) != _turn_bodies(data.speaker_text)
+
+    now = datetime.now(timezone.utc).isoformat()
+    set_parts = [
+        "speaker_text=$1",
+        "speaker_text_edited_by_name=$2",
+        "speaker_text_edited_at=$3",
+    ]
+    values = [data.speaker_text, current_user.get("name", ""), now]
+    idx = 4
+
+    if data.speaker_colors is not None:
+        set_parts.append(f"speaker_colors=${idx}::jsonb")
+        values.append(json.dumps(data.speaker_colors))
+        idx += 1
+
+    if existing_t and existing_t["speaker_text"]:
+        set_parts.append(f"speaker_text_backup=${idx}")
+        values.append(existing_t["speaker_text"])
+        idx += 1
+        set_parts.append(f"speaker_text_backup_at=${idx}")
+        values.append(existing_t.get("speaker_text_edited_at") or "")
+        idx += 1
+        set_parts.append(f"speaker_text_backup_by=${idx}")
+        values.append(existing_t.get("speaker_text_edited_by_name") or "")
+        idx += 1
+
+    values.append(transcript_id)
+    async with database.with_org(org_id) as conn:
+        await conn.execute(f"UPDATE transcripts SET {', '.join(set_parts)} WHERE id=${idx}", *values)
+        logs = [{
+            "action": "speaker_correction", "user_id": current_user["id"],
+            "user_name": current_user.get("name", ""), "meeting_id": meeting_id, "org_id": org_id,
+        }]
+        if has_text_edit:
+            logs.append({
+                "action": "transcript_text_edited", "user_id": current_user["id"],
+                "user_name": current_user.get("name", ""), "meeting_id": meeting_id, "org_id": org_id,
+            })
+        for log in logs:
+            await _audit(conn, log["meeting_id"], log["org_id"], log["action"], log["user_id"], log["user_name"])
+
+    return {
+        "message": "Speaker labels updated",
+        "speaker_text": data.speaker_text,
+        "speaker_colors": data.speaker_colors,
+        "edited_by_name": current_user.get("name", ""),
+        "edited_at": now,
+        "has_backup": bool(existing_t and existing_t["speaker_text"]),
+    }
+
+
+@router.post("/{meeting_id}/speaker-text/restore-backup")
+async def restore_speaker_text_backup(meeting_id: str, current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can restore speaker labels")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT transcript_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row or not m_row["transcript_id"]:
+        raise HTTPException(status_code=404, detail="No transcript found")
+
+    async with database.with_org(org_id) as conn:
+        t_row = await conn.fetchrow(
+            "SELECT id, speaker_text_backup, speaker_text_backup_at, speaker_text_backup_by FROM transcripts WHERE id=$1",
+            m_row["transcript_id"],
+        )
+    if not t_row or not t_row["speaker_text_backup"]:
+        raise HTTPException(status_code=404, detail="No backup available")
+
+    backup = t_row["speaker_text_backup"]
+    now = datetime.now(timezone.utc).isoformat()
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            """UPDATE transcripts SET
+               speaker_text=$1, speaker_text_edited_by_name=$2, speaker_text_edited_at=$3,
+               speaker_text_backup=NULL, speaker_text_backup_at=NULL, speaker_text_backup_by=NULL
+               WHERE id=$4""",
+            backup, t_row["speaker_text_backup_by"] or "", t_row["speaker_text_backup_at"] or now,
+            t_row["id"],
+        )
+        await _audit(conn, meeting_id, org_id, "speaker_restore_backup", current_user["id"], current_user.get("name", ""))
+
+    return {
+        "message": "Previous speaker labels restored",
+        "speaker_text": backup,
+        "edited_by_name": t_row["speaker_text_backup_by"] or "",
+        "edited_at": t_row["speaker_text_backup_at"] or now,
+    }
+
+
+@router.delete("/{meeting_id}/speaker-text")
+async def reset_speaker_text(meeting_id: str, current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can reset speaker labels")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT transcript_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row or not m_row["transcript_id"]:
+        raise HTTPException(status_code=404, detail="No transcript found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            "UPDATE transcripts SET speaker_text=NULL, speaker_text_edited_by_name=NULL, speaker_text_edited_at=NULL WHERE id=$1",
+            m_row["transcript_id"],
+        )
+        await _audit(conn, meeting_id, org_id, "speaker_reset", current_user["id"], current_user.get("name", ""))
+    return {"message": "Speaker labels cleared — transcript restored to full raw text"}
+
+
+# ── AI operations ─────────────────────────────────────────────────────────────
+
 @router.post("/{meeting_id}/rescan-evidence")
-async def rescan_evidence(
-    meeting_id: str,
-    data: RescanRequest,
-    background_tasks: BackgroundTasks,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Re-run AI compliance mapping using the current (possibly edited) transcript.
-    Accepts an optional custom_prompt to steer the AI (e.g. "Focus on medication management").
-    Runs in the background to avoid gateway timeouts on large standard sets.
-    Only regenerates CQC/Care Cert/Custom evidence mappings — preserves summary, actions, and risks."""
+async def rescan_evidence(meeting_id: str, data: RescanRequest, background_tasks: BackgroundTasks, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can re-scan evidence")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") in ["signed_off", "shared"]:
-        raise HTTPException(status_code=409, detail="Report is locked. Cannot re-scan evidence after sign-off. Request a re-open first.")
+    meeting = dict(m_row)
+    if (meeting.get("status") or "") in ["signed_off", "shared"]:
+        raise HTTPException(status_code=409, detail="Report is locked. Cannot re-scan after sign-off.")
     if not meeting.get("analysis_id"):
         raise HTTPException(status_code=400, detail="No analysis found — run initial processing first")
 
     transcript_id = meeting.get("transcript_id")
     if not transcript_id:
-        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
+        raise HTTPException(status_code=404, detail="No transcript found")
 
-    transcript = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
-    if not transcript:
+    async with database.with_org(org_id) as conn:
+        t_row = await conn.fetchrow("SELECT speaker_text, text FROM transcripts WHERE id=$1", transcript_id)
+    if not t_row:
         raise HTTPException(status_code=404, detail="Transcript not found")
 
-    transcript_text = transcript.get("speaker_text") or transcript.get("text", "")
-    if not transcript_text.strip():
+    transcript_text = (t_row["speaker_text"] or t_row["text"] or "").strip()
+    if not transcript_text:
         raise HTTPException(status_code=400, detail="Transcript is empty")
 
     custom_prompt = (data.custom_prompt or "").strip() or None
-
-    # Mark as processing immediately so the frontend can show a spinner
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
-        {"$set": {"rescan_status": "processing"}}
-    )
+    async with database.with_org(org_id) as conn:
+        await conn.execute("UPDATE meetings SET rescan_status='processing' WHERE id=$1", meeting_id)
 
     background_tasks.add_task(
         _run_rescan_background,
-        meeting_id, meeting, transcript_text, str(current_user["id"]), current_user["name"], db, custom_prompt
+        meeting_id, meeting, transcript_text,
+        str(current_user["id"]), current_user.get("name", ""), org_id, custom_prompt,
     )
+    return {"status": "processing", "message": "Re-scanning evidence in the background — this takes 1–2 minutes."}
 
-    return {"status": "processing", "message": "Re-scanning evidence in the background — this takes 1–2 minutes. The page will update automatically."}
 
-
-async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text: str, user_id: str, user_name: str, db, custom_prompt: str = None):
-    """Background worker: re-runs AI compliance mapping and updates the analysis record."""
+async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text: str,
+                                  user_id: str, user_name: str, org_id: str, custom_prompt: str = None):
     from utils.ai import analyze_meeting as _analyze_meeting
     try:
-        meeting_org_id = meeting.get("org_id")
+        async with database.with_admin() as conn:
+            cqc_rows = await conn.fetch(
+                "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
+                org_id,
+            )
+            care_cert_rows = await conn.fetch(
+                "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
+                org_id,
+            )
+        cqc_standards = [dict(r) for r in cqc_rows]
+        care_cert_standards = [dict(r) for r in care_cert_rows]
 
-        # Load CQC standards from the system collection (includes QS + regulations)
-        cqc_standards = await db.standards.find({"type": "cqc", "is_active": True}).to_list(100)
-        care_cert_standards = await db.standards.find({"type": "care_cert", "is_active": True}).to_list(50)
-
-        # Merge any org-specific or system entries from standards_entries not already in the system set
-        _org_std_filter = lambda t: {"type": t, "is_active": True, "$or": [{"is_system": True}, {"org_id": meeting_org_id}]}
-        system_refs = {s.get("reference") for s in cqc_standards}
-        async for doc in db.standards_entries.find(_org_std_filter("cqc")):
-            if doc.get("reference") not in system_refs:
-                cqc_standards.append(doc)
-        cc_refs = {s.get("reference") for s in care_cert_standards}
-        async for doc in db.standards_entries.find(_org_std_filter("care_cert")):
-            if doc.get("reference") not in cc_refs:
-                care_cert_standards.append(doc)
-
-        custom_standards = []
-        std_doc_query = {"is_active": True, "parse_status": "parsed"}
-        if meeting_org_id:
-            std_doc_query["org_id"] = meeting_org_id
-        async for doc in db.standards_documents.find(std_doc_query):
-            doc["id"] = str(doc["_id"])
-            custom_standards.append(doc)
+        async with database.with_org(org_id) as conn:
+            custom_rows = await conn.fetch(
+                "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
+                org_id,
+            )
+        custom_standards = [dict(r) for r in custom_rows]
 
         supervision_template = None
-        tmpl_doc = await db.settings.find_one({"_id": f"supervision_template:{meeting_org_id}"}) if meeting_org_id else None
-        if not tmpl_doc:
-            tmpl_doc = await db.settings.find_one({"_id": "supervision_template"})
-        if tmpl_doc and tmpl_doc.get("steps"):
-            supervision_template = tmpl_doc
+        async with database.with_admin() as conn:
+            tmpl_row = await conn.fetchrow("SELECT data FROM settings WHERE id=$1", f"supervision_template:{org_id}")
+            if not tmpl_row:
+                tmpl_row = await conn.fetchrow("SELECT data FROM settings WHERE id='supervision_template'")
+        if tmpl_row and (tmpl_row["data"] or {}).get("steps"):
+            supervision_template = tmpl_row["data"]
 
-        paused_periods = meeting.get("paused_periods", [])
-
+        paused_periods = meeting.get("paused_periods") or []
         analysis_result = await _analyze_meeting(
             transcript_text, cqc_standards, care_cert_standards, paused_periods,
-            custom_standards, supervision_template, custom_prompt
+            custom_standards, supervision_template, custom_prompt,
         )
 
-        cqc_kq_map = {s.get("reference"): s.get("key_questions", []) for s in cqc_standards}
+        cqc_kq_map = {s.get("reference"): s.get("key_questions") or [] for s in cqc_standards}
         for item in analysis_result.get("cqc_mappings", []):
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
@@ -752,131 +838,98 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
 
         now = datetime.now(timezone.utc).isoformat()
         analysis_id = meeting["analysis_id"]
-
-        await db.analyses.update_one(
-            {"_id": ObjectId(analysis_id)},
-            {"$set": {
-                "cqc_mappings": analysis_result.get("cqc_mappings", []),
-                "care_cert_mappings": analysis_result.get("care_cert_mappings", []),
-                "custom_mappings": analysis_result.get("custom_mappings", []),
-                "last_edited_at": now,
-                "last_edited_by": user_id,
-                "rescanned_at": now,
-                "rescanned_by_name": user_name,
-            }}
-        )
-        await db.meetings.update_one(
-            {"_id": ObjectId(meeting_id)},
-            {"$set": {"rescan_status": "done"}}
-        )
-        await db.review_edits.insert_one({
-            "meeting_id": meeting_id,
-            "editor_id": user_id,
-            "editor_name": user_name,
-            "edit_type": "evidence_rescan",
-            "content": f"Compliance evidence re-scanned{' with guidance: ' + custom_prompt if custom_prompt else ' from corrected transcript'}",
-            "created_at": now,
-        })
-        logger.info(f"Rescan complete for meeting {meeting_id} — {len(analysis_result.get('cqc_mappings',[]))} CQC, {len(analysis_result.get('care_cert_mappings',[]))} CC mappings")
-
+        async with database.with_org(org_id) as conn:
+            await conn.execute(
+                """UPDATE analyses SET
+                   cqc_mappings=$1::jsonb, care_cert_mappings=$2::jsonb, custom_mappings=$3::jsonb,
+                   last_edited_at=$4, last_edited_by=$5, rescanned_at=$4, rescanned_by_name=$6
+                   WHERE id=$7""",
+                json.dumps(analysis_result.get("cqc_mappings", [])),
+                json.dumps(analysis_result.get("care_cert_mappings", [])),
+                json.dumps(analysis_result.get("custom_mappings", [])),
+                now, user_id, user_name, analysis_id,
+            )
+            await conn.execute("UPDATE meetings SET rescan_status='done' WHERE id=$1", meeting_id)
+            await _log_edit(conn, meeting_id, org_id, "evidence_rescan", user_id, user_name,
+                            f"Compliance evidence re-scanned{' with guidance: ' + custom_prompt if custom_prompt else ' from corrected transcript'}")
+        logger.info(f"Rescan complete for meeting {meeting_id}")
     except Exception as e:
         logger.error(f"Rescan failed for meeting {meeting_id}: {e}")
-        await db.meetings.update_one(
-            {"_id": ObjectId(meeting_id)},
-            {"$set": {"rescan_status": "failed"}}
-        )
+        try:
+            async with database.with_org(org_id) as conn:
+                await conn.execute("UPDATE meetings SET rescan_status='failed' WHERE id=$1", meeting_id)
+        except Exception:
+            pass
 
 
 @router.post("/{meeting_id}/regenerate-summary")
-async def regenerate_summary(
-    meeting_id: str,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Re-generate just the meeting summary in the new structured format (intro + bullets + closing)."""
+async def regenerate_summary(meeting_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers/admins can regenerate summaries")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id, transcript_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    if not m_row["analysis_id"]:
+        raise HTTPException(status_code=400, detail="No analysis found")
+    if not m_row["transcript_id"]:
+        raise HTTPException(status_code=404, detail="No transcript found")
 
-    if not meeting.get("analysis_id"):
-        raise HTTPException(status_code=400, detail="No analysis found — run initial processing first")
-
-    transcript_id = meeting.get("transcript_id")
-    if not transcript_id:
-        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
-
-    transcript = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
-    if not transcript:
+    async with database.with_org(org_id) as conn:
+        t_row = await conn.fetchrow("SELECT speaker_text, text FROM transcripts WHERE id=$1", m_row["transcript_id"])
+    if not t_row:
         raise HTTPException(status_code=404, detail="Transcript not found")
-
-    text = transcript.get("speaker_text") or transcript.get("text") or ""
-    if not text.strip():
+    text = (t_row["speaker_text"] or t_row["text"] or "").strip()
+    if not text:
         raise HTTPException(status_code=400, detail="No transcript text to summarise")
 
     from utils.ai import generate_meeting_summary
     new_summary = await generate_meeting_summary(text)
-
-    analysis_id = meeting["analysis_id"]
-    await db.analyses.update_one(
-        {"_id": ObjectId(analysis_id)},
-        {"$set": {"summary": new_summary}},
-    )
-
+    async with database.with_org(org_id) as conn:
+        await conn.execute("UPDATE analyses SET summary=$1 WHERE id=$2", new_summary, m_row["analysis_id"])
     return {"summary": new_summary}
 
 
 @router.post("/{meeting_id}/scan-pii")
-async def scan_pii(
-    meeting_id: str,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Run AI + regex scan on the meeting transcript to surface potential third-party PII."""
+async def scan_pii(meeting_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can scan for PII")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT transcript_id, attendees, created_by_name, sign_off_manager_name FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if not meeting.get("transcript_id"):
+    if not m_row["transcript_id"]:
         return {"flags": []}
 
-    transcript = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
-    if not transcript:
+    async with database.with_org(org_id) as conn:
+        t_row = await conn.fetchrow("SELECT speaker_text, text FROM transcripts WHERE id=$1", m_row["transcript_id"])
+    if not t_row:
         return {"flags": []}
 
-    text = transcript.get("speaker_text") or transcript.get("text", "")
-    if not text.strip():
+    text = (t_row["speaker_text"] or t_row["text"] or "").strip()
+    if not text:
         return {"flags": []}
 
     from utils.ai import scan_pii_in_transcript
-    attendees = meeting.get("attendees", [])
-    manager_name = meeting.get("created_by_name", "") or meeting.get("sign_off_manager_name", "")
+    attendees = m_row["attendees"] or []
+    manager_name = m_row["sign_off_manager_name"] or m_row["created_by_name"] or ""
     flags = await scan_pii_in_transcript(text, attendees, manager_name)
     return {"flags": flags}
 
 
 @router.post("/{meeting_id}/complete-pii-review")
-async def complete_pii_review(
-    meeting_id: str,
-    data: PIIReviewRequest,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Save the manager's PII review decision (redactions applied or skipped).
-    Sets pii_review_status = 'reviewed' so the gate never shows again."""
+async def complete_pii_review(meeting_id: str, data: PIIReviewRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can complete PII review")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
     now = datetime.now(timezone.utc).isoformat()
-
     clean_redactions = []
     for r in data.redactions:
         original = r.get("original", "").strip()
@@ -891,452 +944,212 @@ async def complete_pii_review(
                 "added_by": current_user["id"],
             })
 
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
-        {"$set": {
-            "pii_review_status": "reviewed",
-            "pii_reviewed_at": now,
-            "pii_reviewed_by": current_user["id"],
-            "pii_reviewed_by_name": current_user.get("name", ""),
-            "pii_skipped": data.skipped,
-            "pii_redactions": clean_redactions,
-        }}
-    )
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            """UPDATE meetings SET
+               pii_review_status='reviewed', pii_reviewed_at=$1, pii_reviewed_by=$2,
+               pii_reviewed_by_name=$3, pii_skipped=$4, pii_redactions=$5::jsonb
+               WHERE id=$6""",
+            now, current_user["id"], current_user.get("name", ""),
+            data.skipped, json.dumps(clean_redactions), meeting_id,
+        )
+        action = "pii_review_skipped" if data.skipped else "pii_review_completed"
+        detail = "Acknowledged — no changes made" if data.skipped else f"{len(clean_redactions)} redaction(s) applied"
+        await _audit(conn, meeting_id, org_id, action, current_user["id"], current_user.get("name", ""), detail)
 
-    action = "pii_review_skipped" if data.skipped else "pii_review_completed"
-    detail = "Acknowledged — no changes made" if data.skipped else f"{len(clean_redactions)} redaction(s) applied"
-    await db.audit_logs.insert_one({
-        "meeting_id": meeting_id,
-        "user_id": current_user["id"],
-        "user_name": current_user.get("name", ""),
-        "action": action,
-        "edit_type": action,
-        "detail": detail,
-        "timestamp": now,
-    })
-
-    logger.info("PII review for meeting %s: %s — %s", meeting_id, action, detail)
     return {"message": "PII review completed", "redactions_applied": len(clean_redactions)}
 
 
+# ── Sharing & Comments ────────────────────────────────────────────────────────
+
 @router.post("/{meeting_id}/share")
-async def share_meeting(meeting_id: str, data: ShareRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def share_meeting(meeting_id: str, data: ShareRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can share meetings")
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT status, shared_with FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") not in ["signed_off", "shared"]:
+    if (m_row["status"] or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="Meeting must be signed off before sharing")
 
     now = datetime.now(timezone.utc).isoformat()
-    shared_with = meeting.get("shared_with", []) or []
+    shared_with = list(m_row["shared_with"] or [])
     added = []
     for uid in data.user_ids:
         if not any(s.get("user_id") == uid for s in shared_with):
-            user = await db.users.find_one({"_id": ObjectId(uid)})
-            if user:
-                entry = {"user_id": uid, "name": user.get("name", ""), "email": user.get("email", ""), "shared_at": now}
+            async with database.with_org(org_id) as conn:
+                u_row = await conn.fetchrow("SELECT id, name, email FROM users WHERE id=$1 AND org_id=$2", uid, org_id)
+            if u_row:
+                entry = {"user_id": uid, "name": u_row["name"], "email": u_row["email"], "shared_at": now}
                 shared_with.append(entry)
                 added.append(entry)
 
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
-        {"$set": {"status": "shared", "shared_with": shared_with, "updated_at": now}}
-    )
-    await db.audit_logs.insert_one({
-        "meeting_id": meeting_id,
-        "user_id": current_user.get("id", ""),
-        "user_name": current_user.get("name", ""),
-        "action": "meeting_shared",
-        "edit_type": "meeting_shared",
-        "detail": f"Report shared with: {', '.join(e['name'] for e in added)}" if added else "No new users added",
-        "timestamp": now,
-    })
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            "UPDATE meetings SET status='shared', shared_with=$1::jsonb, updated_at=$2 WHERE id=$3",
+            json.dumps(shared_with), now, meeting_id,
+        )
+        await _audit(conn, meeting_id, org_id, "meeting_shared", current_user.get("id", ""), current_user.get("name", ""),
+                     f"Report shared with: {', '.join(e['name'] for e in added)}" if added else "No new users added")
     return {"message": f"Report shared with {len(added)} new user(s)", "shared_with": shared_with}
 
 
 @router.post("/{meeting_id}/comments")
-async def add_comment(meeting_id: str, data: CommentRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+async def add_comment(meeting_id: str, data: CommentRequest, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT status, analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Admins and managers can comment at any stage; others only after sign-off
     role = current_user.get("role")
-    if role not in ["admin", "manager"] and meeting.get("status") not in ["signed_off", "shared"]:
+    if role not in ["admin", "manager"] and (m_row["status"] or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="Comments are only available after sign-off")
-
-    # Must have at least some processed content to comment on
-    if not meeting.get("analysis_id") and role not in ["admin", "manager"]:
+    if not m_row["analysis_id"] and role not in ["admin", "manager"]:
         raise HTTPException(status_code=400, detail="Meeting has not been processed yet")
 
     now = datetime.now(timezone.utc).isoformat()
-    comment_doc = {
-        "meeting_id": meeting_id,
-        "user_id": current_user["id"],
-        "user_name": current_user["name"],
-        "text": data.text,
-        "created_at": now,
-    }
-    result = await db.reviewer_comments.insert_one(comment_doc)
-    comment_doc["id"] = str(result.inserted_id)
-    del comment_doc["_id"]
-    return comment_doc
+    comment_id = str(uuid.uuid4())
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            "INSERT INTO reviewer_comments (id, meeting_id, org_id, user_id, user_name, role, text, created_at) "
+            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            comment_id, meeting_id, org_id, current_user["id"],
+            current_user.get("name", ""), current_user.get("role", ""), data.text, now,
+        )
+    return {"id": comment_id, "meeting_id": meeting_id, "user_id": current_user["id"],
+            "user_name": current_user.get("name", ""), "text": data.text, "created_at": now}
 
 
-@router.patch("/{meeting_id}/speaker-text")
-async def update_speaker_text(
-    meeting_id: str,
-    data: SpeakerTextUpdateRequest,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Save corrected speaker turn labels back to the transcript document."""
-    if current_user["role"] not in ["manager", "admin"]:
-        raise HTTPException(status_code=403, detail="Only managers can edit speaker labels")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+@router.get("/{meeting_id}/comments")
+async def get_comments(meeting_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-
-    if meeting.get("status") in ["signed_off", "shared"]:
-        raise HTTPException(status_code=409, detail="Report is locked. Cannot edit speaker labels after sign-off. Request a re-open first.")
-
-    transcript_id = meeting.get("transcript_id")
-    if not transcript_id:
-        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
-
-    now = datetime.now(timezone.utc).isoformat()
-    # Detect whether this save contains text edits (not just speaker label changes)
-    existing_t = await db.transcripts.find_one({"_id": ObjectId(transcript_id)}, {"speaker_text": 1})
-    prev_text = existing_t.get("speaker_text", "") if existing_t else ""
-    has_text_edit = False
-    if prev_text:
-        # Compare turn text content (strip speaker labels) to detect text-only edits
-        def _turn_bodies(s):
-            return [ln.split(":", 1)[-1].strip() for ln in s.strip().split("\n") if ":" in ln]
-        has_text_edit = _turn_bodies(prev_text) != _turn_bodies(data.speaker_text)
-    update_fields = {
-        "speaker_text": data.speaker_text,
-        "speaker_text_edited_by_name": current_user.get("name", ""),
-        "speaker_text_edited_at": now,
-    }
-    if data.speaker_colors is not None:
-        update_fields["speaker_colors"] = data.speaker_colors
-    if existing_t and existing_t.get("speaker_text"):
-        update_fields["speaker_text_backup"] = existing_t["speaker_text"]
-        update_fields["speaker_text_backup_at"] = existing_t.get("speaker_text_edited_at", "")
-        update_fields["speaker_text_backup_by"] = existing_t.get("speaker_text_edited_by_name", "")
-
-    await db.transcripts.update_one(
-        {"_id": ObjectId(transcript_id)},
-        {"$set": update_fields}
-    )
-
-    # Audit: always log the save; log a separate text-edit event when turn bodies changed
-    logs = [{
-        "meeting_id": meeting_id,
-        "user_id": current_user["id"],
-        "user_name": current_user.get("name", ""),
-        "action": "speaker_correction",
-        "edit_type": "speaker_correction",
-        "timestamp": now,
-    }]
-    if has_text_edit:
-        logs.append({
-            "meeting_id": meeting_id,
-            "user_id": current_user["id"],
-            "user_name": current_user.get("name", ""),
-            "action": "transcript_text_edited",
-            "edit_type": "transcript_text_edited",
-            "timestamp": now,
-        })
-    await db.audit_logs.insert_many(logs)
-
-    return {
-        "message": "Speaker labels updated",
-        "speaker_text": data.speaker_text,
-        "speaker_colors": data.speaker_colors,
-        "edited_by_name": current_user.get("name", ""),
-        "edited_at": now,
-        "has_backup": bool(existing_t and existing_t.get("speaker_text")),
-    }
+    async with database.with_org(org_id) as conn:
+        rows = await conn.fetch("SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id)
+    return [dict(r) for r in rows]
 
 
-@router.post("/{meeting_id}/speaker-text/restore-backup")
-async def restore_speaker_text_backup(
-    meeting_id: str,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Restore the one-deep backup of speaker_text (the version before the last save)."""
-    if current_user["role"] not in ["manager", "admin"]:
-        raise HTTPException(status_code=403, detail="Only managers can restore speaker labels")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    transcript_id = meeting.get("transcript_id")
-    if not transcript_id:
-        raise HTTPException(status_code=404, detail="No transcript found")
-
-    t = await db.transcripts.find_one({"_id": ObjectId(transcript_id)})
-    backup = t.get("speaker_text_backup") if t else None
-    if not backup:
-        raise HTTPException(status_code=404, detail="No backup available")
-
-    now = datetime.now(timezone.utc).isoformat()
-    await db.transcripts.update_one(
-        {"_id": ObjectId(transcript_id)},
-        {"$set": {
-            "speaker_text": backup,
-            "speaker_text_edited_by_name": t.get("speaker_text_backup_by", ""),
-            "speaker_text_edited_at": t.get("speaker_text_backup_at", now),
-        }, "$unset": {
-            "speaker_text_backup": "",
-            "speaker_text_backup_at": "",
-            "speaker_text_backup_by": "",
-        }}
-    )
-
-    await db.audit_logs.insert_one({
-        "meeting_id": meeting_id,
-        "user_id": current_user["id"],
-        "user_name": current_user.get("name", ""),
-        "action": "speaker_restore_backup",
-        "edit_type": "speaker_restore_backup",
-        "timestamp": now,
-    })
-
-    return {
-        "message": "Previous speaker labels restored",
-        "speaker_text": backup,
-        "edited_by_name": t.get("speaker_text_backup_by", ""),
-        "edited_at": t.get("speaker_text_backup_at", now),
-    }
-
-
-@router.delete("/{meeting_id}/speaker-text")
-async def reset_speaker_text(
-    meeting_id: str,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Clear the edited speaker_text so the transcript falls back to the raw full text."""
-    if current_user["role"] not in ["manager", "admin"]:
-        raise HTTPException(status_code=403, detail="Only managers can reset speaker labels")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    transcript_id = meeting.get("transcript_id")
-    if not transcript_id:
-        raise HTTPException(status_code=404, detail="No transcript found for this meeting")
-
-    now = datetime.now(timezone.utc).isoformat()
-    await db.transcripts.update_one(
-        {"_id": ObjectId(transcript_id)},
-        {"$unset": {
-            "speaker_text": "",
-            "speaker_text_edited_by_name": "",
-            "speaker_text_edited_at": "",
-        }}
-    )
-
-    await db.audit_logs.insert_one({
-        "meeting_id": meeting_id,
-        "user_id": current_user["id"],
-        "user_name": current_user.get("name", ""),
-        "action": "speaker_reset",
-        "edit_type": "speaker_reset",
-        "timestamp": now,
-    })
-
-    return {"message": "Speaker labels cleared — transcript restored to full raw text"}
-
+# ── Audit Trail ───────────────────────────────────────────────────────────────
 
 @router.get("/{meeting_id}/audit-trail")
-async def get_audit_trail(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-
+    meeting = dict(m_row)
     events = []
 
-    # 1. Meeting created
     if meeting.get("created_at"):
-        events.append({
-            "type": "meeting_created",
-            "label": "Meeting created",
-            "actor": meeting.get("created_by_name", "Unknown"),
-            "timestamp": meeting["created_at"],
-            "detail": meeting.get("title", ""),
-        })
+        events.append({"type": "meeting_created", "label": "Meeting created",
+                       "actor": meeting.get("created_by_name", "Unknown"),
+                       "timestamp": meeting["created_at"], "detail": meeting.get("title", "")})
 
-    # 2. Recording events
-    # 2. Recording events — resolve user names from users collection
-    rec_user_ids = list({ev.get("user_id") for ev in meeting.get("recording_events", []) if ev.get("user_id")})
+    rec_user_ids = list({ev.get("user_id") for ev in (meeting.get("recording_events") or []) if ev.get("user_id")})
     rec_users = {}
     for uid in rec_user_ids:
         try:
-            u = await db.users.find_one({"_id": ObjectId(uid)})
-            if u:
-                rec_users[uid] = u.get("name", "Unknown")
+            async with database.with_org(org_id) as conn:
+                u_row = await conn.fetchrow("SELECT id, name FROM users WHERE id=$1", uid)
+            if u_row:
+                rec_users[uid] = u_row["name"]
         except Exception:
             pass
 
-    label_map_rec = {
-        "notice_acknowledged": "Recording notice acknowledged",
-        "started": "Recording started",
-        "paused": "Recording paused",
-        "resumed": "Recording resumed",
-        "stopped": "Recording stopped",
-    }
-    for ev in meeting.get("recording_events", []):
+    label_map_rec = {"notice_acknowledged": "Recording notice acknowledged", "started": "Recording started",
+                     "paused": "Recording paused", "resumed": "Recording resumed", "stopped": "Recording stopped"}
+    for ev in (meeting.get("recording_events") or []):
         ev_type = ev.get("type") or ev.get("event_type", "unknown")
         actor = rec_users.get(ev.get("user_id", ""), ev.get("user_name", "System"))
-        events.append({
-            "type": f"recording_{ev_type}",
-            "label": label_map_rec.get(ev_type, f"Recording {ev_type}"),
-            "actor": actor,
-            "timestamp": ev.get("timestamp", ""),
-            "detail": None,
-        })
+        events.append({"type": f"recording_{ev_type}", "label": label_map_rec.get(ev_type, f"Recording {ev_type}"),
+                       "actor": actor, "timestamp": ev.get("timestamp", ""), "detail": None})
 
-    # 3. Transcript created
     if meeting.get("transcript_id"):
         try:
-            tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
-            if tdoc and tdoc.get("created_at"):
-                events.append({
-                    "type": "transcribed",
-                    "label": "Audio transcribed",
-                    "actor": "1two.one",
-                    "timestamp": tdoc["created_at"],
-                    "detail": None,
-                })
+            async with database.with_org(org_id) as conn:
+                t_row = await conn.fetchrow("SELECT created_at FROM transcripts WHERE id=$1", meeting["transcript_id"])
+            if t_row and t_row["created_at"]:
+                events.append({"type": "transcribed", "label": "Audio transcribed", "actor": "1two.one",
+                               "timestamp": t_row["created_at"], "detail": None})
         except Exception:
             pass
 
-    # 4. Analysis completed
     if meeting.get("analysis_id"):
         try:
-            adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
-            if adoc and adoc.get("created_at"):
-                events.append({
-                    "type": "analyzed",
-                    "label": "AI analysis completed",
-                    "actor": "1two.one",
-                    "timestamp": adoc["created_at"],
-                    "detail": None,
-                })
+            async with database.with_org(org_id) as conn:
+                a_row = await conn.fetchrow("SELECT created_at FROM analyses WHERE id=$1", meeting["analysis_id"])
+            if a_row and a_row["created_at"]:
+                events.append({"type": "analyzed", "label": "AI analysis completed", "actor": "1two.one",
+                               "timestamp": a_row["created_at"], "detail": None})
         except Exception:
             pass
 
-    # 5. Review edits
-    label_map_edit = {
-        "summary": "Summary edited",
-        "actions": "Action items updated",
-        "evidence": "Evidence item updated",
-        "transcript_anonymise": "Transcript anonymised (manual)",
-        "evidence_rescan": "Evidence re-scanned",
-        "post_signoff_evidence_edit": "Evidence edited after sign-off",
-    }
-    async for edit in db.review_edits.find({"meeting_id": meeting_id}).sort("created_at", 1):
-        edit_type = edit.get("edit_type", "unknown")
+    label_map_edit = {"summary": "Summary edited", "actions": "Action items updated",
+                      "evidence": "Evidence item updated", "transcript_anonymise": "Transcript anonymised (manual)",
+                      "evidence_rescan": "Evidence re-scanned", "post_signoff_evidence_edit": "Evidence edited after sign-off"}
+    async with database.with_org(org_id) as conn:
+        edit_rows = await conn.fetch(
+            "SELECT * FROM review_edits WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id,
+        )
+    for edit in edit_rows:
+        edit = dict(edit)
+        edit_type = edit.get("action", "unknown")
         is_post_signoff = edit_type == "post_signoff_evidence_edit"
-        events.append({
-            "type": f"edit_{edit_type}",
-            "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
-            "actor": edit.get("editor_name", "Unknown"),
-            "timestamp": edit.get("created_at", ""),
-            "detail": edit.get("content") if is_post_signoff else None,
-            "flagged": is_post_signoff,  # highlighted in UI
-        })
+        events.append({"type": f"edit_{edit_type}", "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
+                       "actor": edit.get("user_name", "Unknown"), "timestamp": edit.get("timestamp", ""),
+                       "detail": edit.get("detail") if is_post_signoff else None, "flagged": is_post_signoff})
 
-    # 6. Attendees marked as reviewed
-    for a in meeting.get("attendees", []):
+    for a in (meeting.get("attendees") or []):
         if a.get("reviewed") and a.get("reviewed_at"):
-            events.append({
-                "type": "mark_reviewed",
-                "label": "Marked as reviewed",
-                "actor": a.get("name", "Unknown"),
-                "timestamp": a["reviewed_at"],
-                "detail": None,
-            })
+            events.append({"type": "mark_reviewed", "label": "Marked as reviewed",
+                           "actor": a.get("name", "Unknown"), "timestamp": a["reviewed_at"], "detail": None})
 
-    # 7. Sign-off
-    sign_off = meeting.get("sign_off_record")
+    sign_off = meeting.get("sign_off_record") or {}
     if sign_off:
-        events.append({
-            "type": "signed_off",
-            "label": "Meeting signed off",
-            "actor": sign_off.get("signed_by_name", "Unknown"),
-            "timestamp": sign_off.get("signed_at", ""),
-            "detail": None,
-        })
+        events.append({"type": "signed_off", "label": "Meeting signed off",
+                       "actor": sign_off.get("signed_by_name", "Unknown"),
+                       "timestamp": sign_off.get("signed_at", ""), "detail": None})
 
-    # 8. Comments
-    async for c in db.reviewer_comments.find({"meeting_id": meeting_id}).sort("created_at", 1):
+    async with database.with_org(org_id) as conn:
+        c_rows = await conn.fetch("SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id)
+    for c in c_rows:
+        c = dict(c)
         text = c.get("text", "")
-        events.append({
-            "type": "comment_added",
-            "label": "Comment added",
-            "actor": c.get("user_name", "Unknown"),
-            "timestamp": c.get("created_at", ""),
-            "detail": text[:100] + ("…" if len(text) > 100 else ""),
-        })
+        events.append({"type": "comment_added", "label": "Comment added", "actor": c.get("user_name", "Unknown"),
+                       "timestamp": c.get("created_at", ""), "detail": text[:100] + ("…" if len(text) > 100 else "")})
 
-    # 9a. Speaker-text edits (stored in audit_logs collection)
-    label_map_audit = {
-        "speaker_correction": "Speaker labels edited",
-        "transcript_text_edited": "Transcript text edited",
-        "speaker_reset": "Speaker labels reset to raw transcript",
-        "speaker_restore_backup": "Speaker labels restored from backup",
-        "speaker_diarize": "Speaker identification (AI)",
-        "pii_review_completed": "Confidentiality review completed",
-        "pii_review_skipped": "Confidentiality review skipped (acknowledged)",
-    }
-    async for log in db.audit_logs.find({"meeting_id": meeting_id}).sort("timestamp", 1):
+    label_map_audit = {"speaker_correction": "Speaker labels edited", "transcript_text_edited": "Transcript text edited",
+                       "speaker_reset": "Speaker labels reset to raw transcript",
+                       "speaker_restore_backup": "Speaker labels restored from backup",
+                       "speaker_diarize": "Speaker identification (AI)",
+                       "pii_review_completed": "Confidentiality review completed",
+                       "pii_review_skipped": "Confidentiality review skipped (acknowledged)"}
+    async with database.with_org(org_id) as conn:
+        log_rows = await conn.fetch("SELECT * FROM audit_logs WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id)
+    for log in log_rows:
+        log = dict(log)
         action = log.get("action", "unknown")
-        events.append({
-            "type": action,
-            "label": label_map_audit.get(action, action.replace("_", " ").title()),
-            "actor": log.get("user_name", "System"),
-            "timestamp": log.get("timestamp", ""),
-            "detail": log.get("detail"),
-        })
+        events.append({"type": action, "label": label_map_audit.get(action, action.replace("_", " ").title()),
+                       "actor": log.get("user_name", "System"), "timestamp": log.get("timestamp", ""),
+                       "detail": log.get("detail")})
 
-    # 9b. Audio deleted
-    if meeting.get("audio_deletion_status") == "deleted" and meeting.get("audio_deleted_at"):
-        events.append({
-            "type": "audio_deleted",
-            "label": "Raw audio deleted (GDPR)",
-            "actor": "System",
-            "timestamp": meeting["audio_deleted_at"],
-            "detail": "Audio file removed after sign-off grace period",
-        })
+    if (meeting.get("audio_deletion_status") == "deleted") and meeting.get("audio_deleted_at"):
+        events.append({"type": "audio_deleted", "label": "Raw audio deleted (GDPR)", "actor": "System",
+                       "timestamp": meeting["audio_deleted_at"], "detail": "Audio file removed after sign-off grace period"})
 
     events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
     return {"events": events}
 
 
-@router.get("/{meeting_id}/comments")
-async def get_comments(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    comments = []
-    async for c in db.reviewer_comments.find({"meeting_id": meeting_id}).sort("created_at", 1):
-        comments.append(doc_to_dict(c))
-    return comments
-
+# ── Email ─────────────────────────────────────────────────────────────────────
 
 async def _send_email_background(params: dict, meeting_id: str):
-    """Background task: sends email via Resend so the HTTP response isn't blocked."""
     import resend
     api_key = os.environ.get("RESEND_API_KEY", "")
     if not api_key:
@@ -1344,7 +1157,6 @@ async def _send_email_background(params: dict, meeting_id: str):
         return
     resend.api_key = api_key
     try:
-        import asyncio
         await asyncio.to_thread(resend.Emails.send, params)
         logger.info(f"Background email sent for meeting {meeting_id}")
     except Exception as e:
@@ -1352,13 +1164,15 @@ async def _send_email_background(params: dict, meeting_id: str):
 
 
 @router.post("/{meeting_id}/send-email")
-async def send_email_report(meeting_id: str, data: EmailRequest, background_tasks: BackgroundTasks, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def send_email_report(meeting_id: str, data: EmailRequest, background_tasks: BackgroundTasks, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can email meeting reports")
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT title, date, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") not in ["signed_off", "shared"]:
+    if (m_row["status"] or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="Meeting must be signed off")
 
     api_key = os.environ.get("RESEND_API_KEY", "")
@@ -1366,9 +1180,7 @@ async def send_email_report(meeting_id: str, data: EmailRequest, background_task
         raise HTTPException(status_code=503, detail="Email service not configured — RESEND_API_KEY is missing.")
 
     frontend_url = os.environ.get("FRONTEND_URL", "")
-
-    # Format date nicely: "2 Jul 2026" from ISO string
-    raw_date = meeting.get("date", "")
+    raw_date = m_row["date"] or ""
     try:
         from datetime import datetime as _dt
         _d = _dt.fromisoformat(str(raw_date).replace("Z", "+00:00"))
@@ -1376,81 +1188,69 @@ async def send_email_report(meeting_id: str, data: EmailRequest, background_task
     except Exception:
         friendly_date = str(raw_date)
 
-    html = f"""
-<html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+    html = f"""<html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
 <h2 style="color: #1E3A8A;">Supervision Meeting Report</h2>
-<p><strong>Meeting:</strong> {meeting.get('title')}</p>
+<p><strong>Meeting:</strong> {m_row['title']}</p>
 <p><strong>Date:</strong> {friendly_date}</p>
 <p><strong>Status:</strong> Signed Off</p>
 <p>{data.message or 'Please review the meeting report linked below.'}</p>
 <p><a href="{frontend_url}/meetings/{meeting_id}/report" style="background:#1E3A8A;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;">View Report</a></p>
-<hr/>
-<p style="color:#666;font-size:12px;">Supervision 2.0 - Compliance Evidence Platform</p>
+<hr/><p style="color:#666;font-size:12px;">Supervision 2.0 - Compliance Evidence Platform</p>
 </body></html>"""
 
-    params = {
-        "from": "Supervision 2.0 <noreply@notify.1two.one>",
-        "to": data.recipients,
-        "subject": f"Meeting Report: {meeting.get('title')}",
-        "html": html,
-    }
-
-    # Run in background so Cloudflare/proxy timeout doesn't affect the response
+    params = {"from": "Supervision 2.0 <noreply@notify.1two.one>", "to": data.recipients,
+               "subject": f"Meeting Report: {m_row['title']}", "html": html}
     background_tasks.add_task(_send_email_background, params, meeting_id)
-    logger.info(f"Report email queued for meeting {meeting_id} to {len(data.recipients)} recipient(s)")
     return {"message": f"Email sending to {len(data.recipients)} recipient(s) — this may take a moment."}
 
 
+# ── PDF Export ────────────────────────────────────────────────────────────────
+
 @router.get("/{meeting_id}/export-pdf")
-async def export_pdf(meeting_id: str, include_transcript: bool = False, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def export_pdf(meeting_id: str, include_transcript: bool = False, current_user=Depends(get_current_user)):
     from fastapi.responses import Response
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") not in ["signed_off", "shared"]:
+    meeting = dict(m_row)
+    if (meeting.get("status") or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="PDF export is only available for signed-off meetings")
 
-    # Gather analysis
     analysis = {}
     if meeting.get("analysis_id"):
-        adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
-        if adoc:
-            analysis = adoc
+        async with database.with_org(org_id) as conn:
+            a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", meeting["analysis_id"])
+        if a_row:
+            analysis = dict(a_row)
 
     transcript_text = ""
     speaker_text = ""
     if meeting.get("transcript_id"):
-        tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
-        if tdoc:
-            # Speaker turns are always included — they reflect manual corrections and are key evidence
-            speaker_text = tdoc.get("speaker_text", "")
-            # Full plain-text transcript only when explicitly requested
+        async with database.with_org(org_id) as conn:
+            t_row = await conn.fetchrow("SELECT speaker_text, text FROM transcripts WHERE id=$1", meeting["transcript_id"])
+        if t_row:
+            speaker_text = t_row["speaker_text"] or ""
             if include_transcript:
-                transcript_text = tdoc.get("text", "")
+                transcript_text = t_row["text"] or ""
 
-    # ── Apply PII redactions ──────────────────────────────────────────────
-    redactions = meeting.get("pii_redactions", [])
+    redactions = meeting.get("pii_redactions") or []
     if redactions:
         user_id = current_user.get("id", "")
         privileged = _has_privileged_access(meeting, user_id)
-        # Speaker text in PDFs: always redacted — PDFs are for sharing/archiving
         if speaker_text:
             speaker_text = _apply_redactions_to_text(speaker_text, redactions)
-        # Full transcript text: only redact for non-privileged users
         if not privileged and transcript_text:
             transcript_text = _apply_redactions_to_text(transcript_text, redactions)
-        # Analysis (evidence summaries, excerpts): always redact
         if analysis:
             analysis = _apply_redactions_deep(analysis, redactions)
 
     pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text)
-    safe_title = "".join(c for c in meeting.get("title", "report") if c.isalnum() or c in " _-")
+    safe_title = "".join(c for c in (meeting.get("title") or "report") if c.isalnum() or c in " _-")
     filename = f"supervision_{safe_title[:40].strip().replace(' ', '_')}.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_text: str = "") -> bytes:
@@ -1511,18 +1311,15 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         return t
 
     story = []
-
-    # ── Header ──────────────────────────────────────────────────────────
     story.append(Paragraph("Supervision 2.0", ParagraphStyle("App", fontName="Helvetica", fontSize=9, textColor=MID_GRAY)))
     story.append(Paragraph(e(meeting.get("title", "Meeting Report")), title_style))
     story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=6))
 
-    # Meeting metadata table
-    sign_off = meeting.get("sign_off_record", {})
+    sign_off = meeting.get("sign_off_record") or {}
     meta_rows = [
-        ["Date", meeting.get("date", "—"), "Status", meeting.get("status", "—").replace("_", " ").title()],
+        ["Date", meeting.get("date", "—"), "Status", (meeting.get("status") or "—").replace("_", " ").title()],
         ["Manager", meeting.get("sign_off_manager_name", "—"), "Signed off by", sign_off.get("signed_by_name", "—")],
-        ["Attendees", ", ".join([a.get("name", "") for a in meeting.get("attendees", [])]), "Signed at", sign_off.get("signed_at", "—")[:16] if sign_off.get("signed_at") else "—"],
+        ["Attendees", ", ".join([a.get("name", "") for a in (meeting.get("attendees") or [])]), "Signed at", sign_off.get("signed_at", "—")[:16] if sign_off.get("signed_at") else "—"],
     ]
     meta_table = Table(meta_rows, colWidths=[28*mm, 57*mm, 28*mm, 57*mm])
     meta_table.setStyle(TableStyle([
@@ -1533,67 +1330,42 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         ("BACKGROUND", (0, 0), (-1, -1), LIGHT_GRAY), ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
     ]))
     story.append(meta_table)
-
-    # ── Summary ──────────────────────────────────────────────────────────
     story.append(Spacer(1, 6*mm))
     story.append(section_header("Meeting Summary"))
-    summary = analysis.get("edited_summary") or analysis.get("summary", "No summary available.")
+    summary = (analysis.get("edited_summary") or analysis.get("summary") or "No summary available.")
     story.append(Spacer(1, 2*mm))
 
-    bullet_style = ParagraphStyle("Bullet", fontName="Helvetica", fontSize=9,
-                                  textColor=colors.HexColor("#374151"), spaceAfter=3,
-                                  leading=13, leftIndent=12, bulletIndent=0)
-
-    # Parse structured summary: intro paragraph / bullet lines / closing paragraph
+    bullet_style = ParagraphStyle("Bullet", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=3, leading=13, leftIndent=12, bulletIndent=0)
     sections = [s.strip() for s in summary.split("\n\n") if s.strip()]
     for section in sections:
         lines = section.splitlines()
         bullet_lines = [l for l in lines if l.strip().startswith("- ")]
         non_bullet_lines = [l for l in lines if not l.strip().startswith("- ")]
         if bullet_lines and len(bullet_lines) >= len(lines) // 2:
-            # Bullet section
             for bl in bullet_lines:
                 text = bl.lstrip("- ").strip()
                 story.append(Paragraph(f"\u2022  {e(text)}", bullet_style))
         else:
-            # Plain paragraph (intro or closing)
             full_text = " ".join(l.strip() for l in lines if l.strip())
             story.append(Paragraph(e(full_text), body_style))
 
-    # ── Actions ──────────────────────────────────────────────────────────
-    actions = analysis.get("actions", [])
+    actions = analysis.get("actions") or []
     if actions:
         story.append(Spacer(1, 4*mm))
         story.append(section_header("Action Items"))
         story.append(Spacer(1, 2*mm))
-        cell_style = ParagraphStyle("Cell", fontName="Helvetica", fontSize=9,
-                                    textColor=colors.HexColor("#374151"), leading=12)
-        done_style = ParagraphStyle("Done", fontName="Helvetica", fontSize=9,
-                                    textColor=MID_GRAY, leading=12)
-        hdr_style = ParagraphStyle("Hdr", fontName="Helvetica-Bold", fontSize=9,
-                                   textColor=colors.white, leading=12)
-        action_rows = [[
-            Paragraph("#", hdr_style),
-            Paragraph("Action", hdr_style),
-            Paragraph("Assigned To", hdr_style),
-            Paragraph("Due Date", hdr_style),
-            Paragraph("Done", hdr_style),
-        ]]
+        cell_style = ParagraphStyle("Cell", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), leading=12)
+        done_style = ParagraphStyle("Done", fontName="Helvetica", fontSize=9, textColor=MID_GRAY, leading=12)
+        hdr_style = ParagraphStyle("Hdr", fontName="Helvetica-Bold", fontSize=9, textColor=colors.white, leading=12)
+        action_rows = [[Paragraph("#", hdr_style), Paragraph("Action", hdr_style), Paragraph("Assigned To", hdr_style), Paragraph("Due Date", hdr_style), Paragraph("Done", hdr_style)]]
         for i, a in enumerate(actions, 1):
             completed = a.get("completed", False)
             st = done_style if completed else cell_style
             tick = "\u2713" if completed else ""
-            action_rows.append([
-                Paragraph(str(i), st),
-                Paragraph(e(a.get("text", "")), st),
-                Paragraph(e(a.get("assigned_to") or "\u2014"), st),
-                Paragraph(e(a.get("due_date") or "\u2014"), st),
-                Paragraph(tick, st),
-            ])
+            action_rows.append([Paragraph(str(i), st), Paragraph(e(a.get("text", "")), st), Paragraph(e(a.get("assigned_to") or "\u2014"), st), Paragraph(e(a.get("due_date") or "\u2014"), st), Paragraph(tick, st)])
         at = Table(action_rows, colWidths=[8*mm, 93*mm, 38*mm, 24*mm, 7*mm])
         at.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY]),
             ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
             ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
@@ -1602,8 +1374,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         ]))
         story.append(at)
 
-    # ── Risks ──────────────────────────────────────────────────────────
-    risks = analysis.get("risks", [])
+    risks = analysis.get("risks") or []
     if risks:
         story.append(Spacer(1, 4*mm))
         story.append(section_header("Risks & Concerns", bg=colors.HexColor("#7F1D1D")))
@@ -1613,20 +1384,18 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
             sev_color = {"HIGH": "#DC2626", "MEDIUM": "#D97706", "LOW": "#6B7280"}.get(sev, "#6B7280")
             story.append(Paragraph(f'<font color="{sev_color}"><b>[{sev}]</b></font> {e(r.get("text", ""))}', body_style))
 
-    # ── CQC Evidence ──────────────────────────────────────────────────────
-    cqc_maps = analysis.get("cqc_mappings", [])
+    cqc_maps = analysis.get("cqc_mappings") or []
     if cqc_maps:
         story.append(Spacer(1, 4*mm))
         story.append(section_header("CQC Regulatory Evidence", bg=colors.HexColor("#4C1D95")))
         story.append(Spacer(1, 2*mm))
         for m in cqc_maps:
-            kq = ", ".join(m.get("key_questions", []))
+            kq = ", ".join(m.get("key_questions") or [])
             badge = f"Key Questions: {kq}" if kq else ""
             story.append(evidence_card(m.get("regulation_ref", ""), m.get("regulation_name", ""), badge, m.get("evidence_summary", ""), m.get("transcript_excerpt", ""), m.get("confidence", ""), PURPLE_BG))
             story.append(Spacer(1, 2*mm))
 
-    # ── Care Certificate Evidence ─────────────────────────────────────────
-    cc_maps = analysis.get("care_cert_mappings", [])
+    cc_maps = analysis.get("care_cert_mappings") or []
     if cc_maps:
         story.append(Spacer(1, 4*mm))
         story.append(section_header("Care Certificate Evidence", bg=colors.HexColor("#1E40AF")))
@@ -1636,8 +1405,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
             story.append(evidence_card(m.get("standard_ref", ""), m.get("standard_name", ""), badge, m.get("evidence_summary", ""), m.get("transcript_excerpt", ""), m.get("confidence", ""), BLUE_BG))
             story.append(Spacer(1, 2*mm))
 
-    # ── Custom / Organisational Evidence ─────────────────────────────────
-    custom_maps = analysis.get("custom_mappings", [])
+    custom_maps = analysis.get("custom_mappings") or []
     if custom_maps:
         story.append(Spacer(1, 4*mm))
         story.append(section_header("Organisational Standards Evidence", bg=colors.HexColor("#065F46")))
@@ -1647,13 +1415,11 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
             story.append(evidence_card(m.get("criterion_ref", ""), m.get("criterion_name", ""), badge, m.get("evidence_summary", ""), m.get("transcript_excerpt", ""), m.get("confidence", ""), TEAL_BG))
             story.append(Spacer(1, 2*mm))
 
-    # ── Transcript (optional) ─────────────────────────────────────────────
     if transcript_text or speaker_text:
         import re as _re
         story.append(Spacer(1, 4*mm))
         story.append(section_header("Meeting Transcript (Anonymised)", bg=colors.HexColor("#374151")))
         story.append(Spacer(1, 2*mm))
-
         MGMT_NAVY = colors.HexColor("#1E3A8A")
         WORKER_GREEN = colors.HexColor("#065F46")
         label_text_style = ParagraphStyle("LabelTxt", fontName="Helvetica-Bold", fontSize=7, textColor=colors.white, leading=9)
@@ -1662,11 +1428,8 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         if speaker_text:
             story.append(Paragraph("Speaker turns identified by AI. Names replaced with initials where anonymised.", small_style))
             story.append(Spacer(1, 2*mm))
-
             manager_name = meeting.get("sign_off_manager_name", "")
             manager_words = [w.lower() for w in manager_name.split() if len(w) > 2] if manager_name else []
-
-            # Parse "SPEAKER: text" lines
             turns = []
             for line in speaker_text.split("\n"):
                 line = line.strip()
@@ -1679,11 +1442,9 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
                     turns[-1][1] += " " + line
                 else:
                     turns.append(["Speaker", line])
-
             for speaker, text in turns:
                 sl = speaker.lower()
-                is_manager = (sl in ("manager", "supervisor") or
-                              any(w in sl for w in manager_words))
+                is_manager = (sl in ("manager", "supervisor") or any(w in sl for w in manager_words))
                 label_color = MGMT_NAVY if is_manager else WORKER_GREEN
                 row = [[Paragraph(e(speaker.upper()), label_text_style), Paragraph(e(text), turn_text_style)]]
                 t = Table(row, colWidths=[22*mm, 148*mm])
@@ -1691,12 +1452,9 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
                     ("BACKGROUND", (0, 0), (0, 0), label_color),
                     ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#F9FAFB")),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("TOPPADDING", (0, 0), (-1, -1), 4),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                    ("LEFTPADDING", (0, 0), (0, 0), 4),
-                    ("RIGHTPADDING", (0, 0), (0, 0), 4),
-                    ("LEFTPADDING", (1, 0), (1, 0), 6),
-                    ("RIGHTPADDING", (1, 0), (1, 0), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (0, 0), 4), ("RIGHTPADDING", (0, 0), (0, 0), 4),
+                    ("LEFTPADDING", (1, 0), (1, 0), 6), ("RIGHTPADDING", (1, 0), (1, 0), 6),
                     ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
                 ]))
                 story.append(t)
@@ -1707,7 +1465,6 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
                 if chunk.strip():
                     story.append(Paragraph(e(chunk.strip()), mono_style))
 
-    # ── Footer note ───────────────────────────────────────────────────────
     story.append(Spacer(1, 8*mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GRAY))
     from datetime import datetime as _dt
@@ -1718,25 +1475,27 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
 
 
 @router.get("/{meeting_id}/export-transcript")
-async def export_transcript(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    """Export a clean PDF of just the meeting transcript (speaker turns)."""
+async def export_transcript(meeting_id: str, current_user=Depends(get_current_user)):
     from fastapi.responses import Response
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") != "signed_off":
+    meeting = dict(m_row)
+    if (meeting.get("status") or "") != "signed_off":
         raise HTTPException(status_code=400, detail="Transcript export only available for signed-off meetings")
     if not meeting.get("transcript_id"):
         raise HTTPException(status_code=404, detail="No transcript found for this meeting")
 
-    tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
-    if not tdoc:
+    async with database.with_org(org_id) as conn:
+        t_row = await conn.fetchrow("SELECT speaker_text, text FROM transcripts WHERE id=$1", meeting["transcript_id"])
+    if not t_row:
         raise HTTPException(status_code=404, detail="Transcript record missing")
 
-    speaker_text = tdoc.get("speaker_text", "")
-    transcript_text = tdoc.get("text", "")
-
-    redactions = meeting.get("pii_redactions", [])
+    speaker_text = t_row["speaker_text"] or ""
+    transcript_text = t_row["text"] or ""
+    redactions = meeting.get("pii_redactions") or []
     if redactions:
         if speaker_text:
             speaker_text = _apply_redactions_to_text(speaker_text, redactions)
@@ -1744,13 +1503,10 @@ async def export_transcript(meeting_id: str, db=Depends(get_db), current_user=De
             transcript_text = _apply_redactions_to_text(transcript_text, redactions)
 
     pdf_bytes = _generate_transcript_pdf(meeting, speaker_text, transcript_text)
-    safe_title = "".join(c for c in meeting.get("title", "transcript") if c.isalnum() or c in " _-")
+    safe_title = "".join(c for c in (meeting.get("title") or "transcript") if c.isalnum() or c in " _-")
     filename = f"transcript_{safe_title[:40].strip().replace(' ', '_')}.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: str) -> bytes:
@@ -1767,52 +1523,39 @@ def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: 
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
 
-    NAVY     = colors.HexColor("#1E3A8A")
+    NAVY = colors.HexColor("#1E3A8A")
     MID_GRAY = colors.HexColor("#6B7280")
-    MGMT_NAVY    = colors.HexColor("#1E3A8A")
+    MGMT_NAVY = colors.HexColor("#1E3A8A")
     WORKER_GREEN = colors.HexColor("#065F46")
 
-    title_s   = ParagraphStyle("T", fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=4, leading=20)
-    meta_r_s  = ParagraphStyle("MR", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, leading=12, alignment=2)
-    small_s   = ParagraphStyle("S", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
-    label_s   = ParagraphStyle("L", fontName="Helvetica-Bold", fontSize=7, textColor=colors.white, leading=9)
-    turn_s    = ParagraphStyle("TT", fontName="Helvetica", fontSize=8.5, textColor=colors.HexColor("#1F2937"), leading=13)
-    mono_s    = ParagraphStyle("M", fontName="Courier", fontSize=8, textColor=colors.HexColor("#374151"), leading=12, spaceAfter=3)
+    title_s = ParagraphStyle("T", fontName="Helvetica-Bold", fontSize=16, textColor=NAVY, spaceAfter=4, leading=20)
+    meta_r_s = ParagraphStyle("MR", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, leading=12, alignment=2)
+    small_s = ParagraphStyle("S", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
+    label_s = ParagraphStyle("L", fontName="Helvetica-Bold", fontSize=7, textColor=colors.white, leading=9)
+    turn_s = ParagraphStyle("TT", fontName="Helvetica", fontSize=8.5, textColor=colors.HexColor("#1F2937"), leading=13)
+    mono_s = ParagraphStyle("M", fontName="Courier", fontSize=8, textColor=colors.HexColor("#374151"), leading=12, spaceAfter=3)
 
     def e(t): return _xe(str(t or ""))
 
     story = []
-
-    # Header row: title left, generated date right
     hdr = Table(
         [[Paragraph(e(meeting.get("title", "Meeting")), title_s),
           Paragraph(f"Generated {_dt.now().strftime('%d %b %Y %H:%M')} UTC", meta_r_s)]],
         colWidths=[120*mm, 50*mm],
     )
-    hdr.setStyle(TableStyle([
-        ("VALIGN",        (0, 0), (-1, -1), "BOTTOM"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-    ]))
+    hdr.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 4), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story.append(hdr)
 
-    # Supervisee name (bold, bigger) — first non-supervisor attendee
     sign_off_mgr_id = str(meeting.get("sign_off_manager_id") or "")
-    supervisees = [a.get("name", "") for a in meeting.get("attendees", []) if a.get("user_id") != sign_off_mgr_id]
+    supervisees = [a.get("name", "") for a in (meeting.get("attendees") or []) if a.get("user_id") != sign_off_mgr_id]
     if supervisees:
         name_s = ParagraphStyle("SN", fontName="Helvetica-Bold", fontSize=13, textColor=NAVY, spaceAfter=2, leading=17)
         story.append(Paragraph(", ".join(supervisees), name_s))
 
-    meta_parts = [
-        f"Date: {e(meeting.get('date', '—')[:10])}",
-        f"Manager: {e(meeting.get('sign_off_manager_name', '—'))}",
-    ]
+    meta_parts = [f"Date: {e((meeting.get('date') or '')[:10])}", f"Manager: {e(meeting.get('sign_off_manager_name', '—'))}"]
     story.append(Paragraph("  ·  ".join(meta_parts), small_s))
     story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=6))
 
-    # Transcript body
     manager_name = meeting.get("sign_off_manager_name", "")
     manager_words = [w.lower() for w in manager_name.split() if len(w) > 2] if manager_name else []
 
@@ -1829,7 +1572,6 @@ def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: 
                 turns[-1][1] += " " + line
             else:
                 turns.append(["Speaker", line])
-
         for speaker, text in turns:
             sl = speaker.lower()
             is_mgr = sl in ("manager", "supervisor") or any(w in sl for w in manager_words)
@@ -1837,15 +1579,11 @@ def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: 
             row = [[Paragraph(e(speaker.upper()), label_s), Paragraph(e(text), turn_s)]]
             t = Table(row, colWidths=[22*mm, 148*mm])
             t.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (0, 0), color),
-                ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#F9FAFB")),
-                ("VALIGN",     (0, 0), (-1, -1), "TOP"),
-                ("TOPPADDING",    (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ("LEFTPADDING",   (0, 0), (0, 0), 4),
-                ("RIGHTPADDING",  (0, 0), (0, 0), 4),
-                ("LEFTPADDING",   (1, 0), (1, 0), 6),
-                ("RIGHTPADDING",  (1, 0), (1, 0), 6),
+                ("BACKGROUND", (0, 0), (0, 0), color), ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#F9FAFB")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (0, 0), 4), ("RIGHTPADDING", (0, 0), (0, 0), 4),
+                ("LEFTPADDING", (1, 0), (1, 0), 6), ("RIGHTPADDING", (1, 0), (1, 0), 6),
                 ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
             ]))
             story.append(t)
@@ -1864,106 +1602,68 @@ def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: 
     return buf.getvalue()
 
 
-
-# ── Report re-open (mutual consent unlock) ───────────────────────────────────
+# ── Report re-open ────────────────────────────────────────────────────────────
 
 @router.post("/{meeting_id}/request-reopen")
-async def request_reopen(
-    meeting_id: str,
-    data: ReopenRequest,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Manager requests to re-open a signed-off meeting for editing. Awaits attendee approval."""
+async def request_reopen(meeting_id: str, data: ReopenRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can request a re-open")
-
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT status, reopen_requested FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.get("status") not in ["signed_off", "shared"]:
+    if (m_row["status"] or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="Meeting is not signed off")
-    if meeting.get("reopen_requested"):
+    if m_row["reopen_requested"]:
         raise HTTPException(status_code=409, detail="A re-open request is already pending — awaiting attendee approval")
 
     now = datetime.now(timezone.utc).isoformat()
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
-        {"$set": {
-            "reopen_requested": True,
-            "reopen_requested_by": current_user.get("id", ""),
-            "reopen_requested_by_name": current_user.get("name", ""),
-            "reopen_requested_at": now,
-            "reopen_reason": data.reason.strip(),
-        }}
-    )
-    await db.audit_logs.insert_one({
-        "meeting_id": meeting_id,
-        "user_id": current_user.get("id", ""),
-        "user_name": current_user.get("name", ""),
-        "action": "reopen_requested",
-        "edit_type": "reopen_requested",
-        "detail": f"Re-open requested. Reason: {data.reason.strip()}",
-        "timestamp": now,
-    })
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            """UPDATE meetings SET
+               reopen_requested=TRUE, reopen_requested_by=$1, reopen_requested_by_name=$2,
+               reopen_requested_at=$3, reopen_reason=$4
+               WHERE id=$5""",
+            current_user.get("id", ""), current_user.get("name", ""), now, data.reason.strip(), meeting_id,
+        )
+        await _audit(conn, meeting_id, org_id, "reopen_requested", current_user.get("id", ""), current_user.get("name", ""),
+                     f"Re-open requested. Reason: {data.reason.strip()}")
     return {"message": "Re-open requested — awaiting attendee approval"}
 
 
 @router.post("/{meeting_id}/approve-reopen")
-async def approve_reopen(
-    meeting_id: str,
-    db=Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Attendee (or a different manager) approves the re-open request, unlocking the report."""
-    meeting = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    if not meeting:
+async def approve_reopen(meeting_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting = dict(m_row)
     if not meeting.get("reopen_requested"):
         raise HTTPException(status_code=400, detail="No re-open request is pending for this meeting")
 
     user_id = current_user.get("id", "")
-    attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
+    attendee_ids = [a.get("user_id", "") for a in (meeting.get("attendees") or [])]
     requester_id = meeting.get("reopen_requested_by", "")
-
     is_attendee = user_id in attendee_ids and user_id != requester_id
     is_different_manager = current_user["role"] in ["manager", "admin"] and user_id != requester_id
-
     if not (is_attendee or is_different_manager):
-        raise HTTPException(
-            status_code=403,
-            detail="Only meeting attendees or a different manager can approve the re-open request"
-        )
+        raise HTTPException(status_code=403, detail="Only meeting attendees or a different manager can approve the re-open request")
 
     now = datetime.now(timezone.utc).isoformat()
     reopen_reason = meeting.get("reopen_reason", "")
-
-    await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id)},
-        {
-            "$set": {
-                "status": "reviewed",
-                "reopen_requested": False,
-                "reopen_approved_by": user_id,
-                "reopen_approved_by_name": current_user.get("name", ""),
-                "reopen_approved_at": now,
-                "updated_at": now,
-            },
-            "$unset": {
-                "reopen_requested_by": "",
-                "reopen_requested_by_name": "",
-                "reopen_requested_at": "",
-                "reopen_reason": "",
-            }
-        }
-    )
-    await db.audit_logs.insert_one({
-        "meeting_id": meeting_id,
-        "user_id": user_id,
-        "user_name": current_user.get("name", ""),
-        "action": "reopen_approved",
-        "edit_type": "reopen_approved",
-        "detail": f"Re-open approved by {current_user.get('name', '')}. Report unlocked for editing. Original reason: {reopen_reason}",
-        "timestamp": now,
-    })
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            """UPDATE meetings SET
+               status='reviewed', reopen_requested=FALSE,
+               reopen_approved_by=$1, reopen_approved_by_name=$2, reopen_approved_at=$3,
+               reopen_requested_by=NULL, reopen_requested_by_name=NULL,
+               reopen_requested_at=NULL, reopen_reason=NULL,
+               updated_at=$3
+               WHERE id=$4""",
+            user_id, current_user.get("name", ""), now, meeting_id,
+        )
+        await _audit(conn, meeting_id, org_id, "reopen_approved", user_id, current_user.get("name", ""),
+                     f"Re-open approved. Report unlocked for editing. Original reason: {reopen_reason}")
     return {"message": "Re-open approved — report is now unlocked for editing"}

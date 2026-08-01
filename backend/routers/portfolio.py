@@ -1,27 +1,25 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
-from bson import ObjectId
 import logging
 
-from deps import get_db, get_current_user
+from deps import get_current_user
+import database
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _s(oid):
-    return str(oid) if oid else None
-
-
-async def _build_portfolio_data(user_id: str, db):
+async def _build_portfolio_data(user_id: str, org_id: str):
     """Aggregate evidence data for a single user across all signed-off meetings."""
-    user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
-    if not user_doc:
+    async with database.with_org(org_id) as conn:
+        user_row = await conn.fetchrow("SELECT * FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
+    if not user_row:
         return None
 
+    user_doc = dict(user_row)
     user_data = {
-        "id": str(user_doc["_id"]),
+        "id": user_doc["id"],
         "name": user_doc.get("name", ""),
         "email": user_doc.get("email", ""),
         "role": user_doc.get("role", ""),
@@ -32,8 +30,12 @@ async def _build_portfolio_data(user_id: str, db):
     # Enrich with team/setting names
     if user_data.get("team_id"):
         try:
-            team_doc = await db.teams.find_one({"_id": ObjectId(user_data["team_id"])})
-            user_data["team_name"] = team_doc.get("name", "") if team_doc else None
+            async with database.with_org(org_id) as conn:
+                team_row = await conn.fetchrow(
+                    "SELECT name FROM teams WHERE id = $1 AND org_id = $2",
+                    user_data["team_id"], org_id,
+                )
+            user_data["team_name"] = team_row["name"] if team_row else None
         except Exception:
             user_data["team_name"] = None
     else:
@@ -41,33 +43,45 @@ async def _build_portfolio_data(user_id: str, db):
 
     if user_data.get("setting_id"):
         try:
-            setting_doc = await db.org_settings.find_one({"_id": ObjectId(user_data["setting_id"])})
-            user_data["setting_name"] = setting_doc.get("name", "") if setting_doc else None
+            async with database.with_org(org_id) as conn:
+                setting_row = await conn.fetchrow(
+                    "SELECT name FROM org_settings WHERE id = $1 AND org_id = $2",
+                    user_data["setting_id"], org_id,
+                )
+            user_data["setting_name"] = setting_row["name"] if setting_row else None
         except Exception:
             user_data["setting_name"] = None
     else:
         user_data["setting_name"] = None
 
     # Signed-off meetings where this user is an attendee (supervisee, not supervisor)
-    meetings_list = await db.meetings.find(
-        {
-            "attendees.user_id": user_id,
-            "sign_off_manager_id": {"$ne": user_id},  # exclude meetings they conducted as supervisor
-            "status": {"$in": ["signed_off", "shared"]},
-            "analysis_id": {"$exists": True},
-        }
-    ).sort("date", -1).limit(500).to_list(length=500)
+    async with database.with_org(org_id) as conn:
+        meetings_rows = await conn.fetch(
+            """SELECT * FROM meetings
+               WHERE org_id = $1
+                 AND status IN ('signed_off', 'shared')
+                 AND analysis_id IS NOT NULL
+                 AND (sign_off_manager_id IS NULL OR sign_off_manager_id != $2)
+                 AND EXISTS (
+                     SELECT 1 FROM jsonb_array_elements(attendees) elem
+                     WHERE elem->>'user_id' = $2
+                 )
+               ORDER BY date DESC
+               LIMIT 500""",
+            org_id, user_id,
+        )
 
-    analysis_ids = []
-    for m in meetings_list:
-        aid = m.get("analysis_id")
-        if aid:
-            try:
-                analysis_ids.append(ObjectId(aid))
-            except Exception:
-                pass
+    meetings_list = [dict(r) for r in meetings_rows]
 
-    analyses_map = {str(a["_id"]): a async for a in db.analyses.find({"_id": {"$in": analysis_ids}})}
+    analysis_ids = [m["analysis_id"] for m in meetings_list if m.get("analysis_id")]
+    analyses_map = {}
+    if analysis_ids:
+        async with database.with_org(org_id) as conn:
+            analysis_rows = await conn.fetch(
+                "SELECT * FROM analyses WHERE id = ANY($1::text[])",
+                analysis_ids,
+            )
+        analyses_map = {r["id"]: dict(r) for r in analysis_rows}
 
     raw_meetings = []
     for meeting in meetings_list:
@@ -76,7 +90,7 @@ async def _build_portfolio_data(user_id: str, db):
             continue
         adoc = analyses_map.get(aid)
         if adoc:
-            redactions = meeting.get("pii_redactions", [])
+            redactions = meeting.get("pii_redactions") or []
             if redactions:
                 adoc = _apply_redactions_deep(dict(adoc), redactions)
             raw_meetings.append({"meeting": meeting, "analysis": adoc})
@@ -90,9 +104,9 @@ async def _build_portfolio_data(user_id: str, db):
         mtg = item["meeting"]
         ana = item["analysis"]
         mdate = mtg.get("date", "")
-        mid = str(mtg["_id"])
+        mid = mtg["id"]
 
-        for m in ana.get("cqc_mappings", []):
+        for m in (ana.get("cqc_mappings") or []):
             key = m.get("regulation_ref", "—")
             if key not in cqc_agg:
                 cqc_agg[key] = {
@@ -108,12 +122,13 @@ async def _build_portfolio_data(user_id: str, db):
                 e["likely_count"] += 1
             elif m.get("confidence") == "needs_review":
                 e["needs_review_count"] += 1
-            if mdate and {"date": mdate, "id": mid, "title": mtg.get("title", "")} not in e["meeting_refs"]:
-                e["meeting_refs"].append({"date": mdate, "id": mid, "title": mtg.get("title", "")})
+            ref_entry = {"date": mdate, "id": mid, "title": mtg.get("title", "")}
+            if ref_entry not in e["meeting_refs"]:
+                e["meeting_refs"].append(ref_entry)
             if m.get("transcript_excerpt"):
                 e["latest_excerpt"] = m["transcript_excerpt"][:200]
 
-        for m in ana.get("care_cert_mappings", []):
+        for m in (ana.get("care_cert_mappings") or []):
             key = m.get("standard_ref", "—") + "::" + m.get("outcome_ref", "")
             if key not in care_cert_agg:
                 care_cert_agg[key] = {
@@ -130,12 +145,13 @@ async def _build_portfolio_data(user_id: str, db):
                 e["likely_count"] += 1
             elif m.get("confidence") == "needs_review":
                 e["needs_review_count"] += 1
-            if mdate and {"date": mdate, "id": mid, "title": mtg.get("title", "")} not in e["meeting_refs"]:
-                e["meeting_refs"].append({"date": mdate, "id": mid, "title": mtg.get("title", "")})
+            ref_entry = {"date": mdate, "id": mid, "title": mtg.get("title", "")}
+            if ref_entry not in e["meeting_refs"]:
+                e["meeting_refs"].append(ref_entry)
             if m.get("transcript_excerpt"):
                 e["latest_excerpt"] = m["transcript_excerpt"][:200]
 
-        for m in ana.get("custom_mappings", []):
+        for m in (ana.get("custom_mappings") or []):
             key = m.get("document_id", "") + "::" + m.get("criterion_ref", "—")
             if key not in custom_agg:
                 custom_agg[key] = {
@@ -152,24 +168,25 @@ async def _build_portfolio_data(user_id: str, db):
                 e["likely_count"] += 1
             elif m.get("confidence") == "needs_review":
                 e["needs_review_count"] += 1
-            if mdate and {"date": mdate, "id": mid, "title": mtg.get("title", "")} not in e["meeting_refs"]:
-                e["meeting_refs"].append({"date": mdate, "id": mid, "title": mtg.get("title", "")})
+            ref_entry = {"date": mdate, "id": mid, "title": mtg.get("title", "")}
+            if ref_entry not in e["meeting_refs"]:
+                e["meeting_refs"].append(ref_entry)
             if m.get("transcript_excerpt"):
                 e["latest_excerpt"] = m["transcript_excerpt"][:200]
 
-    meetings_list = []
+    meetings_summary = []
     for item in raw_meetings:
         mtg = item["meeting"]
         ana = item["analysis"]
-        meetings_list.append({
-            "id": str(mtg["_id"]),
+        meetings_summary.append({
+            "id": mtg["id"],
             "title": mtg.get("title", ""),
             "date": mtg.get("date", ""),
             "status": mtg.get("status", ""),
             "sign_off_manager_name": mtg.get("sign_off_manager_name", ""),
-            "cqc_count": len(ana.get("cqc_mappings", [])),
-            "care_cert_count": len(ana.get("care_cert_mappings", [])),
-            "custom_count": len(ana.get("custom_mappings", [])),
+            "cqc_count": len(ana.get("cqc_mappings") or []),
+            "care_cert_count": len(ana.get("care_cert_mappings") or []),
+            "custom_count": len(ana.get("custom_mappings") or []),
         })
 
     cqc_summary = sorted(cqc_agg.values(), key=lambda x: -x["evidence_count"])
@@ -181,7 +198,7 @@ async def _build_portfolio_data(user_id: str, db):
         "cqc_count": len(cqc_agg),
         "care_cert_count": len(care_cert_agg),
         "custom_count": len(custom_agg),
-        "last_meeting_date": meetings_list[0]["date"] if meetings_list else None,
+        "last_meeting_date": meetings_summary[0]["date"] if meetings_summary else None,
     }
 
     return {
@@ -190,31 +207,27 @@ async def _build_portfolio_data(user_id: str, db):
         "cqc_summary": cqc_summary,
         "care_cert_summary": care_cert_summary,
         "custom_summary": custom_summary,
-        "meetings": meetings_list,
+        "meetings": meetings_summary,
     }
 
 
 @router.get("/{user_id}")
-async def get_portfolio(user_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def get_portfolio(user_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"] and current_user["id"] != user_id:
         raise HTTPException(status_code=403, detail="You can only view your own portfolio")
-    target = await db.users.find_one({"_id": ObjectId(user_id)}, {"org_id": 1})
-    if not target or target.get("org_id") != current_user.get("org_id"):
-        raise HTTPException(status_code=404, detail="User not found")
-    data = await _build_portfolio_data(user_id, db)
+    org_id = current_user.get("org_id", "")
+    data = await _build_portfolio_data(user_id, org_id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
     return data
 
 
 @router.get("/{user_id}/export-pdf")
-async def export_portfolio_pdf(user_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def export_portfolio_pdf(user_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"] and current_user["id"] != user_id:
         raise HTTPException(status_code=403, detail="You can only export your own portfolio")
-    target = await db.users.find_one({"_id": ObjectId(user_id)}, {"org_id": 1})
-    if not target or target.get("org_id") != current_user.get("org_id"):
-        raise HTTPException(status_code=404, detail="User not found")
-    data = await _build_portfolio_data(user_id, db)
+    org_id = current_user.get("org_id", "")
+    data = await _build_portfolio_data(user_id, org_id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -269,14 +282,10 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
         ]))
         return t
 
-    def conf_str(c):
-        return {"likely_evidence": "Likely Evidence", "needs_review": "Needs Review", "not_enough_evidence": "Not Enough"}.get(c, c)
-
     story = []
     user = data["user"]
     stats = data["stats"]
 
-    # ── Header ───────────────────────────────────────────────────────────
     story.append(Paragraph("Supervision 2.0 — Staff Evidence Portfolio", small_s))
     story.append(Paragraph(e(user["name"]), title_s))
     story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=4))
@@ -301,7 +310,6 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     story.append(mt)
     story.append(Spacer(1, 4*mm))
 
-    # Stats bar
     stat_rows = [["CQC Regulations Evidenced", "Care Cert Standards", "Custom Criteria", "Total Evidence Items"]]
     total_ev = (sum(s["evidence_count"] for s in data["cqc_summary"]) +
                 sum(s["evidence_count"] for s in data["care_cert_summary"]) +
@@ -326,7 +334,6 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     ]))
     story.append(st)
 
-    # ── CQC Evidence ─────────────────────────────────────────────────────
     if data["cqc_summary"]:
         story.append(Spacer(1, 5*mm))
         story.append(section_hdr("CQC Regulatory Evidence", bg=colors.HexColor("#4C1D95")))
@@ -346,22 +353,20 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
             if s.get("latest_excerpt"):
                 rows.append([Paragraph(f'&#34;{e(s["latest_excerpt"])}&#34;', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
-            t.setStyle(TableStyle([
+            span_styles = [
                 ("BACKGROUND", (0, 0), (-1, -1), PURPLE_BG),
-                ("SPAN", (0, 1), (1, 1)),
-                ("SPAN", (0, 2), (1, 2)),
-                ("SPAN", (0, 3), (1, 3)),
-                ("SPAN", (0, 4), (1, 4)),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                 ("LEFTPADDING", (0, 0), (-1, -1), 8),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 8),
                 ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
-            ]))
+            ]
+            for i in range(1, len(rows)):
+                span_styles.append(("SPAN", (0, i), (1, i)))
+            t.setStyle(TableStyle(span_styles))
             story.append(t)
             story.append(Spacer(1, 1.5*mm))
 
-    # ── Care Certificate Evidence ─────────────────────────────────────────
     if data["care_cert_summary"]:
         story.append(Spacer(1, 4*mm))
         story.append(section_hdr("Care Certificate Evidence", bg=colors.HexColor("#1E40AF")))
@@ -380,22 +385,20 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
             if s.get("latest_excerpt"):
                 rows.append([Paragraph(f'&#34;{e(s["latest_excerpt"])}&#34;', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
-            t.setStyle(TableStyle([
+            span_styles = [
                 ("BACKGROUND", (0, 0), (-1, -1), BLUE_BG),
-                ("SPAN", (0, 1), (1, 1)),
-                ("SPAN", (0, 2), (1, 2)),
-                ("SPAN", (0, 3), (1, 3)),
-                ("SPAN", (0, 4), (1, 4)),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                 ("LEFTPADDING", (0, 0), (-1, -1), 8),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 8),
                 ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
-            ]))
+            ]
+            for i in range(1, len(rows)):
+                span_styles.append(("SPAN", (0, i), (1, i)))
+            t.setStyle(TableStyle(span_styles))
             story.append(t)
             story.append(Spacer(1, 1.5*mm))
 
-    # ── Custom / Organisational Evidence ─────────────────────────────────
     if data["custom_summary"]:
         story.append(Spacer(1, 4*mm))
         story.append(section_hdr("Organisational Standards Evidence", bg=colors.HexColor("#065F46")))
@@ -414,28 +417,26 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
             if s.get("latest_excerpt"):
                 rows.append([Paragraph(f'&#34;{e(s["latest_excerpt"])}&#34;', italic_s), ""])
             t = Table(rows, colWidths=[140*mm, 30*mm])
-            t.setStyle(TableStyle([
+            span_styles = [
                 ("BACKGROUND", (0, 0), (-1, -1), TEAL_BG),
-                ("SPAN", (0, 1), (1, 1)),
-                ("SPAN", (0, 2), (1, 2)),
-                ("SPAN", (0, 3), (1, 3)),
-                ("SPAN", (0, 4), (1, 4)),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                 ("LEFTPADDING", (0, 0), (-1, -1), 8),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 8),
                 ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
-            ]))
+            ]
+            for i in range(1, len(rows)):
+                span_styles.append(("SPAN", (0, i), (1, i)))
+            t.setStyle(TableStyle(span_styles))
             story.append(t)
             story.append(Spacer(1, 1.5*mm))
 
-    # ── Meeting History ───────────────────────────────────────────────────
     if data["meetings"]:
         story.append(Spacer(1, 4*mm))
         story.append(section_hdr("Meeting History", bg=colors.HexColor("#374151")))
         story.append(Spacer(1, 2*mm))
         hdr = [["Date", "Meeting Title", "CQC", "Care Cert", "Custom", "Manager"]]
-        rows = hdr + [
+        tbl_rows = hdr + [
             [m["date"][:10] if m.get("date") else "—",
              m.get("title", ""),
              str(m["cqc_count"]),
@@ -444,7 +445,7 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
              m.get("sign_off_manager_name", "—")]
             for m in data["meetings"]
         ]
-        tbl = Table(rows, colWidths=[22*mm, 75*mm, 14*mm, 17*mm, 14*mm, 28*mm])
+        tbl = Table(tbl_rows, colWidths=[22*mm, 75*mm, 14*mm, 17*mm, 14*mm, 28*mm])
         tbl.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), NAVY),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -458,7 +459,6 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
         ]))
         story.append(tbl)
 
-    # ── Footer ───────────────────────────────────────────────────────────
     story.append(Spacer(1, 8*mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GRAY))
     story.append(Paragraph(
