@@ -12,7 +12,9 @@ import { toast } from "sonner";
 function FocusTopicsTab({ API, getAuthConfig }) {
   const [topics, setTopics]   = useState([]);
   const [newTopic, setNewTopic] = useState("");
+  const [newMonth, setNewMonth] = useState("");
   const [saving, setSaving]   = useState(false);
+  const thisMonth = new Date().toISOString().slice(0, 7);
 
   const load = useCallback(async () => {
     try {
@@ -27,8 +29,12 @@ function FocusTopicsTab({ API, getAuthConfig }) {
     if (!newTopic.trim()) return;
     setSaving(true);
     try {
-      await axios.post(`${API}/prep/focus-topics`, { topic: newTopic.trim(), is_current: topics.length === 0 }, getAuthConfig());
-      setNewTopic("");
+      await axios.post(`${API}/prep/focus-topics`, {
+        topic: newTopic.trim(),
+        is_current: topics.length === 0,
+        active_month: newMonth || null,
+      }, getAuthConfig());
+      setNewTopic(""); setNewMonth("");
       await load();
       toast.success("Focus topic added");
     } catch (err) { toast.error(err.response?.data?.detail || "Failed to add"); }
@@ -37,7 +43,9 @@ function FocusTopicsTab({ API, getAuthConfig }) {
 
   const handleSetCurrent = async (topic) => {
     try {
-      await axios.put(`${API}/prep/focus-topics/${topic.id}`, { topic: topic.topic, is_current: true }, getAuthConfig());
+      await axios.put(`${API}/prep/focus-topics/${topic.id}`, {
+        topic: topic.topic, is_current: true, active_month: topic.active_month || null,
+      }, getAuthConfig());
       await load();
       toast.success("Current focus topic updated");
     } catch { toast.error("Failed to update"); }
@@ -50,34 +58,52 @@ function FocusTopicsTab({ API, getAuthConfig }) {
     } catch { toast.error("Failed to delete"); }
   };
 
+  const formatMonth = (ym) => {
+    if (!ym) return null;
+    const [y, m] = ym.split("-");
+    return new Date(+y, +m - 1).toLocaleString("default", { month: "long", year: "numeric" });
+  };
+
   return (
     <div className="space-y-5 max-w-xl">
       <div>
         <h3 className="text-sm font-semibold text-gray-800 mb-0.5">Organisational Focus Topics</h3>
         <p className="text-xs text-gray-500">
-          Set the current supervision focus for your whole organisation. Managers will see this as a suggestion in Dynamic Supervision Prep — the active topic is locked and cannot be changed by individual supervisors.
+          Set supervision focus topics and optionally assign them to a month — the right topic activates automatically. Managers see the active topic in Dynamic Supervision Prep.
         </p>
       </div>
 
       {/* Add new */}
-      <div className="flex gap-2">
+      <div className="space-y-2">
         <input
           type="text"
           value={newTopic}
           onChange={e => setNewTopic(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleAdd()}
           placeholder="e.g. Medication management, Safeguarding, Personal development…"
-          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           data-testid="new-focus-topic-input"
         />
-        <button
-          onClick={handleAdd}
-          disabled={saving || !newTopic.trim()}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#1E3A8A] text-white text-sm font-medium rounded-lg hover:bg-[#1E40AF] disabled:opacity-60 transition-colors"
-          data-testid="add-focus-topic-btn"
-        >
-          <Plus className="w-4 h-4" /> Add
-        </button>
+        <div className="flex gap-2 items-end">
+          <div className="flex-1">
+            <label className="block text-xs text-gray-500 mb-1">Assign to month <span className="text-gray-400">(optional)</span></label>
+            <input
+              type="month"
+              value={newMonth}
+              onChange={e => setNewMonth(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              data-testid="new-focus-topic-month"
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={saving || !newTopic.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#1E3A8A] text-white text-sm font-medium rounded-lg hover:bg-[#1E40AF] disabled:opacity-60 transition-colors"
+            data-testid="add-focus-topic-btn"
+          >
+            <Plus className="w-4 h-4" /> Add
+          </button>
+        </div>
       </div>
 
       {/* Topic list */}
@@ -85,36 +111,54 @@ function FocusTopicsTab({ API, getAuthConfig }) {
         <p className="text-xs text-gray-400 italic">No focus topics yet — add the first one above.</p>
       )}
       <div className="space-y-2">
-        {topics.map(t => (
-          <div
-            key={t.id}
-            className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-              t.is_current ? "border-indigo-300 bg-indigo-50" : "border-gray-200 bg-white"
-            }`}
-            data-testid={`focus-topic-row-${t.id}`}
-          >
-            {t.is_current && <Star className="w-4 h-4 text-indigo-600 flex-shrink-0" fill="currentColor" />}
-            <span className={`flex-1 text-sm ${t.is_current ? "font-semibold text-indigo-800" : "text-gray-700"}`}>{t.topic}</span>
-            {t.is_current && <span className="text-xs font-medium text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">Current</span>}
-            {!t.is_current && (
-              <button
-                onClick={() => handleSetCurrent(t)}
-                className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 px-2.5 py-1 rounded-lg transition-colors"
-                data-testid={`set-current-topic-${t.id}`}
-              >
-                Set as current
-              </button>
-            )}
-            <button
-              onClick={() => handleDelete(t.id)}
-              className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
-              data-testid={`delete-topic-${t.id}`}
+        {topics.map(t => {
+          const isActiveMonth = t.active_month === thisMonth;
+          const isCurrent = t.effective_current || t.is_current;
+          return (
+            <div
+              key={t.id}
+              className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                isCurrent ? "border-indigo-300 bg-indigo-50" : "border-gray-200 bg-white"
+              }`}
+              data-testid={`focus-topic-row-${t.id}`}
             >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ))}
+              {isCurrent && <Star className="w-4 h-4 text-indigo-600 flex-shrink-0" fill="currentColor" />}
+              <div className="flex-1 min-w-0">
+                <span className={`text-sm ${isCurrent ? "font-semibold text-indigo-800" : "text-gray-700"}`}>{t.topic}</span>
+                {t.active_month && (
+                  <p className="mt-0.5">
+                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${
+                      isActiveMonth ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
+                    }`}>
+                      {isActiveMonth ? "Active — " : ""}{formatMonth(t.active_month)}
+                    </span>
+                  </p>
+                )}
+              </div>
+              {isCurrent && !t.active_month && (
+                <span className="text-xs font-medium text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">Current</span>
+              )}
+              {!isCurrent && !t.active_month && (
+                <button
+                  onClick={() => handleSetCurrent(t)}
+                  className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 px-2.5 py-1 rounded-lg transition-colors"
+                  data-testid={`set-current-topic-${t.id}`}
+                >
+                  Set as current
+                </button>
+              )}
+              <button
+                onClick={() => handleDelete(t.id)}
+                className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+                data-testid={`delete-topic-${t.id}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          );
+        })}
       </div>
+      <p className="text-xs text-gray-400">Topics with a month activate automatically. Topics without a month can be set manually as current.</p>
     </div>
   );
 }

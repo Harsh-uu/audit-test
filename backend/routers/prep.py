@@ -41,6 +41,7 @@ def _ensure_list(val):
 class FocusTopicCreate(BaseModel):
     topic: str
     is_current: bool = False
+    active_month: Optional[str] = None  # YYYY-MM format, e.g. "2026-01"
 
 
 class QuestionUpdate(BaseModel):
@@ -97,11 +98,19 @@ async def _get_meeting_guarded(meeting_id: str, user: dict):
 @router.get("/focus-topics")
 async def list_focus_topics(current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
+    this_month = datetime.now(timezone.utc).strftime("%Y-%m")
     async with database.with_org(org_id) as conn:
         rows = await conn.fetch(
-            "SELECT * FROM focus_topics WHERE org_id=$1 ORDER BY created_at DESC", org_id,
+            "SELECT * FROM focus_topics WHERE org_id=$1 ORDER BY active_month ASC NULLS LAST, created_at DESC",
+            org_id,
         )
-    return [_topic_row_to_dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = _topic_row_to_dict(r)
+        # Auto-mark as effective_current if active_month matches today
+        d["effective_current"] = (d.get("active_month") == this_month) or bool(d.get("is_current"))
+        result.append(d)
+    return result
 
 
 @router.post("/focus-topics")
@@ -119,13 +128,15 @@ async def create_focus_topic(data: FocusTopicCreate, current_user=Depends(get_cu
                 org_id,
             )
         await conn.execute(
-            "INSERT INTO focus_topics (id, org_id, text, is_current, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
-            topic_id, org_id, data.topic.strip(), data.is_current, current_user["id"], now,
+            "INSERT INTO focus_topics (id, org_id, text, is_current, active_month, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+            topic_id, org_id, data.topic.strip(), data.is_current,
+            data.active_month or None, current_user["id"], now,
         )
 
     return {
         "id": topic_id, "org_id": org_id, "topic": data.topic.strip(),
-        "is_current": data.is_current, "created_by": current_user["id"], "created_at": now,
+        "is_current": data.is_current, "active_month": data.active_month,
+        "created_by": current_user["id"], "created_at": now,
     }
 
 
@@ -141,8 +152,8 @@ async def update_focus_topic(topic_id: str, data: FocusTopicCreate, current_user
                 "UPDATE focus_topics SET is_current=FALSE WHERE org_id=$1 AND is_current=TRUE", org_id,
             )
         result = await conn.execute(
-            "UPDATE focus_topics SET text=$1, is_current=$2 WHERE id=$3 AND org_id=$4",
-            data.topic.strip(), data.is_current, topic_id, org_id,
+            "UPDATE focus_topics SET text=$1, is_current=$2, active_month=$3 WHERE id=$4 AND org_id=$5",
+            data.topic.strip(), data.is_current, data.active_month or None, topic_id, org_id,
         )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Focus topic not found")

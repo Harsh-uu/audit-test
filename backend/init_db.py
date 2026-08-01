@@ -417,6 +417,7 @@ CREATE TABLE IF NOT EXISTS focus_topics (
     org_id TEXT,
     text TEXT,
     is_current BOOLEAN NOT NULL DEFAULT FALSE,
+    active_month TEXT,
     created_by TEXT,
     created_at TEXT
 );
