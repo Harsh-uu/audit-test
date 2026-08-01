@@ -121,12 +121,12 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
         logger.info(f"Starting transcription for meeting {meeting_id}")
         assemblyai_key = os.environ.get("ASSEMBLYAI_API_KEY")
         numbered_speaker_text = None
+        transcript_warnings = []
 
         if assemblyai_key:
             try:
                 logger.info("Attempting AssemblyAI medical transcription + diarization")
-                # Pass attendee count as a speaker hint to improve diarization accuracy
-                transcript_text, numbered_speaker_text = await transcribe_with_assemblyai(
+                transcript_text, numbered_speaker_text, transcript_warnings = await transcribe_with_assemblyai(
                     audio_data, speakers_expected=attendee_count
                 )
             except Exception as aai_err:
@@ -139,19 +139,25 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str, db):
 
         logger.info(f"Transcription complete for meeting {meeting_id}: {len(transcript_text)} chars")
 
-        # Save transcript
+        # Save transcript (include safety warnings for the review gate)
         now = datetime.now(timezone.utc).isoformat()
         transcript_doc = {
             "meeting_id": meeting_id,
             "text": transcript_text,
             "created_at": now,
+            "safety_warnings": transcript_warnings,
         }
         t_result = await db.transcripts.insert_one(transcript_doc)
         transcript_id = str(t_result.inserted_id)
 
         await db.meetings.update_one(
             {"_id": ObjectId(meeting_id)},
-            {"$set": {"transcript_id": transcript_id, "status": "analyzing", "updated_at": now}}
+            {"$set": {
+                "transcript_id": transcript_id,
+                "status": "analyzing",
+                "updated_at": now,
+                "transcript_has_warnings": len(transcript_warnings) > 0,
+            }}
         )
 
         # Get meeting for context
@@ -567,7 +573,7 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
 
     attendee_count = len(meeting.get("attendees", [])) or None
     try:
-        plain_text, numbered_speaker_text = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
+        plain_text, numbered_speaker_text, _ = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
     except Exception as e:
         logger.error(f"Retranscribe: AssemblyAI failed for {meeting_id}: {e}")
         await db.meetings.update_one({"_id": ObjectId(meeting_id)}, {"$set": {"diarize_status": "failed"}})

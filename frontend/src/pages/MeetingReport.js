@@ -449,6 +449,17 @@ export default function MeetingReport() {
   return (
     <Layout>
       <div className="flex flex-col h-full">
+        {/* Safety warning banner — shown when transcript has AI hallucination or content flags */}
+        {meeting.transcript_has_warnings && (
+          <div className="bg-red-600 text-white px-4 py-3 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 text-sm">
+              <span className="font-semibold">Transcript Safety Warning: </span>
+              This transcript was automatically flagged for potentially hallucinated or inappropriate content.
+              Review carefully before sharing. Use the <strong>Find &amp; Replace</strong> tool in the Transcript tab to remove any incorrect text.
+            </div>
+          </div>
+        )}
         {/* Top bar */}
         <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-20 gap-2">
           <div className="flex items-center gap-4">

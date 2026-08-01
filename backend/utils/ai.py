@@ -208,6 +208,59 @@ Rules:
 - Output ONLY the reformatted transcript — no preamble, explanation, or markdown"""
 
 
+def _check_transcript_safety(plain_text: str, transcript) -> list[str]:
+    """
+    Returns a list of warning strings if the transcript contains:
+    1. AssemblyAI content safety flags (violence, hate speech, etc.)
+    2. Repetition hallucination patterns (looping phrases — classic ASR failure)
+    """
+    import re
+    warnings = []
+
+    # --- Layer 1: AssemblyAI content safety labels ---
+    try:
+        if hasattr(transcript, "content_safety_labels") and transcript.content_safety_labels:
+            flagged = set()
+            results = transcript.content_safety_labels.results or []
+            for result in results:
+                for label in (result.labels or []):
+                    if label.confidence >= 0.6:
+                        flagged.add(label.label)
+            if flagged:
+                warnings.append(f"Content safety flags from AssemblyAI: {', '.join(sorted(flagged))}")
+    except Exception:
+        pass
+
+    # --- Layer 2: Repetition / hallucination detector ---
+    # Split into sentences and check for excessive repetition
+    if plain_text:
+        sentences = [s.strip() for s in re.split(r'[.!?]', plain_text) if len(s.strip()) > 5]
+        if len(sentences) >= 4:
+            from collections import Counter
+            counts = Counter(s.lower() for s in sentences)
+            most_common_text, most_common_count = counts.most_common(1)[0]
+            # If any single sentence appears 3+ times in a row it's very likely a hallucination
+            if most_common_count >= 3:
+                warnings.append(
+                    f"Possible hallucination detected: the phrase \"{most_common_text[:80]}\" "
+                    f"appears {most_common_count} times — please review before sharing."
+                )
+
+        # Check for consecutive repeated short phrases (tighter looping pattern)
+        words = plain_text.lower().split()
+        if len(words) >= 10:
+            chunk_size = 6
+            chunks = [" ".join(words[i:i+chunk_size]) for i in range(0, len(words) - chunk_size, chunk_size)]
+            for i in range(len(chunks) - 2):
+                if chunks[i] == chunks[i+1] == chunks[i+2]:
+                    warnings.append(
+                        f"Looping repetition detected near: \"{chunks[i][:80]}\" — likely an AI hallucination."
+                    )
+                    break
+
+    return warnings
+
+
 async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int = None) -> tuple:
     """
     Transcribe + diarise with AssemblyAI (Universal model, speaker_labels=True).
@@ -230,6 +283,7 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
         speakers_expected=speakers_expected if speakers_expected and speakers_expected >= 2 else None,
         speech_models=["universal-3-pro"],  # AssemblyAI medical-capable model
         domain="medical-v1",               # Activates medical mode (care/clinical vocab)
+        content_safety=True,               # Flag violent/threatening/sensitive content
         word_boost=[                        # Reinforce UK adult social care terminology
             "CQC", "safeguarding", "MCA", "DoLS", "LPS", "Care Certificate",
             "duty of candour", "deprivation of liberty", "best interests",
@@ -258,6 +312,14 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
     plain_text = transcript.text or ""
     logger.info(f"AssemblyAI transcription complete: {len(plain_text)} chars")
 
+    plain_text = transcript.text or ""
+    logger.info(f"AssemblyAI transcription complete: {len(plain_text)} chars")
+
+    # --- Content safety & hallucination checks ---
+    warnings = _check_transcript_safety(plain_text, transcript)
+    if warnings:
+        logger.warning(f"Transcript safety flags for this recording: {warnings}")
+
     if transcript.utterances:
         unique_speakers = {u.speaker for u in transcript.utterances}
         logger.info(f"AssemblyAI found {len(unique_speakers)} speaker(s): {sorted(unique_speakers)}")
@@ -266,10 +328,10 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
             lines = [f"Speaker {u.speaker}: {u.text}" for u in transcript.utterances]
             speaker_text = "\n".join(lines)
             logger.info("AssemblyAI diarization usable — GPT-4o will map names only")
-            return plain_text, speaker_text
+            return plain_text, speaker_text, warnings
 
     logger.info("AssemblyAI found only 1 speaker — GPT-4o will diarise from text")
-    return plain_text, None
+    return plain_text, None, warnings
 
 
 async def transcribe_with_deepgram(audio_data: bytes) -> tuple:
