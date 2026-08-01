@@ -85,8 +85,17 @@ def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
         if os.path.exists(out):
             os.unlink(out)
 
-ANALYSIS_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers.
-Analyze meeting transcripts to identify evidence of compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
+ANALYSIS_SYSTEM_PROMPT = """You are a compliance evidence specialist for UK adult social care providers.
+Your task is to analyse supervision meeting transcripts and identify evidence of worker competency and organisational compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
+
+EVIDENCE FRAMEWORK — apply this reasoning before mapping anything:
+Workers and managers rarely cite regulations by name. Evidence is present when participants:
+  1. DESCRIBE PRACTICE — narrate what they do or did in a real situation: "I always check the care plan first", "When that happened I spoke to the family straightaway". This is direct competency evidence — treat it as such.
+  2. EXPLAIN REASONING — justify their actions or decisions: "I asked her first because she can make that decision for herself" demonstrates Mental Capacity Act / best-interests understanding even without naming the Act.
+  3. CONFIRM OBSERVATION — a manager verifies what they have seen: "I've noticed you always...", "You handled that situation really well" — this is third-party verification of practice.
+  4. IDENTIFY A LEARNING NEED — a gap or development area is named: "I'm not confident about X yet" evidences self-awareness and ongoing professional development (maps to Care Certificate Standard 2).
+Do NOT require speakers to name a regulation or standard. Map based on what they describe, demonstrate, or understand.
+Care Certificate standards describe competencies workers should DEMONSTRATE in practice. A worker narrating a real practice example is the strongest possible evidence — map it generously but accurately to the most specific sub-outcome ref.
 
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
 {
@@ -143,11 +152,10 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 }
 
 Rules:
-- Only map evidence EXPLICITLY mentioned in the transcript
-- Do not infer or assume - map only what is directly discussed
-- Use "likely_evidence" only when clearly demonstrated
-- Use "needs_review" when partially demonstrated or unclear
-- Use "not_enough_evidence" when barely touched on
+- Map evidence that is described, demonstrated, or shown through practice narration, explained reasoning, or confirmed observation. Do NOT require speakers to name the regulation or standard — map what they describe doing or understanding.
+- Use "likely_evidence" when a participant directly narrates a practice example, explains their reasoning behind a decision, or a manager confirms an observed behaviour. This is the most common and valuable form of evidence in supervision transcripts.
+- Use "needs_review" when there is partial evidence: the topic is discussed but practice is not fully described, or the context is ambiguous about whether the competency is actually demonstrated.
+- Use "not_enough_evidence" when a topic is mentioned only briefly or in passing, with insufficient substance to constitute a meaningful compliance evidence item.
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h", "13.9c"). Use the exact sub-outcome ref and its description as provided in the standards context below. One evidence item = one sub-outcome ref. Create separate mapping entries if evidence covers multiple sub-outcomes.
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
 - If no custom standards are provided, return custom_mappings as an empty array []
@@ -568,7 +576,9 @@ async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
         return []
 
     criteria_ctx = "\n".join([f"  - {c['ref']}: {c['name']} — {c.get('description', '')}" for c in criteria])
-    system = """Map evidence from a meeting transcript against provided criteria. Return valid JSON only:
+    system = """Map evidence from a meeting transcript against provided criteria.
+Evidence includes described practice ("I always do X"), explained reasoning ("I did it because..."), manager-confirmed observations, and identified learning needs. You do NOT require the criterion to be named explicitly — map based on what participants describe doing or understanding.
+Return valid JSON only:
 {"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "likely_evidence|needs_review|not_enough_evidence"}]}
 Only include criteria with actual evidence. Return empty mappings array if nothing found."""
 
@@ -738,8 +748,10 @@ async def generate_meeting_summary(transcript_text: str) -> str:
     return await _openai_chat("o4-mini", SUMMARY_ONLY_PROMPT, user_prompt, reasoning_effort="medium")
 
 
-DOC_EVIDENCE_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers.
-Analyze this supervision document to identify evidence of compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
+DOC_EVIDENCE_SYSTEM_PROMPT = """You are a compliance evidence specialist for UK adult social care providers.
+Analyse this supervision document to identify evidence of worker competency and organisational compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
+
+Evidence is present when the document contains descriptions of practice, explained reasoning, manager observations, or identified learning needs — not only when standards are cited by name. A written record stating a worker "demonstrates safe medication management" or "explained her approach to consent" is direct competency evidence.
 
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
 {
@@ -780,11 +792,10 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 }
 
 Rules:
-- Only map evidence EXPLICITLY mentioned in the document
-- Do not infer or assume — map only what is directly discussed
-- Use "likely_evidence" only when clearly demonstrated
-- Use "needs_review" when partially demonstrated or unclear
-- Use "not_enough_evidence" when barely touched on
+- Map evidence that is described, demonstrated, or recorded in the document — including described practice, noted observations, identified learning needs, or explained reasoning. Do not require the standard or regulation to be named.
+- Use "likely_evidence" when practice or competency is explicitly described or confirmed.
+- Use "needs_review" when partially evidenced or context is ambiguous.
+- Use "not_enough_evidence" when barely touched on with no substantive content.
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h")
 - For custom_mappings, only include entries if custom standards are provided AND there is actual evidence
 - If no custom standards provided, return custom_mappings as an empty array []
