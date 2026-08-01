@@ -122,8 +122,41 @@ export default function NewMeeting() {
         )}
 
         <div className="space-y-5">
-          {/* Date, time, location, type */}
+          {/* Title preview + submit — always at the top so the title is visible as fields are filled */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center gap-2">
+            <span className="text-xs text-blue-500 font-medium whitespace-nowrap">Meeting title:</span>
+            <span className="text-sm font-semibold text-blue-900 flex-1" data-testid="meeting-title-preview">{titlePreview}</span>
+          </div>
+
+          <button
+            onClick={submit}
+            disabled={loading}
+            className="w-full bg-[#1E3A8A] text-white py-2.5 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            data-testid="create-meeting-btn"
+          >
+            {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></div>}
+            <Sparkles className="w-4 h-4" />
+            Create &amp; Prepare
+          </button>
+
+          {/* Meeting type first — most likely to change */}
           <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Meeting type</label>
+              <select
+                value={form.meeting_type}
+                onChange={e => setForm(f => ({ ...f, meeting_type: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
+                data-testid="meeting-type-select"
+              >
+                <option value="supervision">Supervision</option>
+                <option value="appraisal">Appraisal</option>
+                <option value="observation">Observation</option>
+                <option value="team_meeting">Team Meeting</option>
+                <option value="competency_review">Competency Review</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 <Calendar className="inline w-3.5 h-3.5 mr-1 text-gray-400" />Date &amp; Time
@@ -148,22 +181,6 @@ export default function NewMeeting() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                 data-testid="meeting-location-input"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Meeting type</label>
-              <select
-                value={form.meeting_type}
-                onChange={e => setForm(f => ({ ...f, meeting_type: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
-                data-testid="meeting-type-select"
-              >
-                <option value="supervision">Supervision</option>
-                <option value="appraisal">Appraisal</option>
-                <option value="observation">Observation</option>
-                <option value="team_meeting">Team Meeting</option>
-                <option value="competency_review">Competency Review</option>
-                <option value="other">Other</option>
-              </select>
             </div>
           </div>
 
@@ -227,24 +244,6 @@ export default function NewMeeting() {
             )}
           </div>
 
-          {/* Title preview + submit */}
-          {form.attendee_ids.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center gap-2">
-              <span className="text-xs text-blue-500 font-medium">Meeting title:</span>
-              <span className="text-sm font-semibold text-blue-900" data-testid="meeting-title-preview">{titlePreview}</span>
-            </div>
-          )}
-
-          <button
-            onClick={submit}
-            disabled={loading}
-            className="w-full bg-[#1E3A8A] text-white py-2.5 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-            data-testid="create-meeting-btn"
-          >
-            {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></div>}
-            <Sparkles className="w-4 h-4" />
-            Create &amp; Prepare
-          </button>
         </div>
       </div>
     </Layout>
