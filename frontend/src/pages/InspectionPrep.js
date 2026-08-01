@@ -5,8 +5,9 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   ClipboardCheck, ChevronDown, ChevronRight,
-  Loader, AlertCircle, CheckCircle, TrendingUp, Download,
+  Loader, AlertCircle, CheckCircle, TrendingUp, Download, ExternalLink,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -18,17 +19,26 @@ function coverageTheme(pct) {
 
 function buildCoverage(standards, rows) {
   return standards.map(std => {
-    const evidenced = rows.filter(r => r.cells?.[std.ref]?.status !== "gap").length;
-    const gaps      = rows.filter(r => r.cells?.[std.ref]?.status === "gap").map(r => r.staff_name);
-    const pct       = rows.length > 0 ? Math.round((evidenced / rows.length) * 100) : 0;
-    return { ...std, evidenced, gaps, total: rows.length, pct, theme: coverageTheme(pct) };
+    const evidenced    = rows.filter(r => r.cells?.[std.ref]?.status !== "gap").length;
+    const gaps         = rows.filter(r => r.cells?.[std.ref]?.status === "gap").map(r => r.staff_name);
+    const evidenced_staff = rows
+      .filter(r => r.cells?.[std.ref]?.status !== "gap")
+      .map(r => ({
+        name:             r.staff_name,
+        excerpt:          r.cells[std.ref]?.latest_excerpt || "",
+        source_meeting_id: r.cells[std.ref]?.source_meeting_id || "",
+      }));
+    const pct = rows.length > 0 ? Math.round((evidenced / rows.length) * 100) : 0;
+    return { ...std, evidenced, gaps, evidenced_staff, total: rows.length, pct, theme: coverageTheme(pct) };
   });
 }
 
 /* ── StandardRow ──────────────────────────────────────────────────────────── */
 
 function StandardRow({ item, open, onToggle }) {
-  const { pct, evidenced, total, gaps, theme } = item;
+  const navigate = useNavigate();
+  const { pct, evidenced, total, gaps, evidenced_staff = [], theme } = item;
+  const hasExpandable = gaps.length > 0 || evidenced_staff.length > 0;
 
   return (
     <div className={`bg-white border rounded-lg overflow-hidden ${theme.ring}`}>
@@ -60,7 +70,7 @@ function StandardRow({ item, open, onToggle }) {
         </div>
 
         {/* Expand toggle */}
-        {gaps.length > 0
+        {hasExpandable
           ? open
             ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
             : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -68,18 +78,49 @@ function StandardRow({ item, open, onToggle }) {
         }
       </div>
 
-      {/* Gap list */}
-      {open && gaps.length > 0 && (
-        <div className="border-t border-red-100 bg-red-50/40 px-4 py-3">
-          <p className="text-xs font-semibold text-red-600 mb-2">No evidence recorded for:</p>
-          <div className="flex flex-wrap gap-1.5">
-            {gaps.map(name => (
-              <span key={name} className="text-xs bg-white border border-red-200 text-red-700 px-2 py-0.5 rounded-full">
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
+      {open && (
+        <>
+          {/* Gaps */}
+          {gaps.length > 0 && (
+            <div className="border-t border-red-100 bg-red-50/40 px-4 py-3">
+              <p className="text-xs font-semibold text-red-600 mb-2">No evidence recorded for:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {gaps.map(name => (
+                  <span key={name} className="text-xs bg-white border border-red-200 text-red-700 px-2 py-0.5 rounded-full">
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Evidence with transcript links */}
+          {evidenced_staff.length > 0 && (
+            <div className="border-t border-emerald-100 bg-emerald-50/20 px-4 py-3 space-y-3">
+              <p className="text-xs font-semibold text-emerald-700">Evidence recorded:</p>
+              {evidenced_staff.map(s => (
+                <div key={s.name}>
+                  <p className="text-xs font-medium text-gray-700">{s.name}</p>
+                  {s.excerpt && (
+                    <blockquote className="mt-0.5 border-l-2 border-emerald-200 pl-2.5 text-xs text-gray-500 italic leading-relaxed">
+                      "{s.excerpt}"
+                    </blockquote>
+                  )}
+                  {s.source_meeting_id && s.excerpt && (
+                    <button
+                      onClick={e => { e.stopPropagation(); navigate(`/meetings/${s.source_meeting_id}/report`, { state: { highlightExcerpt: s.excerpt, initialTab: "transcript" } }); }}
+                      className="mt-1 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                      data-testid={`view-transcript-${item.ref}-${s.name.replace(/\s+/g,"-")}`}
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      View in transcript
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

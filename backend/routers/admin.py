@@ -380,6 +380,8 @@ async def save_template(request: Request, current_user=Depends(get_current_user)
 async def get_team_insights(
     team_id: Optional[str] = None,
     setting_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     current_user=Depends(get_current_user),
 ):
     if current_user["role"] not in ["admin", "manager"]:
@@ -461,8 +463,8 @@ async def get_team_insights(
 
     staff_ids = {s["id"] for s in staff}
 
-    def empty_cqc(): return {"likely": 0, "review": 0, "total": 0, "last_date": ""}
-    def empty_cc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "covered_refs": set()}
+    def empty_cqc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "latest_excerpt": "", "source_meeting_id": ""}
+    def empty_cc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "latest_excerpt": "", "source_meeting_id": "", "covered_refs": set()}
 
     cqc_ev = {s["id"]: {} for s in staff}
     cc_ev = {s["id"]: {} for s in staff}
@@ -487,7 +489,11 @@ async def get_team_insights(
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
                 elif m.get("confidence") == "needs_review": c["review"] += 1
-                if date > c["last_date"]: c["last_date"] = date
+                if date > c["last_date"]:
+                    c["last_date"] = date
+                    if m.get("transcript_excerpt"):
+                        c["latest_excerpt"] = m["transcript_excerpt"][:200]
+                        c["source_meeting_id"] = str(mtg.get("id", ""))
             for m in (ana.get("care_cert_mappings") or []):
                 if m.get("status") == "rejected": continue
                 std_ref = m.get("standard_ref", "")
@@ -497,7 +503,11 @@ async def get_team_insights(
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
                 elif m.get("confidence") == "needs_review": c["review"] += 1
-                if date > c["last_date"]: c["last_date"] = date
+                if date > c["last_date"]:
+                    c["last_date"] = date
+                    if m.get("transcript_excerpt"):
+                        c["latest_excerpt"] = m["transcript_excerpt"][:200]
+                        c["source_meeting_id"] = str(mtg.get("id", ""))
                 or_ref = m.get("outcome_ref", "")
                 if or_ref: c["covered_refs"].add(or_ref)
             for m in (ana.get("custom_mappings") or []):
@@ -510,7 +520,11 @@ async def get_team_insights(
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
                 elif m.get("confidence") == "needs_review": c["review"] += 1
-                if date > c["last_date"]: c["last_date"] = date
+                if date > c["last_date"]:
+                    c["last_date"] = date
+                    if m.get("transcript_excerpt"):
+                        c["latest_excerpt"] = m["transcript_excerpt"][:200]
+                        c["source_meeting_id"] = str(mtg.get("id", ""))
         for risk in (ana.get("risks") or []):
             text = risk if isinstance(risk, str) else (risk.get("text", "") if isinstance(risk, dict) else "")
             if text.strip(): all_risks.append(text.strip())
@@ -561,6 +575,8 @@ async def get_team_insights(
                     "review": ev.get("review", 0), "last_date": ev.get("last_date", ""),
                     "covered_sub": covered_count, "total_sub": total_subs, "pct": pct,
                     "evidenced_refs": sorted(list(covered_refs & all_subs)),
+                    "latest_excerpt": ev.get("latest_excerpt", ""),
+                    "source_meeting_id": ev.get("source_meeting_id", ""),
                 }
             rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
         return {"standards": stds, "rows": rows}
