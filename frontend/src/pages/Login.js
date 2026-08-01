@@ -310,10 +310,8 @@ export default function Login() {
           </form>
 
           <p className="mt-6 text-center text-sm text-gray-500">
-            {mode === "login" ? (
-              <>Don't have an account? <button onClick={() => { setMode("register"); setError(""); setSuccess(""); }} className="text-[#1E3A8A] font-medium hover:underline" data-testid="toggle-register-btn">Register</button></>
-            ) : (
-              <><button onClick={() => { setMode("login"); setError(""); setSuccess(""); }} className="text-[#1E3A8A] font-medium hover:underline" data-testid="toggle-login-btn">Back to sign in</button></>
+            {mode !== "login" && (
+              <button onClick={() => { setMode("login"); setError(""); setSuccess(""); }} className="text-[#1E3A8A] font-medium hover:underline" data-testid="toggle-login-btn">Back to sign in</button>
             )}
           </p>
 
