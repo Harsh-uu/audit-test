@@ -298,10 +298,12 @@ export default function MeetingPrep() {
       if (p.focus_topic !== undefined) setFocusTopic(p.focus_topic || "");
       if (p.included_source_ids?.length) setIncludedSourceIds(p.included_source_ids);
       setFocusTopics(ftRes.data || []);
-      // Default focus topic from org if none set on this prep
-      if (!p.focus_topic) {
-        const current = (ftRes.data || []).find(t => t.effective_current || t.is_current);
-        if (current) setFocusTopic(current.topic);
+      // If an org-level topic is active for this month, always override and lock
+      const activeTopic = (ftRes.data || []).find(t => t.effective_current || t.is_current);
+      if (activeTopic) {
+        setFocusTopic(activeTopic.topic);
+      } else if (!p.focus_topic) {
+        setFocusTopic("");
       }
     } catch {
       toast.error("Failed to load prep data");
@@ -354,7 +356,9 @@ export default function MeetingPrep() {
   const allSources = context?.sources || [];
   const effectiveIds = includedSourceIds || allSources.map(s => s.source_id);
   const currentFocusTopic = focusTopics.find(t => t.effective_current || t.is_current);
-  const isLocked = !!currentFocusTopic && currentFocusTopic.topic === focusTopic;
+  const isLocked = !!currentFocusTopic;
+
+  const toggleSource = (sid) => {
     setIncludedSourceIds(prev => {
       const current = prev || allSources.map(s => s.source_id);
       return current.includes(sid) ? current.filter(id => id !== sid) : [...current, sid];
@@ -480,7 +484,6 @@ export default function MeetingPrep() {
   );
 
   const superviseeNames = context?.supervisees?.map(s => s.name).join(", ") || "supervisee";
-  const currentFocusTopic = focusTopics.find(t => t.is_current);
 
   return (
     <Layout>
