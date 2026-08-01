@@ -76,6 +76,71 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class VerifyMfaRequest(BaseModel):
+    mfa_session: str
+    code: str
+
+
+class MfaConfirmRequest(BaseModel):
+    code: str
+
+
+# ── MFA helpers ──────────────────────────────────────────────────────────────
+
+MFA_REQUIRES_ROLES = {"super_admin", "admin", "manager"}
+
+
+def _mfa_required_for_role(role: str, mfa_enabled: bool) -> bool:
+    """super_admins always need MFA; admins/managers only if they opted in."""
+    if role == "super_admin":
+        return True
+    if role in ("admin", "manager") and mfa_enabled:
+        return True
+    return False
+
+
+def create_mfa_session_token(user_id: str) -> str:
+    payload = {
+        "sub": user_id,
+        "type": "mfa_pending",
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
+
+
+async def _generate_and_send_mfa(conn, user: dict) -> None:
+    """Generate a 6-digit OTP, hash it, store it, and email it to the user."""
+    code = f"{secrets.randbelow(1000000):06d}"
+    code_hash = bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode()
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    await conn.execute(
+        "UPDATE users SET mfa_code=$1, mfa_code_expires_at=$2, mfa_code_attempts=0 WHERE id=$3",
+        code_hash, expires_at, user["id"],
+    )
+    resend.api_key = os.environ.get("RESEND_API_KEY", "")
+    try:
+        resend.Emails.send({
+            "from": "Supervision 2 <noreply@notify.1two.one>",
+            "to": [user["email"]],
+            "subject": "Your verification code",
+            "html": (
+                "<div style='font-family:Poppins,sans-serif;max-width:480px;margin:0 auto;"
+                "padding:32px 24px;background:#f8fafc;border-radius:12px;'>"
+                "<h2 style='color:#1E3A8A;font-size:22px;margin-bottom:8px;'>Verification code</h2>"
+                f"<p style='color:#475569;font-size:15px;margin-bottom:20px;'>Hi {user.get('name','')}, "
+                "enter the code below to complete your sign-in. It expires in <strong>10 minutes</strong>.</p>"
+                f"<div style='font-size:36px;font-weight:700;letter-spacing:10px;color:#1E3A8A;"
+                "text-align:center;padding:20px 0;'>{code}</div>"
+                "<p style='color:#94a3b8;font-size:12px;margin-top:24px;'>"
+                "If you didn't attempt to sign in, your account may be at risk — "
+                "please change your password immediately.</p></div>"
+            ),
+        })
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(f"MFA email send failed: {exc}")
+
+
 @router.post("/register")
 async def register(data: RegisterRequest, response: Response):
     email = data.email.lower()
@@ -127,11 +192,23 @@ async def login(data: LoginRequest, response: Response, request: Request):
 
     user = dict(user)
     user_id = user["id"]
-    access_token = create_access_token(user_id, email)
+
+    # ── MFA gate ──────────────────────────────────────────────────────────────
+    if _mfa_required_for_role(user["role"], bool(user.get("mfa_enabled"))):
+        async with database.with_admin() as conn2:
+            await _generate_and_send_mfa(conn2, user)
+        mfa_session = create_mfa_session_token(user_id)
+        return {
+            "requires_mfa": True,
+            "mfa_session": mfa_session,
+            "email": user["email"],
+        }
+
+    access_token = create_access_token(user_id, user["email"])
     refresh_token = create_refresh_token(user_id)
     set_auth_cookies(response, access_token, refresh_token)
     return {
-        "id": user_id, "email": email, "name": user["name"], "role": user["role"],
+        "id": user_id, "email": user["email"], "name": user["name"], "role": user["role"],
         "token": access_token, "refresh_token": refresh_token,
         "must_change_password": user.get("must_change_password", False),
     }
