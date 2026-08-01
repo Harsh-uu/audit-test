@@ -12,6 +12,35 @@ function cleanExcerpt(excerpt) {
     .slice(0, 120);
 }
 
+/**
+ * Find the best searchable substring of an excerpt within text.
+ * First tries the full cleaned excerpt; if not found, falls back to
+ * progressively shorter word-prefix matches (10 → 8 → 6 → 4 words).
+ * This handles cases where the AI paraphrases a quote very slightly.
+ * Returns the matched string, or "" if nothing was found.
+ */
+function resolveExcerptQuery(text, excerpt) {
+  const cleaned = cleanExcerpt(excerpt);
+  if (!cleaned) return "";
+  const tLower = text.toLowerCase();
+
+  if (tLower.includes(cleaned.toLowerCase())) return cleaned;
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  for (const n of [10, 8, 6, 4]) {
+    if (words.length <= n) continue;
+    const partial = words.slice(0, n).join(" ");
+    if (tLower.includes(partial.toLowerCase())) return partial;
+  }
+
+  if (words.length >= 4) {
+    const partial = words.slice(0, 4).join(" ");
+    if (tLower.includes(partial.toLowerCase())) return partial;
+  }
+
+  return "";
+}
+
 /** Render text with a highlighted substring */
 function HighlightedText({ text, query }) {
   if (!query) return <>{text}</>;
@@ -390,13 +419,26 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
 
   const matchTurnIdx = useMemo(() => {
     if (!highlightExcerpt || !localTurns.length) return -1;
-    const q = cleanExcerpt(highlightExcerpt).toLowerCase();
-    if (!q) return -1;
-    // Try first 80 chars, then fallback to first 40
-    let idx = localTurns.findIndex(t => t.text.toLowerCase().includes(q.slice(0, 80)));
-    if (idx === -1) idx = localTurns.findIndex(t => t.text.toLowerCase().includes(q.slice(0, 40)));
-    return idx;
+    return localTurns.findIndex(t => resolveExcerptQuery(t.text, highlightExcerpt) !== "");
   }, [highlightExcerpt, localTurns]);
+
+  // What actually matched — may be a shorter word-prefix if the full excerpt wasn't verbatim.
+  // Used to drive the yellow highlight so it renders on the right substring.
+  const effectiveHighlightQuery = useMemo(() => {
+    if (!highlightExcerpt) return "";
+    if (hasSpeakerText && localTurns.length) {
+      for (const turn of localTurns) {
+        const q = resolveExcerptQuery(turn.text, highlightExcerpt);
+        if (q) return q;
+      }
+      return "";
+    }
+    for (const para of rawParas) {
+      const q = resolveExcerptQuery(para, highlightExcerpt);
+      if (q) return q;
+    }
+    return "";
+  }, [highlightExcerpt, localTurns, rawParas, hasSpeakerText]);
 
   // For raw text mode
   const rawParas = useMemo(() => formatTranscript(meeting.transcript?.text || ""), [meeting.transcript?.text]);
@@ -454,11 +496,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
   }, [findMatches]);
   const matchParaIdx = useMemo(() => {
     if (!highlightExcerpt || hasSpeakerText) return -1;
-    const q = cleanExcerpt(highlightExcerpt).toLowerCase();
-    if (!q) return -1;
-    let idx = rawParas.findIndex(p => p.toLowerCase().includes(q.slice(0, 80)));
-    if (idx === -1) idx = rawParas.findIndex(p => p.toLowerCase().includes(q.slice(0, 40)));
-    return idx;
+    return rawParas.findIndex(p => resolveExcerptQuery(p, highlightExcerpt) !== "");
   }, [highlightExcerpt, rawParas, hasSpeakerText]);
 
   useEffect(() => {
@@ -1224,7 +1262,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                             {findReplaceOpen && findQuery.trim() && turnMatchMap[i]
                               ? <MultiHighlightText text={turn.text} matches={turnMatchMap[i]} currentGlobalIdx={findMatchIdx} />
                               : matchTurnIdx === i
-                              ? <HighlightedText text={turn.text} query={highlightExcerpt} />
+                              ? <HighlightedText text={turn.text} query={effectiveHighlightQuery} />
                               : turn.text}
                           </p>
                           {canEditSpeakers && (
@@ -1271,7 +1309,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                 {findReplaceOpen && findQuery.trim() && paraMatchMap[idx]
                   ? <MultiHighlightText text={para} matches={paraMatchMap[idx]} currentGlobalIdx={findMatchIdx} />
                   : matchParaIdx === idx
-                  ? <HighlightedText text={para} query={highlightExcerpt} />
+                  ? <HighlightedText text={para} query={effectiveHighlightQuery} />
                   : para}
               </p>
             ))}

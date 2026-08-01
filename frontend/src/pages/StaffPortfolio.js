@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   ArrowLeft, Shield, Award, FileText, Download, Loader,
-  CheckCircle, Clock, ChevronRight, ChevronDown, TrendingUp, User, Check, FileUp
+  CheckCircle, Clock, ChevronRight, ChevronDown, TrendingUp, User, Check, FileUp, ExternalLink
 } from "lucide-react";
 
 const CONF_CONFIG = {
@@ -50,6 +50,7 @@ function MeetingChips({ refs }) {
 
 function EvidenceStandardCard({ item, typeColor }) {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const ref = item.regulation_ref || item.standard_ref || item.criterion_ref || "";
   const name = item.regulation_name || item.standard_name || item.criterion_name || "";
   const sub = item.key_questions?.length
@@ -82,9 +83,23 @@ function EvidenceStandardCard({ item, typeColor }) {
         <div className="px-3 pb-3 pt-2 bg-white border-t border-gray-100">
           <MeetingChips refs={item.meeting_refs} />
           {item.latest_excerpt && (
-            <blockquote className="mt-2 border-l-2 border-gray-200 pl-2.5 text-xs text-gray-500 italic leading-relaxed">
-              "{item.latest_excerpt}"
-            </blockquote>
+            <div className="mt-2">
+              <blockquote className="border-l-2 border-gray-200 pl-2.5 text-xs text-gray-500 italic leading-relaxed">
+                "{item.latest_excerpt}"
+              </blockquote>
+              {item.source_meeting_id && (
+                <button
+                  onClick={() => navigate(`/meetings/${item.source_meeting_id}/report`, {
+                    state: { highlightExcerpt: item.latest_excerpt, initialTab: "transcript" }
+                  })}
+                  className="mt-1.5 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                  data-testid={`view-in-transcript-btn-${ref}`}
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  View in transcript
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
@@ -58,6 +58,7 @@ const PROCESSING_STAGES = {
 export default function MeetingReport() {
   const { meetingId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { getAuthConfig, API, user } = useAuth();
   const [meeting, setMeeting] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -138,6 +139,14 @@ export default function MeetingReport() {
     const interval = setInterval(() => { if (isProcessing || isRescanning) fetchMeeting(); }, 5000);
     return () => clearInterval(interval);
   }, [fetchMeeting, isProcessing, isRescanning]);
+
+  // Auto-open transcript tab with highlight when navigated from portfolio "View in transcript"
+  useEffect(() => {
+    if (location.state?.highlightExcerpt) {
+      setHighlightExcerpt(location.state.highlightExcerpt);
+      setActiveTab("transcript");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect rescan completion and surface result as a toast
   useEffect(() => {

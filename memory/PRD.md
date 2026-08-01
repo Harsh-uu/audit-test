@@ -354,6 +354,12 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
   - `Dashboard.js`: split meetings into active/historical; collapsible "Historical Meetings" section with greyed-out styling and Archive icon.
   - Bug fixes: `auth.py /me` JSONB branding parse 500 fixed; `org_settings.org_id` UNIQUE constraint dropped (was preventing multi-branch orgs).
 
+- **2026-Aug (Verifiable Evidence — Fuzzy Quote Matching + Portfolio "View in Transcript")** —
+  - `TranscriptTab.js`: Added `resolveExcerptQuery()` with progressive word-prefix fallback (10 → 8 → 6 → 4 words). Replaced char-slice fallback (`q.slice(0,80)`) with word-based matching. Added `effectiveHighlightQuery` useMemo — the actual matched substring drives the yellow highlight, so it renders on exactly what was found rather than the potentially-longer AI quote.
+  - `portfolio.py`: Added `source_meeting_id` field alongside `latest_excerpt` in all three aggregation blocks (cqc, care_cert, custom).
+  - `StaffPortfolio.js`: Added `ExternalLink` import. `EvidenceStandardCard` now uses `useNavigate`; expanded evidence card shows a "View in transcript" button when `source_meeting_id` is present — navigates to that meeting's report with `{ highlightExcerpt, initialTab: "transcript" }` in router state.
+  - `MeetingReport.js`: Added `useLocation`; reads router state on mount to auto-open transcript tab with highlight pre-set.
+
 - **2026-Aug (Schedules RBAC write guards)** — Extended scope enforcement to all schedule write endpoints. `POST /schedules/bulk`: out-of-scope `staff_user_ids` silently skipped (counts toward `skipped` total). `POST /schedules/`: 403 if `staff_user_id` not in manager's scope. `PUT /{id}` and `DELETE /{id}`: look up schedule's `staff_user_id` and 403 if outside scope. Org-level managers remain unrestricted. Verified with live API: bulk skips correctly, single create returns 403 for out-of-scope staff.
 
 - **2026-Aug (Bug Fix — PII scan truncation)** — `scan_pii_in_transcript` in `utils/ai.py` was truncating the transcript to the first 8,000 chars (`[:8000]`) before sending to GPT-4o, covering only ~10-12 minutes of speech. Regex scan (phones, postcodes, NHS/NI, emails) was already running on the full transcript. Fixed: removed truncation; now sends the full text in a single GPT-4o call (128K token context window handles even a 3-hour session). Safety-net chunking added at 40,000 chars for extreme outliers (splits at word boundaries, 300-char overlap, results deduplicated).

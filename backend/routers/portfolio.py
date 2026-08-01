@@ -114,7 +114,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                     "regulation_name": m.get("regulation_name", ""),
                     "key_questions": m.get("key_questions", []),
                     "evidence_count": 0, "likely_count": 0, "needs_review_count": 0,
-                    "meeting_refs": [], "latest_excerpt": None,
+                    "meeting_refs": [], "latest_excerpt": None, "source_meeting_id": None,
                 }
             e = cqc_agg[key]
             e["evidence_count"] += 1
@@ -127,6 +127,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                 e["meeting_refs"].append(ref_entry)
             if m.get("transcript_excerpt"):
                 e["latest_excerpt"] = m["transcript_excerpt"][:200]
+                e["source_meeting_id"] = mid
 
         for m in (ana.get("care_cert_mappings") or []):
             key = m.get("standard_ref", "—") + "::" + m.get("outcome_ref", "")
@@ -137,7 +138,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                     "outcome_ref": m.get("outcome_ref", ""),
                     "outcome_name": m.get("outcome_name", ""),
                     "evidence_count": 0, "likely_count": 0, "needs_review_count": 0,
-                    "meeting_refs": [], "latest_excerpt": None,
+                    "meeting_refs": [], "latest_excerpt": None, "source_meeting_id": None,
                 }
             e = care_cert_agg[key]
             e["evidence_count"] += 1
@@ -150,6 +151,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                 e["meeting_refs"].append(ref_entry)
             if m.get("transcript_excerpt"):
                 e["latest_excerpt"] = m["transcript_excerpt"][:200]
+                e["source_meeting_id"] = mid
 
         for m in (ana.get("custom_mappings") or []):
             key = m.get("document_id", "") + "::" + m.get("criterion_ref", "—")
@@ -160,7 +162,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                     "criterion_ref": m.get("criterion_ref", ""),
                     "criterion_name": m.get("criterion_name", ""),
                     "evidence_count": 0, "likely_count": 0, "needs_review_count": 0,
-                    "meeting_refs": [], "latest_excerpt": None,
+                    "meeting_refs": [], "latest_excerpt": None, "source_meeting_id": None,
                 }
             e = custom_agg[key]
             e["evidence_count"] += 1
@@ -173,6 +175,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                 e["meeting_refs"].append(ref_entry)
             if m.get("transcript_excerpt"):
                 e["latest_excerpt"] = m["transcript_excerpt"][:200]
+                e["source_meeting_id"] = mid
 
     meetings_summary = []
     for item in raw_meetings:
