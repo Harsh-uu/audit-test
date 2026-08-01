@@ -4,6 +4,7 @@ load_dotenv()
 from fastapi import FastAPI, APIRouter  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
+import asyncio  # noqa: E402
 import os  # noqa: E402
 import logging  # noqa: E402
 
@@ -21,6 +22,7 @@ from routers.doc_uploads import router as doc_uploads_router  # noqa: E402
 from routers.prep import router as prep_router  # noqa: E402
 from utils.storage import init_storage  # noqa: E402
 from utils.seed import seed_standards, migrate_standard_outcomes, migrate_cqc_key_questions, migrate_analyses_key_questions, seed_super_admin, seed_default_org, seed_quality_statements_migration, migrate_standards_entries_system_flag  # noqa: E402,E501
+from utils.job_worker import start_worker  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -69,6 +71,8 @@ async def startup():
     await db.standards_entries.create_index([("type", 1), ("reference", 1)])
     await db.login_attempts.create_index("identifier")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
+    # Job queue indexes — status+created_at for fast FIFO polling
+    await db.jobs.create_index([("status", 1), ("attempts", 1), ("created_at", 1)])
 
     await seed_admin(db)
     await seed_super_admin(db)
@@ -85,6 +89,10 @@ async def startup():
         logger.info("Object storage initialized")
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
+
+    # Start persistent job queue worker
+    asyncio.create_task(start_worker(db))
+    logger.info("Job queue worker started")
 
 
 @app.on_event("shutdown")

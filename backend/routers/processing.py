@@ -8,6 +8,7 @@ import os
 from deps import get_db, get_current_user
 from utils.storage import put_object
 from utils.ai import transcribe_audio, analyze_meeting, diarize_transcript, transcribe_with_assemblyai, map_speaker_numbers_to_names
+from utils.job_worker import enqueue_job
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -363,8 +364,8 @@ async def upload_audio(
         }}
     )
 
-    # Start background processing
-    background_tasks.add_task(run_transcription_and_analysis, meeting_id, actual_path, db)
+    # Enqueue to persistent MongoDB job queue (survives server restarts, auto-retries)
+    await enqueue_job(db, meeting_id, actual_path)
 
     return {
         "message": "Audio uploaded. Processing started.",
@@ -407,7 +408,7 @@ async def retry_processing(
         {"_id": ObjectId(meeting_id)},
         {"$set": {"status": "processing", "updated_at": now}}
     )
-    background_tasks.add_task(run_transcription_and_analysis, meeting_id, storage_path, db)
+    await enqueue_job(db, meeting_id, storage_path)
 
     return {"message": "Retry started. Processing will resume shortly."}
 
