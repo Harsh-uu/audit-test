@@ -451,8 +451,17 @@ async def get_team_insights(
         cc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
 
         # Meetings with analyses
+        date_conds = ["status IN ('in_review','reviewed','signed_off','shared')", "analysis_id IS NOT NULL"]
+        date_params: list = []
+        if date_from:
+            date_params.append(date_from)
+            date_conds.append(f"date >= ${len(date_params)}")
+        if date_to:
+            date_params.append(date_to + "T23:59:59")
+            date_conds.append(f"date <= ${len(date_params)}")
         mtg_rows = await conn.fetch(
-            "SELECT * FROM meetings WHERE status IN ('in_review','reviewed','signed_off','shared') AND analysis_id IS NOT NULL"
+            f"SELECT * FROM meetings WHERE {' AND '.join(date_conds)}",
+            *date_params,
         )
         all_items = []
         for mtg_row in mtg_rows:

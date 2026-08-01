@@ -49,7 +49,11 @@ CREATE TABLE IF NOT EXISTS users (
     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
     password_changed_at TEXT,
     created_at TEXT,
-    updated_at TEXT
+    updated_at TEXT,
+    mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_code TEXT,
+    mfa_code_expires_at TEXT,
+    mfa_code_attempts INTEGER NOT NULL DEFAULT 0
 );
 -- RLS: each org can only see its own users; auth ops (login, invite) use with_admin()
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;

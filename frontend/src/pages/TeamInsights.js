@@ -486,6 +486,8 @@ export default function TeamInsights() {
   const [tab, setTab] = useState("matrix");
   const [orgStructure, setOrgStructure] = useState({ settings: [] });
   const [orgFilter, setOrgFilter] = useState({ setting_id: "", team_id: "" });
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [ccStandards, setCcStandards] = useState([]);
   const [drillDown, setDrillDown] = useState(null);
 
@@ -495,6 +497,8 @@ export default function TeamInsights() {
       const params = {};
       if (filter.team_id) params.team_id = filter.team_id;
       else if (filter.setting_id) params.setting_id = filter.setting_id;
+      if (filter.date_from) params.date_from = filter.date_from;
+      if (filter.date_to) params.date_to = filter.date_to;
       const { data: d } = await axios.get(`${API}/admin/team-insights`, { ...getAuthConfig(), params });
       setData(d);
     } catch (err) {
@@ -506,9 +510,9 @@ export default function TeamInsights() {
   }, [API]);
 
   useEffect(() => {
-    load(orgFilter);
+    load({ ...orgFilter, date_from: dateFrom, date_to: dateTo });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgFilter]);
+  }, [orgFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     if (user?.role === "admin" || user?.role === "manager") {
@@ -607,6 +611,36 @@ export default function TeamInsights() {
                 )}
               </div>
             )}
+            {/* Date range filters */}
+            <div className="flex items-center gap-1.5 border-l border-gray-200 pl-2 ml-1" data-testid="date-range-filter">
+              <span className="text-xs text-gray-400 whitespace-nowrap">From</span>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                data-testid="insights-date-from"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                min={dateFrom || undefined}
+                className="px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                data-testid="insights-date-to"
+              />
+              {(dateFrom || dateTo) && (
+                <button
+                  onClick={() => { setDateFrom(""); setDateTo(""); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-1"
+                  title="Clear date filter"
+                  data-testid="insights-date-clear"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <button
               onClick={exportMatrixCSV}
               disabled={!data || loading}
@@ -618,7 +652,7 @@ export default function TeamInsights() {
               Export CSV
             </button>
             <button
-              onClick={() => load(orgFilter)}
+              onClick={() => load({ ...orgFilter, date_from: dateFrom, date_to: dateTo })}
               disabled={loading}
               className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
               data-testid="refresh-insights-btn"

@@ -90,10 +90,21 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const { data } = await axios.post(`${API}/auth/login`, { email, password });
+    if (data.requires_mfa) return data; // MFA pending — caller handles OTP flow
     if (data.token) localStorage.setItem("supervision_token", data.token);
     if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
     setUser(data);
     return data;
+  };
+
+  const completeLogin = (data) => {
+    if (data.token) localStorage.setItem("supervision_token", data.token);
+    if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
+    setUser(data);
+  };
+
+  const updateMfaStatus = (mfa_enabled) => {
+    setUser(u => u ? { ...u, mfa_enabled } : u);
   };
 
   const register = async (email, password, name, role) => {
@@ -139,7 +150,7 @@ export function AuthProvider({ children }) {
   }, [user?.org_branding?.primary_color]);
 
   const contextValue = useMemo(
-    () => ({ user, login, register, logout, getAuthConfig, silentRefresh, API, updateOrgBranding, updateOrgName }),
+    () => ({ user, login, register, logout, getAuthConfig, silentRefresh, API, updateOrgBranding, updateOrgName, completeLogin, updateMfaStatus }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user]
   );

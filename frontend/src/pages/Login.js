@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
+import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, CheckCircle, ShieldCheck, Mail } from "lucide-react";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -13,7 +14,7 @@ function formatError(detail) {
 }
 
 export default function Login() {
-  const { user, login, register } = useAuth();
+  const { user, login, register, completeLogin } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [form, setForm] = useState({ email: "", password: "", name: "", role: "attendee" });
@@ -21,6 +22,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // MFA state
+  const [mfaState, setMfaState] = useState(null); // { mfa_session, email }
+  const [otpCode, setOtpCode] = useState("");
 
   if (user) return <Navigate to={user.role === "super_admin" ? "/super-admin" : "/dashboard"} replace />;
 
@@ -32,6 +37,10 @@ export default function Login() {
     try {
       if (mode === "login") {
         const userData = await login(form.email, form.password);
+        if (userData.requires_mfa) {
+          setMfaState({ mfa_session: userData.mfa_session, email: userData.email });
+          return;
+        }
         navigate(userData.role === "super_admin" ? "/super-admin" : "/dashboard");
       } else if (mode === "register") {
         await register(form.email, form.password, form.name, form.role);
@@ -52,6 +61,110 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  const handleMfaVerify = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await axios.post(`${API}/api/auth/verify-mfa`, {
+        mfa_session: mfaState.mfa_session,
+        code: otpCode.trim(),
+      });
+      completeLogin(data);
+      navigate(data.role === "super_admin" ? "/super-admin" : "/dashboard");
+    } catch (err) {
+      setError(formatError(err.response?.data?.detail) || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── MFA OTP screen ────────────────────────────────────────────────────────
+  if (mfaState) {
+    return (
+      <div className="min-h-screen flex bg-[#F8F9FA]">
+        <div className="hidden lg:flex lg:w-1/2 bg-[#1E3A8A] flex-col justify-between p-12">
+          <div className="flex items-center gap-3">
+            <img src="/logo.svg" alt="1two.one" className="w-16 h-16" />
+            <span className="text-white text-4xl font-semibold tracking-tight">1two.one</span>
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-4 leading-tight">Two-factor authentication</h1>
+            <p className="text-blue-200 text-lg leading-relaxed">
+              Your account is protected with an extra layer of security. Enter the code sent to your email to continue.
+            </p>
+          </div>
+          <p className="text-blue-300 text-sm">1two.one &copy; 2025</p>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="w-full max-w-md fade-in">
+            <div className="lg:hidden flex items-center gap-2 mb-8">
+              <img src="/logo.svg" alt="1two.one" className="w-7 h-7" />
+              <span className="text-[#1E3A8A] text-xl font-semibold">1two.one</span>
+            </div>
+
+            <div className="w-12 h-12 rounded-xl bg-[#EEF2FF] flex items-center justify-center mb-5">
+              <ShieldCheck className="w-6 h-6 text-[#1E3A8A]" />
+            </div>
+
+            <h2 className="text-2xl font-semibold text-gray-900 mb-1">Check your email</h2>
+            <p className="text-sm text-gray-500 mb-8 flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              We sent a 6-digit code to <strong className="text-gray-700 ml-1">{mfaState.email}</strong>
+            </p>
+
+            {error && (
+              <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 rounded-md p-3 mb-6 text-sm" data-testid="mfa-error">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleMfaVerify} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Verification code</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={otpCode}
+                  onChange={e => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  required
+                  maxLength={6}
+                  autoFocus
+                  className="w-full px-3 py-3 border border-gray-300 rounded-md text-center text-2xl font-mono tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                  data-testid="mfa-code-input"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || otpCode.length !== 6}
+                className="w-full bg-[#1E3A8A] text-white py-2.5 px-4 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                data-testid="mfa-submit-btn"
+              >
+                {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></div>}
+                Verify and sign in
+              </button>
+            </form>
+
+            <p className="mt-6 text-center text-sm text-gray-500">
+              <button
+                onClick={() => { setMfaState(null); setOtpCode(""); setError(""); }}
+                className="text-[#1E3A8A] font-medium hover:underline"
+                data-testid="mfa-back-btn"
+              >
+                Back to sign in
+              </button>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-[#F8F9FA]">

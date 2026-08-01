@@ -7,7 +7,6 @@ import {
   ClipboardCheck, ChevronDown, ChevronRight,
   Loader, AlertCircle, CheckCircle, TrendingUp, Download, ExternalLink,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 

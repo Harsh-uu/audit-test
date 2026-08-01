@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star } from "lucide-react";
+import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield } from "lucide-react";
 import { TemplateTab } from "@/components/admin/TemplateTab";
 import { ExportTab } from "@/components/admin/ExportTab";
 import { BrandingTab } from "@/components/admin/BrandingTab";
@@ -121,7 +121,140 @@ function FocusTopicsTab({ API, getAuthConfig }) {
 
 
 
-function TabBtn({ active, onClick, children }) {  return (
+function SecurityTab({ API, getAuthConfig, user, updateMfaStatus }) {
+  const [step, setStep] = useState("idle"); // "idle" | "sent" | "saving"
+  const [code, setCode] = useState("");
+  const [pendingEnable, setPendingEnable] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const isMfaOn = Boolean(user?.mfa_enabled);
+
+  const requestCode = async (enable) => {
+    setError("");
+    setSuccess("");
+    setPendingEnable(enable);
+    try {
+      await axios.post(`${API}/auth/request-mfa-code`, {}, getAuthConfig());
+      setStep("sent");
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to send code. Please try again.");
+    }
+  };
+
+  const confirmToggle = async (e) => {
+    e.preventDefault();
+    setError("");
+    setStep("saving");
+    try {
+      const { data } = await axios.post(`${API}/auth/toggle-mfa`, { code: code.trim(), enable: pendingEnable }, getAuthConfig());
+      updateMfaStatus(data.mfa_enabled);
+      setSuccess(data.message);
+      setStep("idle");
+      setCode("");
+    } catch (err) {
+      setError(err.response?.data?.detail || "Invalid code. Please try again.");
+      setStep("sent");
+    }
+  };
+
+  return (
+    <div className="max-w-xl">
+      <div className="bg-white border border-gray-200 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isMfaOn ? "bg-emerald-100" : "bg-gray-100"}`}>
+            <Shield className={`w-5 h-5 ${isMfaOn ? "text-emerald-600" : "text-gray-400"}`} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-gray-900">Two-Factor Authentication</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {isMfaOn
+                ? "2FA is enabled. You will be asked for an email code on every sign-in."
+                : "Add an extra layer of security. You will be emailed a code each time you sign in."}
+            </p>
+            <div className="mt-1">
+              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${isMfaOn ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                {isMfaOn ? "Enabled" : "Disabled"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {success && (
+          <div className="mt-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded p-3 text-sm">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />{success}
+          </div>
+        )}
+        {error && (
+          <div className="mt-4 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+          </div>
+        )}
+
+        {step === "idle" && !success && (
+          <div className="mt-5">
+            <button
+              onClick={() => requestCode(!isMfaOn)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                isMfaOn
+                  ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                  : "bg-[#1E3A8A] text-white hover:bg-[#1E40AF]"
+              }`}
+              data-testid="mfa-toggle-btn"
+            >
+              {isMfaOn ? "Disable 2FA" : "Enable 2FA"}
+            </button>
+          </div>
+        )}
+
+        {step === "sent" && (
+          <form onSubmit={confirmToggle} className="mt-5 space-y-3">
+            <p className="text-xs text-gray-600">
+              A 6-digit code has been sent to <strong>{user?.email}</strong>. Enter it below to confirm.
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              maxLength={6}
+              autoFocus
+              className="w-40 px-3 py-2 border border-gray-300 rounded-md text-center text-lg font-mono tracking-[0.4em] focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+              data-testid="mfa-confirm-code-input"
+            />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={code.length !== 6}
+                className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60 transition-colors"
+                data-testid="mfa-confirm-btn"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                onClick={() => { setStep("idle"); setCode(""); setError(""); }}
+                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-md text-sm font-medium hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      <p className="mt-3 text-xs text-gray-400">
+        Codes expire after 10 minutes. Your password is required to disable 2FA on the next sign-in regardless.
+      </p>
+    </div>
+  );
+}
+
+
+function TabBtn({ active, onClick, children }) {
+  return (
     <button
       onClick={onClick}
       className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
@@ -134,7 +267,7 @@ function TabBtn({ active, onClick, children }) {  return (
 }
 
 export default function OrgSettings() {
-  const { getAuthConfig, API, user } = useAuth();
+  const { getAuthConfig, API, user, updateMfaStatus } = useAuth();
   const canBrand = user?.role === "admin" || user?.role === "manager";
 
   const [tab, setTab] = useState("template");
@@ -317,6 +450,9 @@ export default function OrgSettings() {
           <TabBtn active={tab === "focus"} onClick={() => setTab("focus")}>
             <Target className="w-3.5 h-3.5" />Focus Topics
           </TabBtn>
+          <TabBtn active={tab === "security"} onClick={() => setTab("security")}>
+            <Shield className="w-3.5 h-3.5" />Security
+          </TabBtn>
         </div>
 
         {tab === "template" && (
@@ -378,6 +514,10 @@ export default function OrgSettings() {
         {tab === "branding" && canBrand && <BrandingTab />}
 
         {tab === "focus" && <FocusTopicsTab API={API} getAuthConfig={getAuthConfig} />}
+
+        {tab === "security" && (
+          <SecurityTab API={API} getAuthConfig={getAuthConfig} user={user} updateMfaStatus={updateMfaStatus} />
+        )}
       </div>
     </Layout>
   );

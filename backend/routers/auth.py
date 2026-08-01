@@ -221,10 +221,111 @@ async def logout(response: Response):
     return {"message": "Logged out"}
 
 
+@router.post("/verify-mfa")
+async def verify_mfa(data: VerifyMfaRequest, response: Response):
+    """Complete MFA login: validate OTP and issue full JWT."""
+    try:
+        payload = jwt.decode(data.mfa_session, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "mfa_pending":
+            raise HTTPException(status_code=401, detail="Invalid session token")
+        user_id = payload["sub"]
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+
+    async with database.with_admin() as conn:
+        user = await conn.fetchrow("SELECT * FROM users WHERE id=$1", user_id)
+        if not user or not user["is_active"]:
+            raise HTTPException(status_code=401, detail="User not found or inactive")
+        user = dict(user)
+
+        if (user.get("mfa_code_attempts") or 0) >= 5:
+            raise HTTPException(status_code=429, detail="Too many attempts. Please sign in again to get a new code.")
+
+        expires_at = user.get("mfa_code_expires_at") or ""
+        if not expires_at or expires_at < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(status_code=401, detail="Code expired. Please sign in again.")
+
+        code_hash = user.get("mfa_code") or ""
+        if not code_hash or not bcrypt.checkpw(data.code.strip().encode(), code_hash.encode()):
+            await conn.execute(
+                "UPDATE users SET mfa_code_attempts = COALESCE(mfa_code_attempts, 0) + 1 WHERE id=$1",
+                user_id,
+            )
+            raise HTTPException(status_code=401, detail="Invalid code")
+
+        await conn.execute(
+            "UPDATE users SET mfa_code=NULL, mfa_code_expires_at=NULL, mfa_code_attempts=0 WHERE id=$1",
+            user_id,
+        )
+
+    access_token = create_access_token(user_id, user["email"])
+    refresh_token = create_refresh_token(user_id)
+    set_auth_cookies(response, access_token, refresh_token)
+    return {
+        "id": user_id, "email": user["email"], "name": user["name"], "role": user["role"],
+        "token": access_token, "refresh_token": refresh_token,
+        "must_change_password": user.get("must_change_password", False),
+    }
+
+
+@router.post("/request-mfa-code")
+async def request_mfa_code(current_user=Depends(get_current_user)):
+    """Send OTP to current user's email for MFA enable/disable confirmation."""
+    if current_user["role"] not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="MFA toggle is only available for admin and manager roles")
+    async with database.with_admin() as conn:
+        user = await conn.fetchrow("SELECT * FROM users WHERE id=$1", current_user["id"])
+        await _generate_and_send_mfa(conn, dict(user))
+    return {"message": "A verification code has been sent to your email"}
+
+
+class ToggleMfaRequest(BaseModel):
+    code: str
+    enable: bool
+
+
+@router.post("/toggle-mfa")
+async def toggle_mfa(data: ToggleMfaRequest, current_user=Depends(get_current_user)):
+    """Enable or disable MFA for the current user after OTP verification."""
+    if current_user["role"] not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="MFA toggle is only available for admin and manager roles")
+
+    async with database.with_admin() as conn:
+        user = await conn.fetchrow("SELECT * FROM users WHERE id=$1", current_user["id"])
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = dict(user)
+
+        if (user.get("mfa_code_attempts") or 0) >= 5:
+            raise HTTPException(status_code=429, detail="Too many attempts. Please request a new code.")
+
+        expires_at = user.get("mfa_code_expires_at") or ""
+        if not expires_at or expires_at < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(status_code=401, detail="Code expired. Please request a new code.")
+
+        code_hash = user.get("mfa_code") or ""
+        if not code_hash or not bcrypt.checkpw(data.code.strip().encode(), code_hash.encode()):
+            await conn.execute(
+                "UPDATE users SET mfa_code_attempts = COALESCE(mfa_code_attempts, 0) + 1 WHERE id=$1",
+                current_user["id"],
+            )
+            raise HTTPException(status_code=401, detail="Invalid code")
+
+        await conn.execute(
+            "UPDATE users SET mfa_enabled=$1, mfa_code=NULL, mfa_code_expires_at=NULL, mfa_code_attempts=0 WHERE id=$2",
+            data.enable, current_user["id"],
+        )
+
+    return {"message": f"Two-factor authentication {'enabled' if data.enable else 'disabled'}", "mfa_enabled": data.enable}
+
+
 @router.get("/me")
 async def me(current_user=Depends(get_current_user)):
     user = dict(current_user)
     user.pop("password_hash", None)
+    user.pop("mfa_code", None)
+    user.pop("mfa_code_expires_at", None)
+    user.pop("mfa_code_attempts", None)
     org_id = user.get("org_id")
     if org_id:
         async with database.with_admin() as conn:
