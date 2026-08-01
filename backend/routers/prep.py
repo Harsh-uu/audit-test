@@ -28,6 +28,16 @@ router = APIRouter(prefix="/prep", tags=["prep"])
 logger = logging.getLogger(__name__)
 
 
+def _ensure_list(val):
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return val or []
+
+
 class FocusTopicCreate(BaseModel):
     topic: str
     is_current: bool = False
@@ -74,8 +84,9 @@ async def _get_meeting_guarded(meeting_id: str, user: dict):
     meeting = dict(row)
     if org_id and meeting.get("org_id") != org_id:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting["attendees"] = _ensure_list(meeting.get("attendees"))
     if user["role"] in ("attendee", "shared_reviewer"):
-        attendee_ids = [a.get("user_id") for a in (meeting.get("attendees") or [])]
+        attendee_ids = [a.get("user_id") for a in meeting["attendees"]]
         if user["id"] not in attendee_ids and meeting.get("sign_off_manager_id") != user["id"]:
             raise HTTPException(status_code=403, detail="Access denied")
     return meeting

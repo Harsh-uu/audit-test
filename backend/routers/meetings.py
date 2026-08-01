@@ -47,6 +47,46 @@ async def _resolve_attendees(conn, attendee_ids: List[str], org_id: str) -> list
     return attendees
 
 
+def _ensure_list(val, field=""):
+    """Return val as a Python list; json.loads if it's a string."""
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return val or []
+
+
+def _ensure_dict(val):
+    """Return val as a Python dict; json.loads if it's a string."""
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return val or {}
+
+
+def _parse_meeting_row(m: dict) -> dict:
+    """Normalize JSONB list/dict fields on a meeting row."""
+    for field in ("attendees", "recording_events", "paused_periods", "shared_with", "pii_redactions"):
+        m[field] = _ensure_list(m.get(field))
+    for field in ("sign_off_record", "reopen_record"):
+        m[field] = _ensure_dict(m.get(field))
+    return m
+
+
+def _parse_analysis_row(a: dict) -> dict:
+    """Normalize JSONB fields on an analysis row."""
+    for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions"):
+        a[field] = _ensure_list(a.get(field))
+    for field in ("speaker_colors",):
+        a[field] = _ensure_dict(a.get(field))
+    return a
+
+
 @router.post("/")
 async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
@@ -129,18 +169,7 @@ async def list_meetings(current_user=Depends(get_current_user)):
                    ORDER BY created_at DESC LIMIT 500""",
                 user_id,
             )
-    result = []
-    for r in rows:
-        m = dict(r)
-        # Parse JSONB fields that asyncpg may return as strings
-        for field in ("attendees", "recording_events", "paused_periods", "shared_with"):
-            if isinstance(m.get(field), str):
-                try:
-                    m[field] = json.loads(m[field])
-                except Exception:
-                    pass
-        result.append(m)
-    return result
+    return [_parse_meeting_row(dict(r)) for r in rows]
 
 
 @router.get("/{meeting_id}")
@@ -152,12 +181,12 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
         row = await conn.fetchrow("SELECT * FROM meetings WHERE id = $1", meeting_id)
         if not row:
             raise HTTPException(status_code=404, detail="Meeting not found")
-        meeting = dict(row)
+        meeting = _parse_meeting_row(dict(row))
 
         # Access check for non-admin/manager
         if current_user["role"] not in ["admin", "manager", "super_admin"]:
-            attendee_ids = [a.get("user_id", "") for a in (meeting.get("attendees") or [])]
-            shared_with = meeting.get("shared_with") or []
+            attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
+            shared_with = meeting["shared_with"]
             if user_id not in attendee_ids and user_id not in shared_with and user_id != meeting.get("created_by", ""):
                 raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -165,13 +194,15 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
         if meeting.get("transcript_id"):
             t_row = await conn.fetchrow("SELECT * FROM transcripts WHERE id = $1", meeting["transcript_id"])
             if t_row:
-                meeting["transcript"] = dict(t_row)
+                tr = dict(t_row)
+                tr["safety_warnings"] = _ensure_list(tr.get("safety_warnings"))
+                meeting["transcript"] = tr
 
         # Attach analysis
         if meeting.get("analysis_id"):
             a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id = $1", meeting["analysis_id"])
             if a_row:
-                meeting["analysis"] = dict(a_row)
+                meeting["analysis"] = _parse_analysis_row(dict(a_row))
 
         # Attach comments
         c_rows = await conn.fetch(

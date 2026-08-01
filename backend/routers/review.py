@@ -18,6 +18,44 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+# ── JSONB normalisation helpers ───────────────────────────────────────────────
+
+def _ensure_list(val):
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return val or []
+
+
+def _ensure_dict(val):
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return val or {}
+
+
+def _parse_meeting_row(m: dict) -> dict:
+    for field in ("attendees", "recording_events", "paused_periods", "shared_with", "pii_redactions"):
+        m[field] = _ensure_list(m.get(field))
+    for field in ("sign_off_record", "reopen_record"):
+        m[field] = _ensure_dict(m.get(field))
+    return m
+
+
+def _parse_analysis_row(a: dict) -> dict:
+    for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions"):
+        a[field] = _ensure_list(a.get(field))
+    for field in ("speaker_colors",):
+        a[field] = _ensure_dict(a.get(field))
+    return a
+
+
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class UpdateSummaryRequest(BaseModel):
@@ -135,14 +173,14 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
         row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
     if not row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = dict(row)
+    meeting = _parse_meeting_row(dict(row))
 
     user_id = current_user.get("id", "")
     if current_user.get("role") not in ["admin", "manager"]:
-        attendee_ids = [a.get("user_id", "") for a in (meeting.get("attendees") or [])]
-        shared_with = meeting.get("shared_with") or []
+        attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
+        shared_with = meeting["shared_with"]
         if (user_id not in attendee_ids
-                and not any(s.get("user_id") == user_id for s in shared_with)
+                and not any(s.get("user_id") == user_id for s in shared_with if isinstance(s, dict))
                 and user_id != meeting.get("created_by", "")):
             raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -151,7 +189,9 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
             async with database.with_org(org_id) as conn:
                 t_row = await conn.fetchrow("SELECT * FROM transcripts WHERE id=$1", meeting["transcript_id"])
             if t_row:
-                meeting["transcript"] = dict(t_row)
+                t = dict(t_row)
+                t["safety_warnings"] = _ensure_list(t.get("safety_warnings"))
+                meeting["transcript"] = t
         except Exception:
             pass
 
@@ -160,7 +200,7 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
             async with database.with_org(org_id) as conn:
                 a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", meeting["analysis_id"])
             if a_row:
-                meeting["analysis"] = dict(a_row)
+                meeting["analysis"] = _parse_analysis_row(dict(a_row))
         except Exception:
             pass
 
@@ -171,7 +211,7 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
         )
     meeting["comments"] = [dict(c) for c in c_rows]
 
-    redactions = meeting.get("pii_redactions") or []
+    redactions = meeting["pii_redactions"]
     privileged = _has_privileged_access(meeting, user_id)
 
     if redactions and meeting.get("transcript"):
