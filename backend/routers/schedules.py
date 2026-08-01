@@ -234,8 +234,11 @@ async def bulk_create_schedules(data: ScheduleBulkCreate, current_user=Depends(g
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
     org_id = current_user["org_id"]
+    scope = get_manager_scope(current_user)
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_org(org_id) as conn:
+        # Restrict to scoped staff for branch/team managers
+        allowed_ids = await get_scoped_staff_ids(conn, org_id, scope)  # None = org-level (no restriction)
         existing_rows = await conn.fetch(
             "SELECT staff_user_id FROM schedules WHERE org_id=$1 AND meeting_type_id=$2 AND is_active=TRUE",
             org_id, data.meeting_type_id,
@@ -243,6 +246,10 @@ async def bulk_create_schedules(data: ScheduleBulkCreate, current_user=Depends(g
         existing_staff = {r["staff_user_id"] for r in existing_rows}
         created, skipped = 0, 0
         for uid in data.staff_user_ids:
+            # Scope check — silently skip out-of-scope staff
+            if allowed_ids is not None and uid not in allowed_ids:
+                skipped += 1
+                continue
             if uid in existing_staff:
                 skipped += 1
                 continue
@@ -264,8 +271,14 @@ async def create_schedule(data: ScheduleCreate, current_user=Depends(get_current
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
     org_id = current_user["org_id"]
+    scope = get_manager_scope(current_user)
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_org(org_id) as conn:
+        # Scope check — prevent assigning schedule to staff outside scope
+        if scope["level"] != "org":
+            allowed_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
+            if data.staff_user_id not in allowed_ids:
+                raise HTTPException(403, "Staff member is outside your assigned scope")
         existing = await conn.fetchrow(
             "SELECT id FROM schedules WHERE org_id=$1 AND staff_user_id=$2 AND meeting_type_id=$3 AND is_active=TRUE",
             org_id, data.staff_user_id, data.meeting_type_id,
@@ -289,7 +302,15 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user=D
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
     org_id = current_user["org_id"]
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
+        # Scope check — verify this schedule belongs to a staff member in scope
+        if scope["level"] != "org":
+            sched = await conn.fetchrow("SELECT staff_user_id FROM schedules WHERE id=$1", schedule_id)
+            if sched:
+                allowed_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
+                if sched["staff_user_id"] not in allowed_ids:
+                    raise HTTPException(403, "Schedule is outside your assigned scope")
         if data.meeting_type_id:
             await conn.execute(
                 "UPDATE schedules SET frequency=$1, start_date=$2, meeting_type_id=$3 WHERE id=$4",
@@ -308,6 +329,14 @@ async def delete_schedule(schedule_id: str, current_user=Depends(get_current_use
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
     org_id = current_user["org_id"]
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
+        # Scope check — verify this schedule belongs to a staff member in scope
+        if scope["level"] != "org":
+            sched = await conn.fetchrow("SELECT staff_user_id FROM schedules WHERE id=$1", schedule_id)
+            if sched:
+                allowed_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
+                if sched["staff_user_id"] not in allowed_ids:
+                    raise HTTPException(403, "Schedule is outside your assigned scope")
         await conn.execute("UPDATE schedules SET is_active=FALSE WHERE id=$1", schedule_id)
     return {"ok": True}
