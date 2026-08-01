@@ -51,22 +51,34 @@ def get_pool() -> asyncpg.Pool:
 @asynccontextmanager
 async def with_org(org_id: str):
     """
-    Acquire a connection, start a transaction, and set the RLS context.
-    All queries within the block are scoped to org_id via PostgreSQL RLS.
+    Acquire a connection, start a transaction, set the RLS context, and
+    switch to the limited `app_rls_user` role so PostgreSQL RLS policies
+    are actually enforced (superusers bypass RLS; limited roles do not).
+    Uses a savepoint for the role switch so failure is non-fatal — the app
+    continues with app-level WHERE guards until the SQL script is run.
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # Set org context that USING policies check
             await conn.execute(
                 "SELECT set_config('app.current_org_id', $1, TRUE)", org_id or ""
             )
+            # Attempt role switch inside a nested savepoint so a failure
+            # (role not created yet) rolls back only the savepoint, not the
+            # outer transaction.
+            try:
+                async with conn.transaction():  # creates SAVEPOINT
+                    await conn.execute("SET LOCAL ROLE app_rls_user")
+            except Exception:
+                pass  # savepoint rolled back; outer tx is intact
             yield conn
 
 
 @asynccontextmanager
 async def with_admin():
     """
-    Acquire a connection with RLS bypassed.
-    Use for: seeding, super-admin operations, job worker.
+    Acquire a connection as postgres (superuser) with RLS explicitly off.
+    Use for: seeding, super-admin operations, auth, job worker.
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
