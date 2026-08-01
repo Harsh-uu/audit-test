@@ -324,7 +324,7 @@ CREATE POLICY audit_logs_rls ON audit_logs FOR ALL
 -- Org settings (teams hierarchy)
 CREATE TABLE IF NOT EXISTS org_settings (
     id TEXT PRIMARY KEY,
-    org_id TEXT UNIQUE,
+    org_id TEXT,
     name TEXT,
     settings JSONB NOT NULL DEFAULT '[]',
     created_at TEXT,

@@ -5,7 +5,7 @@ from datetime import datetime, timezone, date
 import calendar
 from pydantic import BaseModel
 from typing import List, Optional
-from deps import get_db, get_current_user
+from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
 import database
 
 router = APIRouter()
@@ -64,10 +64,16 @@ async def seed_meeting_types(conn, org_id: str):
             )
 
 
-async def _enriched_schedules(conn, org_id: str):
-    s_rows = await conn.fetch(
-        "SELECT * FROM schedules WHERE org_id = $1 AND is_active = TRUE", org_id
-    )
+async def _enriched_schedules(conn, org_id: str, staff_ids=None):
+    if staff_ids is not None:
+        s_rows = await conn.fetch(
+            "SELECT * FROM schedules WHERE org_id=$1 AND is_active=TRUE AND staff_user_id=ANY($2)",
+            org_id, staff_ids,
+        )
+    else:
+        s_rows = await conn.fetch(
+            "SELECT * FROM schedules WHERE org_id = $1 AND is_active = TRUE", org_id
+        )
     if not s_rows:
         return []
 
@@ -200,8 +206,10 @@ async def get_due_meetings(current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
     org_id = current_user["org_id"]
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
-        all_s = await _enriched_schedules(conn, org_id)
+        staff_ids = await get_scoped_staff_ids(conn, org_id, scope)
+        all_s = await _enriched_schedules(conn, org_id, staff_ids)
     today = date.today()
     last_day = calendar.monthrange(today.year, today.month)[1]
     month_end = date(today.year, today.month, last_day).isoformat()
@@ -215,8 +223,10 @@ async def list_schedules(current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
     org_id = current_user["org_id"]
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
-        return await _enriched_schedules(conn, org_id)
+        staff_ids = await get_scoped_staff_ids(conn, org_id, scope)
+        return await _enriched_schedules(conn, org_id, staff_ids)
 
 
 @router.post("/bulk")

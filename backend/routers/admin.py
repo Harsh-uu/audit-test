@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Form, Request
 from pydantic import BaseModel, EmailStr
 from fastapi.responses import Response as _Response
-from deps import get_db, get_current_user
+from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
 from utils.storage import put_object
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 import database
@@ -46,11 +46,23 @@ async def list_users(current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
+    _cols = "SELECT id, org_id, email, name, role, is_active, team_id, setting_id, created_at FROM users"
     async with database.with_org(org_id) as conn:
-        rows = await conn.fetch(
-            "SELECT id, org_id, email, name, role, is_active, team_id, setting_id, created_at FROM users WHERE org_id = $1 ORDER BY name ASC",
-            org_id,
-        )
+        if scope["level"] == "team":
+            rows = await conn.fetch(
+                f"{_cols} WHERE org_id=$1 AND team_id=$2 ORDER BY name ASC",
+                org_id, scope["team_id"],
+            )
+        elif scope["level"] == "setting":
+            rows = await conn.fetch(
+                f"{_cols} WHERE org_id=$1 AND setting_id=$2 ORDER BY name ASC",
+                org_id, scope["setting_id"],
+            )
+        else:
+            rows = await conn.fetch(
+                f"{_cols} WHERE org_id=$1 ORDER BY name ASC", org_id,
+            )
     return [dict(r) for r in rows]
 
 
@@ -386,11 +398,23 @@ async def get_team_insights(
                 "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
                 org_id, setting_id,
             )
-        elif current_user["role"] == "manager" and current_user.get("team_id"):
-            staff_rows = await conn.fetch(
-                "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
-                org_id, current_user["team_id"],
-            )
+        elif current_user["role"] == "manager":
+            mgr_scope = get_manager_scope(current_user)
+            if mgr_scope["level"] == "team":
+                staff_rows = await conn.fetch(
+                    "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
+                    org_id, mgr_scope["team_id"],
+                )
+            elif mgr_scope["level"] == "setting":
+                staff_rows = await conn.fetch(
+                    "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
+                    org_id, mgr_scope["setting_id"],
+                )
+            else:
+                staff_rows = await conn.fetch(
+                    "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
+                    org_id,
+                )
         else:
             staff_rows = await conn.fetch(
                 "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
@@ -608,10 +632,25 @@ async def list_meetings_brief(current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
-        rows = await conn.fetch(
-            "SELECT id, title, date, attendees FROM meetings WHERE status IN ('signed_off','shared') ORDER BY date DESC"
-        )
+        if scope["level"] != "org":
+            scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
+            scoped_ids = list(set(scoped_ids) | {current_user["id"]})
+            rows = await conn.fetch(
+                """SELECT id, title, date, attendees FROM meetings
+                   WHERE status IN ('signed_off','shared')
+                     AND (created_by = ANY($1)
+                          OR sign_off_manager_id = ANY($1)
+                          OR EXISTS (SELECT 1 FROM jsonb_array_elements(attendees) a
+                                     WHERE a->>'user_id' = ANY($1)))
+                   ORDER BY date DESC""",
+                scoped_ids,
+            )
+        else:
+            rows = await conn.fetch(
+                "SELECT id, title, date, attendees FROM meetings WHERE status IN ('signed_off','shared') ORDER BY date DESC"
+            )
     return [{"id": r["id"], "title": r["title"], "date": r["date"],
              "attendees": [{"user_id": a.get("user_id"), "name": a.get("name")} for a in (r["attendees"] or [])]}
             for r in rows]

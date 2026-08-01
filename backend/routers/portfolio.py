@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 import logging
 
-from deps import get_current_user
+from deps import get_current_user, get_manager_scope, get_scoped_staff_ids
 import database
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 
@@ -216,6 +216,16 @@ async def get_portfolio(user_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"] and current_user["id"] != user_id:
         raise HTTPException(status_code=403, detail="You can only view your own portfolio")
     org_id = current_user.get("org_id", "")
+
+    # Scoped managers may only view portfolios of staff within their scope
+    if current_user["role"] == "manager" and current_user["id"] != user_id:
+        scope = get_manager_scope(current_user)
+        if scope["level"] != "org":
+            async with database.with_org(org_id) as conn:
+                scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
+            if user_id not in scoped_ids:
+                raise HTTPException(status_code=403, detail="You can only view portfolios of staff in your scope")
+
     data = await _build_portfolio_data(user_id, org_id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -226,6 +236,16 @@ async def get_portfolio(user_id: str, current_user=Depends(get_current_user)):
 async def export_portfolio_pdf(user_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"] and current_user["id"] != user_id:
         raise HTTPException(status_code=403, detail="You can only export your own portfolio")
+    org_id = current_user.get("org_id", "")
+
+    # Scoped managers may only export portfolios of staff within their scope
+    if current_user["role"] == "manager" and current_user["id"] != user_id:
+        scope = get_manager_scope(current_user)
+        if scope["level"] != "org":
+            async with database.with_org(org_id) as conn:
+                scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
+            if user_id not in scoped_ids:
+                raise HTTPException(status_code=403, detail="You can only export portfolios of staff in your scope")
     org_id = current_user.get("org_id", "")
     data = await _build_portfolio_data(user_id, org_id)
     if data is None:

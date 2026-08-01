@@ -153,7 +153,9 @@ async def me(current_user=Depends(get_current_user)):
         async with database.with_admin() as conn:
             org = await conn.fetchrow("SELECT name, branding FROM organisations WHERE id = $1", org_id)
         if org:
-            b = org["branding"] or {}
+            _b_raw = org["branding"] or {}
+            import json as _json
+            b = _json.loads(_b_raw) if isinstance(_b_raw, str) else (_b_raw or {})
             user["org_branding"] = {
                 "has_logo": bool(b.get("logo_path")),
                 "primary_color": b.get("primary_color"),

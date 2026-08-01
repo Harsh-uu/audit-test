@@ -50,3 +50,45 @@ def require_roles(*roles):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return current_user
     return checker
+
+
+def get_manager_scope(current_user: dict) -> dict:
+    """
+    Determine data scope for a manager/admin.
+    Returns {'level': 'org'|'setting'|'team', 'setting_id': str|None, 'team_id': str|None}
+      - 'org'     → no restriction; sees everything in the org (admin, super_admin, or
+                    manager with no branch/team assignment)
+      - 'setting' → restricted to a specific branch / setting
+      - 'team'    → restricted to a specific team within a setting
+    """
+    role = current_user.get("role", "")
+    if role in ["admin", "super_admin"]:
+        return {"level": "org", "setting_id": None, "team_id": None}
+    team_id = current_user.get("team_id") or None
+    setting_id = current_user.get("setting_id") or None
+    if team_id:
+        return {"level": "team", "setting_id": setting_id, "team_id": team_id}
+    if setting_id:
+        return {"level": "setting", "setting_id": setting_id, "team_id": None}
+    return {"level": "org", "setting_id": None, "team_id": None}
+
+
+async def get_scoped_staff_ids(conn, org_id: str, scope: dict):
+    """
+    Returns a list of staff user IDs within the manager's scope.
+    Returns None for org-level scope (meaning no restriction).
+    Used by multiple routers to apply consistent RBAC filtering.
+    """
+    if scope["level"] == "org":
+        return None
+    if scope["level"] == "team":
+        rows = await conn.fetch(
+            "SELECT id FROM users WHERE org_id=$1 AND is_active=TRUE AND team_id=$2",
+            org_id, scope["team_id"],
+        )
+    else:  # setting
+        rows = await conn.fetch(
+            "SELECT id FROM users WHERE org_id=$1 AND is_active=TRUE AND setting_id=$2",
+            org_id, scope["setting_id"],
+        )
+    return [r["id"] for r in rows]

@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional, List
-from deps import get_db, get_current_user
+from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
 import database
 
 router = APIRouter()
@@ -141,23 +141,52 @@ async def list_meetings(current_user=Depends(get_current_user)):
         return []
 
     user_id = current_user["id"]
+    scope = get_manager_scope(current_user)
+
     async with database.with_org(org_id) as conn:
         if role == "admin":
             rows = await conn.fetch(
                 "SELECT * FROM meetings ORDER BY created_at DESC LIMIT 500"
             )
+
         elif role == "manager":
-            rows = await conn.fetch(
-                """SELECT * FROM meetings
-                   WHERE created_by=$1
-                      OR sign_off_manager_id=$1
-                      OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(attendees) a
-                          WHERE a->>'user_id' = $1
-                      )
-                   ORDER BY created_at DESC LIMIT 500""",
-                user_id,
-            )
+            if scope["level"] == "org":
+                # Org-level manager sees every meeting in the org
+                rows = await conn.fetch(
+                    "SELECT * FROM meetings ORDER BY created_at DESC LIMIT 500"
+                )
+            else:
+                # Scoped manager — get current team/setting members
+                scoped_staff_ids_list = await get_scoped_staff_ids(conn, org_id, scope)
+                scoped_staff_ids = set(scoped_staff_ids_list or [])
+                # Include the manager themselves so their personally-created meetings appear
+                all_scoped = list(scoped_staff_ids | {user_id})
+
+                rows = await conn.fetch(
+                    """SELECT * FROM meetings
+                       WHERE created_by = ANY($1)
+                          OR sign_off_manager_id = ANY($1)
+                          OR EXISTS (
+                              SELECT 1 FROM jsonb_array_elements(attendees) a
+                              WHERE a->>'user_id' = ANY($1)
+                          )
+                       ORDER BY created_at DESC LIMIT 500""",
+                    all_scoped,
+                )
+                result = []
+                for row in rows:
+                    m = _parse_meeting_row(dict(row))
+                    attendee_ids = {a.get("user_id") for a in m.get("attendees", [])}
+                    # Staff attendees = everyone except the manager themselves
+                    staff_attendees = attendee_ids - {user_id}
+                    if staff_attendees:
+                        # Historical if NONE of the staff attendees are still in scope
+                        m["is_historical"] = len(staff_attendees & scoped_staff_ids) == 0
+                    else:
+                        m["is_historical"] = False
+                    result.append(m)
+                return result
+
         else:
             rows = await conn.fetch(
                 """SELECT * FROM meetings
@@ -169,6 +198,7 @@ async def list_meetings(current_user=Depends(get_current_user)):
                    ORDER BY created_at DESC LIMIT 500""",
                 user_id,
             )
+
     return [_parse_meeting_row(dict(r)) for r in rows]
 
 

@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, Loader, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, ChevronDown, Loader, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles, Archive } from "lucide-react";
 
 const STATUS_CONFIG = {
   draft:             { label: "Draft",        color: "bg-gray-100 text-gray-700 border-gray-200",       icon: FileText },
@@ -115,6 +115,7 @@ export default function Dashboard() {
   const [orgStructure, setOrgStructure] = useState({ settings: [], unassigned_users: [] });
   const [dueMeetings, setDueMeetings] = useState([]);
   const [dueLoading, setDueLoading] = useState(false);
+  const [showHistorical, setShowHistorical] = useState(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -142,9 +143,12 @@ export default function Dashboard() {
     }
   };
 
+  const activeMeetings = useMemo(() => meetings.filter(m => !m.is_historical), [meetings]);
+  const historicalMeetings = useMemo(() => meetings.filter(m => m.is_historical === true), [meetings]);
+
   const filteredMeetings = useMemo(() => {
     const q = search.toLowerCase();
-    return meetings
+    return activeMeetings
       .filter(m => {
         if (q) {
           const titleMatch = m.title?.toLowerCase().includes(q);
@@ -171,7 +175,7 @@ export default function Dashboard() {
         const db = new Date(b.date || b.created_at || 0).getTime();
         return sortOrder === "desc" ? db - da : da - db;
       });
-  }, [meetings, search, statusFilter, dateFrom, dateTo, sortOrder, orgFilter]);
+  }, [activeMeetings, search, statusFilter, dateFrom, dateTo, sortOrder, orgFilter]);
 
   const hasActiveFilters = search || statusFilter !== "all" || dateFrom || dateTo || orgFilter.setting_id || orgFilter.team_id;
 
@@ -184,9 +188,9 @@ export default function Dashboard() {
   };
 
   const stats = {
-    total: meetings.length,
-    inReview: meetings.filter(m => ["in_review", "reviewed"].includes(m.status)).length,
-    signedOff: meetings.filter(m => ["signed_off", "shared"].includes(m.status)).length,
+    total: activeMeetings.length,
+    inReview: activeMeetings.filter(m => ["in_review", "reviewed"].includes(m.status)).length,
+    signedOff: activeMeetings.filter(m => ["signed_off", "shared"].includes(m.status)).length,
   };
 
   const getMeetingAction = (meeting) => {
@@ -420,7 +424,7 @@ export default function Dashboard() {
                 {f.label}
                 {f.value !== "all" && (
                   <span className="ml-1.5 opacity-70">
-                    {meetings.filter(m => m.status === f.value).length}
+                    {activeMeetings.filter(m => m.status === f.value).length}
                   </span>
                 )}
               </button>
@@ -538,6 +542,61 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Historical meetings — staff who have since moved teams */}
+        {historicalMeetings.length > 0 && (
+          <div className="mt-8" data-testid="historical-section">
+            <button
+              onClick={() => setShowHistorical(v => !v)}
+              className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 transition-colors mb-1 group"
+              data-testid="historical-toggle-btn"
+            >
+              <Archive className="w-4 h-4" />
+              <span className="font-medium">Historical Meetings</span>
+              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                {historicalMeetings.length}
+              </span>
+              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showHistorical ? "rotate-180" : ""}`} />
+            </button>
+            <p className="text-xs text-gray-400 mb-3">
+              Staff in these meetings have since moved to a different team.
+            </p>
+            {showHistorical && (
+              <div className="space-y-2 opacity-50" data-testid="historical-meetings-list">
+                {historicalMeetings.map(meeting => (
+                  <div
+                    key={meeting.id}
+                    onClick={getMeetingAction(meeting)}
+                    className="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm cursor-pointer hover:opacity-75 transition-opacity"
+                    data-testid={`historical-meeting-item-${meeting.id}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Archive className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                          <h3 className="font-medium text-gray-600 truncate">{meeting.title}</h3>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-gray-400">
+                          <span>{formatDate(meeting.date || meeting.created_at)}</span>
+                          {meeting.attendees?.length > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              {meeting.attendees.length} attendee{meeting.attendees.length !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <StatusBadge status={meeting.status} />
+                        <ChevronRight className="w-4 h-4 text-gray-300 mt-0.5" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

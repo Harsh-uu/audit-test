@@ -6,7 +6,7 @@ from fastapi.responses import Response as _Response
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timezone
 from typing import Optional
-from deps import get_db, get_current_user
+from deps import get_db, get_current_user, get_manager_scope
 from utils.storage import put_object, get_object
 import database
 
@@ -69,8 +69,16 @@ async def update_org_name(data: OrgNameUpdate, current_user=Depends(get_current_
 @router.get("/structure")
 async def get_structure(current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
+
     async with database.with_org(org_id) as conn:
-        s_rows = await conn.fetch("SELECT * FROM org_settings ORDER BY name ASC")
+        # Determine which settings to show
+        if scope["level"] == "org":
+            s_rows = await conn.fetch("SELECT * FROM org_settings ORDER BY name ASC")
+        else:
+            # Branch/team managers see only their own setting
+            s_rows = await conn.fetch("SELECT * FROM org_settings WHERE id=$1", scope["setting_id"])
+
         settings = []
         for s_row in s_rows:
             s = dict(s_row)
@@ -82,7 +90,17 @@ async def get_structure(current_user=Depends(get_current_user)):
                 s["manager_name"] = None
             s["teams"] = []
 
-            t_rows = await conn.fetch("SELECT * FROM teams WHERE setting_id=$1 ORDER BY name ASC", s["id"])
+            # Determine which teams to show within this setting
+            if scope["level"] == "team":
+                t_rows = await conn.fetch(
+                    "SELECT * FROM teams WHERE setting_id=$1 AND id=$2 ORDER BY name ASC",
+                    s["id"], scope["team_id"],
+                )
+            else:
+                t_rows = await conn.fetch(
+                    "SELECT * FROM teams WHERE setting_id=$1 ORDER BY name ASC", s["id"]
+                )
+
             for t_row in t_rows:
                 t = dict(t_row)
                 sup_id = t.get("supervisor_user_id")
@@ -99,12 +117,15 @@ async def get_structure(current_user=Depends(get_current_user)):
                 s["teams"].append(t)
             settings.append(s)
 
-        # Unassigned users
-        unassigned_rows = await conn.fetch(
-            "SELECT id, name, email, role FROM users WHERE org_id=$1 AND is_active=TRUE AND (team_id IS NULL OR team_id='') ORDER BY name ASC",
-            org_id,
-        )
-        unassigned = [dict(r) for r in unassigned_rows]
+        # Unassigned users — only relevant for org-level managers
+        if scope["level"] == "org":
+            unassigned_rows = await conn.fetch(
+                "SELECT id, name, email, role FROM users WHERE org_id=$1 AND is_active=TRUE AND (team_id IS NULL OR team_id='') ORDER BY name ASC",
+                org_id,
+            )
+            unassigned = [dict(r) for r in unassigned_rows]
+        else:
+            unassigned = []
 
     return {"settings": settings, "unassigned_users": unassigned}
 
@@ -112,8 +133,12 @@ async def get_structure(current_user=Depends(get_current_user)):
 @router.get("/settings")
 async def list_settings(current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
-        rows = await conn.fetch("SELECT * FROM org_settings ORDER BY name ASC")
+        if scope["level"] == "org":
+            rows = await conn.fetch("SELECT * FROM org_settings ORDER BY name ASC")
+        else:
+            rows = await conn.fetch("SELECT * FROM org_settings WHERE id=$1", scope["setting_id"])
     return [dict(r) for r in rows]
 
 
