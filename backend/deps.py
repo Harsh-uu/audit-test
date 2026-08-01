@@ -1,38 +1,47 @@
-from fastapi import Request, HTTPException, Depends
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 import os
-from bson import ObjectId
+import database
+
+security = HTTPBearer(auto_error=False)
 
 
 def get_db(request: Request):
-    return request.app.state.db
+    """Return the asyncpg pool stored on app state."""
+    return request.app.state.pool
 
 
-async def get_current_user(request: Request, db=Depends(get_db)):
-    token = request.cookies.get("access_token")
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    if not token:
+async def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    token = credentials.credentials
+    secret = os.environ["JWT_SECRET"]
     try:
-        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=["HS256"])
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="Invalid token type")
-        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        if not user.get("is_active", True):
-            raise HTTPException(status_code=401, detail="Account is deactivated")
-        user["id"] = str(user["_id"])
-        del user["_id"]
-        user.pop("password_hash", None)
-        return user
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
+    except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    pool = request.app.state.pool
+    async with database.with_admin() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM users WHERE id = $1 AND is_active = TRUE", user_id
+        )
+
+    if not row:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+
+    user = dict(row)
+    return user
 
 
 def require_roles(*roles):

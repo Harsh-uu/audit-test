@@ -1,20 +1,13 @@
+import json
+import uuid
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional, List
 from deps import get_db, get_current_user
+import database
 
 router = APIRouter()
-
-
-def doc_to_dict(doc):
-    if doc is None:
-        return None
-    doc = dict(doc)
-    doc["id"] = str(doc["_id"])
-    del doc["_id"]
-    return doc
 
 
 class CreateMeetingRequest(BaseModel):
@@ -35,287 +28,229 @@ class UpdateManagerRequest(BaseModel):
     manager_id: str
 
 
-@router.post("/")
-async def create_meeting(data: CreateMeetingRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    # Resolve attendees in a single bulk query
+async def _resolve_attendees(conn, attendee_ids: List[str], org_id: str) -> list:
+    if not attendee_ids:
+        return []
+    rows = await conn.fetch(
+        "SELECT id, name, email, role FROM users WHERE id = ANY($1) AND org_id = $2",
+        attendee_ids, org_id,
+    )
+    user_map = {r["id"]: dict(r) for r in rows}
     attendees = []
-    if data.attendee_ids:
-        valid_ids = []
-        for uid in data.attendee_ids:
-            try:
-                valid_ids.append(ObjectId(uid))
-            except Exception:
-                pass
-        org_id = current_user.get("org_id")
-        users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": valid_ids}, "org_id": org_id})}
-        for uid in data.attendee_ids:
-            user = users_map.get(uid)
-            if user:
-                attendees.append({
-                    "user_id": str(user["_id"]),
-                    "name": user["name"],
-                    "email": user["email"],
-                    "role": user["role"],
-                    "present": True,
-                    "reviewed": False,
-                    "reviewed_at": None,
-                })
+    for uid in attendee_ids:
+        u = user_map.get(uid)
+        if u:
+            attendees.append({
+                "user_id": u["id"], "name": u["name"], "email": u["email"],
+                "role": u["role"], "present": True, "reviewed": False, "reviewed_at": None,
+            })
+    return attendees
 
-    manager_name = None
-    if data.sign_off_manager_id:
-        try:
-            mgr = await db.users.find_one({"_id": ObjectId(data.sign_off_manager_id), "org_id": current_user.get("org_id")})
+
+@router.post("/")
+async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    now = datetime.now(timezone.utc).isoformat()
+    meeting_id = str(uuid.uuid4())
+
+    async with database.with_org(org_id) as conn:
+        attendees = await _resolve_attendees(conn, data.attendee_ids, org_id)
+        manager_name = None
+        if data.sign_off_manager_id:
+            mgr = await conn.fetchrow(
+                "SELECT name FROM users WHERE id = $1 AND org_id = $2",
+                data.sign_off_manager_id, org_id,
+            )
             if mgr:
                 manager_name = mgr["name"]
-        except Exception:
-            pass
 
-    now = datetime.now(timezone.utc).isoformat()
-    meeting_doc = {
-        "title": data.title,
-        "date": data.date,
-        "location": data.location,
-        "meeting_type": data.meeting_type,
-        "org_id": current_user.get("org_id"),
-        "created_by": current_user["id"],
-        "created_by_name": current_user["name"],
-        "sign_off_manager_id": data.sign_off_manager_id,
-        "sign_off_manager_name": manager_name,
-        "attendees": attendees,
-        "team_id": current_user.get("team_id") or None,
-        "setting_id": current_user.get("setting_id") or None,
-        "schedule_id": data.schedule_id or None,
-        "status": "draft",
-        "recording_events": [],
-        "paused_periods": [],
-        "total_paused_duration_seconds": 0,
-        "recording_notice_shown_at": None,
-        "audio_file_id": None,
-        "transcript_id": None,
-        "analysis_id": None,
-        "sign_off_record": None,
-        "audio_deletion_status": "none",
-        "audio_grace_period_started_at": None,
-        "audio_deleted_at": None,
-        "created_at": now,
-        "updated_at": now,
+        await conn.execute(
+            """INSERT INTO meetings
+               (id, org_id, title, date, location, meeting_type, created_by, created_by_name,
+                sign_off_manager_id, sign_off_manager_name, attendees, team_id, setting_id,
+                schedule_id, status, recording_events, paused_periods,
+                total_paused_duration_seconds, audio_deletion_status, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)""",
+            meeting_id, org_id, data.title, data.date, data.location, data.meeting_type,
+            current_user["id"], current_user.get("name", ""),
+            data.sign_off_manager_id, manager_name,
+            json.dumps(attendees),
+            current_user.get("team_id"), current_user.get("setting_id"),
+            data.schedule_id, "draft",
+            "[]", "[]", 0, "none", now,
+        )
+
+    return {
+        "id": meeting_id, "org_id": org_id, "title": data.title, "date": data.date,
+        "location": data.location, "meeting_type": data.meeting_type,
+        "created_by": current_user["id"], "created_by_name": current_user.get("name", ""),
+        "sign_off_manager_id": data.sign_off_manager_id, "sign_off_manager_name": manager_name,
+        "attendees": attendees, "status": "draft",
+        "recording_events": [], "paused_periods": [], "total_paused_duration_seconds": 0,
+        "audio_deletion_status": "none", "created_at": now, "updated_at": now,
     }
-    result = await db.meetings.insert_one(meeting_doc)
-    meeting_doc["id"] = str(result.inserted_id)
-    del meeting_doc["_id"]
-    return meeting_doc
 
 
 @router.get("/")
-async def list_meetings(db=Depends(get_db), current_user=Depends(get_current_user)):
-    user_id = current_user["id"]
+async def list_meetings(current_user=Depends(get_current_user)):
     role = current_user["role"]
-
-    # Super admin has no org scope — return empty from regular dashboard
     if role == "super_admin":
         return []
-
-    org_id = current_user.get("org_id")
-    # No org_id means the user is not part of any organisation — return nothing
+    org_id = current_user.get("org_id", "")
     if not org_id:
         return []
-    org_filter = {"org_id": org_id}
 
-    if role == "admin":
-        cursor = db.meetings.find(org_filter).sort("created_at", -1).limit(500)
-    elif role == "manager":
-        or_conditions = [
-            {"created_by": user_id},
-            {"sign_off_manager_id": user_id},
-            {"attendees.user_id": user_id},
-        ]
-        if current_user.get("team_id"):
-            or_conditions.append({"team_id": current_user["team_id"]})
-        if current_user.get("setting_id"):
-            or_conditions.append({"setting_id": current_user["setting_id"]})
-        query = {**org_filter, "$or": or_conditions}
-        cursor = db.meetings.find(query).sort("created_at", -1).limit(500)
-    else:
-        query = {
-            **org_filter,
-            "$or": [
-                {"created_by": user_id},
-                {"attendees.user_id": user_id},
-            ]
-        }
-        cursor = db.meetings.find(query).sort("created_at", -1).limit(500)
-
-    meetings = []
-    async for doc in cursor:
-        meetings.append(doc_to_dict(doc))
-    return meetings
+    user_id = current_user["id"]
+    async with database.with_org(org_id) as conn:
+        if role == "admin":
+            rows = await conn.fetch(
+                "SELECT * FROM meetings ORDER BY created_at DESC LIMIT 500"
+            )
+        elif role == "manager":
+            rows = await conn.fetch(
+                """SELECT * FROM meetings
+                   WHERE created_by=$1
+                      OR sign_off_manager_id=$1
+                      OR EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(attendees) a
+                          WHERE a->>'user_id' = $1
+                      )
+                   ORDER BY created_at DESC LIMIT 500""",
+                user_id,
+            )
+        else:
+            rows = await conn.fetch(
+                """SELECT * FROM meetings
+                   WHERE created_by=$1
+                      OR EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(attendees) a
+                          WHERE a->>'user_id' = $1
+                      )
+                   ORDER BY created_at DESC LIMIT 500""",
+                user_id,
+            )
+    return [dict(r) for r in rows]
 
 
 @router.get("/{meeting_id}")
-async def get_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
-    try:
-        doc = await db.meetings.find_one({"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")})
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid meeting ID")
-    if not doc:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = doc_to_dict(doc)
-
-    # Non-managers can only read meetings they participated in or were explicitly shared with.
-    # Return 404 (not 403) to avoid leaking that the meeting exists.
+async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
     user_id = current_user.get("id", "")
-    if current_user.get("role") not in ["admin", "manager"]:
-        attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
-        shared_with  = meeting.get("shared_with", []) or []
-        if user_id not in attendee_ids and user_id not in shared_with and user_id != meeting.get("created_by", ""):
+
+    async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow("SELECT * FROM meetings WHERE id = $1", meeting_id)
+        if not row:
             raise HTTPException(status_code=404, detail="Meeting not found")
+        meeting = dict(row)
 
-    # Attach transcript
-    if meeting.get("transcript_id"):
-        try:
-            tdoc = await db.transcripts.find_one({"_id": ObjectId(meeting["transcript_id"])})
-            if tdoc:
-                meeting["transcript"] = doc_to_dict(tdoc)
-        except Exception:
-            pass
+        # Access check for non-admin/manager
+        if current_user["role"] not in ["admin", "manager", "super_admin"]:
+            attendee_ids = [a.get("user_id", "") for a in (meeting.get("attendees") or [])]
+            shared_with = meeting.get("shared_with") or []
+            if user_id not in attendee_ids and user_id not in shared_with and user_id != meeting.get("created_by", ""):
+                raise HTTPException(status_code=404, detail="Meeting not found")
 
-    # Apply PII redactions —
-    # speaker_text is always redacted (everyone works from the redacted view).
-    # raw text is only redacted for non-privileged users (creator/attendees keep the original).
+        # Attach transcript
+        if meeting.get("transcript_id"):
+            t_row = await conn.fetchrow("SELECT * FROM transcripts WHERE id = $1", meeting["transcript_id"])
+            if t_row:
+                meeting["transcript"] = dict(t_row)
+
+        # Attach analysis
+        if meeting.get("analysis_id"):
+            a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id = $1", meeting["analysis_id"])
+            if a_row:
+                meeting["analysis"] = dict(a_row)
+
+        # Attach comments
+        c_rows = await conn.fetch(
+            "SELECT * FROM reviewer_comments WHERE meeting_id = $1 ORDER BY created_at ASC", meeting_id
+        )
+        meeting["comments"] = [dict(c) for c in c_rows]
+
+    # Enrich attendee emails from live user accounts
+    if meeting.get("attendees"):
+        async with database.with_admin() as conn:
+            enriched = []
+            for attendee in meeting["attendees"]:
+                uid = attendee.get("user_id")
+                if uid:
+                    u = await conn.fetchrow("SELECT email FROM users WHERE id = $1", uid)
+                    if u and u["email"]:
+                        attendee = {**attendee, "email": u["email"]}
+                enriched.append(attendee)
+            meeting["attendees"] = enriched
+
+            if meeting.get("created_by"):
+                creator = await conn.fetchrow(
+                    "SELECT email, name FROM users WHERE id = $1", meeting["created_by"]
+                )
+                if creator:
+                    meeting["created_by_email"] = creator["email"]
+                    meeting["created_by_name"] = meeting.get("created_by_name") or creator["name"]
+
+    # Apply PII redactions
     from routers.review import _apply_redactions_to_text, _apply_redactions_deep, _has_privileged_access
-    redactions = meeting.get("pii_redactions", [])
+    redactions = meeting.get("pii_redactions") or []
     if redactions and meeting.get("transcript"):
         t = meeting["transcript"]
         if t.get("speaker_text"):
             t["speaker_text"] = _apply_redactions_to_text(t["speaker_text"], redactions)
-        user_id = current_user.get("id", "")
         if not _has_privileged_access(meeting, user_id) and t.get("text"):
             t["text"] = _apply_redactions_to_text(t["text"], redactions)
-    # Strip raw redaction list from non-privileged callers
     if redactions:
-        user_id = current_user.get("id", "")
         if not _has_privileged_access(meeting, user_id):
             meeting.pop("pii_redactions", None)
             meeting["pii_redactions_count"] = len(redactions)
-
-    # Attach analysis
-    if meeting.get("analysis_id"):
-        try:
-            adoc = await db.analyses.find_one({"_id": ObjectId(meeting["analysis_id"])})
-            if adoc:
-                meeting["analysis"] = doc_to_dict(adoc)
-                # Analysis text (evidence summaries, excerpts) always uses the redacted version
-                if redactions:
-                    meeting["analysis"] = _apply_redactions_deep(meeting["analysis"], redactions)
-        except Exception:
-            pass
-
-    # Attach comments
-    meeting["comments"] = []
-    async for c in db.reviewer_comments.find({"meeting_id": str(meeting["id"])}).sort("created_at", 1):
-        meeting["comments"].append(doc_to_dict(c))
-
-    # Enrich with creator email for email-fallback when no attendees
-    if meeting.get("created_by"):
-        try:
-            creator = await db.users.find_one({"_id": ObjectId(meeting["created_by"])}, {"email": 1, "name": 1})
-            if creator:
-                meeting["created_by_email"] = creator.get("email", "")
-                meeting["created_by_name"] = meeting.get("created_by_name") or creator.get("name", "")
-        except Exception:
-            pass
-
-    # Re-sync attendee emails from live user accounts (emails may have been updated after meeting was created)
-    if meeting.get("attendees"):
-        enriched = []
-        for attendee in meeting["attendees"]:
-            uid = attendee.get("user_id")
-            if uid:
-                try:
-                    user = await db.users.find_one({"_id": ObjectId(uid)}, {"email": 1})
-                    if user and user.get("email"):
-                        attendee = {**attendee, "email": user["email"]}
-                except Exception:
-                    pass
-            enriched.append(attendee)
-        meeting["attendees"] = enriched
+    if meeting.get("analysis") and redactions:
+        meeting["analysis"] = _apply_redactions_deep(meeting["analysis"], redactions)
 
     return meeting
 
 
 @router.put("/{meeting_id}/attendees")
-async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
+async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    attendees = []
-    if data.attendee_ids:
-        valid_ids = []
-        for uid in data.attendee_ids:
-            try:
-                valid_ids.append(ObjectId(uid))
-            except Exception:
-                pass
-        users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": valid_ids}, "org_id": current_user.get("org_id")})}
-        for uid in data.attendee_ids:
-            user = users_map.get(uid)
-            if user:
-                attendees.append({
-                    "user_id": str(user["_id"]),
-                    "name": user["name"],
-                    "email": user["email"],
-                    "role": user["role"],
-                    "present": True,
-                    "reviewed": False,
-                    "reviewed_at": None,
-                })
-    result = await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
-        {"$set": {"attendees": attendees, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    if result.matched_count == 0:
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        attendees = await _resolve_attendees(conn, data.attendee_ids, org_id)
+        result = await conn.execute(
+            "UPDATE meetings SET attendees=$1, updated_at=$2 WHERE id=$3",
+            json.dumps(attendees), datetime.now(timezone.utc).isoformat(), meeting_id,
+        )
+    if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Meeting not found")
     return {"message": "Attendees updated"}
 
 
 @router.put("/{meeting_id}/manager")
-async def update_manager(meeting_id: str, data: UpdateManagerRequest, db=Depends(get_db), current_user=Depends(get_current_user)):  # noqa: E501
+async def update_manager(meeting_id: str, data: UpdateManagerRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    mgr = await db.users.find_one({"_id": ObjectId(data.manager_id), "org_id": current_user.get("org_id")})
-    if not mgr:
-        raise HTTPException(status_code=404, detail="Manager not found")
-    result = await db.meetings.update_one(
-        {"_id": ObjectId(meeting_id), "org_id": current_user.get("org_id")},
-        {"$set": {
-            "sign_off_manager_id": data.manager_id,
-            "sign_off_manager_name": mgr["name"],
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }}
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Meeting not found")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        mgr = await conn.fetchrow("SELECT name FROM users WHERE id = $1 AND org_id = $2", data.manager_id, org_id)
+        if not mgr:
+            raise HTTPException(status_code=404, detail="Manager not found")
+        await conn.execute(
+            """UPDATE meetings SET sign_off_manager_id=$1, sign_off_manager_name=$2, updated_at=$3
+               WHERE id=$4""",
+            data.manager_id, mgr["name"], datetime.now(timezone.utc).isoformat(), meeting_id,
+        )
     return {"message": "Manager updated"}
 
 
 @router.delete("/{meeting_id}")
-async def delete_meeting(meeting_id: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+async def delete_meeting(meeting_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    try:
-        oid = ObjectId(meeting_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid meeting ID")
-
-    result = await db.meetings.delete_one({"_id": oid, "org_id": current_user.get("org_id")})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Cascade-delete all related records
-    await db.transcripts.delete_many({"meeting_id": meeting_id})
-    await db.analyses.delete_many({"meeting_id": meeting_id})
-    await db.audio_files.delete_many({"meeting_id": meeting_id})
-    await db.reviewer_comments.delete_many({"meeting_id": meeting_id})
-    await db.review_edits.delete_many({"meeting_id": meeting_id})
-    await db.audit_logs.delete_many({"meeting_id": meeting_id})
-
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        result = await conn.execute("DELETE FROM meetings WHERE id = $1", meeting_id)
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        # Cascade deletes
+        for table in ["transcripts", "analyses", "audio_files", "reviewer_comments", "review_edits", "audit_logs"]:
+            await conn.execute(f"DELETE FROM {table} WHERE meeting_id = $1", meeting_id)
     return {"message": "Meeting deleted"}

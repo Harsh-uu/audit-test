@@ -1,14 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends, Response, Request
 from pydantic import BaseModel, EmailStr
-from bson import ObjectId
 import bcrypt
 import jwt
 import os
 import re
+import uuid
 import secrets
 import resend
 from datetime import datetime, timezone, timedelta
 from deps import get_db, get_current_user
+import database
 
 router = APIRouter()
 JWT_ALGORITHM = "HS256"
@@ -24,7 +25,6 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def validate_password_strength(password: str):
-    """Raise 400 if password doesn't meet the minimum strength policy."""
     errors = []
     if len(password) < 10:
         errors.append("at least 10 characters")
@@ -60,15 +60,14 @@ def create_refresh_token(user_id: str) -> str:
 
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
-    response.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/")  # noqa: E501
-    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=True, samesite="lax", max_age=604800, path="/")  # noqa: E501
+    response.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/")
+    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=True, samesite="lax", max_age=604800, path="/")
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     name: str
-    # role is accepted for API compatibility but always overridden to "attendee" on public registration
     role: str = "attendee"
 
 
@@ -78,52 +77,56 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/register")
-async def register(data: RegisterRequest, response: Response, db=Depends(get_db)):
+async def register(data: RegisterRequest, response: Response):
     email = data.email.lower()
-    existing = await db.users.find_one({"email": email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    # Public self-registration is always attendee — elevated roles require admin/super-admin
-    role = "attendee"
-    user_doc = {
-        "email": email,
-        "password_hash": hash_password(data.password),
-        "name": data.name,
-        "role": role,
-        "is_active": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    result = await db.users.insert_one(user_doc)
-    user_id = str(result.inserted_id)
+    async with database.with_admin() as conn:
+        existing = await conn.fetchrow("SELECT id FROM users WHERE email = $1", email)
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        user_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        await conn.execute(
+            """INSERT INTO users (id, email, password_hash, name, role, is_active, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7)""",
+            user_id, email, hash_password(data.password), data.name, "attendee", True, now,
+        )
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     set_auth_cookies(response, access_token, refresh_token)
-    return {"id": user_id, "email": email, "name": data.name, "role": role, "token": access_token, "refresh_token": refresh_token}
+    return {"id": user_id, "email": email, "name": data.name, "role": "attendee", "token": access_token, "refresh_token": refresh_token}
 
 
 @router.post("/login")
-async def login(data: LoginRequest, response: Response, request: Request, db=Depends(get_db)):
+async def login(data: LoginRequest, response: Response, request: Request):
     email = data.email.lower()
     identifier = f"{request.client.host}:{email}"
 
-    # Check brute force
-    attempts = await db.login_attempts.find_one({"identifier": identifier})
-    if attempts and attempts.get("count", 0) >= 5:
-        lockout_until = attempts.get("locked_until")
-        if lockout_until and datetime.fromisoformat(lockout_until) > datetime.now(timezone.utc):
-            raise HTTPException(status_code=429, detail="Account temporarily locked. Try again later.")
+    async with database.with_admin() as conn:
+        attempts_row = await conn.fetchrow("SELECT count, locked_until FROM login_attempts WHERE identifier = $1", identifier)
+        if attempts_row and attempts_row["count"] >= 5:
+            lockout_until = attempts_row.get("locked_until")
+            if lockout_until and lockout_until > datetime.now(timezone.utc).isoformat():
+                raise HTTPException(status_code=429, detail="Account temporarily locked. Try again later.")
 
-    user = await db.users.find_one({"email": email})
-    if not user or not verify_password(data.password, user.get("password_hash", "")):
-        await db.login_attempts.update_one(
-            {"identifier": identifier},
-            {"$inc": {"count": 1}, "$set": {"locked_until": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()}},  # noqa: E501
-            upsert=True,
-        )
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        user = await conn.fetchrow("SELECT * FROM users WHERE email = $1", email)
+        if not user or not verify_password(data.password, user["password_hash"] or ""):
+            now = datetime.now(timezone.utc).isoformat()
+            locked_until = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+            await conn.execute(
+                """INSERT INTO login_attempts (identifier, count, locked_until, updated_at)
+                   VALUES ($1, 1, $2, $3)
+                   ON CONFLICT (identifier) DO UPDATE
+                   SET count = login_attempts.count + 1,
+                       locked_until = $2,
+                       updated_at = $3""",
+                identifier, locked_until, now,
+            )
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    await db.login_attempts.delete_one({"identifier": identifier})
-    user_id = str(user["_id"])
+        await conn.execute("DELETE FROM login_attempts WHERE identifier = $1", identifier)
+
+    user = dict(user)
+    user_id = user["id"]
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     set_auth_cookies(response, access_token, refresh_token)
@@ -142,26 +145,25 @@ async def logout(response: Response):
 
 
 @router.get("/me")
-async def me(current_user=Depends(get_current_user), db=Depends(get_db)):
-    org_id = current_user.get("org_id")
+async def me(current_user=Depends(get_current_user)):
+    user = dict(current_user)
+    user.pop("password_hash", None)
+    org_id = user.get("org_id")
     if org_id:
-        try:
-            org = await db.organisations.find_one({"_id": ObjectId(org_id)})
-            if org:
-                b = org.get("branding") or {}
-                current_user["org_branding"] = {
-                    "has_logo": bool(b.get("logo_path")),
-                    "primary_color": b.get("primary_color"),
-                }
-                current_user["org_name"] = org.get("name", "")
-        except Exception:
-            pass
-    return current_user
+        async with database.with_admin() as conn:
+            org = await conn.fetchrow("SELECT name, branding FROM organisations WHERE id = $1", org_id)
+        if org:
+            b = org["branding"] or {}
+            user["org_branding"] = {
+                "has_logo": bool(b.get("logo_path")),
+                "primary_color": b.get("primary_color"),
+            }
+            user["org_name"] = org["name"]
+    return user
 
 
 @router.post("/refresh")
-async def refresh_token(request: Request, response: Response, db=Depends(get_db)):
-    # Accept refresh token from cookie OR Authorization header (for non-cookie clients)
+async def refresh_token(request: Request, response: Response):
     token = request.cookies.get("refresh_token")
     if not token:
         auth_header = request.headers.get("Authorization", "")
@@ -173,16 +175,17 @@ async def refresh_token(request: Request, response: Response, db=Depends(get_db)
         payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Invalid token type")
-        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        async with database.with_admin() as conn:
+            user = await conn.fetchrow("SELECT id, email, is_active FROM users WHERE id = $1", payload["sub"])
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
-        if not user.get("is_active", True):
+        if not user["is_active"]:
             raise HTTPException(status_code=401, detail="Account is deactivated")
-        user_id = str(user["_id"])
+        user_id = user["id"]
         new_access = create_access_token(user_id, user["email"])
         new_refresh = create_refresh_token(user_id)
-        response.set_cookie("access_token", new_access, httponly=True, secure=True, samesite="lax", max_age=86400, path="/")  # noqa: E501
-        response.set_cookie("refresh_token", new_refresh, httponly=True, secure=True, samesite="lax", max_age=604800, path="/")  # noqa: E501
+        response.set_cookie("access_token", new_access, httponly=True, secure=True, samesite="lax", max_age=86400, path="/")
+        response.set_cookie("refresh_token", new_refresh, httponly=True, secure=True, samesite="lax", max_age=604800, path="/")
         return {"access_token": new_access, "refresh_token": new_refresh, "message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
@@ -198,39 +201,36 @@ class ResetPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password")
-async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_db)):
+async def forgot_password(data: ForgotPasswordRequest):
     email = data.email.lower()
-    user = await db.users.find_one({"email": email})
-    # Always return success to prevent email enumeration
-    if not user:
-        return {"message": "If that email exists, a reset link has been sent."}
+    async with database.with_admin() as conn:
+        user = await conn.fetchrow("SELECT id FROM users WHERE email = $1", email)
+        if not user:
+            return {"message": "If that email exists, a reset link has been sent."}
 
-    token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        token = secrets.token_urlsafe(32)
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
 
-    await db.password_reset_tokens.delete_many({"email": email})
-    await db.password_reset_tokens.insert_one({
-        "token": token,
-        "email": email,
-        "expires_at": expires_at,
-        "used": False,
-    })
+        await conn.execute("DELETE FROM password_reset_tokens WHERE email = $1", email)
+        await conn.execute(
+            "INSERT INTO password_reset_tokens (token, email, expires_at, used) VALUES ($1,$2,$3,$4)",
+            token, email, expires_at, False,
+        )
 
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     reset_link = f"{frontend_url}/reset-password?token={token}"
 
     resend.api_key = os.environ.get("RESEND_API_KEY", "")
-    sender = "Supervision 2.0 <noreply@notify.1two.one>"
     try:
         resend.Emails.send({
-            "from": f"Supervision 2 <{sender}>",
+            "from": "Supervision 2 <noreply@notify.1two.one>",
             "to": [email],
             "subject": "Reset your password",
             "html": (
                 "<div style='font-family:Poppins,sans-serif;max-width:480px;margin:0 auto;"
                 "padding:32px 24px;background:#f8fafc;border-radius:12px;'>"
-                f"<h2 style='color:#1E3A8A;font-size:22px;margin-bottom:8px;'>Reset your password</h2>"
-                "<p style='color:#475569;font-size:15px;margin-bottom:24px;'>Click the button below to set a new password. "  # noqa: E501
+                "<h2 style='color:#1E3A8A;font-size:22px;margin-bottom:8px;'>Reset your password</h2>"
+                "<p style='color:#475569;font-size:15px;margin-bottom:24px;'>Click the button below to set a new password. "
                 "This link expires in <strong>1 hour</strong>.</p>"
                 f"<a href='{reset_link}' style='display:inline-block;background:#1E3A8A;color:#fff;"
                 "text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;"
@@ -241,31 +241,29 @@ async def forgot_password(data: ForgotPasswordRequest, db=Depends(get_db)):
             ),
         })
     except Exception:
-        pass  # Don't expose email sending errors
-
+        pass
     return {"message": "If that email exists, a reset link has been sent."}
 
 
 @router.post("/reset-password")
-async def reset_password(data: ResetPasswordRequest, db=Depends(get_db)):
+async def reset_password(data: ResetPasswordRequest):
     validate_password_strength(data.new_password)
+    async with database.with_admin() as conn:
+        record = await conn.fetchrow(
+            "SELECT * FROM password_reset_tokens WHERE token = $1 AND used = FALSE", data.token
+        )
+        if not record:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+        if record["expires_at"] < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(status_code=400, detail="This reset link has expired.")
 
-    record = await db.password_reset_tokens.find_one({"token": data.token, "used": False})
-    if not record:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
-    if record["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="This reset link has expired.")
-
-    await db.users.update_one(
-        {"email": record["email"]},
-        {"$set": {
-            "password_hash": hash_password(data.new_password),
-            "must_change_password": False,
-            "password_changed_at": datetime.now(timezone.utc).isoformat(),
-        }}
-    )
-    await db.password_reset_tokens.update_one({"token": data.token}, {"$set": {"used": True}})
-
+        now = datetime.now(timezone.utc).isoformat()
+        await conn.execute(
+            """UPDATE users SET password_hash=$1, must_change_password=FALSE,
+               password_changed_at=$2 WHERE email=$3""",
+            hash_password(data.new_password), now, record["email"],
+        )
+        await conn.execute("UPDATE password_reset_tokens SET used=TRUE WHERE token=$1", data.token)
     return {"message": "Password updated successfully. You can now log in."}
 
 
@@ -275,80 +273,40 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/change-password")
-async def change_password(data: ChangePasswordRequest, db=Depends(get_db), current_user=Depends(get_current_user)):
-    """Authenticated users change their own password (requires knowing current password)."""
+async def change_password(data: ChangePasswordRequest, current_user=Depends(get_current_user)):
     validate_password_strength(data.new_password)
-
-    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if not verify_password(data.current_password, user.get("password_hash", "")):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if data.current_password == data.new_password:
-        raise HTTPException(status_code=400, detail="New password must be different from the current one")
-
-    await db.users.update_one(
-        {"_id": ObjectId(current_user["id"])},
-        {"$set": {
-            "password_hash": hash_password(data.new_password),
-            "must_change_password": False,
-            "password_changed_at": datetime.now(timezone.utc).isoformat(),
-        }}
-    )
+    async with database.with_admin() as conn:
+        user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", current_user["id"])
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if not verify_password(data.current_password, user["password_hash"] or ""):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        if data.current_password == data.new_password:
+            raise HTTPException(status_code=400, detail="New password must be different from the current one")
+        now = datetime.now(timezone.utc).isoformat()
+        await conn.execute(
+            """UPDATE users SET password_hash=$1, must_change_password=FALSE,
+               password_changed_at=$2 WHERE id=$3""",
+            hash_password(data.new_password), now, current_user["id"],
+        )
     return {"message": "Password changed successfully"}
 
 
-async def seed_admin(db):
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@supervision.com")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!")
-    existing = await db.users.find_one({"email": admin_email})
-    if existing is None:
-        await db.users.insert_one({
-            "email": admin_email,
-            "password_hash": hash_password(admin_password),
-            "name": "Admin",
-            "role": "admin",
-            "is_active": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-    elif not verify_password(admin_password, existing.get("password_hash", "")):
-        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
-
-    # Seed test manager and attendee
-    for test_user in [
-        {"email": "manager@supervision.com", "name": "Test Manager", "role": "manager", "password": "Manager123!"},
-        {"email": "staff@supervision.com", "name": "Test Staff", "role": "attendee", "password": "Staff123!"},
-    ]:
-        exists = await db.users.find_one({"email": test_user["email"]})
-        if not exists:
-            await db.users.insert_one({
-                "email": test_user["email"],
-                "password_hash": hash_password(test_user["password"]),
-                "name": test_user["name"],
-                "role": test_user["role"],
-                "is_active": True,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-
-
-
-# ── Invite acceptance (public endpoints) ─────────────────────────────────────
-
 @router.get("/invite/{token}")
-async def validate_invite(token: str, db=Depends(get_db)):
-    """Check if an invite token is valid and return the associated user/org info."""
+async def validate_invite(token: str):
     now = datetime.now(timezone.utc).isoformat()
-    invite = await db.invitations.find_one({"token": token, "used_at": {"$exists": False}})
-    if not invite:
-        raise HTTPException(status_code=404, detail="Invitation not found or already used")
-    if invite.get("expires_at", "") < now:
-        raise HTTPException(status_code=410, detail="Invitation link has expired")
-
-    user = await db.users.find_one({"_id": ObjectId(invite["user_id"])})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    org = await db.organisations.find_one({"_id": ObjectId(invite["org_id"])})
+    async with database.with_admin() as conn:
+        invite = await conn.fetchrow(
+            "SELECT * FROM invitations WHERE token = $1 AND used_at IS NULL", token
+        )
+        if not invite:
+            raise HTTPException(status_code=404, detail="Invitation not found or already used")
+        if invite["expires_at"] < now:
+            raise HTTPException(status_code=410, detail="Invitation link has expired")
+        user = await conn.fetchrow("SELECT email, name FROM users WHERE id = $1", invite["user_id"])
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        org = await conn.fetchrow("SELECT name FROM organisations WHERE id = $1", invite["org_id"])
     return {
         "email": user["email"],
         "name": user["name"],
@@ -363,39 +321,29 @@ class AcceptInviteRequest(BaseModel):
 
 
 @router.post("/accept-invite")
-async def accept_invite(data: AcceptInviteRequest, response: Response, db=Depends(get_db)):
-    """Claim an invite: set password, activate the user, return a JWT session."""
-    if len(data.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+async def accept_invite(data: AcceptInviteRequest, response: Response):
     validate_password_strength(data.password)
-
     now = datetime.now(timezone.utc).isoformat()
-    invite = await db.invitations.find_one({"token": data.token, "used_at": {"$exists": False}})
-    if not invite:
-        raise HTTPException(status_code=404, detail="Invitation not found or already used")
-    if invite.get("expires_at", "") < now:
-        raise HTTPException(status_code=410, detail="Invitation link has expired")
+    async with database.with_admin() as conn:
+        invite = await conn.fetchrow(
+            "SELECT * FROM invitations WHERE token = $1 AND used_at IS NULL", data.token
+        )
+        if not invite:
+            raise HTTPException(status_code=404, detail="Invitation not found or already used")
+        if invite["expires_at"] < now:
+            raise HTTPException(status_code=410, detail="Invitation link has expired")
+        user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", invite["user_id"])
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
 
-    user = await db.users.find_one({"_id": ObjectId(invite["user_id"])})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        name = data.name.strip() or user["name"]
+        await conn.execute(
+            """UPDATE users SET password_hash=$1, name=$2, is_active=TRUE,
+               must_change_password=FALSE WHERE id=$3""",
+            hash_password(data.password), name, invite["user_id"],
+        )
+        await conn.execute("UPDATE invitations SET used_at=$1 WHERE token=$2", now, data.token)
 
-    # Activate user with the chosen password; user chose this password, no force-change needed
-    name = data.name.strip() or user["name"]
-    await db.users.update_one(
-        {"_id": ObjectId(invite["user_id"])},
-        {"$set": {
-            "password_hash": hash_password(data.password),
-            "name": name,
-            "is_active": True,
-            "must_change_password": False,
-        }}
-    )
-
-    # Mark invite as used (single-use)
-    await db.invitations.update_one({"token": data.token}, {"$set": {"used_at": now}})
-
-    # Return the same shape as /login so the frontend can log in immediately
     user_id = invite["user_id"]
     email = user["email"]
     access_token = create_access_token(user_id, email)
