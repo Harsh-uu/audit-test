@@ -382,9 +382,9 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
         async with database.with_org(org_id) as conn:
             await conn.execute(
                 """UPDATE meeting_prep
-                   SET sections=$1::jsonb, gen_status=$2, generated_at=$3, updated_at=$3
+                   SET sections=$1, gen_status=$2, generated_at=$3, updated_at=$3
                    WHERE meeting_id=$4""",
-                json.dumps(result.get("sections", [])),
+                result.get("sections", []),
                 result.get("gen_status", "done"),
                 now, meeting_id,
             )
@@ -425,10 +425,10 @@ async def generate_prep(
         if existing:
             await conn.execute(
                 """UPDATE meeting_prep
-                   SET focus_topic=$1, included_source_ids=$2::jsonb, gen_status='generating', updated_at=$3
+                   SET focus_topic=$1, included_source_ids=$2, gen_status='generating', updated_at=$3
                    WHERE meeting_id=$4""",
                 focus_topic,
-                json.dumps(included_source_ids if included_source_ids is not None else []),
+                included_source_ids if included_source_ids is not None else [],
                 now, meeting_id,
             )
         else:
@@ -440,8 +440,8 @@ async def generate_prep(
                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)""",
                 prep_id, meeting_id, org_id, current_user["id"],
                 focus_topic,
-                json.dumps(included_source_ids if included_source_ids is not None else []),
-                "generating", False, "[]", "{}", now,
+                included_source_ids if included_source_ids is not None else [],
+                "generating", False, [], {}, now,
             )
 
     background_tasks.add_task(_run_generate_prep, meeting_id, focus_topic, included_source_ids, org_id)
@@ -466,12 +466,12 @@ async def save_prep(meeting_id: str, data: PrepSave, current_user=Depends(get_cu
         values.append(data.focus_topic)
         idx += 1
     if data.context_source_ids is not None:
-        set_clauses.append(f"included_source_ids=${idx}::jsonb")
-        values.append(json.dumps(data.context_source_ids))
+        set_clauses.append(f"included_source_ids=${idx}")
+        values.append(data.context_source_ids)
         idx += 1
     if data.sections is not None:
-        set_clauses.append(f"sections=${idx}::jsonb")
-        values.append(json.dumps([s.dict() for s in data.sections]))
+        set_clauses.append(f"sections=${idx}")
+        values.append([s.dict() for s in data.sections])
         idx += 1
     if data.shared_with_attendees is not None:
         set_clauses.append(f"shared_with_attendees=${idx}")
@@ -572,7 +572,7 @@ async def carry_forward_missed(meeting_id: str, current_user=Depends(get_current
 
     async with database.with_org(org_id) as conn:
         await conn.execute(
-            "UPDATE analyses SET actions=$1::jsonb WHERE id=$2",
-            json.dumps(all_actions), analysis_id,
+            "UPDATE analyses SET actions=$1 WHERE id=$2",
+            all_actions, analysis_id,
         )
     return {"message": f"{len(new_actions)} action(s) added", "added": len(new_actions)}

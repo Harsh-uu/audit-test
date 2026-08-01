@@ -74,10 +74,10 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
             meeting_id, org_id, data.title, data.date, data.location, data.meeting_type,
             current_user["id"], current_user.get("name", ""),
             data.sign_off_manager_id, manager_name,
-            json.dumps(attendees),
+            attendees,
             current_user.get("team_id"), current_user.get("setting_id"),
             data.schedule_id, "draft",
-            "[]", "[]", 0, "none", now,
+            [], [], 0, "none", now,
         )
 
     return {
@@ -129,7 +129,18 @@ async def list_meetings(current_user=Depends(get_current_user)):
                    ORDER BY created_at DESC LIMIT 500""",
                 user_id,
             )
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        m = dict(r)
+        # Parse JSONB fields that asyncpg may return as strings
+        for field in ("attendees", "recording_events", "paused_periods", "shared_with"):
+            if isinstance(m.get(field), str):
+                try:
+                    m[field] = json.loads(m[field])
+                except Exception:
+                    pass
+        result.append(m)
+    return result
 
 
 @router.get("/{meeting_id}")
@@ -217,7 +228,7 @@ async def update_attendees(meeting_id: str, data: UpdateAttendeesRequest, curren
         attendees = await _resolve_attendees(conn, data.attendee_ids, org_id)
         result = await conn.execute(
             "UPDATE meetings SET attendees=$1, updated_at=$2 WHERE id=$3",
-            json.dumps(attendees), datetime.now(timezone.utc).isoformat(), meeting_id,
+            attendees, datetime.now(timezone.utc).isoformat(), meeting_id,
         )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Meeting not found")

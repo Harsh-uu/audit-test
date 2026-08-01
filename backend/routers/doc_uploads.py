@@ -66,7 +66,7 @@ async def upload_supervision_doc(
                (id, org_id, uploader_id, uploader_name, staff_id, staff_name,
                 filename, label, doc_type, meeting_date, file_ext, size_bytes,
                 status, cqc_mappings, care_cert_mappings, custom_mappings, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)""",
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16::jsonb,$17)""",
             upload_id, org_id,
             current_user["id"], current_user.get("name", ""),
             staff_id, staff["name"],

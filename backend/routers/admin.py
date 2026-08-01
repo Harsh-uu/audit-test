@@ -155,7 +155,7 @@ async def create_standard(data: CreateStandardRequest, current_user=Depends(get_
         await conn.execute(
             """INSERT INTO standards_entries (id, type, reference, name, description, keywords, source,
                is_active, is_system, org_id, created_at, created_by)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)""",
+               VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12)""",
             std_id, data.type, data.reference, data.name, data.description,
             json.dumps(data.keywords), data.source or "", True, False, org_id, now, current_user["id"],
         )
@@ -245,7 +245,7 @@ async def parse_document_background(doc_id: str, file_data: bytes, filename: str
         async with database.with_org(org_id) as conn:
             await conn.execute(
                 """UPDATE standards_documents SET parse_status='parsed', extracted_text=$1,
-                   document_summary=$2, extracted_criteria=$3, criteria_count=$4, parsed_at=$5 WHERE id=$6""",
+                   document_summary=$2, extracted_criteria=$3::jsonb, criteria_count=$4, parsed_at=$5 WHERE id=$6""",
                 text[:5000], doc_summary, json.dumps(criteria), len(criteria),
                 datetime.now(timezone.utc).isoformat(), doc_id,
             )
@@ -313,7 +313,7 @@ async def rescan_meetings_background(doc_id: str, org_id: str):
             if new_mappings:
                 async with database.with_org(org_id) as conn:
                     await conn.execute(
-                        "UPDATE analyses SET custom_mappings=$1 WHERE id=$2",
+                        "UPDATE analyses SET custom_mappings=$1::jsonb WHERE id=$2",
                         json.dumps(custom_mappings + new_mappings), analysis["id"],
                     )
                 updated += 1
@@ -355,8 +355,8 @@ async def save_template(request: Request, current_user=Depends(get_current_user)
     }
     async with database.with_admin() as conn:
         await conn.execute(
-            """INSERT INTO settings (id, org_id, data) VALUES ($1,$2,$3)
-               ON CONFLICT (id) DO UPDATE SET data=$3""",
+            """INSERT INTO settings (id, org_id, data) VALUES ($1,$2,$3::jsonb)
+               ON CONFLICT (id) DO UPDATE SET data=$3::jsonb""",
             key, org_id, json.dumps(payload),
         )
     return {"message": "Template saved", "steps": data.get("steps", [])}

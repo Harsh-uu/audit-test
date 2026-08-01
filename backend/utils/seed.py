@@ -88,10 +88,31 @@ CARE_CERT_STANDARDS = [
 
 async def seed_standards():
     """Insert CQC regulations, quality statements, and Care Certificate standards (idempotent)."""
+    import json as _json
+
     async with database.with_admin() as conn:
         count = await conn.fetchval("SELECT COUNT(*) FROM standards_entries WHERE is_system = TRUE")
         if count and count > 0:
-            logger.info(f"Standards already seeded ({count} entries) — skipping")
+            # One-time fix: check if JSONB fields were double-encoded (sub_outcomes stored as string)
+            sample = await conn.fetchrow(
+                "SELECT sub_outcomes FROM standards_entries WHERE is_system = TRUE LIMIT 1"
+            )
+            if sample and isinstance(sample["sub_outcomes"], str):
+                logger.info("Detected double-encoded JSONB in standards — repairing…")
+                rows = await conn.fetch(
+                    "SELECT id, keywords, sub_outcomes, key_questions FROM standards_entries WHERE is_system = TRUE"
+                )
+                for row in rows:
+                    kw = _json.loads(row["keywords"]) if isinstance(row["keywords"], str) else (row["keywords"] or [])
+                    so = _json.loads(row["sub_outcomes"]) if isinstance(row["sub_outcomes"], str) else (row["sub_outcomes"] or [])
+                    kq = _json.loads(row["key_questions"]) if isinstance(row["key_questions"], str) else (row["key_questions"] or [])
+                    await conn.execute(
+                        "UPDATE standards_entries SET keywords=$1, sub_outcomes=$2, key_questions=$3 WHERE id=$4",
+                        kw, so, kq, row["id"],
+                    )
+                logger.info("JSONB repair complete for standards_entries")
+            else:
+                logger.info(f"Standards already seeded ({count} entries) — skipping")
             return
 
         now = datetime.now(timezone.utc).isoformat()
@@ -151,7 +172,7 @@ async def seed_standards():
                 """INSERT INTO standards_entries
                    (id, org_id, type, reference, name, description, keywords, sub_outcomes,
                     key_questions, quality_statement, source, is_active, is_system, created_at)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14)
                    ON CONFLICT (id) DO NOTHING""",
                 e["id"], None, e["type"], e["reference"], e["name"], e["description"],
                 json.dumps(e["keywords"]), json.dumps(e["sub_outcomes"]),
@@ -196,7 +217,8 @@ async def seed_default_org():
                 org_id, "Test Company", "test-company", "active", "{}", now,
             )
             logger.info(f"Default org 'Test Company' created: {org_id}")
-        return org["id"] if org else None
+            return org_id
+        return org["id"]
 
 
 async def seed_all():
