@@ -744,6 +744,12 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
                 })
 
     # ── 2. AI scan for names and sensitive context ────────────────────────
+    # Scans the FULL transcript. GPT-4o supports 128K tokens (~500K chars),
+    # so even a 3-hour meeting fits in a single call. For extreme outliers
+    # we chunk at 40,000 chars and merge results.
+    _AI_CHUNK = 40_000   # chars per chunk — covers ~50 min of speech
+    _AI_OVERLAP = 300    # overlap to catch names near a boundary
+
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if api_key and transcript_text.strip():
         participant_names: list = []
@@ -758,43 +764,63 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
         if participant_names:
             participant_note = f"\n\nMEETING PARTICIPANTS (do NOT flag these): {', '.join(participant_names)}"
 
-        user_prompt = (
-            f"Scan this supervision transcript for third-party PII:{participant_note}\n\n"
-            f"TRANSCRIPT:\n{transcript_text[:8000]}"
-        )
+        # Build list of chunks (single chunk for most meetings)
+        if len(transcript_text) <= _AI_CHUNK:
+            chunks = [transcript_text]
+        else:
+            chunks = []
+            start = 0
+            while start < len(transcript_text):
+                end = min(start + _AI_CHUNK, len(transcript_text))
+                # Break at a word boundary so we don't split mid-name
+                if end < len(transcript_text):
+                    wb = transcript_text.rfind(" ", start + _AI_CHUNK // 2, end)
+                    if wb > 0:
+                        end = wb
+                chunks.append(transcript_text[start:end])
+                start = max(start + 1, end - _AI_OVERLAP)
 
-        try:
-            chat = LlmChat(
-                api_key=api_key,
-                session_id=f"pii_scan_{uuid.uuid4()}",
-                system_message=PII_SCAN_SYSTEM_PROMPT,
-            ).with_model("openai", "gpt-4o")
+        total_chunks = len(chunks)
+        from emergentintegrations.llm.chat import TextDelta, StreamDone  # noqa: E402
 
-            full_response = ""
-            async for event in chat.stream_message(UserMessage(text=user_prompt)):
-                from emergentintegrations.llm.chat import TextDelta, StreamDone
-                if isinstance(event, TextDelta):
-                    full_response += event.content
-                elif isinstance(event, StreamDone):
-                    break
+        for chunk_idx, chunk_text in enumerate(chunks):
+            chunk_label = f" (part {chunk_idx + 1} of {total_chunks})" if total_chunks > 1 else ""
+            user_prompt = (
+                f"Scan this supervision transcript for third-party PII:{participant_note}\n\n"
+                f"TRANSCRIPT{chunk_label}:\n{chunk_text}"
+            )
 
-            text_resp = full_response.strip()
-            if text_resp.startswith("```"):
-                lines = text_resp.split("\n")
-                text_resp = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+            try:
+                chat = LlmChat(
+                    api_key=api_key,
+                    session_id=f"pii_scan_{uuid.uuid4()}",
+                    system_message=PII_SCAN_SYSTEM_PROMPT,
+                ).with_model("openai", "gpt-4o")
 
-            ai_flags = json.loads(text_resp)
-            if isinstance(ai_flags, list):
-                for flag in ai_flags:
-                    original = flag.get("original", "").strip()
-                    if original and original not in seen_originals:
-                        seen_originals.add(original)
-                        flag["id"] = str(uuid.uuid4())[:8]
-                        flag["source"] = "ai"
-                        flags.append(flag)
-        except Exception as e:
-            logger.error(f"AI PII scan failed: {e}")
-            # Return regex-only results on AI failure
+                full_response = ""
+                async for event in chat.stream_message(UserMessage(text=user_prompt)):
+                    if isinstance(event, TextDelta):
+                        full_response += event.content
+                    elif isinstance(event, StreamDone):
+                        break
+
+                text_resp = full_response.strip()
+                if text_resp.startswith("```"):
+                    lines = text_resp.split("\n")
+                    text_resp = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+                ai_flags = json.loads(text_resp)
+                if isinstance(ai_flags, list):
+                    for flag in ai_flags:
+                        original = flag.get("original", "").strip()
+                        if original and original not in seen_originals:
+                            seen_originals.add(original)
+                            flag["id"] = str(uuid.uuid4())[:8]
+                            flag["source"] = "ai"
+                            flags.append(flag)
+            except Exception as e:
+                logger.error(f"AI PII scan failed (chunk {chunk_idx + 1}/{total_chunks}): {e}")
+                # Continue to next chunk — regex results still returned
 
     return flags
 

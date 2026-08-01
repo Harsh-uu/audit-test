@@ -353,3 +353,5 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
   - `portfolio.py get_portfolio + export_portfolio_pdf`: 403 if scoped manager tries to view out-of-scope staff.
   - `Dashboard.js`: split meetings into active/historical; collapsible "Historical Meetings" section with greyed-out styling and Archive icon.
   - Bug fixes: `auth.py /me` JSONB branding parse 500 fixed; `org_settings.org_id` UNIQUE constraint dropped (was preventing multi-branch orgs).
+
+- **2026-Aug (Bug Fix — PII scan truncation)** — `scan_pii_in_transcript` in `utils/ai.py` was truncating the transcript to the first 8,000 chars (`[:8000]`) before sending to GPT-4o, covering only ~10-12 minutes of speech. Regex scan (phones, postcodes, NHS/NI, emails) was already running on the full transcript. Fixed: removed truncation; now sends the full text in a single GPT-4o call (128K token context window handles even a 3-hour session). Safety-net chunking added at 40,000 chars for extreme outliers (splits at word boundaries, 300-char overlap, results deduplicated).
