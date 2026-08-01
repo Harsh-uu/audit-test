@@ -278,11 +278,13 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
         raise ValueError("ASSEMBLYAI_API_KEY not configured")
 
     aai.settings.api_key = api_key
+    aai.settings.base_url = "https://api.eu.assemblyai.com"  # EU data residency (Dublin)
+
     config = aai.TranscriptionConfig(
         speaker_labels=True,
         speakers_expected=speakers_expected if speakers_expected and speakers_expected >= 2 else None,
-        speech_models=["universal-3-pro"],  # AssemblyAI medical-capable model
-        domain="medical-v1",               # Activates medical mode (care/clinical vocab)
+        speech_models=["universal-3-5-pro", "universal-2"],  # Latest EU-available models
+        language_detection=True,
         content_safety=True,               # Flag violent/threatening/sensitive content
         word_boost=[                        # Reinforce UK adult social care terminology
             "CQC", "safeguarding", "MCA", "DoLS", "LPS", "Care Certificate",
