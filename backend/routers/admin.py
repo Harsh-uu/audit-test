@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Backgro
 from pydantic import BaseModel, EmailStr
 from fastapi.responses import Response as _Response
 from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
-from utils.storage import put_object
+from utils.supabase_storage import put_document
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 import database
 
@@ -220,7 +220,7 @@ async def upload_document(
 
     storage_path = f"standards/docs/{uuid.uuid4()}.{file_ext}"
     try:
-        result = put_object(storage_path, file_data, file.content_type or "application/octet-stream")
+        result = await put_document(storage_path, file_data, file.content_type or "application/octet-stream")
         actual_path = result.get("path", storage_path)
     except Exception as e:
         logger.error(f"Document storage failed: {e}")

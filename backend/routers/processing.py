@@ -6,7 +6,7 @@ import uuid
 import logging
 import os
 from deps import get_current_user
-from utils.storage import put_object
+from utils.supabase_storage import put_audio, get_audio
 from utils.ai import analyze_meeting, diarize_transcript, transcribe_with_assemblyai, map_speaker_numbers_to_names
 from utils.job_worker import enqueue_job
 import database
@@ -96,8 +96,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
         attendee_count = len(meeting.get("attendees") or []) or None
         meeting_org_id = meeting.get("org_id")
 
-        from utils.storage import get_object
-        audio_data, _ = get_object(audio_path)
+        audio_data, _ = await get_audio(audio_path)
 
         logger.info(f"Starting transcription for meeting {meeting_id}")
         assemblyai_key = os.environ.get("ASSEMBLYAI_API_KEY")
@@ -314,7 +313,7 @@ async def upload_audio(
 
     storage_path = f"{meeting_id}/audio_{uuid.uuid4()}.{file_ext}"
     try:
-        result = put_object(storage_path, audio_data, content_type)
+        result = await put_audio(storage_path, audio_data, content_type)
         actual_path = result.get("path", storage_path)
     except Exception as e:
         logger.error(f"Storage upload failed: {e}")
