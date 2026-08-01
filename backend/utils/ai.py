@@ -314,9 +314,6 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
     plain_text = transcript.text or ""
     logger.info(f"AssemblyAI transcription complete: {len(plain_text)} chars")
 
-    plain_text = transcript.text or ""
-    logger.info(f"AssemblyAI transcription complete: {len(plain_text)} chars")
-
     # --- Content safety & hallucination checks ---
     warnings = _check_transcript_safety(plain_text, transcript)
     if warnings:
