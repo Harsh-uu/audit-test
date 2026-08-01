@@ -301,7 +301,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - **2026-Jul** — Schedule pills right-aligned in Schedules page; status pills right-aligned in Dashboard meeting cards
 
 ## Changelog (Latest)
-- **2026-Aug (Email OTP 2FA)** — Mandatory for super_admin, optional (toggleable) for admin/manager.
+- **2026-Aug (OpenAI Direct — Data Governance)** — Migrated all AI calls from Emergent Universal Key (`emergentintegrations` library) to native `openai` SDK (v1.99.9) using user's own `OPENAI_API_KEY`. Data now flows directly from app server → OpenAI; no third-party proxy. All 12 call-sites in `utils/ai.py` updated: `AsyncOpenAI` client with `_openai_chat()` helper. Whisper also migrated to `client.audio.transcriptions.create()`. **TODO: Revisit reasoning_effort levels and prompt quality once user confirms.** — Mandatory for super_admin, optional (toggleable) for admin/manager.
   - `login` returns `{ requires_mfa: true, mfa_session, email }` when MFA required.
   - `POST /api/auth/verify-mfa` — validates bcrypt-hashed OTP (10-min expiry, 5-attempt lockout), issues full JWT.
   - `POST /api/auth/request-mfa-code` — sends fresh OTP to email (for settings toggle flow).

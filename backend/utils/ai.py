@@ -5,11 +5,29 @@ import uuid
 import asyncio
 import subprocess
 import tempfile
-from emergentintegrations.llm.chat import LlmChat, UserMessage
-from emergentintegrations.llm.openai import OpenAISpeechToText
+from openai import AsyncOpenAI
 from deepgram import DeepgramClient
 
 logger = logging.getLogger(__name__)
+
+
+async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str = None) -> str:
+    """Single-shot OpenAI chat completion — direct to OpenAI, no proxy."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not set")
+    client = AsyncOpenAI(api_key=api_key)
+    messages: list = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": user})
+    kwargs: dict = {"model": model, "messages": messages}
+    if reasoning_effort and model.startswith("o"):
+        kwargs["reasoning_effort"] = reasoning_effort
+    else:
+        kwargs["temperature"] = 0.3
+    response = await client.chat.completions.create(**kwargs)
+    return (response.choices[0].message.content or "").strip()
 
 WHISPER_MAX_BYTES = 24 * 1024 * 1024  # 24 MB — 1 MB buffer below Whisper's 25 MB hard limit
 
@@ -451,8 +469,7 @@ async def map_speaker_numbers_to_names(
     meeting_type: str = "Supervision",
 ) -> str:
     """Use GPT-4o to replace 'Speaker 0/1/2' labels with real participant names."""
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key or not numbered_speaker_text.strip():
+    if not numbered_speaker_text.strip():
         return numbered_speaker_text
 
     participants = []
@@ -474,21 +491,7 @@ async def map_speaker_numbers_to_names(
     )
 
     try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"mapspk_{uuid.uuid4()}",
-            system_message=SPEAKER_MAPPING_SYSTEM_PROMPT,
-        ).with_model("openai", "gpt-4o")
-
-        full_response = ""
-        async for event in chat.stream_message(UserMessage(text=user_prompt)):
-            from emergentintegrations.llm.chat import TextDelta, StreamDone
-            if isinstance(event, TextDelta):
-                full_response += event.content
-            elif isinstance(event, StreamDone):
-                break
-
-        result = full_response.strip()
+        result = await _openai_chat("gpt-4o", SPEAKER_MAPPING_SYSTEM_PROMPT, user_prompt)
         return result if result else numbered_speaker_text
     except Exception as e:
         logger.error(f"Speaker name mapping failed: {e}")
@@ -502,8 +505,7 @@ async def diarize_transcript(
     meeting_type: str = "Supervision",
 ) -> str:
     """Use GPT-4o to add speaker labels to a Whisper transcript. Returns None on failure."""
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key or not transcript_text.strip():
+    if not transcript_text.strip():
         return None
 
     # Build a named participant list for the prompt
@@ -534,21 +536,7 @@ async def diarize_transcript(
     )
 
     try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"diarize_{uuid.uuid4()}",
-            system_message=DIARIZATION_SYSTEM_PROMPT,
-        ).with_model("openai", "gpt-4o")
-
-        full_response = ""
-        async for event in chat.stream_message(UserMessage(text=user_prompt)):
-            from emergentintegrations.llm.chat import TextDelta, StreamDone
-            if isinstance(event, TextDelta):
-                full_response += event.content
-            elif isinstance(event, StreamDone):
-                break
-
-        result = full_response.strip()
+        result = await _openai_chat("gpt-4o", DIARIZATION_SYSTEM_PROMPT, user_prompt)
         return result if result else None
     except Exception as e:
         logger.error(f"Speaker diarization failed: {e}")
@@ -556,9 +544,9 @@ async def diarize_transcript(
 
 
 async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> str:
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("EMERGENT_LLM_KEY not set")
+        raise ValueError("OPENAI_API_KEY not set")
 
     # Compress large files to avoid Whisper's 25 MB limit.
     # 30 min WebM ≈ 28 MB → 32 kbps mono MP3 ≈ 7 MB.
@@ -579,44 +567,25 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> s
         tmp_path = tmp.name
 
     try:
-        stt = OpenAISpeechToText(api_key=api_key)
+        client = AsyncOpenAI(api_key=api_key)
         with open(tmp_path, "rb") as audio_file:
-            response = await stt.transcribe(
-                file=audio_file,
+            response = await client.audio.transcriptions.create(
                 model="whisper-1",
-                response_format="json",
+                file=audio_file,
                 language="en",
                 prompt=CARE_TRANSCRIPTION_PROMPT,
             )
-        if hasattr(response, "text"):
-            return response.text
-        return str(response)
+        return response.text
     finally:
         os.unlink(tmp_path)
 
 
 async def extract_document_criteria(text: str, doc_name: str) -> dict:
     """Ask GPT-4o to extract a structured list of criteria from a document."""
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise ValueError("EMERGENT_LLM_KEY not set")
-
     truncated = text[:8000]  # Stay well within token budget
     user_prompt = f"Document name: {doc_name}\n\nDocument content:\n{truncated}"
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"docparse_{uuid.uuid4()}",
-        system_message=CRITERIA_EXTRACTION_PROMPT,
-    ).with_model("openai", "gpt-4o")
-
-    full_response = ""
-    async for event in chat.stream_message(UserMessage(text=user_prompt)):
-        from emergentintegrations.llm.chat import TextDelta, StreamDone
-        if isinstance(event, TextDelta):
-            full_response += event.content
-        elif isinstance(event, StreamDone):
-            break
+    full_response = await _openai_chat("gpt-4o", CRITERIA_EXTRACTION_PROMPT, user_prompt)
 
     try:
         text_resp = full_response.strip()
@@ -630,10 +599,7 @@ async def extract_document_criteria(text: str, doc_name: str) -> dict:
 
 
 async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
-    """Light GPT-4o call: map evidence from transcript against a single document's criteria only."""
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        return []
+    """Light o4-mini call: map evidence from transcript against a single document's criteria only."""
     doc_id = str(doc.get("id", doc.get("_id", "")))
     doc_name = doc.get("label") or doc.get("filename", "Unknown")
     criteria = doc.get("extracted_criteria", [])
@@ -645,14 +611,8 @@ async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
 {"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "likely_evidence|needs_review|not_enough_evidence"}]}
 Only include criteria with actual evidence. Return empty mappings array if nothing found."""
 
-    chat = LlmChat(api_key=api_key, session_id=f"rescan_{uuid.uuid4()}", system_message=system).with_model("openai", "o4-mini").with_params(reasoning_effort="high")
-    full = ""
-    async for event in chat.stream_message(UserMessage(text=f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\nTranscript:\n{transcript_text[:5000]}")):
-        from emergentintegrations.llm.chat import TextDelta, StreamDone
-        if isinstance(event, TextDelta):
-            full += event.content
-        elif isinstance(event, StreamDone):
-            break
+    chat = await _openai_chat("o4-mini", system, f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\nTranscript:\n{transcript_text[:5000]}", reasoning_effort="high")
+    full = chat
     try:
         txt = full.strip()
         if txt.startswith("```"):
@@ -750,8 +710,7 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
     _AI_CHUNK = 40_000   # chars per chunk — covers ~50 min of speech
     _AI_OVERLAP = 300    # overlap to catch names near a boundary
 
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if api_key and transcript_text.strip():
+    if transcript_text.strip():
         participant_names: list = []
         if manager_name:
             participant_names.append(manager_name)
@@ -781,7 +740,6 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
                 start = max(start + 1, end - _AI_OVERLAP)
 
         total_chunks = len(chunks)
-        from emergentintegrations.llm.chat import TextDelta, StreamDone  # noqa: E402
 
         for chunk_idx, chunk_text in enumerate(chunks):
             chunk_label = f" (part {chunk_idx + 1} of {total_chunks})" if total_chunks > 1 else ""
@@ -791,19 +749,7 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
             )
 
             try:
-                chat = LlmChat(
-                    api_key=api_key,
-                    session_id=f"pii_scan_{uuid.uuid4()}",
-                    system_message=PII_SCAN_SYSTEM_PROMPT,
-                ).with_model("openai", "gpt-4o")
-
-                full_response = ""
-                async for event in chat.stream_message(UserMessage(text=user_prompt)):
-                    if isinstance(event, TextDelta):
-                        full_response += event.content
-                    elif isinstance(event, StreamDone):
-                        break
-
+                full_response = await _openai_chat("gpt-4o", PII_SCAN_SYSTEM_PROMPT, user_prompt)
                 text_resp = full_response.strip()
                 if text_resp.startswith("```"):
                     lines = text_resp.split("\n")
@@ -827,27 +773,8 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
 
 async def generate_meeting_summary(transcript_text: str) -> str:
     """Re-generate just the meeting summary in the new structured format."""
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise ValueError("EMERGENT_LLM_KEY not set")
-
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"summary_{uuid.uuid4()}",
-        system_message=SUMMARY_ONLY_PROMPT,
-    ).with_model("openai", "o4-mini").with_params(reasoning_effort="medium")
-
     user_prompt = f"Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
-
-    full = ""
-    async for event in chat.stream_message(UserMessage(text=user_prompt)):
-        from emergentintegrations.llm.chat import TextDelta, StreamDone
-        if isinstance(event, TextDelta):
-            full += event.content
-        elif isinstance(event, StreamDone):
-            break
-
-    return full.strip()
+    return await _openai_chat("o4-mini", SUMMARY_ONLY_PROMPT, user_prompt, reasoning_effort="medium")
 
 
 DOC_EVIDENCE_SYSTEM_PROMPT = """You are a compliance analysis specialist for UK adult social care providers.
@@ -910,10 +837,6 @@ async def analyze_doc_for_evidence(
     custom_standards: list = None,
 ) -> dict:
     """Map evidence from an uploaded supervision document to CQC/Care Cert/custom standards."""
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise ValueError("EMERGENT_LLM_KEY not set")
-
     cqc_context = "\n".join([
         f"- {s['reference']}: {s['name']}" +
         (f" [Key Questions: {', '.join(s.get('key_questions', []))}]" if s.get('key_questions') else "") +
@@ -958,19 +881,7 @@ CARE CERTIFICATE STANDARDS TO MAP AGAINST:
 
 Provide your analysis as JSON only. Only map regulations/standards where there is actual evidence in the document."""
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"docevidence_{uuid.uuid4()}",
-        system_message=DOC_EVIDENCE_SYSTEM_PROMPT,
-    ).with_model("openai", "o4-mini").with_params(reasoning_effort="high")
-
-    full_response = ""
-    async for event in chat.stream_message(UserMessage(text=user_prompt)):
-        from emergentintegrations.llm.chat import TextDelta, StreamDone
-        if isinstance(event, TextDelta):
-            full_response += event.content
-        elif isinstance(event, StreamDone):
-            break
+    full_response = await _openai_chat("o4-mini", DOC_EVIDENCE_SYSTEM_PROMPT, user_prompt, reasoning_effort="high")
 
     try:
         text_resp = full_response.strip()
@@ -996,10 +907,6 @@ async def analyze_meeting(
     supervision_template: dict = None,
     custom_prompt: str = None,
 ) -> dict:
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise ValueError("EMERGENT_LLM_KEY not set")
-
     # Build standards context — CQC includes key questions; Care Cert includes outcomes
     cqc_context = "\n".join([
         f"- {s['reference']}: {s['name']}" +
@@ -1068,19 +975,7 @@ CARE CERTIFICATE STANDARDS TO MAP AGAINST:
 
 Provide your analysis as JSON. Only map regulations/standards where there is actual evidence in the transcript."""
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"analysis_{uuid.uuid4()}",
-        system_message=ANALYSIS_SYSTEM_PROMPT,
-    ).with_model("openai", "o4-mini").with_params(reasoning_effort="high")
-
-    full_response = ""
-    async for event in chat.stream_message(UserMessage(text=user_prompt)):
-        from emergentintegrations.llm.chat import TextDelta, StreamDone
-        if isinstance(event, TextDelta):
-            full_response += event.content
-        elif isinstance(event, StreamDone):
-            break
+    full_response = await _openai_chat("o4-mini", ANALYSIS_SYSTEM_PROMPT, user_prompt, reasoning_effort="high")
 
     # Parse JSON from response
     try:
@@ -1130,10 +1025,6 @@ async def generate_prep_questions(
     - Grounded in the provided context (previous meetings, JD, values, focus topic)
     Returns: {"sections": [...], "gen_status": "done"}
     """
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise ValueError("EMERGENT_LLM_KEY not set")
-
     # Build context blocks
     prev_context = ""
     if previous_meeting_summaries:
@@ -1254,14 +1145,7 @@ FINAL CHECKS BEFORE GENERATING:
 - The AOB question MUST be grounded in a real theme or concern from the context — identify it now before writing.
 - All questions must be open-ended and behavioural. Generate them now."""
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"prep_{uuid.uuid4().hex[:8]}",
-        system_message=system_prompt,
-    ).with_model("openai", "o4-mini").with_params(reasoning_effort="high")
-
-    response = await chat.send_message(UserMessage(text=user_prompt))
-    full_response = response.text.strip() if hasattr(response, "text") else str(response)
+    full_response = await _openai_chat("o4-mini", system_prompt, user_prompt, reasoning_effort="high")
 
     # Strip markdown fences
     if "```" in full_response:
@@ -1297,9 +1181,6 @@ async def check_prep_coverage(transcript_text: str, questions: list) -> dict:
     questions: list of {"id": str, "text": str}
     Returns: {"results": {question_id: {"status": "covered"|"partial"|"missed", "evidence": str}}, "checked_at": str}
     """
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        return {"results": {}, "checked_at": None}
     if not questions or not transcript_text:
         return {"results": {}, "checked_at": None}
 
@@ -1328,14 +1209,7 @@ TRANSCRIPT (first 6000 chars):
 Assess each question's coverage in the transcript. Return JSON only."""
 
     try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"cov_{uuid.uuid4().hex[:8]}",
-            system_message=system_prompt,
-        ).with_model("openai", "gpt-4o")
-
-        response = await chat.send_message(UserMessage(text=user_prompt))
-        full_response = response.text.strip() if hasattr(response, "text") else str(response)
+        full_response = await _openai_chat("gpt-4o", system_prompt, user_prompt)
 
         if "```" in full_response:
             import re as _re
@@ -1353,13 +1227,8 @@ Assess each question's coverage in the transcript. Return JSON only."""
         return {"results": {}, "checked_at": None}
 
 
-
 async def generate_risk_suggestions(risk_text: str, severity: str, transcript_text: str) -> dict:
     """Generate a transcript excerpt and resolution suggestions for an existing risk."""
-    api_key = os.environ.get("LLM_API_KEY", "")
-    if not api_key:
-        return {"transcript_excerpt": "", "suggested_resolutions": []}
-
     system_prompt = """You are an expert UK adult social care safeguarding and risk management advisor.
 Given a risk or concern identified in a supervision meeting, your job is to:
 1. Find the most relevant short excerpt from the transcript that evidences this risk (max 60 words, exact quote)
@@ -1382,14 +1251,7 @@ Transcript:
 Find the transcript excerpt evidencing this risk and provide resolution suggestions."""
 
     try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"risk_{uuid.uuid4().hex[:8]}",
-            system_message=system_prompt,
-        ).with_model("openai", "gpt-4o")
-        msg = UserMessage(text=user_prompt)
-        response = await chat.send_message(msg)
-        full_response = response.text.strip()
+        full_response = await _openai_chat("gpt-4o", system_prompt, user_prompt)
         if "```" in full_response:
             import re as _re
             m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", full_response)
