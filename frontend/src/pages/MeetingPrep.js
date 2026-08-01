@@ -298,9 +298,9 @@ export default function MeetingPrep() {
       if (p.focus_topic !== undefined) setFocusTopic(p.focus_topic || "");
       if (p.included_source_ids?.length) setIncludedSourceIds(p.included_source_ids);
       setFocusTopics(ftRes.data || []);
-      // Default focus topic from org if none set
+      // Default focus topic from org if none set on this prep
       if (!p.focus_topic) {
-        const current = (ftRes.data || []).find(t => t.is_current);
+        const current = (ftRes.data || []).find(t => t.effective_current || t.is_current);
         if (current) setFocusTopic(current.topic);
       }
     } catch {
@@ -353,9 +353,8 @@ export default function MeetingPrep() {
   // ── Helpers ────────────────────────────────────────────────────────────────
   const allSources = context?.sources || [];
   const effectiveIds = includedSourceIds || allSources.map(s => s.source_id);
-  const isLocked = !!focusTopics.find(t => t.is_current && t.topic === focusTopic);
-
-  const handleSourceToggle = (sid) => {
+  const currentFocusTopic = focusTopics.find(t => t.effective_current || t.is_current);
+  const isLocked = !!currentFocusTopic && currentFocusTopic.topic === focusTopic;
     setIncludedSourceIds(prev => {
       const current = prev || allSources.map(s => s.source_id);
       return current.includes(sid) ? current.filter(id => id !== sid) : [...current, sid];
@@ -532,18 +531,26 @@ export default function MeetingPrep() {
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Target className="w-4 h-4 text-indigo-600" />
                 <span className="text-sm font-semibold text-gray-800">Focus Topic</span>
+                {isLocked && (
+                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">Org-wide</span>
+                )}
               </div>
               <div className="flex-1 min-w-48">
                 <input
                   type="text"
                   value={focusTopic}
-                  onChange={e => setFocusTopic(e.target.value)}
+                  onChange={e => !isLocked && setFocusTopic(e.target.value)}
+                  readOnly={isLocked}
                   placeholder="e.g. Medication management, Safeguarding…"
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className={`w-full text-sm border rounded-lg px-3 py-2 focus:outline-none ${
+                    isLocked
+                      ? "border-indigo-200 bg-indigo-50 text-indigo-800 cursor-default"
+                      : "border-gray-300 focus:ring-2 focus:ring-indigo-500"
+                  }`}
                   data-testid="focus-topic-input"
                 />
               </div>
-              {currentFocusTopic && currentFocusTopic.topic !== focusTopic && (
+              {!isLocked && currentFocusTopic && currentFocusTopic.topic !== focusTopic && (
                 <button
                   onClick={() => setFocusTopic(currentFocusTopic.topic)}
                   className="text-xs px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 whitespace-nowrap"
@@ -551,7 +558,7 @@ export default function MeetingPrep() {
                   Use org focus: <span className="font-medium">{currentFocusTopic.topic}</span>
                 </button>
               )}
-              {focusTopics.filter(t => !t.is_current).slice(0, 3).map(t => (
+              {!isLocked && focusTopics.filter(t => !(t.effective_current || t.is_current)).slice(0, 3).map(t => (
                 <button key={t.id} onClick={() => setFocusTopic(t.topic)} className="text-xs text-indigo-500 hover:underline">
                   {t.topic}
                 </button>
