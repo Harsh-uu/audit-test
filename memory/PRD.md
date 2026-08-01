@@ -301,6 +301,20 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - **2026-Jul** — Schedule pills right-aligned in Schedules page; status pills right-aligned in Dashboard meeting cards
 
 ## Changelog (Latest)
+- **2026-Aug (Email OTP 2FA)** — Mandatory for super_admin, optional (toggleable) for admin/manager.
+  - `login` returns `{ requires_mfa: true, mfa_session, email }` when MFA required.
+  - `POST /api/auth/verify-mfa` — validates bcrypt-hashed OTP (10-min expiry, 5-attempt lockout), issues full JWT.
+  - `POST /api/auth/request-mfa-code` — sends fresh OTP to email (for settings toggle flow).
+  - `POST /api/auth/toggle-mfa` — enables/disables MFA after OTP confirmation.
+  - `/me` strips `mfa_code`, `mfa_code_expires_at`, `mfa_code_attempts` from response; exposes `mfa_enabled`.
+  - Login.js: MFA OTP screen with 6-digit mono input, back-to-sign-in link, auto-focus.
+  - OrgSettings.js: "Security" tab with MFA card — Enable/Disable 2FA with 2-step OTP confirmation.
+  - `init_db.py` updated with MFA columns so fresh setups don't break.
+  - `InspectionPrep.js` duplicate `useNavigate` import fixed.
+
+- **2026-Aug (Date-Range Filter — Team Intelligence)** — From/To date pickers added to Team Intelligence toolbar.
+  - Backend: `GET /api/admin/team-insights` already accepted `date_from`/`date_to` params; query now actually applies them.
+  - Frontend: `dateFrom`/`dateTo` state in `TeamInsights.js`; passed as `date_from`/`date_to` query params. Clear (✕) button shown when either is set.
 - **2026-Jul** — Email sending fully fixed: hardcoded `noreply@notify.1two.one` in `review.py` + `auth.py` (production had stale `noreply@1two.one` env var causing Resend 403). MongoDB migrated to Atlas (AWS Ireland). `FRONTEND_URL` → `https://1two.one`. Email date format humanised. Email Modal shows actual recipient emails + manual override. Attendee emails live-synced from user accounts. Skip button restored on Prep Step 3.
 
 ## Changelog (Continued)
