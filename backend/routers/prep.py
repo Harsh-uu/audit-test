@@ -176,6 +176,10 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
         if a.get("user_id") and a.get("user_id") != manager_id
     ]
 
+    # Safety guard — if no supervisees are set, return no personal documents
+    if not supervisee_ids:
+        logger.warning(f"prep context: meeting {meeting_id} has no supervisees — skipping personal docs")
+
     sources = []
 
     # 1. Previous system supervision meetings for these supervisees
@@ -218,15 +222,17 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
                 ][:10],
             })
 
-    # 2. Uploaded documents for these supervisees
+    # 2. Uploaded documents — strictly scoped to this meeting's supervisees + org
     if supervisee_ids:
         async with database.with_org(org_id) as conn:
             doc_rows = await conn.fetch(
                 """SELECT id, label, filename, doc_type, meeting_date, status, full_text
                    FROM supervision_uploads
-                   WHERE staff_id = ANY($1::text[]) AND status IN ('text_ready','done')
+                   WHERE org_id=$1
+                     AND staff_id = ANY($2::text[])
+                     AND status IN ('text_ready','done')
                    ORDER BY meeting_date DESC LIMIT 10""",
-                supervisee_ids,
+                org_id, supervisee_ids,
             )
         for doc in doc_rows:
             doc = dict(doc)
@@ -354,8 +360,13 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
         if supervisee_ids:
             async with database.with_org(org_id) as conn:
                 upload_rows = await conn.fetch(
-                    "SELECT id, label, doc_type, full_text FROM supervision_uploads WHERE staff_id = ANY($1::text[]) AND status IN ('text_ready','done') ORDER BY meeting_date DESC LIMIT 6",
-                    supervisee_ids,
+                    """SELECT id, label, doc_type, full_text
+                       FROM supervision_uploads
+                       WHERE org_id=$1
+                         AND staff_id = ANY($2::text[])
+                         AND status IN ('text_ready','done')
+                       ORDER BY meeting_date DESC LIMIT 6""",
+                    org_id, supervisee_ids,
                 )
             for doc in upload_rows:
                 doc = dict(doc)

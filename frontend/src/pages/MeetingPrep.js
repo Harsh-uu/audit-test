@@ -362,10 +362,21 @@ export default function MeetingPrep() {
     });
   };
 
-  const superviseeId = context?.supervisees?.[0]?.user_id;
+  const supervisees = context?.supervisees || [];
+  const superviseeId = supervisees[0]?.user_id;
+  const [uploadTargetId, setUploadTargetId] = useState("");
+
+  // When supervisees load, default upload target to the first one
+  React.useEffect(() => {
+    if (supervisees.length > 0 && !uploadTargetId) {
+      setUploadTargetId(supervisees[0].user_id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supervisees.length]);
 
   const handleUploadContext = async () => {
-    if (!uploadFile || !superviseeId) return;
+    const targetId = supervisees.length > 1 ? uploadTargetId : superviseeId;
+    if (!uploadFile || !targetId) return;
     const label = uploadLabel || uploadFile.name;
     // Add optimistic pending entry immediately
     const tempId = `pending_${Date.now()}`;
@@ -379,7 +390,7 @@ export default function MeetingPrep() {
     try {
       const fd = new FormData();
       fd.append("file", uploadFile);
-      fd.append("staff_id", superviseeId);
+      fd.append("staff_id", targetId);
       fd.append("doc_type", uploadDocType);
       fd.append("label", label);
       fd.append("meeting_date", new Date().toISOString().slice(0, 10));
@@ -720,6 +731,21 @@ export default function MeetingPrep() {
                   ) : (
                     <div className="space-y-2">
                       <input type="file" accept=".pdf,.docx" onChange={e => setUploadFile(e.target.files[0] || null)} className="block w-full text-xs text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-indigo-50 file:text-indigo-700" data-testid="upload-context-file" />
+                      {supervisees.length > 1 && (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Uploading for</label>
+                          <select
+                            value={uploadTargetId}
+                            onChange={e => setUploadTargetId(e.target.value)}
+                            className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
+                            data-testid="upload-supervisee-select"
+                          >
+                            {supervisees.map(s => (
+                              <option key={s.user_id} value={s.user_id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <select value={uploadDocType} onChange={e => setUploadDocType(e.target.value)} className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
                         <option value="supervision_record">Previous Supervision Record</option>
                         <option value="job_description">Job Description</option>
