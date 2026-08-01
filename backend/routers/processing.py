@@ -517,9 +517,8 @@ async def retranscribe_meeting(
 
 
 async def _run_retranscribe_background(meeting_id: str, transcript_id: str, storage_path: str, meeting: dict, org_id: str):
-    from utils.storage import get_object
     try:
-        audio_data, _ = get_object(storage_path)
+        audio_data, _ = await get_audio(storage_path)
     except Exception as e:
         logger.error(f"Retranscribe: could not load audio for {meeting_id}: {e}")
         async with database.with_org(org_id) as conn:
