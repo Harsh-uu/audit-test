@@ -7,7 +7,7 @@ import logging
 import os
 from deps import get_current_user
 from utils.storage import put_object
-from utils.ai import transcribe_audio, analyze_meeting, diarize_transcript, transcribe_with_assemblyai, map_speaker_numbers_to_names
+from utils.ai import analyze_meeting, diarize_transcript, transcribe_with_assemblyai, map_speaker_numbers_to_names
 from utils.job_worker import enqueue_job
 import database
 
@@ -110,11 +110,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                     audio_data, speakers_expected=attendee_count
                 )
             except Exception as aai_err:
-                logger.warning(f"AssemblyAI failed ({aai_err}), falling back to Whisper")
-                transcript_text = await transcribe_audio(audio_data)
-                numbered_speaker_text = None
+                logger.error(f"AssemblyAI transcription failed for meeting {meeting_id}: {aai_err}")
+                raise
         else:
-            transcript_text = await transcribe_audio(audio_data)
+            raise ValueError("ASSEMBLYAI_API_KEY not configured — transcription requires AssemblyAI")
 
         logger.info(f"Transcription complete for meeting {meeting_id}: {len(transcript_text)} chars")
 

@@ -29,8 +29,6 @@ async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str
     response = await client.chat.completions.create(**kwargs)
     return (response.choices[0].message.content or "").strip()
 
-WHISPER_MAX_BYTES = 24 * 1024 * 1024  # 24 MB — 1 MB buffer below Whisper's 25 MB hard limit
-
 # UK adult social care terminology — fed to Deepgram nova-3-medical keyterm prompting
 # to reduce misrecognitions on domain-specific language (up to 100 terms supported)
 CARE_KEYTERMS = [
@@ -58,7 +56,7 @@ CARE_KEYTERMS = [
 
 
 def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
-    """Compress audio to 16 kHz mono 32 kbps MP3 — optimal for voice/Whisper, ~7 MB per 30 min."""
+    """Compress audio to 16 kHz mono 32 kbps MP3 — optimal for voice, ~7 MB per 30 min."""
     import imageio_ffmpeg
     ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
     with tempfile.NamedTemporaryFile(suffix=input_suffix, delete=False) as f:
@@ -70,7 +68,7 @@ def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
             [
                 ffmpeg_exe, "-i", inp,
                 "-vn",                 # drop any video stream
-                "-ar", "16000",        # 16 kHz — Whisper's native sample rate
+                "-ar", "16000",        # 16 kHz — optimal for speech recognition
                 "-ac", "1",            # mono
                 "-b:a", "32k",         # 32 kbps bitrate
                 out, "-y", "-loglevel", "error",
@@ -504,7 +502,7 @@ async def diarize_transcript(
     attendee_names: list = None,
     meeting_type: str = "Supervision",
 ) -> str:
-    """Use GPT-4o to add speaker labels to a Whisper transcript. Returns None on failure."""
+    """Use GPT-4o to add speaker labels to an AssemblyAI transcript. Returns None on failure."""
     if not transcript_text.strip():
         return None
 
@@ -541,43 +539,6 @@ async def diarize_transcript(
     except Exception as e:
         logger.error(f"Speaker diarization failed: {e}")
         return None
-
-
-async def transcribe_audio(audio_data: bytes, filename: str = "audio.webm") -> str:
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY not set")
-
-    # Compress large files to avoid Whisper's 25 MB limit.
-    # 30 min WebM ≈ 28 MB → 32 kbps mono MP3 ≈ 7 MB.
-    if len(audio_data) > WHISPER_MAX_BYTES:
-        suffix = os.path.splitext(filename)[1] or ".webm"
-        logger.info(
-            "Audio is %d MB — compressing to 16 kHz/32 kbps MP3 for Whisper",
-            len(audio_data) // (1024 * 1024),
-        )
-        loop = asyncio.get_running_loop()
-        audio_data = await loop.run_in_executor(None, _compress_to_mp3, audio_data, suffix)
-        filename = "audio.mp3"
-        logger.info("Compressed to %d MB", len(audio_data) // (1024 * 1024))
-
-    suffix = os.path.splitext(filename)[1] or ".webm"
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(audio_data)
-        tmp_path = tmp.name
-
-    try:
-        client = AsyncOpenAI(api_key=api_key)
-        with open(tmp_path, "rb") as audio_file:
-            response = await client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language="en",
-                prompt=CARE_TRANSCRIPTION_PROMPT,
-            )
-        return response.text
-    finally:
-        os.unlink(tmp_path)
 
 
 async def extract_document_criteria(text: str, doc_name: str) -> dict:
