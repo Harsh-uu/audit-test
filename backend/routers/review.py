@@ -519,17 +519,51 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
     now = datetime.now(timezone.utc).isoformat()
     actions = list(a_row["actions"] or [])
     updated = False
+    matched_action = None
     for a in actions:
         if a.get("id") == action_id:
             a["completed"] = completed
             a["completed_at"] = now if completed else None
             updated = True
+            matched_action = a
             break
     if not updated:
         raise HTTPException(status_code=404, detail="Action not found")
 
     async with database.with_org(org_id) as conn:
         await conn.execute("UPDATE analyses SET actions=$1::jsonb WHERE id=$2", json.dumps(actions), a_row["id"])
+
+    # Propagate completion back to the original meeting so the action stops rolling forward
+    if completed and matched_action and matched_action.get("is_rolled_over"):
+        source_meeting_id = matched_action.get("source_meeting_id")
+        source_action_id = matched_action.get("source_action_id")
+        if source_meeting_id and source_action_id:
+            try:
+                async with database.with_org(org_id) as conn:
+                    src_row = await conn.fetchrow(
+                        "SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2",
+                        source_meeting_id, org_id,
+                    )
+                if src_row and src_row["analysis_id"]:
+                    async with database.with_org(org_id) as conn:
+                        src_analysis = await conn.fetchrow(
+                            "SELECT id, actions FROM analyses WHERE id=$1", src_row["analysis_id"]
+                        )
+                    if src_analysis:
+                        src_actions = list(src_analysis["actions"] or [])
+                        for sa in src_actions:
+                            if sa.get("id") == source_action_id:
+                                sa["completed"] = True
+                                sa["completed_at"] = now
+                                break
+                        async with database.with_org(org_id) as conn:
+                            await conn.execute(
+                                "UPDATE analyses SET actions=$1::jsonb WHERE id=$2",
+                                json.dumps(src_actions), src_analysis["id"],
+                            )
+            except Exception as e:
+                logger.warning(f"Could not propagate action completion to source meeting {source_meeting_id}: {e}")
+
     return {"message": "Updated", "completed": completed}
 
 

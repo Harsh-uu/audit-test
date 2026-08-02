@@ -78,6 +78,7 @@ async def _get_rolled_actions(conn, supervisee_ids: list, current_meeting_id: st
                 "completed_at": None,
                 "source_meeting_id": prev["id"],
                 "source_meeting_title": prev.get("title", "Previous Meeting"),
+                "source_action_id": action.get("id"),
             })
     return rolled
 
