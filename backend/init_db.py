@@ -486,6 +486,11 @@ CREATE INDEX IF NOT EXISTS idx_supervision_uploads_org_id ON supervision_uploads
 CREATE INDEX IF NOT EXISTS idx_supervision_uploads_staff_id ON supervision_uploads(staff_id);
 
 -- ── Schema patches (idempotent — safe to run on existing database) ─────────────
+
+-- Jurisdiction support: single deployment serves England / Wales / Scotland
+ALTER TABLE organisations ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'england';
+ALTER TABLE standards_entries ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'england';
+
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS gen_status TEXT DEFAULT 'idle';
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS included_source_ids JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS created_by TEXT;
