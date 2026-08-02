@@ -176,12 +176,25 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
 
         # Phase 2: run AI evidence mapping
         async with database.with_admin() as conn:
-            cqc_rows = await conn.fetch(
-                "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE ORDER BY reference ASC",
+            org_row = await conn.fetchrow(
+                "SELECT jurisdiction FROM organisations WHERE id=$1", org_id
             )
-            care_cert_rows = await conn.fetch(
-                "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE ORDER BY reference ASC",
-            )
+            org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
+
+            if org_jurisdiction == "wales":
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='ciw' AND is_active=TRUE AND jurisdiction='wales'",
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
+                )
+            else:
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE ORDER BY reference ASC",
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE ORDER BY reference ASC",
+                )
         async with database.with_org(org_id) as conn:
             custom_rows = await conn.fetch(
                 "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
@@ -193,7 +206,7 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
         custom_stds = [dict(r) for r in custom_rows]
 
         from utils.ai import analyze_doc_for_evidence
-        result = await analyze_doc_for_evidence(text, cqc_stds, care_cert_stds, custom_stds)
+        result = await analyze_doc_for_evidence(text, cqc_stds, care_cert_stds, custom_stds, jurisdiction=org_jurisdiction)
 
         async with database.with_org(org_id) as conn:
             await conn.execute(

@@ -1,11 +1,12 @@
 """
-PostgreSQL seed: system standards, super admin, default org.
+PostgreSQL seed: system standards (England + Wales), super admin, default org.
 Called once on startup — all operations are idempotent.
 """
 from datetime import datetime, timezone
 import uuid
 import logging
 import os
+import json
 
 import database
 
@@ -86,33 +87,49 @@ CARE_CERT_STANDARDS = [
 ]
 
 
-async def seed_standards():
-    """Insert CQC regulations, quality statements, and Care Certificate standards (idempotent)."""
-    import json as _json
+async def _insert_standards_entries(conn, entries: list, jurisdiction: str):
+    """Shared helper: bulk-insert standards entries with given jurisdiction."""
+    for e in entries:
+        await conn.execute(
+            """INSERT INTO standards_entries
+               (id, org_id, type, reference, name, description, keywords, sub_outcomes,
+                key_questions, quality_statement, source, is_active, is_system, jurisdiction, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15)
+               ON CONFLICT (id) DO NOTHING""",
+            e["id"], None, e["type"], e["reference"], e["name"], e["description"],
+            json.dumps(e["keywords"]), json.dumps(e["sub_outcomes"]),
+            json.dumps(e["key_questions"]), e.get("quality_statement", False), e["source"],
+            e.get("is_active", True), True, jurisdiction, e["created_at"],
+        )
 
+
+async def seed_standards():
+    """Insert CQC regulations, quality statements, and Care Certificate standards (idempotent, jurisdiction=england)."""
     async with database.with_admin() as conn:
-        count = await conn.fetchval("SELECT COUNT(*) FROM standards_entries WHERE is_system = TRUE")
+        count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries WHERE is_system=TRUE AND jurisdiction='england'"
+        )
         if count and count > 0:
             # One-time fix: check if JSONB fields were double-encoded (sub_outcomes stored as string)
             sample = await conn.fetchrow(
-                "SELECT sub_outcomes FROM standards_entries WHERE is_system = TRUE LIMIT 1"
+                "SELECT sub_outcomes FROM standards_entries WHERE is_system=TRUE AND jurisdiction='england' LIMIT 1"
             )
             if sample and isinstance(sample["sub_outcomes"], str):
                 logger.info("Detected double-encoded JSONB in standards — repairing…")
                 rows = await conn.fetch(
-                    "SELECT id, keywords, sub_outcomes, key_questions FROM standards_entries WHERE is_system = TRUE"
+                    "SELECT id, keywords, sub_outcomes, key_questions FROM standards_entries WHERE is_system=TRUE AND jurisdiction='england'"
                 )
                 for row in rows:
-                    kw = _json.loads(row["keywords"]) if isinstance(row["keywords"], str) else (row["keywords"] or [])
-                    so = _json.loads(row["sub_outcomes"]) if isinstance(row["sub_outcomes"], str) else (row["sub_outcomes"] or [])
-                    kq = _json.loads(row["key_questions"]) if isinstance(row["key_questions"], str) else (row["key_questions"] or [])
+                    kw = json.loads(row["keywords"]) if isinstance(row["keywords"], str) else (row["keywords"] or [])
+                    so = json.loads(row["sub_outcomes"]) if isinstance(row["sub_outcomes"], str) else (row["sub_outcomes"] or [])
+                    kq = json.loads(row["key_questions"]) if isinstance(row["key_questions"], str) else (row["key_questions"] or [])
                     await conn.execute(
                         "UPDATE standards_entries SET keywords=$1, sub_outcomes=$2, key_questions=$3 WHERE id=$4",
                         kw, so, kq, row["id"],
                     )
                 logger.info("JSONB repair complete for standards_entries")
             else:
-                logger.info(f"Standards already seeded ({count} entries) — skipping")
+                logger.info(f"England standards already seeded ({count} entries) — skipping")
             return
 
         now = datetime.now(timezone.utc).isoformat()
@@ -129,8 +146,6 @@ async def seed_standards():
                 "key_questions": reg.get("key_questions", []),
                 "quality_statement": False,
                 "source": "CQC Guidance - Regulations for service providers and managers",
-                "is_active": True,
-                "is_system": True,
                 "created_at": now,
             })
         for qs in CQC_QUALITY_STATEMENTS:
@@ -145,8 +160,6 @@ async def seed_standards():
                 "key_questions": qs.get("key_questions", []),
                 "quality_statement": True,
                 "source": "CQC Single Assessment Framework - Quality Statements",
-                "is_active": True,
-                "is_system": True,
                 "created_at": now,
             })
         for std in CARE_CERT_STANDARDS:
@@ -161,25 +174,555 @@ async def seed_standards():
                 "key_questions": [],
                 "quality_statement": False,
                 "source": "Care Certificate Standards 2025 - Skills for Care",
-                "is_active": True,
-                "is_system": True,
                 "created_at": now,
             })
 
-        import json
-        for e in entries:
-            await conn.execute(
-                """INSERT INTO standards_entries
-                   (id, org_id, type, reference, name, description, keywords, sub_outcomes,
-                    key_questions, quality_statement, source, is_active, is_system, created_at)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14)
-                   ON CONFLICT (id) DO NOTHING""",
-                e["id"], None, e["type"], e["reference"], e["name"], e["description"],
-                json.dumps(e["keywords"]), json.dumps(e["sub_outcomes"]),
-                json.dumps(e["key_questions"]), e["quality_statement"], e["source"],
-                e["is_active"], e["is_system"], e["created_at"],
-            )
-        logger.info(f"Seeded {len(entries)} standards entries")
+        await _insert_standards_entries(conn, entries, "england")
+        logger.info(f"Seeded {len(entries)} England standards entries")
+
+
+# ── CIW (Care Inspectorate Wales) — 7 inspection key questions ────────────────
+# Based on RISCA 2016 and CIW's inspection framework for regulated services in Wales.
+# Equivalent to CQC's 5 key questions (Safe/Effective/Caring/Responsive/Well-led).
+
+CIW_REGULATIONS = [
+    {
+        "reference": "CIW 1",
+        "name": "Well-being outcomes",
+        "key_questions": ["Well-being"],
+        "description": (
+            "Are people's individual well-being outcomes achieved? "
+            "Services must support people to achieve their personal outcomes and promote their physical, "
+            "mental and emotional well-being, social relationships, participation in the community, and "
+            "protection from abuse and neglect. Underpinned by the Social Services and Well-being (Wales) Act 2014."
+        ),
+        "keywords": [
+            "well-being", "personal outcomes", "voice and control", "co-production",
+            "social participation", "independence", "emotional health", "mental well-being",
+            "SSWB Act 2014", "well-being goals", "individual outcomes",
+        ],
+    },
+    {
+        "reference": "CIW 2",
+        "name": "Care and support",
+        "key_questions": ["Care and Support"],
+        "description": (
+            "Is care and support appropriate, person-centred, safe and effective? "
+            "Providers must assess individual needs, plan and deliver care that respects rights, "
+            "dignity and preferences, and involves the person in all decisions about their care and support. "
+            "Regulated under RISCA 2016 National Minimum Standards."
+        ),
+        "keywords": [
+            "person-centred care", "care planning", "needs assessment", "consent", "dignity",
+            "individual rights", "preferences", "cultural needs", "communication", "advocacy",
+            "RISCA 2016", "statement of purpose", "active participation",
+        ],
+    },
+    {
+        "reference": "CIW 3",
+        "name": "Safeguarding",
+        "key_questions": ["Safeguarding"],
+        "description": (
+            "Are people protected from harm, abuse and neglect? "
+            "Providers must have robust safeguarding policies aligned with Wales Safeguarding Procedures 2019, "
+            "ensure all staff are trained, and act promptly on any concern. Includes adult and child "
+            "safeguarding responsibilities under the Social Services and Well-being (Wales) Act 2014."
+        ),
+        "keywords": [
+            "safeguarding", "abuse", "neglect", "harm", "whistleblowing",
+            "Wales Safeguarding Procedures", "referral", "disclosure", "Disclosure and Barring Service",
+            "DBS", "safeguarding adults", "safeguarding children", "exploitation",
+            "risk of harm", "reportable", "POVA", "restrictive practice",
+        ],
+    },
+    {
+        "reference": "CIW 4",
+        "name": "Health and personal care",
+        "key_questions": ["Health"],
+        "description": (
+            "Are people's health and personal care needs assessed, planned for and met? "
+            "This includes medication management, nutrition and hydration, clinical healthcare needs, "
+            "personal care, pressure area care, end of life care and access to healthcare professionals. "
+            "Workers must understand their responsibilities and work within their competence."
+        ),
+        "keywords": [
+            "health needs", "medication management", "nutrition", "hydration", "personal care",
+            "pressure area care", "end of life", "healthcare professionals", "GP", "district nurse",
+            "medication administration", "MAR", "continence", "oral health", "dementia",
+            "mental health", "sensory loss", "palliative care", "falls prevention",
+        ],
+    },
+    {
+        "reference": "CIW 5",
+        "name": "Leadership and management",
+        "key_questions": ["Well-led"],
+        "description": (
+            "Is there effective leadership, governance and a culture of continuous improvement? "
+            "The Responsible Individual and Registered Manager must demonstrate competent, values-led "
+            "leadership, maintain robust governance systems, and operate a culture of quality improvement "
+            "and learning. This includes the Quality of Care Review required under RISCA 2016 regulations."
+        ),
+        "keywords": [
+            "registered manager", "responsible individual", "governance", "quality improvement",
+            "quality of care review", "statement of purpose", "supervision", "appraisal",
+            "policies and procedures", "audit", "complaints", "notifications to CIW",
+            "annual return", "learning culture", "values-led leadership", "openness",
+        ],
+    },
+    {
+        "reference": "CIW 6",
+        "name": "Staffing",
+        "key_questions": ["Staffing"],
+        "description": (
+            "Is the workforce sufficient, appropriately qualified, registered and well-supported? "
+            "Providers must ensure safe staffing levels, that workers complete the All Wales Induction "
+            "Framework (AWIF) within 6 months, hold relevant qualifications, are registered with Social "
+            "Care Wales where required, and receive regular supervision and continuing professional development."
+        ),
+        "keywords": [
+            "AWIF", "All Wales Induction Framework", "Social Care Wales", "SCW registration",
+            "staffing levels", "qualifications", "training", "supervision", "CPD",
+            "professional development", "workforce planning", "DBS", "references",
+            "mandatory training", "competency", "induction",
+        ],
+    },
+    {
+        "reference": "CIW 7",
+        "name": "Environment and safety",
+        "key_questions": ["Environment"],
+        "description": (
+            "Is the environment safe, suitable, well-maintained and promoting of well-being? "
+            "Premises must meet health and safety requirements, infection prevention and control standards, "
+            "fire safety regulations, and provide a suitable, accessible environment that supports "
+            "people's dignity and promotes their well-being."
+        ),
+        "keywords": [
+            "health and safety", "infection prevention", "fire safety", "COSHH",
+            "risk assessment", "moving and handling", "equipment maintenance", "premises",
+            "accessibility", "lone working", "food safety", "hazardous substances",
+            "security", "IPC", "PPE", "environmental safety",
+        ],
+    },
+]
+
+
+# ── AWIF (All Wales Induction Framework) ─────────────────────────────────────
+# 7 workbooks. Each workbook is one standard entry with sub_outcomes for each section.
+# Adults use workbooks 1, 3, 5, 6, 7. Children's services use workbooks 2, 4, 5, 6, 7.
+# Both MUST be seeded as providers may work with adults AND children.
+
+AWIF_STANDARDS = [
+    {
+        "reference": "AWIF 1",
+        "name": "Principles and values of health and social care (adults)",
+        "description": (
+            "Covers the legislative and value base underpinning health and social care work with adults in Wales. "
+            "Includes the Social Services and Well-being (Wales) Act 2014, the Code of Professional Practice, "
+            "rights-based approaches, person-centred care, equality and diversity, positive risk taking, "
+            "communication, Welsh language and culture, restrictive practices, and reflection."
+        ),
+        "keywords": [
+            "SSWB Act 2014", "voice and control", "well-being", "co-production", "person-centred",
+            "rights-based", "Code of Professional Practice", "Social Care Wales", "equality", "diversity",
+            "inclusion", "positive risk taking", "professional boundaries", "communication",
+            "Welsh language", "restrictive practices", "reflection", "principles", "values",
+        ],
+        "sub_outcomes": [
+            {"ref": "1.1", "desc": "Legislation, national policies and codes of conduct and practice that underpin health and social care"},
+            {"ref": "1.2", "desc": "Rights-based approaches and how they relate to health and social care"},
+            {"ref": "1.3", "desc": "Person-centred approaches and how to apply them in practice"},
+            {"ref": "1.4", "desc": "Equality, diversity and inclusion — recognising and responding to discrimination"},
+            {"ref": "1.5", "desc": "Positive risk taking — supporting individuals to take calculated risks safely"},
+            {"ref": "1.6", "desc": "Positive relationships and maintaining professional boundaries"},
+            {"ref": "1.7", "desc": "Communication — verbal, non-verbal and written; adapting to individual needs"},
+            {"ref": "1.8", "desc": "Welsh language and culture — recognising and meeting linguistic and cultural needs"},
+            {"ref": "1.9", "desc": "Positive approaches to reduce restrictive practices in social care"},
+            {"ref": "1.10", "desc": "Change and transitions in health and social care — supporting individuals through life events"},
+            {"ref": "1.11", "desc": "Reflection — how own values, beliefs and experiences influence practice"},
+        ],
+    },
+    {
+        "reference": "AWIF 2",
+        "name": "Principles and values of health and social care (children and young people)",
+        "description": (
+            "Covers the legislative and value base underpinning health and social care work with children and "
+            "young people in Wales. Includes the UN Convention on the Rights of the Child, child-centred "
+            "approaches, equality and diversity, positive risk taking, professional relationships, "
+            "communication, Welsh language, restrictive practices, and reflection. "
+            "Must be completed by all workers who may work with children, even if primarily with adults."
+        ),
+        "keywords": [
+            "children's rights", "UN CRC", "child-centred", "young people", "SSWB Act 2014",
+            "Code of Professional Practice", "equality", "diversity", "positive risk", "safeguarding",
+            "communication", "Welsh language", "professional boundaries", "reflection", "trauma-informed",
+            "residential child care", "foster care", "children's services", "transitions",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.1", "desc": "Legislation, national policies and codes of conduct for working with children and young people"},
+            {"ref": "2.2", "desc": "Rights-based approaches for children and young people"},
+            {"ref": "2.3", "desc": "Child-centred approaches and how to apply them in practice"},
+            {"ref": "2.4", "desc": "Equality, diversity and inclusion when working with children and young people"},
+            {"ref": "2.5", "desc": "Positive risk taking — balancing safety with children's rights to experience and learn"},
+            {"ref": "2.6", "desc": "Positive relationships and professional boundaries with children and young people"},
+            {"ref": "2.7", "desc": "Communication with children and young people, including developmentally appropriate approaches"},
+            {"ref": "2.8", "desc": "Welsh language and culture — supporting identity and cultural heritage"},
+            {"ref": "2.9", "desc": "Positive approaches to reduce restrictive practices when working with children"},
+            {"ref": "2.10", "desc": "Change and transitions — supporting children and young people through significant life events"},
+            {"ref": "2.11", "desc": "Reflection — examining own values and their impact on practice with children"},
+        ],
+    },
+    {
+        "reference": "AWIF 3",
+        "name": "Health and well-being (adults)",
+        "description": (
+            "Covers knowledge and skills for supporting the health and well-being of adults in social care settings. "
+            "Includes understanding well-being, supporting personal care, pressure area care, oral and foot care, "
+            "medication administration, nutrition and hydration, falls prevention, end of life care, "
+            "assistive technology, sensory loss, dementia, mental health, and substance misuse."
+        ),
+        "keywords": [
+            "well-being", "personal care", "continence", "pressure area care", "oral health", "foot care",
+            "medication", "MAR", "nutrition", "hydration", "falls prevention", "end of life",
+            "palliative care", "assistive technology", "sensory loss", "dementia", "mental health",
+            "substance misuse", "health needs", "clinical care",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.1", "desc": "What well-being means in the context of health and social care for adults"},
+            {"ref": "3.2", "desc": "Factors that impact upon the health and well-being of individuals"},
+            {"ref": "3.3", "desc": "How to support individuals with their personal care and continence management"},
+            {"ref": "3.4", "desc": "Good practice in relation to pressure area care — prevention and management"},
+            {"ref": "3.5", "desc": "How to support good oral health care and mouth care for individuals"},
+            {"ref": "3.6", "desc": "Supporting foot care — recognising problems and accessing specialist services"},
+            {"ref": "3.7", "desc": "Roles and responsibilities related to the administration of medication in social care"},
+            {"ref": "3.8", "desc": "The importance of nutrition and hydration and how to support individuals' needs"},
+            {"ref": "3.9", "desc": "How to support falls prevention — risk factors and interventions"},
+            {"ref": "3.10", "desc": "Factors that affect end of life care and how to support individuals and families"},
+            {"ref": "3.11", "desc": "How assistive technology can be used to support the health and well-being of individuals"},
+            {"ref": "3.12", "desc": "How sensory loss can impact on health and well-being and how to support individuals"},
+            {"ref": "3.13", "desc": "How living with dementia can impact on the health and well-being of individuals"},
+            {"ref": "3.14", "desc": "How mental ill-health can impact upon the health and well-being of individuals"},
+            {"ref": "3.15", "desc": "How substance misuse can impact upon the health and well-being of individuals"},
+        ],
+    },
+    {
+        "reference": "AWIF 4",
+        "name": "Health and well-being (children and young people)",
+        "description": (
+            "Covers knowledge and skills for supporting the health and well-being of children and young people "
+            "in social care settings. Includes understanding children's well-being, developmental factors, "
+            "positive environments, play, speech and language development, additional support needs, "
+            "advice and guidance, medication administration, personal care, and nutrition and hydration. "
+            "Must be completed by all workers who may work with children, even if primarily with adults."
+        ),
+        "keywords": [
+            "children's well-being", "development", "positive environment", "play", "learning",
+            "speech and language", "additional support needs", "SEND", "personal care", "nutrition",
+            "hydration", "medication", "assessment", "child development", "holistic needs",
+            "transitions", "attachment", "trauma", "resilience",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.1", "desc": "What well-being means in the context of health and social care for children and young people"},
+            {"ref": "4.2", "desc": "Factors that affect the health, well-being and development of children and young people"},
+            {"ref": "4.3", "desc": "Environments that support the health, well-being and development of children and young people"},
+            {"ref": "4.4", "desc": "Supporting the use of play for the health, well-being and development of children"},
+            {"ref": "4.5", "desc": "Speech, language and communication development — importance and how to support it"},
+            {"ref": "4.6", "desc": "Additional support needs — understanding and responding to individual requirements"},
+            {"ref": "4.7", "desc": "How to offer advice, guidance and support to children, young people and their families"},
+            {"ref": "4.8", "desc": "Administration of medication — roles, responsibilities and safe practice for children"},
+            {"ref": "4.9", "desc": "Supporting children and young people with their personal care needs"},
+            {"ref": "4.10", "desc": "The importance of nutrition and hydration for the health and well-being of children"},
+        ],
+    },
+    {
+        "reference": "AWIF 5",
+        "name": "Professional practice as a health and social care worker",
+        "description": (
+            "Covers the professional responsibilities, accountabilities and conduct of health and social care "
+            "workers in Wales. Includes understanding roles and responsibilities, partnership and team working, "
+            "information handling and GDPR, personal conduct and professional registration, and "
+            "continuing professional development (CPD) and the Code of Professional Practice."
+        ),
+        "keywords": [
+            "professional responsibility", "accountability", "scope of practice", "partnership working",
+            "team working", "multi-disciplinary", "information handling", "GDPR", "data protection",
+            "confidentiality", "records", "personal conduct", "Code of Professional Practice",
+            "Social Care Wales registration", "SCW", "CPD", "continuing professional development",
+            "reflective practice", "supervision", "appraisal",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.1", "desc": "Role, responsibilities and accountabilities of the health and social care worker"},
+            {"ref": "5.2", "desc": "How to develop and maintain effective partnership working with others"},
+            {"ref": "5.3", "desc": "How effective team working supports good practice in health and social care"},
+            {"ref": "5.4", "desc": "How to handle information — GDPR, confidentiality and record-keeping"},
+            {"ref": "5.5", "desc": "The importance of personal conduct and upholding the social care profession"},
+            {"ref": "5.6", "desc": "How continuing professional development contributes to professional practice"},
+        ],
+    },
+    {
+        "reference": "AWIF 6",
+        "name": "Safeguarding individuals",
+        "description": (
+            "Covers the knowledge and skills needed to safeguard adults and children in social care settings. "
+            "Includes understanding the legislative framework (Social Services and Well-being (Wales) Act 2014, "
+            "Wales Safeguarding Procedures 2019), working in ways that protect individuals, recognising factors "
+            "that contribute to harm and abuse, and how to respond, record and report concerns."
+        ),
+        "keywords": [
+            "safeguarding", "abuse", "neglect", "harm", "exploitation", "Wales Safeguarding Procedures",
+            "SSWB Act 2014", "disclosure", "allegation", "concern", "reporting", "recording",
+            "whistle-blowing", "DBS", "Barring List", "categories of abuse", "indicators",
+            "information sharing", "multi-agency", "adult protection", "child protection",
+        ],
+        "sub_outcomes": [
+            {"ref": "6.1", "desc": "The purpose of legislation, national policies and codes in relation to safeguarding individuals"},
+            {"ref": "6.2", "desc": "How to work in ways that safeguard individuals from harm, abuse and neglect"},
+            {"ref": "6.3", "desc": "Factors, situations and actions that could lead to or contribute to harm, abuse or neglect"},
+            {"ref": "6.4", "desc": "How to respond, record and report concerns, disclosures or allegations related to safeguarding"},
+        ],
+    },
+    {
+        "reference": "AWIF 7",
+        "name": "Health and safety in health and social care",
+        "description": (
+            "Covers health and safety legislation, responsibilities and practical skills for health and social "
+            "care workers in Wales. Includes workplace health and safety legislation, risk assessment, fire safety, "
+            "moving and handling, emergency first aid, infection prevention and control, food safety, "
+            "hazardous substances (COSHH), security and managing stress."
+        ),
+        "keywords": [
+            "Health and Safety at Work Act", "risk assessment", "fire safety", "moving and handling",
+            "manual handling", "first aid", "infection prevention", "IPC", "PPE", "food safety",
+            "COSHH", "hazardous substances", "security", "lone working", "stress management",
+            "HSE", "personal protective equipment", "hand hygiene", "emergency procedures",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.1", "desc": "Health and safety in the workplace — legislation, responsibilities and rights"},
+            {"ref": "7.2", "desc": "Risk assessments for health and safety — how to carry out and act on them"},
+            {"ref": "7.3", "desc": "Fire safety — prevention, detection, evacuation and responsibilities"},
+            {"ref": "7.4", "desc": "Moving and handling and moving and positioning — safe techniques and legislation"},
+            {"ref": "7.5", "desc": "Emergency first aid — basic life support, responding to accidents and incidents"},
+            {"ref": "7.6", "desc": "Infection prevention and control — standard precautions, PPE, hand hygiene"},
+            {"ref": "7.7", "desc": "Food safety — safe handling, storage, preparation and legal requirements"},
+            {"ref": "7.8", "desc": "Hazardous substances (COSHH) — identification, safe use and storage"},
+            {"ref": "7.9", "desc": "Security in the work setting — including lone working arrangements"},
+            {"ref": "7.10", "desc": "Managing stress — recognising signs and accessing support for well-being"},
+        ],
+    },
+]
+
+
+# ── SCW (Social Care Wales) Code of Professional Practice ─────────────────────
+# Worker's Code — 6 sections applicable to all social care workers in Wales.
+# Section 7 (for managers who lead staff) is included within section 6.
+
+SCW_CODE_STANDARDS = [
+    {
+        "reference": "SCW 1",
+        "name": "Respect the views and wishes, and promote the rights and interests of individuals and carers",
+        "description": (
+            "Social care workers must respect and uphold the rights, values, beliefs, views and wishes of "
+            "individuals and carers. This includes working in person-centred ways, supporting decision-making, "
+            "working with dignity and respect, and ensuring actions promote equality, diversity and inclusion."
+        ),
+        "keywords": [
+            "respect", "rights", "wishes", "person-centred", "dignity", "autonomy",
+            "decision-making", "equality", "diversity", "inclusion", "cultural needs",
+            "beliefs", "values", "preferences", "language", "privacy",
+        ],
+        "sub_outcomes": [
+            {"ref": "1.1", "desc": "Working with individuals in person-centred ways as the basis for social care"},
+            {"ref": "1.2", "desc": "Respecting and promoting the rights, values, beliefs, views and wishes of individuals"},
+            {"ref": "1.3", "desc": "Supporting individuals to maximise their decision-making and control over their lives"},
+            {"ref": "1.4", "desc": "Working with respect for dignity, privacy, preferences, culture, language and rights"},
+            {"ref": "1.5", "desc": "Ensuring actions promote equality, diversity and inclusion"},
+        ],
+    },
+    {
+        "reference": "SCW 2",
+        "name": "Strive to establish and maintain the trust and confidence of individuals and carers",
+        "description": (
+            "Social care workers must be honest, trustworthy and reliable. This includes communicating openly "
+            "and accurately, respecting confidentiality, being dependable, honouring commitments, declaring "
+            "conflicts of interest, and adhering to policies on gifts and money."
+        ),
+        "keywords": [
+            "trust", "confidence", "honesty", "transparency", "confidentiality",
+            "communication", "reliability", "conflicts of interest", "openness",
+            "accurate information", "data protection", "professional relationship",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.1", "desc": "Being honest and trustworthy in all interactions"},
+            {"ref": "2.2", "desc": "Communicating in an open, accurate and straightforward way"},
+            {"ref": "2.3", "desc": "Supporting individuals to communicate their views using their preferred method and language"},
+            {"ref": "2.4", "desc": "Respecting confidential information and explaining confidentiality policies"},
+            {"ref": "2.5", "desc": "Being reliable and dependable — honouring commitments and arrangements"},
+            {"ref": "2.6", "desc": "Declaring conflicts of interest and not letting them influence professional judgement"},
+            {"ref": "2.7", "desc": "Adhering to policies about accepting gifts or money from individuals or families"},
+        ],
+    },
+    {
+        "reference": "SCW 3",
+        "name": "Promote the well-being, voice and control of individuals and carers while supporting them to stay safe",
+        "description": (
+            "Social care workers must work in ways that maximise well-being, active participation and balance "
+            "rights with safety. This includes working in partnership, sharing information appropriately, "
+            "supporting individuals to express concerns or make complaints, and challenging unsafe practice."
+        ),
+        "keywords": [
+            "well-being", "voice", "control", "active participation", "safety", "partnership",
+            "information sharing", "complaints", "whistleblowing", "safeguarding", "unsafe practice",
+            "empowerment", "self-determination", "advocacy", "challenging practice",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.1", "desc": "Working in ways that maximise well-being, active participation and balance rights"},
+            {"ref": "3.2", "desc": "Working in partnership to promote the well-being, voice and control of individuals"},
+            {"ref": "3.3", "desc": "Working with individuals and carers to keep themselves safe"},
+            {"ref": "3.4", "desc": "Using power responsibly and sensitively in work with individuals"},
+            {"ref": "3.5", "desc": "Supporting individuals to express concerns or make complaints"},
+            {"ref": "3.6", "desc": "Using agreed systems and procedures to share information appropriately"},
+            {"ref": "3.7", "desc": "Challenging and reporting dangerous, abusive or discriminatory behaviour"},
+            {"ref": "3.8", "desc": "Raising concerns about unsafe or substandard practice by colleagues"},
+            {"ref": "3.9", "desc": "Reporting resource or operational difficulties that affect safe delivery of care"},
+        ],
+    },
+    {
+        "reference": "SCW 4",
+        "name": "Respect the rights of individuals while seeking to ensure their behaviour does not harm themselves or others",
+        "description": (
+            "Social care workers must balance individual rights with safety. This includes following risk "
+            "assessment procedures, taking necessary steps to minimise risk of harm, and ensuring relevant "
+            "colleagues are informed about risk assessment outcomes."
+        ),
+        "keywords": [
+            "risk assessment", "rights and risks", "positive risk taking", "harm minimisation",
+            "capacity", "best interests", "safety planning", "behaviour", "protection",
+            "balancing rights", "proportionate response", "information sharing",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.1", "desc": "Working with individuals to balance rights, responsibilities and risks"},
+            {"ref": "4.2", "desc": "Following risk assessment policies to assess whether behaviour presents risk of harm"},
+            {"ref": "4.3", "desc": "Taking steps to minimise the risks of individuals' behaviour causing harm"},
+            {"ref": "4.4", "desc": "Ensuring relevant colleagues and agencies are informed about risk assessment outcomes"},
+        ],
+    },
+    {
+        "reference": "SCW 5",
+        "name": "Act with integrity and uphold public trust and confidence in the social care profession",
+        "description": (
+            "Social care workers must not directly or indirectly abuse, neglect or exploit individuals. "
+            "Must not form inappropriate relationships or abuse trust. Must not discriminate, put people "
+            "at unnecessary risk, or behave in ways that undermine confidence in the profession — in or "
+            "outside work, including online."
+        ),
+        "keywords": [
+            "integrity", "public trust", "professional conduct", "professional boundaries",
+            "exploitation", "abuse of trust", "discrimination", "social media", "fitness to practise",
+            "registration", "Social Care Wales", "professional standards", "conduct",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.1", "desc": "Not directly or indirectly abusing, neglecting or harming individuals or colleagues"},
+            {"ref": "5.2", "desc": "Not exploiting individuals, carers or colleagues in any way"},
+            {"ref": "5.3", "desc": "Not abusing trust or access to personal information, property or home"},
+            {"ref": "5.4", "desc": "Not forming inappropriate personal relationships with individuals or families"},
+            {"ref": "5.5", "desc": "Not discriminating unlawfully or unjustifiably against individuals or colleagues"},
+            {"ref": "5.6", "desc": "Not condoning unlawful discrimination by others"},
+            {"ref": "5.7", "desc": "Not putting yourself or others at unnecessary risk"},
+            {"ref": "5.8", "desc": "Not behaving in a way that calls into question suitability to work in social care"},
+        ],
+    },
+    {
+        "reference": "SCW 6",
+        "name": "Be accountable for the quality of your work and take responsibility for maintaining and developing knowledge and skills",
+        "description": (
+            "Social care workers must meet relevant standards of practice, maintain accurate records, be "
+            "open when things go wrong, seek help when uncertain, work openly with colleagues, and "
+            "understand their responsibility for delegated work. Workers who manage or lead staff must "
+            "also embed the Code in their team's work (Section 7)."
+        ),
+        "keywords": [
+            "accountability", "quality of work", "records management", "documentation",
+            "openness", "duty of candour", "CPD", "professional development", "supervision",
+            "appraisal", "delegated work", "responsibility", "competence",
+            "training", "learning", "reflection", "leadership accountability",
+        ],
+        "sub_outcomes": [
+            {"ref": "6.1", "desc": "Meeting relevant standards of practice and working lawfully, safely and effectively"},
+            {"ref": "6.2", "desc": "Maintaining clear and accurate records in accordance with legal and work setting requirements"},
+            {"ref": "6.3", "desc": "Being open and honest when things go wrong, including notifying employer or authority"},
+            {"ref": "6.4", "desc": "Informing employer about personal difficulties that might affect job competence"},
+            {"ref": "6.5", "desc": "Seeking assistance when not adequately prepared or unsure how to proceed"},
+            {"ref": "6.6", "desc": "Working openly and co-operatively with colleagues, treating them with respect"},
+            {"ref": "6.7", "desc": "Understanding responsibility for work delegated to other workers"},
+            {"ref": "7.1", "desc": "Embedding the Code of Professional Practice in the work of staff (managers/leaders)"},
+        ],
+    },
+]
+
+
+async def seed_welsh_standards():
+    """Insert Welsh standards: CIW (7 key questions), AWIF (7 workbooks), SCW Code (6 sections)."""
+    async with database.with_admin() as conn:
+        welsh_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries WHERE is_system=TRUE AND jurisdiction='wales'"
+        )
+        if welsh_count and welsh_count > 0:
+            logger.info(f"Welsh standards already seeded ({welsh_count} entries) — skipping")
+            return
+
+        now = datetime.now(timezone.utc).isoformat()
+        entries = []
+
+        for reg in CIW_REGULATIONS:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "ciw",
+                "reference": reg["reference"],
+                "name": reg["name"],
+                "description": reg["description"],
+                "keywords": reg["keywords"],
+                "sub_outcomes": [],
+                "key_questions": reg.get("key_questions", []),
+                "quality_statement": False,
+                "source": "Care Inspectorate Wales (CIW) — RISCA 2016 Inspection Framework",
+                "created_at": now,
+            })
+
+        for wb in AWIF_STANDARDS:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "awif",
+                "reference": wb["reference"],
+                "name": wb["name"],
+                "description": wb["description"],
+                "keywords": wb["keywords"],
+                "sub_outcomes": wb["sub_outcomes"],
+                "key_questions": [],
+                "quality_statement": False,
+                "source": "All Wales Induction Framework for Health and Social Care (AWIF) — Social Care Wales",
+                "created_at": now,
+            })
+
+        for std in SCW_CODE_STANDARDS:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "scw",
+                "reference": std["reference"],
+                "name": std["name"],
+                "description": std["description"],
+                "keywords": std["keywords"],
+                "sub_outcomes": std["sub_outcomes"],
+                "key_questions": [],
+                "quality_statement": False,
+                "source": "Social Care Wales — Code of Professional Practice for Social Care (Worker's Code)",
+                "created_at": now,
+            })
+
+        await _insert_standards_entries(conn, entries, "wales")
+        logger.info(
+            f"Seeded {len(entries)} Welsh standards entries "
+            f"({len(CIW_REGULATIONS)} CIW, {len(AWIF_STANDARDS)} AWIF, {len(SCW_CODE_STANDARDS)} SCW)"
+        )
+
 
 
 async def seed_super_admin():
@@ -223,6 +766,15 @@ async def seed_default_org():
 
 async def seed_all():
     """Run all seed functions on startup."""
+    # Run one-time schema migrations (idempotent — IF NOT EXISTS guards)
+    async with database.with_admin() as conn:
+        await conn.execute(
+            "ALTER TABLE organisations ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'england'"
+        )
+        await conn.execute(
+            "ALTER TABLE standards_entries ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'england'"
+        )
     await seed_standards()
+    await seed_welsh_standards()
     await seed_super_admin()
     await seed_default_org()

@@ -26,11 +26,13 @@ def _require_super_admin(current_user):
 
 class CreateOrgRequest(BaseModel):
     name: str
+    jurisdiction: Optional[str] = "england"
 
 
 class UpdateOrgRequest(BaseModel):
     name: Optional[str] = None
     status: Optional[str] = None
+    jurisdiction: Optional[str] = None
 
 
 class OrgBrandingUpdate(BaseModel):
@@ -64,7 +66,8 @@ async def list_orgs(current_user=Depends(get_current_user)):
             meeting_count = await conn.fetchval("SELECT COUNT(*) FROM meetings WHERE org_id = $1", org_id)
             result.append({
                 "id": org_id, "name": org["name"], "slug": org["slug"],
-                "status": org["status"], "created_at": org["created_at"],
+                "status": org["status"], "jurisdiction": org.get("jurisdiction") or "england",
+                "created_at": org["created_at"],
                 "user_count": user_count, "meeting_count": meeting_count,
             })
     return result
@@ -80,11 +83,12 @@ async def create_org(data: CreateOrgRequest, current_user=Depends(get_current_us
         existing = await conn.fetchrow("SELECT id FROM organisations WHERE slug = $1", slug)
         if existing:
             raise HTTPException(status_code=400, detail="Organisation with this name already exists")
+        jurisdiction = data.jurisdiction if data.jurisdiction in ("england", "wales", "scotland") else "england"
         await conn.execute(
-            "INSERT INTO organisations (id, name, slug, status, branding, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
-            org_id, data.name.strip(), slug, "active", "{}", now,
+            "INSERT INTO organisations (id, name, slug, status, branding, jurisdiction, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+            org_id, data.name.strip(), slug, "active", "{}", jurisdiction, now,
         )
-    return {"id": org_id, "name": data.name.strip(), "slug": slug, "status": "active", "created_at": now}
+    return {"id": org_id, "name": data.name.strip(), "slug": slug, "status": "active", "jurisdiction": jurisdiction, "created_at": now}
 
 
 @router.patch("/orgs/{org_id}")
@@ -96,6 +100,8 @@ async def update_org(org_id: str, data: UpdateOrgRequest, current_user=Depends(g
         updates["slug"] = _slugify(data.name)
     if data.status in ("active", "suspended"):
         updates["status"] = data.status
+    if data.jurisdiction in ("england", "wales", "scotland"):
+        updates["jurisdiction"] = data.jurisdiction
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()

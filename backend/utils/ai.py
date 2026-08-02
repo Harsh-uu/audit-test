@@ -820,8 +820,16 @@ async def analyze_doc_for_evidence(
     cqc_standards: list,
     care_cert_standards: list,
     custom_standards: list = None,
+    jurisdiction: str = "england",
 ) -> dict:
-    """Map evidence from an uploaded supervision document to CQC/Care Cert/custom standards."""
+    """Map evidence from an uploaded supervision document to standards (jurisdiction-aware)."""
+    if jurisdiction == "wales":
+        reg_label = "CIW REGULATIONS (Care Inspectorate Wales — RISCA 2016)"
+        cert_label = "AWIF / SCW STANDARDS (All Wales Induction Framework & Social Care Wales Code)"
+    else:
+        reg_label = "CQC REGULATIONS"
+        cert_label = "CARE CERTIFICATE STANDARDS"
+
     cqc_context = "\n".join([
         f"- {s['reference']}: {s['name']}" +
         (f" [Key Questions: {', '.join(s.get('key_questions', []))}]" if s.get('key_questions') else "") +
@@ -858,10 +866,10 @@ async def analyze_doc_for_evidence(
 DOCUMENT CONTENT:
 {text[:12000]}
 
-CQC REGULATIONS TO MAP AGAINST:
+{reg_label} TO MAP AGAINST:
 {cqc_context}
 
-CARE CERTIFICATE STANDARDS TO MAP AGAINST:
+{cert_label} TO MAP AGAINST:
 {cc_context}{custom_context}
 
 Provide your analysis as JSON only. Only map regulations/standards where there is actual evidence in the document."""
@@ -891,8 +899,17 @@ async def analyze_meeting(
     custom_standards: list = None,
     supervision_template: dict = None,
     custom_prompt: str = None,
+    jurisdiction: str = "england",
 ) -> dict:
-    # Build standards context — CQC includes key questions; Care Cert includes outcomes
+    # Build jurisdiction-aware labels for prompts
+    if jurisdiction == "wales":
+        reg_label = "CIW REGULATIONS (Care Inspectorate Wales — RISCA 2016)"
+        cert_label = "AWIF / SCW STANDARDS (All Wales Induction Framework & Social Care Wales Code)"
+    else:
+        reg_label = "CQC REGULATIONS"
+        cert_label = "CARE CERTIFICATE STANDARDS"
+
+    # Build standards context — CQC/CIW includes key questions; Care Cert/AWIF includes outcomes
     cqc_context = "\n".join([
         f"- {s['reference']}: {s['name']}" +
         (f" [Key Questions: {', '.join(s.get('key_questions', []))}]" if s.get('key_questions') else "") +
@@ -952,10 +969,10 @@ async def analyze_meeting(
 TRANSCRIPT:{pause_note}
 {transcript_text}
 
-CQC REGULATIONS TO MAP AGAINST:
+{reg_label} TO MAP AGAINST:
 {cqc_context}
 
-CARE CERTIFICATE STANDARDS TO MAP AGAINST:
+{cert_label} TO MAP AGAINST:
 {cc_context}{custom_context}{template_context}{custom_prompt_note}
 
 Provide your analysis as JSON. Only map regulations/standards where there is actual evidence in the transcript."""

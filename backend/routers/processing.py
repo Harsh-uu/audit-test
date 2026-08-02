@@ -133,16 +133,29 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 transcript_id, now, len(transcript_warnings) > 0, meeting_id,
             )
 
-        # Load standards
+        # Load standards — filtered by org's jurisdiction
         async with database.with_admin() as conn:
-            cqc_rows = await conn.fetch(
-                "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
-                meeting_org_id,
+            org_row = await conn.fetchrow(
+                "SELECT jurisdiction FROM organisations WHERE id=$1", meeting_org_id
             )
-            care_cert_rows = await conn.fetch(
-                "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
-                meeting_org_id,
-            )
+            org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
+
+            if org_jurisdiction == "wales":
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='ciw' AND is_active=TRUE AND jurisdiction='wales'",
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
+                )
+            else:
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
+                    meeting_org_id,
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
+                    meeting_org_id,
+                )
         cqc_standards = [dict(r) for r in cqc_rows]
         care_cert_standards = [dict(r) for r in care_cert_rows]
 
@@ -192,7 +205,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         paused_periods = meeting.get("paused_periods") or []
         results = await asyncio.gather(
-            analyze_meeting(timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template),
+            analyze_meeting(timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template, jurisdiction=org_jurisdiction),
             diarize_coro,
             return_exceptions=True,
         )

@@ -917,14 +917,25 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
     from utils.ai import analyze_meeting as _analyze_meeting
     try:
         async with database.with_admin() as conn:
-            cqc_rows = await conn.fetch(
-                "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
-                org_id,
-            )
-            care_cert_rows = await conn.fetch(
-                "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
-                org_id,
-            )
+            org_row = await conn.fetchrow("SELECT jurisdiction FROM organisations WHERE id=$1", org_id)
+            org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
+
+            if org_jurisdiction == "wales":
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='ciw' AND is_active=TRUE AND jurisdiction='wales'",
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
+                )
+            else:
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
+                    org_id,
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
+                    org_id,
+                )
         cqc_standards = [dict(r) for r in cqc_rows]
         care_cert_standards = [dict(r) for r in care_cert_rows]
 
@@ -946,7 +957,7 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         paused_periods = meeting.get("paused_periods") or []
         analysis_result = await _analyze_meeting(
             transcript_text, cqc_standards, care_cert_standards, paused_periods,
-            custom_standards, supervision_template, custom_prompt,
+            custom_standards, supervision_template, custom_prompt, jurisdiction=org_jurisdiction,
         )
 
         cqc_kq_map = {s.get("reference"): s.get("key_questions") or [] for s in cqc_standards}

@@ -48,7 +48,7 @@ export default function SuperAdminDashboard() {
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "", password: "" });
   const [showInviteAdmin, setShowInviteAdmin] = useState(false);
-  const [orgForm, setOrgForm] = useState({ name: "" });
+  const [orgForm, setOrgForm] = useState({ name: "", jurisdiction: "england" });
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "manager" });
   const [inviteForm, setInviteForm] = useState({ name: "", email: "" });
   const [inviteResult, setInviteResult] = useState(null); // { message, invite_link?, email_failed? }
@@ -91,7 +91,7 @@ export default function SuperAdminDashboard() {
     setSubmitting(true);
     setError("");
     try {
-      await axios.post(`${API}/super-admin/orgs`, { name: orgForm.name.trim() }, getAuthConfig());
+      await axios.post(`${API}/super-admin/orgs`, { name: orgForm.name.trim(), jurisdiction: orgForm.jurisdiction }, getAuthConfig());
       setOrgForm({ name: "" });
       setShowCreateOrg(false);
       await loadOrgs();
@@ -244,7 +244,21 @@ export default function SuperAdminDashboard() {
                   <h3 className="font-semibold text-gray-900 truncate font-display">{org.name}</h3>
                   <p className="text-xs text-gray-400 mt-0.5 truncate">{org.slug}</p>
                 </div>
-                <StatusBadge status={org.status} />
+                <div className="flex items-center gap-2">
+                  {org.jurisdiction && org.jurisdiction !== "england" && (
+                    <span
+                      data-testid={`org-jurisdiction-badge-${org.id}`}
+                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        org.jurisdiction === "wales"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-purple-100 text-purple-700"
+                      }`}
+                    >
+                      {org.jurisdiction === "wales" ? "Wales" : "Scotland"}
+                    </span>
+                  )}
+                  <StatusBadge status={org.status} />
+                </div>
               </div>
 
               <div className="flex gap-4 mb-4">
@@ -467,10 +481,26 @@ export default function SuperAdminDashboard() {
                     required
                     autoFocus
                     value={orgForm.name}
-                    onChange={e => setOrgForm({ name: e.target.value })}
+                    onChange={e => setOrgForm(f => ({ ...f, name: e.target.value }))}
                     placeholder="e.g. Sunrise Care Ltd"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Jurisdiction</label>
+                  <select
+                    data-testid="org-jurisdiction-select"
+                    value={orgForm.jurisdiction}
+                    onChange={e => setOrgForm(f => ({ ...f, jurisdiction: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
+                  >
+                    <option value="england">England (CQC / Care Certificate)</option>
+                    <option value="wales">Wales (CIW / AWIF / SCW)</option>
+                    <option value="scotland">Scotland (Care Inspectorate)</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Sets which regulatory framework is used for evidence mapping and compliance reporting.
+                  </p>
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button

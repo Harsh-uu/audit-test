@@ -143,15 +143,25 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
     org_id = current_user.get("org_id", "")
 
     async with database.with_admin() as conn:
+        # Get org jurisdiction to filter system standards correctly
+        org_row = await conn.fetchrow("SELECT jurisdiction FROM organisations WHERE id=$1", org_id)
+        jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
+
         if type:
             rows = await conn.fetch(
-                "SELECT * FROM standards_entries WHERE type=$1 AND is_active=TRUE AND (is_system=TRUE OR org_id=$2) ORDER BY type, reference",
-                type, org_id,
+                """SELECT * FROM standards_entries
+                   WHERE type=$1 AND is_active=TRUE
+                   AND ((is_system=TRUE AND jurisdiction=$2) OR org_id=$3)
+                   ORDER BY type, reference""",
+                type, jurisdiction, org_id,
             )
         else:
             rows = await conn.fetch(
-                "SELECT * FROM standards_entries WHERE is_active=TRUE AND (is_system=TRUE OR org_id=$1) ORDER BY type, reference",
-                org_id,
+                """SELECT * FROM standards_entries
+                   WHERE is_active=TRUE
+                   AND ((is_system=TRUE AND jurisdiction=$1) OR org_id=$2)
+                   ORDER BY type, reference""",
+                jurisdiction, org_id,
             )
     return [dict(r) for r in rows]
 
