@@ -25,8 +25,11 @@ export function ShareModal({ show, onClose, meeting, onShared }) {
   const attendeeIds = new Set((meeting?.attendees || []).map(a => a.user_id).filter(Boolean));
   const sharedIds = new Set((meeting?.shared_with || []).map(s => s.user_id).filter(Boolean));
 
-  // Only show users not already an attendee
-  const candidates = orgUsers.filter(u => !attendeeIds.has(u.id));
+  // Only managers, admins and shared reviewers — never supervisees/care workers
+  const PRIVILEGED_ROLES = ["manager", "admin", "shared_reviewer"];
+  const candidates = orgUsers.filter(u =>
+    !attendeeIds.has(u.id) && PRIVILEGED_ROLES.includes(u.role)
+  );
 
   const toggle = (id) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -65,8 +68,11 @@ export function ShareModal({ show, onClose, meeting, onShared }) {
 
         <div className="px-6 py-4">
           <p className="text-sm text-gray-500 mb-4">
-            Grant read access to this signed-off report for team members who weren't in the meeting.
+            Grant read-only access to this report for managers or reviewers who weren't in the meeting.
           </p>
+          <div className="flex items-start gap-2 mb-4 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+            <span className="text-xs text-blue-700">Only managers, admins and shared reviewers are shown. Care workers and supervisees cannot be shared with directly — use the email function to send them a copy.</span>
+          </div>
 
           {/* Already shared */}
           {sharedIds.size > 0 && (
@@ -92,7 +98,7 @@ export function ShareModal({ show, onClose, meeting, onShared }) {
               <Loader className="w-5 h-5 text-gray-400 animate-spin" />
             </div>
           ) : candidates.length === 0 ? (
-            <p className="text-sm text-gray-400 italic py-4 text-center">All org members are already attendees or shared.</p>
+            <p className="text-sm text-gray-400 italic py-4 text-center">No eligible managers or reviewers to share with.</p>
           ) : (
             <div className="space-y-1.5 max-h-56 overflow-y-auto">
               {candidates.map(u => {

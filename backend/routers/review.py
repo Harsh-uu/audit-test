@@ -1112,8 +1112,8 @@ async def share_meeting(meeting_id: str, data: ShareRequest, current_user=Depend
     for uid in data.user_ids:
         if not any(s.get("user_id") == uid for s in shared_with):
             async with database.with_org(org_id) as conn:
-                u_row = await conn.fetchrow("SELECT id, name, email FROM users WHERE id=$1 AND org_id=$2", uid, org_id)
-            if u_row:
+                u_row = await conn.fetchrow("SELECT id, name, email, role FROM users WHERE id=$1 AND org_id=$2", uid, org_id)
+            if u_row and u_row["role"] in ("manager", "admin", "shared_reviewer"):
                 entry = {"user_id": uid, "name": u_row["name"], "email": u_row["email"], "shared_at": now}
                 shared_with.append(entry)
                 added.append(entry)
