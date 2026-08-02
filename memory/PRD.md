@@ -1,7 +1,7 @@
 # Supervision 2.0 - PRD & Project Memory
 
 ## Product Overview
-Supervision 2.0 is a web-based compliance evidence platform for UK adult social care providers. Users record supervision meetings, and the system automatically generates transcripts, summaries, CQC compliance mappings, and Care Certificate competency evidence.
+Supervision 2.0 is a web-based compliance evidence platform for UK care providers (England, Wales, Scotland) in a **single multi-jurisdiction deployment**. Users record supervision meetings, and the system automatically generates transcripts, summaries, and compliance mappings against the correct regional regulatory framework.
 
 **Deployment URL Identifier:** supervison2
 **Product Name:** Supervision
@@ -17,6 +17,15 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - **Email:** Resend (hardcoded `noreply@notify.1two.one`)
 - **Storage:** Supabase Storage for audio + supervision docs; Emergent Object Storage for org logos only
 - **Auth:** JWT (Bearer token in localStorage), Email OTP 2FA
+
+---
+
+## Jurisdiction Model (Single-Deployment, Multi-Region)
+- `organisations.jurisdiction` column: `'england'` | `'wales'` | `'scotland'`
+- `standards_entries.jurisdiction` column: `'england'` | `'wales'`
+- England orgs: CQC (47) + Care Certificate (16) = 63 standards
+- Wales orgs: CIW (7) + AWIF (7) + SCW (6) = 20 standards — **NEVER show English standards to Welsh orgs**
+- Schema migration runs on startup via `seed_all()` using `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
 
 ---
 
@@ -162,10 +171,10 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 - `users` — org_id, role, mfa_enabled, mfa_code, mfa_code_expires_at
 - `meetings` — org_id, attendees (JSONB), sign_off_manager_id, rescan_status
 - `focus_topics` — org_id, text, is_current, active_month (YYYY-MM)
-- `organisations` — name, slug, status
+- `organisations` — name, slug, status, **jurisdiction** ('england'|'wales'|'scotland')
 - `invitations` — org_id, token, expires_at
 - `meeting_prep` — meeting_id, sections (JSONB), focus_topic, coverage_results
-- `standards_entries` — CQC + Care Certificate (org_id NULL = system-wide)
+- `standards_entries` — type, reference, name, description, sub_outcomes, is_system, **jurisdiction** ('england'|'wales')
 - `standards_documents` — org_id scoped custom/org standards
 
 ---
@@ -185,6 +194,11 @@ Supervision 2.0 is a web-based compliance evidence platform for UK adult social 
 ---
 
 ## Prioritized Backlog
+
+### P0 (Next)
+- Scotland standards seed into `standards_entries` with `jurisdiction='scotland'` (CIS/SSSC Code)
+- Jurisdiction-aware frontend labels: show "CIW Evidence" and "AWIF/SCW Evidence" (instead of "CQC/Care Cert") in MeetingReport, InspectionPrep, CareCertPrep pages for Welsh orgs
+- Super Admin "Edit Org" form needs Jurisdiction field (currently only Create Org has it)
 
 ### P1
 - None outstanding
