@@ -389,6 +389,16 @@ async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, cu
 
     async with database.with_org(org_id) as conn:
         await conn.execute("UPDATE analyses SET risks=$1::jsonb WHERE id=$2", json.dumps(risks), a_row["id"])
+        detail_parts = []
+        if data.is_resolved is not None:
+            resolved_risk = next((r for r in risks if r.get("id") == risk_id), {})
+            risk_label = (resolved_risk.get("risk") or resolved_risk.get("description") or "")[:80]
+            status = "Resolved" if data.is_resolved else "Re-opened"
+            detail_parts.append(f"{status}: \"{risk_label}\"")
+        if data.notes is not None:
+            detail_parts.append(f"Notes updated: \"{data.notes[:80]}\"")
+        await _log_edit(conn, meeting_id, org_id, "risk", current_user["id"], current_user.get("name", ""),
+                        "; ".join(detail_parts))
     return {"message": "Risk updated", "risks": risks}
 
 
@@ -532,6 +542,12 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
 
     async with database.with_org(org_id) as conn:
         await conn.execute("UPDATE analyses SET actions=$1::jsonb WHERE id=$2", json.dumps(actions), a_row["id"])
+        action_label = (matched_action.get("text") or matched_action.get("action") or "")[:80]
+        status = "Completed" if completed else "Re-opened"
+        rolled_note = " (carried-over action)" if matched_action.get("is_rolled_over") else ""
+        await _log_edit(conn, meeting_id, org_id, "action_completion",
+                        current_user["id"], current_user.get("name", ""),
+                        f"{status}: \"{action_label}\"{rolled_note}")
 
     # Propagate completion back to the original meeting so the action stops rolling forward
     if completed and matched_action and matched_action.get("is_rolled_over"):
@@ -700,11 +716,39 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
             transcript_id,
         )
     prev_text = existing_t["speaker_text"] if existing_t else ""
-    has_text_edit = False
-    if prev_text:
-        def _turn_bodies(s):
-            return [ln.split(":", 1)[-1].strip() for ln in s.strip().split("\n") if ":" in ln]
-        has_text_edit = _turn_bodies(prev_text) != _turn_bodies(data.speaker_text)
+
+    # Parse turns properly — strips [MM:SS] prefix before comparing
+    def _parse_turns(s):
+        turns = []
+        for ln in (s or "").strip().split("\n"):
+            ln = ln.strip()
+            if not ln:
+                continue
+            ln = re.sub(r'^\[\d{1,2}:\d{2}\]\s*', '', ln)  # strip timestamp prefix
+            if ':' in ln:
+                spk, body = ln.split(':', 1)
+                turns.append((spk.strip(), body.strip()))
+        return turns
+
+    prev_turns = _parse_turns(prev_text) if prev_text else []
+    new_turns = _parse_turns(data.speaker_text)
+
+    # Detect speaker label renames
+    speaker_renames = {}
+    for p, n in zip(prev_turns, new_turns):
+        if p[0] != n[0] and p[0] not in speaker_renames:
+            speaker_renames[p[0]] = n[0]
+
+    # Detect turn body text changes
+    text_edit_details = []
+    for i, (p, n) in enumerate(zip(prev_turns, new_turns)):
+        if p[1] != n[1]:
+            text_edit_details.append(
+                f"Turn {i+1} ({n[0]}): \"{p[1][:80]}\" \u2192 \"{n[1][:80]}\""
+            )
+
+    has_speaker_rename = bool(speaker_renames)
+    has_text_edit = bool(text_edit_details)
 
     now = datetime.now(timezone.utc).isoformat()
     set_parts = [
@@ -734,17 +778,25 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
     values.append(transcript_id)
     async with database.with_org(org_id) as conn:
         await conn.execute(f"UPDATE transcripts SET {', '.join(set_parts)} WHERE id=${idx}", *values)
-        logs = [{
-            "action": "speaker_correction", "user_id": current_user["id"],
-            "user_name": current_user.get("name", ""), "meeting_id": meeting_id, "org_id": org_id,
-        }]
+
+        # Build targeted audit entries with meaningful detail
+        audit_logs = []
+        if has_speaker_rename:
+            rename_detail = "; ".join(f"'{old}' \u2192 '{new}'" for old, new in speaker_renames.items())
+            audit_logs.append(("speaker_correction", f"Speaker labels updated: {rename_detail}"))
         if has_text_edit:
-            logs.append({
-                "action": "transcript_text_edited", "user_id": current_user["id"],
-                "user_name": current_user.get("name", ""), "meeting_id": meeting_id, "org_id": org_id,
-            })
-        for log in logs:
-            await _audit(conn, log["meeting_id"], log["org_id"], log["action"], log["user_id"], log["user_name"])
+            parts = text_edit_details[:3]
+            edit_detail = "; ".join(parts)
+            if len(text_edit_details) > 3:
+                edit_detail += f" (+{len(text_edit_details) - 3} more turns)"
+            audit_logs.append(("transcript_text_edited", edit_detail))
+        if not audit_logs:
+            # Colour-only change or first save
+            colour_only = data.speaker_colors is not None and not has_text_edit and not has_speaker_rename
+            audit_logs.append(("speaker_correction", "Speaker colours updated" if colour_only else "Speaker labels saved"))
+
+        for action, detail in audit_logs:
+            await _audit(conn, meeting_id, org_id, action, current_user["id"], current_user.get("name", ""), detail)
 
     return {
         "message": "Speaker labels updated",
@@ -1166,7 +1218,8 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
 
     label_map_edit = {"summary": "Summary edited", "actions": "Action items updated",
                       "evidence": "Evidence item updated", "transcript_anonymise": "Transcript anonymised (manual)",
-                      "evidence_rescan": "Evidence re-scanned", "post_signoff_evidence_edit": "Evidence edited after sign-off"}
+                      "evidence_rescan": "Evidence re-scanned", "post_signoff_evidence_edit": "Evidence edited after sign-off",
+                      "risk": "Risk item updated", "action_completion": "Action item updated"}
     async with database.with_org(org_id) as conn:
         edit_rows = await conn.fetch(
             "SELECT * FROM review_edits WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id,
@@ -1177,7 +1230,7 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
         is_post_signoff = edit_type == "post_signoff_evidence_edit"
         events.append({"type": f"edit_{edit_type}", "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
                        "actor": edit.get("user_name", "Unknown"), "timestamp": edit.get("timestamp", ""),
-                       "detail": edit.get("detail") if is_post_signoff else None, "flagged": is_post_signoff})
+                       "detail": edit.get("detail"), "flagged": is_post_signoff})
 
     for a in (meeting.get("attendees") or []):
         if a.get("reviewed") and a.get("reviewed_at"):
