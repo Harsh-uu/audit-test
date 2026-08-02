@@ -105,7 +105,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         if assemblyai_key:
             try:
-                transcript_text, numbered_speaker_text, transcript_warnings = await transcribe_with_assemblyai(
+                transcript_text, numbered_speaker_text, timestamped_plain, transcript_warnings = await transcribe_with_assemblyai(
                     audio_data, speakers_expected=attendee_count
                 )
             except Exception as aai_err:
@@ -191,7 +191,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         paused_periods = meeting.get("paused_periods") or []
         results = await asyncio.gather(
-            analyze_meeting(transcript_text, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template),
+            analyze_meeting(timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template),
             diarize_coro,
             return_exceptions=True,
         )
@@ -534,7 +534,7 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
 
     attendee_count = len(meeting.get("attendees") or []) or None
     try:
-        plain_text, numbered_speaker_text, _ = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
+        plain_text, numbered_speaker_text, _, _ = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
     except Exception as e:
         logger.error(f"Retranscribe: AssemblyAI failed for {meeting_id}: {e}")
         async with database.with_org(org_id) as conn:

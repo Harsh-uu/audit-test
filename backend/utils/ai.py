@@ -55,6 +55,12 @@ CARE_KEYTERMS = [
 ]
 
 
+def _ms_to_mmss(ms: int) -> str:
+    """Convert milliseconds to MM:SS display string."""
+    s = int(ms) // 1000
+    return f"{s // 60:02d}:{s % 60:02d}"
+
+
 def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
     """Compress audio to 16 kHz mono 32 kbps MP3 — optimal for voice, ~7 MB per 30 min."""
     import imageio_ffmpeg
@@ -160,6 +166,7 @@ Rules:
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
 - If no custom standards are provided, return custom_mappings as an empty array []
 - If the meeting had paused sections, note this in the summary
+- If the transcript contains [MM:SS] timestamps, include the timestamp at the start of transcript_excerpt values (e.g. "[14:32] I always check the care plan before..."). This helps locate evidence within the session.
 - Include transcript excerpts as exact quotes from the provided text
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
 - Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections."""
@@ -211,6 +218,7 @@ Rules:
     * Name mentions and self-references
     * Topic ownership — the supervisor steers the agenda; supervisees report on their work
     * Changes in register, formality or topic signal a speaker change
+    * Turn length — the supervisor typically asks shorter questions or prompts; the worker typically speaks for longer when describing their practice or experiences
 - When there are 3 or more participants, give each person their own label — do NOT merge a third person into one of the other two
 - Start each new speaker turn on a fresh line
 - Preserve ALL original words exactly as transcribed — do not paraphrase, correct, or add any words
@@ -221,13 +229,15 @@ Rules:
 # ── Deepgram speaker-number → real name mapping prompt ────────────────────
 SPEAKER_MAPPING_SYSTEM_PROMPT = """You are a transcript editor for supervision meetings in UK adult social care.
 The audio has already been diarized — speakers are labelled generically (e.g. Speaker A, Speaker B, Speaker 0, Speaker 1).
-Your task is to replace those generic labels with the real participant names provided.
+Each turn is prefixed with a [MM:SS] timestamp. Your task is to replace the generic labels with real participant names.
 
 Rules:
 - Identify which labelled speaker corresponds to which named participant by reading the conversation
 - The manager/supervisor steers the agenda, asks questions about the worker's practice, and conducts the meeting
 - The worker/supervisee reports on their own work and development
-- Do NOT change any spoken words — only replace the speaker label at the start of each line
+- Use turn duration as a signal: short turns (under 15 seconds apart) are typically manager questions or prompts; longer turns are typically the worker explaining their practice
+- PRESERVE the [MM:SS] timestamp at the start of each line exactly as-is — only replace the speaker label: [MM:SS] Speaker A: text → [MM:SS] RealName: text
+- Do NOT change any spoken words — only replace the speaker label
 - If there are more labelled speakers than named participants (e.g. crosstalk artefacts), assign them to the closest matching participant
 - Output ONLY the reformatted transcript — no preamble, explanation, or markdown"""
 
@@ -348,13 +358,16 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
         logger.info(f"AssemblyAI found {len(unique_speakers)} speaker(s): {sorted(unique_speakers)}")
 
         if len(unique_speakers) > 1:
-            lines = [f"Speaker {u.speaker}: {u.text}" for u in transcript.utterances]
+            lines = [f"[{_ms_to_mmss(u.start)}] Speaker {u.speaker}: {u.text}" for u in transcript.utterances]
             speaker_text = "\n".join(lines)
+            # Build a timestamped version of the plain text for analysis (no speaker labels — diarization runs in parallel)
+            ts_lines = [f"[{_ms_to_mmss(u.start)}] {u.text}" for u in transcript.utterances]
+            timestamped_plain = "\n".join(ts_lines)
             logger.info("AssemblyAI diarization usable — GPT-4o will map names only")
-            return plain_text, speaker_text, warnings
+            return plain_text, speaker_text, timestamped_plain, warnings
 
     logger.info("AssemblyAI found only 1 speaker — GPT-4o will diarise from text")
-    return plain_text, None, warnings
+    return plain_text, None, plain_text, warnings
 
 
 async def transcribe_with_deepgram(audio_data: bytes) -> tuple:

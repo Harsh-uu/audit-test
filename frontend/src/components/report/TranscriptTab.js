@@ -20,7 +20,10 @@ function cleanExcerpt(excerpt) {
  * Returns the matched string, or "" if nothing was found.
  */
 function resolveExcerptQuery(text, excerpt) {
-  const cleaned = cleanExcerpt(excerpt);
+  // Strip [MM:SS] timestamp and optional "SpeakerName: " prefix the AI may have included
+  const cleaned = cleanExcerpt(excerpt)
+    .replace(/^\[\d{1,2}:\d{2}\]\s*/, "")
+    .replace(/^[^:]{1,50}:\s*/, "");
   if (!cleaned) return "";
   const tLower = text.toLowerCase();
 
@@ -108,20 +111,24 @@ function parseSpeakerText(text) {
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const match = trimmed.match(/^([^:]{1,50}):\s*(.+)/);
+    // Extract optional [MM:SS] timestamp prefix
+    const tsMatch = trimmed.match(/^\[(\d{1,2}:\d{2})\]\s+(.+)/);
+    const timestamp = tsMatch ? tsMatch[1] : null;
+    const rest = tsMatch ? tsMatch[2] : trimmed;
+    const match = rest.match(/^([^:]{1,50}):\s*(.+)/);
     if (match) {
-      turns.push({ speaker: match[1].trim(), text: match[2].trim() });
+      turns.push({ speaker: match[1].trim(), text: match[2].trim(), timestamp });
     } else if (turns.length > 0) {
-      turns[turns.length - 1].text += " " + trimmed;
+      turns[turns.length - 1].text += " " + rest;
     } else {
-      turns.push({ speaker: "Speaker", text: trimmed });
+      turns.push({ speaker: "Speaker", text: rest, timestamp });
     }
   }
   return turns;
 }
 
 function serializeTurns(turns) {
-  return turns.map(t => `${t.speaker}: ${t.text}`).join("\n");
+  return turns.map(t => t.timestamp ? `[${t.timestamp}] ${t.speaker}: ${t.text}` : `${t.speaker}: ${t.text}`).join("\n");
 }
 
 function getSpeakerRole(speaker, managerName) {
@@ -599,7 +606,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     const after = turn.text.slice(selEnd).trim();
 
     const parts = [
-      before ? { speaker: turn.speaker, text: before } : null,
+      before ? { speaker: turn.speaker, text: before, timestamp: turn.timestamp } : null,
       selected ? { speaker: turn.speaker, text: selected } : null,
       after ? { speaker: turn.speaker, text: after } : null,
     ].filter(Boolean);
@@ -1152,8 +1159,13 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
                 const pillClass = customColor ? "" : style.pill;
                 return (
                   <div key={i} className={`flex gap-3 px-5 py-3.5 ${customColor ? "" : style.row}`} style={rowStyle}>
-                    {/* Speaker pill — clickable to reassign (managers/admins only) */}
-                    <div className="relative flex-shrink-0 mt-0.5">
+                    {/* Speaker column: timestamp badge + speaker pill */}
+                    <div className="relative flex-shrink-0 mt-0.5 flex flex-col items-start gap-1">
+                      {turn.timestamp && (
+                        <span className="text-[10px] font-mono text-gray-400 tabular-nums leading-none">
+                          {turn.timestamp}
+                        </span>
+                      )}
                       {canEditSpeakers ? (
                         <button
                           data-testid={`speaker-pill-${i}`}
