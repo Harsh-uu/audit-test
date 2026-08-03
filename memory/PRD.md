@@ -1,7 +1,7 @@
 # Supervision 2.0 - PRD & Project Memory
 
 ## Product Overview
-Supervision 2.0 is a web-based compliance evidence platform for UK care providers (England, Wales, Scotland) in a **single multi-jurisdiction deployment**. Users record supervision meetings, and the system automatically generates transcripts, summaries, and compliance mappings against the correct regional regulatory framework.
+Supervision 2.0 is a web-based compliance evidence platform for UK care providers (England, Wales, Scotland, **Northern Ireland**) in a **single multi-jurisdiction deployment**. Users record supervision meetings, and the system automatically generates transcripts, summaries, and compliance mappings against the correct regional regulatory framework.
 
 **Deployment URL Identifier:** supervison2
 **Product Name:** Supervision
@@ -21,11 +21,16 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ---
 
 ## Jurisdiction Model (Single-Deployment, Multi-Region)
-- `organisations.jurisdiction` column: `'england'` | `'wales'` | `'scotland'`
-- `standards_entries.jurisdiction` column: `'england'` | `'wales'`
+- `organisations.jurisdiction` column: `'england'` | `'wales'` | `'scotland'` | `'northern_ireland'`
+- `organisations.service_type` column: `'residential'` | `'domiciliary'` | `NULL` — **required for NI, NULL for other jurisdictions**
+- `standards_entries.jurisdiction` column: same 4 values
+- `standards_entries.service_type` column: `'residential'` | `'domiciliary'` | `NULL` — NI RQIA standards tagged by service_type; NISCC (NULL = shared)
 - England orgs: CQC (47) + Care Certificate (16) = 63 standards
-- Wales orgs: CIW (7) + AWIF (7) + SCW (6) = 20 standards — **NEVER show English standards to Welsh orgs**
-- Schema migration runs on startup via `seed_all()` using `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
+- Wales orgs: CIW (23) + AWIF (7) + SCW (6) = 36 standards
+- Scotland orgs: CI Quality Indicators (18) + SSSC Code (6) = 24 standards
+- NI Domiciliary orgs: RQIA Dom (16) + NISCC Code (12) + NISCC Induction (7) = 35 standards
+- NI Residential orgs: RQIA Res (15) + NISCC Code (12) + NISCC Induction (7) = 34 standards
+- Schema migrations run on startup via `seed_all()` using `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
 
 ---
 
@@ -171,10 +176,10 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - `users` — org_id, role, mfa_enabled, mfa_code, mfa_code_expires_at
 - `meetings` — org_id, attendees (JSONB), sign_off_manager_id, rescan_status
 - `focus_topics` — org_id, text, is_current, active_month (YYYY-MM)
-- `organisations` — name, slug, status, **jurisdiction** ('england'|'wales'|'scotland')
+- `organisations` — name, slug, status, **jurisdiction** ('england'|'wales'|'scotland'|'northern_ireland'), **service_type** ('residential'|'domiciliary'|NULL)
 - `invitations` — org_id, token, expires_at
 - `meeting_prep` — meeting_id, sections (JSONB), focus_topic, coverage_results
-- `standards_entries` — type, reference, name, description, sub_outcomes, is_system, **jurisdiction** ('england'|'wales')
+- `standards_entries` — type, reference, name, description, sub_outcomes, is_system, **jurisdiction** ('england'|'wales'|'scotland'|'northern_ireland'), **service_type** ('residential'|'domiciliary'|NULL)
 - `standards_documents` — org_id scoped custom/org standards
 
 ---
@@ -196,12 +201,10 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ## Prioritized Backlog
 
 ### P0 (Next)
-- Scotland standards seed into `standards_entries` with `jurisdiction='scotland'` (CIS/SSSC Code)
-- Jurisdiction-aware frontend labels: show "CIW Evidence" and "AWIF/SCW Evidence" (instead of "CQC/Care Cert") in MeetingReport, InspectionPrep, CareCertPrep pages for Welsh orgs
-- Super Admin "Edit Org" form needs Jurisdiction field (currently only Create Org has it)
+- Super Admin "Edit Org" form needs Jurisdiction + Service Type fields (NI orgs need to be able to update service_type post-creation)
 
 ### P1
-- None outstanding
+- Jurisdiction-aware frontend labels: show "RQIA Evidence" and "NISCC Evidence" (instead of "CQC/Care Cert") in MeetingReport, InspectionPrep pages for NI orgs
 
 ### P2 (Upcoming)
 - **AWIF granularity review** (Wales consultation pending): Current AWIF sub-outcomes are section headings (topic level). Decision pending from Welsh users on whether to drill down to the specific "I can/I understand" practice learning outcome statements. All 7 workbook .docx files available in job assets for re-extraction when ready.
