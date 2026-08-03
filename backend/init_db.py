@@ -487,9 +487,13 @@ CREATE INDEX IF NOT EXISTS idx_supervision_uploads_staff_id ON supervision_uploa
 
 -- ── Schema patches (idempotent — safe to run on existing database) ─────────────
 
--- Jurisdiction support: single deployment serves England / Wales / Scotland
+-- Jurisdiction support: single deployment serves England / Wales / Scotland / Northern Ireland
 ALTER TABLE organisations ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'england';
 ALTER TABLE standards_entries ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'england';
+
+-- Northern Ireland service type: 'residential' | 'domiciliary' (NULL = not applicable / NI shared)
+ALTER TABLE organisations ADD COLUMN IF NOT EXISTS service_type TEXT;
+ALTER TABLE standards_entries ADD COLUMN IF NOT EXISTS service_type TEXT;
 
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS gen_status TEXT DEFAULT 'idle';
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS included_source_ids JSONB NOT NULL DEFAULT '[]';

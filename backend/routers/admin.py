@@ -143,11 +143,34 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
     org_id = current_user.get("org_id", "")
 
     async with database.with_admin() as conn:
-        # Get org jurisdiction to filter system standards correctly
-        org_row = await conn.fetchrow("SELECT jurisdiction FROM organisations WHERE id=$1", org_id)
+        # Get org jurisdiction and service_type to filter system standards correctly
+        org_row = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
         jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
+        org_service_type = (org_row["service_type"] if org_row else None)
 
-        if type:
+        if jurisdiction == "northern_ireland":
+            # NI: RQIA standards filtered by service_type, NISCC (service_type=NULL) always shown
+            if type:
+                rows = await conn.fetch(
+                    """SELECT * FROM standards_entries
+                       WHERE type=$1 AND is_active=TRUE
+                       AND ((is_system=TRUE AND jurisdiction='northern_ireland'
+                             AND (service_type IS NULL OR service_type=$2))
+                            OR org_id=$3)
+                       ORDER BY type, reference""",
+                    type, org_service_type, org_id,
+                )
+            else:
+                rows = await conn.fetch(
+                    """SELECT * FROM standards_entries
+                       WHERE is_active=TRUE
+                       AND ((is_system=TRUE AND jurisdiction='northern_ireland'
+                             AND (service_type IS NULL OR service_type=$1))
+                            OR org_id=$2)
+                       ORDER BY type, reference""",
+                    org_service_type, org_id,
+                )
+        elif type:
             rows = await conn.fetch(
                 """SELECT * FROM standards_entries
                    WHERE type=$1 AND is_active=TRUE

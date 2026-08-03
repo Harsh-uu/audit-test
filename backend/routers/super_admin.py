@@ -24,15 +24,21 @@ def _require_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Super admin only")
 
 
+VALID_JURISDICTIONS = ("england", "wales", "scotland", "northern_ireland")
+VALID_SERVICE_TYPES = ("residential", "domiciliary")
+
+
 class CreateOrgRequest(BaseModel):
     name: str
     jurisdiction: Optional[str] = "england"
+    service_type: Optional[str] = None  # required for northern_ireland
 
 
 class UpdateOrgRequest(BaseModel):
     name: Optional[str] = None
     status: Optional[str] = None
     jurisdiction: Optional[str] = None
+    service_type: Optional[str] = None
 
 
 class OrgBrandingUpdate(BaseModel):
@@ -67,6 +73,7 @@ async def list_orgs(current_user=Depends(get_current_user)):
             result.append({
                 "id": org_id, "name": org["name"], "slug": org["slug"],
                 "status": org["status"], "jurisdiction": org.get("jurisdiction") or "england",
+                "service_type": org.get("service_type"),
                 "created_at": org["created_at"],
                 "user_count": user_count, "meeting_count": meeting_count,
             })
@@ -83,12 +90,16 @@ async def create_org(data: CreateOrgRequest, current_user=Depends(get_current_us
         existing = await conn.fetchrow("SELECT id FROM organisations WHERE slug = $1", slug)
         if existing:
             raise HTTPException(status_code=400, detail="Organisation with this name already exists")
-        jurisdiction = data.jurisdiction if data.jurisdiction in ("england", "wales", "scotland") else "england"
+        jurisdiction = data.jurisdiction if data.jurisdiction in VALID_JURISDICTIONS else "england"
+        service_type = data.service_type if data.service_type in VALID_SERVICE_TYPES else None
+        # NI orgs must declare service_type
+        if jurisdiction == "northern_ireland" and not service_type:
+            raise HTTPException(status_code=400, detail="service_type ('residential' or 'domiciliary') is required for Northern Ireland organisations")
         await conn.execute(
-            "INSERT INTO organisations (id, name, slug, status, branding, jurisdiction, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-            org_id, data.name.strip(), slug, "active", "{}", jurisdiction, now,
+            "INSERT INTO organisations (id, name, slug, status, branding, jurisdiction, service_type, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            org_id, data.name.strip(), slug, "active", "{}", jurisdiction, service_type, now,
         )
-    return {"id": org_id, "name": data.name.strip(), "slug": slug, "status": "active", "jurisdiction": jurisdiction, "created_at": now}
+    return {"id": org_id, "name": data.name.strip(), "slug": slug, "status": "active", "jurisdiction": jurisdiction, "service_type": service_type, "created_at": now}
 
 
 @router.patch("/orgs/{org_id}")
@@ -100,8 +111,13 @@ async def update_org(org_id: str, data: UpdateOrgRequest, current_user=Depends(g
         updates["slug"] = _slugify(data.name)
     if data.status in ("active", "suspended"):
         updates["status"] = data.status
-    if data.jurisdiction in ("england", "wales", "scotland"):
+    if data.jurisdiction in VALID_JURISDICTIONS:
         updates["jurisdiction"] = data.jurisdiction
+    if data.service_type in VALID_SERVICE_TYPES:
+        updates["service_type"] = data.service_type
+    elif data.service_type == "" or (data.jurisdiction and data.jurisdiction != "northern_ireland"):
+        # Clear service_type when switching away from NI
+        updates["service_type"] = None
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()

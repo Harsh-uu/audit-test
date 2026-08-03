@@ -829,6 +829,12 @@ async def analyze_doc_for_evidence(
     elif jurisdiction == "scotland":
         reg_label = "CARE INSPECTORATE SCOTLAND QUALITY INDICATORS"
         cert_label = "SSSC CODE OF PRACTICE (Scottish Social Services Council — Worker's Code 2024)"
+    elif jurisdiction == "northern_ireland_domiciliary":
+        reg_label = "RQIA DOMICILIARY MINIMUM STANDARDS (Northern Ireland — DHSSPS 2021)"
+        cert_label = "NISCC CODE OF PRACTICE & INDUCTION PROGRAMME (Northern Ireland Social Care Council)"
+    elif jurisdiction == "northern_ireland_residential":
+        reg_label = "RQIA RESIDENTIAL CARE HOME REGULATIONS (Northern Ireland — 2005)"
+        cert_label = "NISCC CODE OF PRACTICE & INDUCTION PROGRAMME (Northern Ireland Social Care Council)"
     else:
         reg_label = "CQC REGULATIONS"
         cert_label = "CARE CERTIFICATE STANDARDS"
@@ -911,6 +917,12 @@ async def analyze_meeting(
     elif jurisdiction == "scotland":
         reg_label = "CARE INSPECTORATE SCOTLAND QUALITY INDICATORS"
         cert_label = "SSSC CODE OF PRACTICE (Scottish Social Services Council — Worker's Code 2024)"
+    elif jurisdiction == "northern_ireland_domiciliary":
+        reg_label = "RQIA DOMICILIARY MINIMUM STANDARDS (Northern Ireland — DHSSPS 2021)"
+        cert_label = "NISCC CODE OF PRACTICE & INDUCTION PROGRAMME (Northern Ireland Social Care Council)"
+    elif jurisdiction == "northern_ireland_residential":
+        reg_label = "RQIA RESIDENTIAL CARE HOME REGULATIONS (Northern Ireland — 2005)"
+        cert_label = "NISCC CODE OF PRACTICE & INDUCTION PROGRAMME (Northern Ireland Social Care Council)"
     else:
         reg_label = "CQC REGULATIONS"
         cert_label = "CARE CERTIFICATE STANDARDS"

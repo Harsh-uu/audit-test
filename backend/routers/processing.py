@@ -136,9 +136,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
         # Load standards — filtered by org's jurisdiction
         async with database.with_admin() as conn:
             org_row = await conn.fetchrow(
-                "SELECT jurisdiction FROM organisations WHERE id=$1", meeting_org_id
+                "SELECT jurisdiction, service_type FROM organisations WHERE id=$1", meeting_org_id
             )
             org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
+            org_service_type = (org_row["service_type"] if org_row else None)
 
             if org_jurisdiction == "wales":
                 cqc_rows = await conn.fetch(
@@ -153,6 +154,15 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 )
                 care_cert_rows = await conn.fetch(
                     "SELECT * FROM standards_entries WHERE type='sssc' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
+                )
+            elif org_jurisdiction == "northern_ireland":
+                rqia_type = "rqia_dom" if org_service_type == "domiciliary" else "rqia_res"
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type=$1 AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY reference",
+                    rqia_type,
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type IN ('niscc_code','niscc_induction') AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY type, reference",
                 )
             else:
                 cqc_rows = await conn.fetch(
@@ -211,8 +221,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             diarize_coro = diarize_transcript(transcript_text, manager_name, supervisee_names, meeting_type)
 
         paused_periods = meeting.get("paused_periods") or []
+        # Build effective jurisdiction string (NI needs service_type suffix for AI prompt routing)
+        effective_jurisdiction = org_jurisdiction
+        if org_jurisdiction == "northern_ireland":
+            effective_jurisdiction = f"northern_ireland_{org_service_type or 'domiciliary'}"
+
         results = await asyncio.gather(
-            analyze_meeting(timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template, jurisdiction=org_jurisdiction),
+            analyze_meeting(timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template, jurisdiction=effective_jurisdiction),
             diarize_coro,
             return_exceptions=True,
         )

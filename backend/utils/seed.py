@@ -93,13 +93,13 @@ async def _insert_standards_entries(conn, entries: list, jurisdiction: str):
         await conn.execute(
             """INSERT INTO standards_entries
                (id, org_id, type, reference, name, description, keywords, sub_outcomes,
-                key_questions, quality_statement, source, is_active, is_system, jurisdiction, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15)
+                key_questions, quality_statement, source, is_active, is_system, jurisdiction, service_type, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16)
                ON CONFLICT (id) DO NOTHING""",
             e["id"], None, e["type"], e["reference"], e["name"], e["description"],
             json.dumps(e["keywords"]), json.dumps(e["sub_outcomes"]),
             json.dumps(e["key_questions"]), e.get("quality_statement", False), e["source"],
-            e.get("is_active", True), True, jurisdiction, e["created_at"],
+            e.get("is_active", True), True, jurisdiction, e.get("service_type"), e["created_at"],
         )
 
 
@@ -1519,6 +1519,1102 @@ async def seed_scotland_standards():
 
 
 
+# ── Northern Ireland — RQIA Domiciliary Minimum Standards (DHSSPS 2021) ────────
+
+NI_DOM_STANDARDS = [
+    # Theme: Quality Care
+    {
+        "reference": "Dom Std 1",
+        "name": "Service users' involvement",
+        "key_questions": ["Quality Care"],
+        "description": (
+            "The views of service users and their carers/representatives shape the quality of services "
+            "provided by the agency. Agencies must actively seek feedback, involve service users in "
+            "assessments and reviews, and act on their views to improve care delivery."
+        ),
+        "keywords": [
+            "service user involvement", "feedback", "views", "carers", "representatives",
+            "participation", "person-centred", "involvement in reviews", "satisfaction survey",
+            "individual needs", "quality improvement",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 2",
+        "name": "Information for service users",
+        "key_questions": ["Quality Care"],
+        "description": (
+            "Prospective service users are provided with information about the services provided by "
+            "the agency before care commences. Information must be clear, accessible and in "
+            "appropriate formats. Service users must understand their rights, the complaints procedure "
+            "and how to access RQIA."
+        ),
+        "keywords": [
+            "information provision", "accessible information", "prospective service users",
+            "service guide", "rights", "complaints procedure", "RQIA contact", "formats",
+            "language needs", "statement of purpose",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 3",
+        "name": "Referral arrangements",
+        "key_questions": ["Quality Care"],
+        "description": (
+            "Referral arrangements ensure the service user's identified needs can be met by the agency. "
+            "The agency must carry out an assessment of needs before agreeing to provide care, "
+            "and must not accept a referral if needs cannot be safely met."
+        ),
+        "keywords": [
+            "referral", "needs assessment", "suitability", "care needs", "risk assessment",
+            "pre-admission assessment", "eligibility", "care and support needs", "commissioning",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 4",
+        "name": "Agreement between service user and agency",
+        "key_questions": ["Quality Care"],
+        "description": (
+            "Each service user has a written individual service agreement before care commences. "
+            "The agreement must cover the services to be provided, fees, notice periods, and "
+            "the complaints procedure. Service users must be supported to understand and consent to "
+            "the agreement."
+        ),
+        "keywords": [
+            "service agreement", "written agreement", "consent", "fees", "notice period",
+            "services provided", "contract", "terms and conditions", "person-centred",
+            "individual agreement",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 5",
+        "name": "Recording and reporting",
+        "key_questions": ["Quality Care"],
+        "description": (
+            "All activities undertaken in relation to the service user's care plan are recorded and "
+            "relevant information communicated to appropriate people. Records must be accurate, "
+            "up-to-date, and securely maintained. Significant incidents, changes in condition, "
+            "and near misses must be reported promptly."
+        ),
+        "keywords": [
+            "recording", "reporting", "care records", "documentation", "accurate records",
+            "incident reporting", "near misses", "significant events", "communication",
+            "information sharing", "data protection", "GDPR", "confidentiality",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 6",
+        "name": "Contributing to service user reviews",
+        "key_questions": ["Quality Care"],
+        "description": (
+            "The agency contributes to the review of the service user's care plan. Reviews must "
+            "happen at agreed intervals or when needs change. The agency must involve the service "
+            "user, carers and other professionals, and update care plans to reflect changing needs."
+        ),
+        "keywords": [
+            "care plan review", "review process", "changing needs", "multidisciplinary",
+            "involvement", "regular review", "care planning", "outcomes", "personal outcomes",
+            "risk review",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 7",
+        "name": "Management of medicines",
+        "key_questions": ["Quality Care"],
+        "description": (
+            "The agency has arrangements to ensure that care workers manage medicines safely and "
+            "securely. This includes written policies, trained staff, secure storage, accurate "
+            "recording (MAR charts), and clear protocols for self-administration, assistance, "
+            "and safe disposal. Medicine errors must be reported and investigated."
+        ),
+        "keywords": [
+            "medicines management", "medication", "MAR chart", "controlled drugs",
+            "safe storage", "administration", "medicine errors", "self-administration",
+            "trained staff", "medication policy", "disposal", "prescriptions",
+        ],
+        "service_type": "domiciliary",
+    },
+    # Theme: Management of the Domiciliary Care Agency
+    {
+        "reference": "Dom Std 8",
+        "name": "Management and control of operations",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "Management systems and arrangements are in place that support and promote the delivery "
+            "of quality care services. The registered person and manager must ensure the agency is "
+            "conducted with sufficient care, competence and skill. Clear governance, oversight "
+            "systems, and quality assurance must be demonstrable."
+        ),
+        "keywords": [
+            "management systems", "governance", "quality assurance", "oversight", "competence",
+            "registered person", "registered manager", "operational control", "quality review",
+            "service improvement", "audit", "accountability",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 9",
+        "name": "Policies and procedures",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "There are comprehensive, up-to-date policies and procedures in place that direct the "
+            "quality of care and services. All policies must be reviewed at least every three years, "
+            "and staff must have access to and be familiar with relevant policies including "
+            "safeguarding, medicines, and complaints."
+        ),
+        "keywords": [
+            "policies and procedures", "policy review", "safeguarding policy", "medicines policy",
+            "complaints policy", "health and safety policy", "lone working policy",
+            "staff access", "knowledge of policies", "review cycle",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 10",
+        "name": "Management of records",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "Clear, documented systems are in place for the management of records in accordance with "
+            "legislative requirements. Records must be accurate, legible, stored securely and "
+            "retained for required periods. Service users and their representatives must be able to "
+            "access their own records. Electronic records must be password-protected."
+        ),
+        "keywords": [
+            "records management", "record keeping", "accuracy", "legibility", "secure storage",
+            "data retention", "data protection", "GDPR", "access to records",
+            "electronic records", "password protection", "confidentiality",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 11",
+        "name": "Recruitment of staff",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "Staff are recruited and employed in accordance with relevant statutory employment "
+            "legislation. This includes AccessNI criminal record checks, satisfactory references, "
+            "verification of qualifications, NISCC registration checks, and health assessments. "
+            "Agencies must not employ persons who are unsuitable to work with vulnerable adults."
+        ),
+        "keywords": [
+            "recruitment", "AccessNI", "criminal record check", "DBS", "references",
+            "qualifications", "NISCC registration", "employment checks", "fitness to work",
+            "vetting", "safer recruitment", "employment legislation",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 12",
+        "name": "Staff training and development",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "Staff are trained for their roles and responsibilities. All care workers must complete "
+            "the NISCC Induction Programme within agreed timescales. Mandatory training must include "
+            "safeguarding, manual handling, medicines management, infection control and fire safety. "
+            "A training needs analysis must be conducted and training records maintained."
+        ),
+        "keywords": [
+            "training", "NISCC induction", "induction programme", "mandatory training",
+            "safeguarding training", "manual handling", "medicines training", "infection control",
+            "training records", "training needs analysis", "CPD", "professional development",
+            "skills development", "competency",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 13",
+        "name": "Staff supervision and appraisal",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "Staff are supervised and their performance appraised to promote the delivery of quality "
+            "care and services. Supervision must be regular, documented and support staff development. "
+            "Annual appraisals must identify training needs and personal development goals. "
+            "Supervision records must be maintained securely."
+        ),
+        "keywords": [
+            "supervision", "appraisal", "performance management", "staff development",
+            "regular supervision", "documented supervision", "supervision records",
+            "annual appraisal", "training needs", "personal development", "reflective practice",
+            "line management",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 14",
+        "name": "Protection of vulnerable adults and safeguarding children",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "Service users are protected from abuse. Agencies must have a safeguarding policy, "
+            "a designated safeguarding lead, and ensure all staff receive safeguarding training. "
+            "All allegations and concerns must be reported immediately to the designated person and "
+            "the appropriate Trust. Agencies must follow Northern Ireland adult safeguarding procedures "
+            "and work collaboratively with statutory agencies."
+        ),
+        "keywords": [
+            "safeguarding", "abuse", "neglect", "vulnerable adults", "safeguarding lead",
+            "safeguarding policy", "reporting concerns", "allegations", "HSC Trust",
+            "adult safeguarding procedures", "NIAPSA", "safeguarding training", "whistleblowing",
+            "financial abuse", "exploitation", "restraint",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 15",
+        "name": "Complaints",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "All complaints are taken seriously and dealt with promptly and effectively. "
+            "The agency must have a clear complaints procedure accessible to service users and carers. "
+            "Complaints must be investigated, and the complainant informed of the outcome and any "
+            "action taken within 28 days. Complaints must be analysed to identify service improvements."
+        ),
+        "keywords": [
+            "complaints", "complaints procedure", "investigation", "resolution",
+            "28-day response", "complainant rights", "complaints analysis", "service improvement",
+            "RQIA complaints", "advocate", "NIPSO",
+        ],
+        "service_type": "domiciliary",
+    },
+    {
+        "reference": "Dom Std 16",
+        "name": "Safe and healthy working practices",
+        "key_questions": ["Management of the Agency"],
+        "description": (
+            "The agency has systems that ensure safe and healthy working practices for staff and "
+            "service users. This includes risk assessments for care workers visiting service users' "
+            "homes, lone working policies, manual handling procedures, infection prevention and "
+            "control, and appropriate PPE provision. Staff wellbeing must be actively promoted."
+        ),
+        "keywords": [
+            "health and safety", "risk assessment", "lone working", "manual handling",
+            "infection prevention", "infection control", "PPE", "personal protective equipment",
+            "staff wellbeing", "COSHH", "home environment risk", "first aid",
+        ],
+        "service_type": "domiciliary",
+    },
+]
+
+
+# ── Northern Ireland — RQIA Residential Care Home Regulations 2005 ──────────────
+
+NI_RES_REGULATIONS = [
+    {
+        "reference": "Reg 3",
+        "name": "Statement of purpose",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "The registered person must compile a written statement of purpose detailing the home's "
+            "aims and objectives, the facilities and services provided, the philosophy of care, "
+            "resident numbers and needs, admission criteria, and complaints procedure. "
+            "A copy must be supplied to RQIA and made available to residents and their representatives."
+        ),
+        "keywords": [
+            "statement of purpose", "aims and objectives", "philosophy of care", "RQIA",
+            "facilities", "services", "admission criteria", "care home information",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 10",
+        "name": "Registered person: general requirements",
+        "key_questions": ["Management"],
+        "description": (
+            "The registered provider and manager must conduct the home with sufficient care, "
+            "competence and skill, having regard to the size of the home, its statement of purpose, "
+            "and the needs of residents. Both must undertake appropriate training to fulfil their roles."
+        ),
+        "keywords": [
+            "registered person", "registered manager", "registered provider", "competence",
+            "care and skill", "management training", "accountable person",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 12",
+        "name": "Requirements to ensure quality of care and other service provision",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "Care and services must meet individual needs, reflect best practice and use appropriate "
+            "aids and equipment. Food and drink must be adequate, nutritious, varied and suitable "
+            "for residents' specific dietary, cultural, and clinical needs. Equipment must be "
+            "suitable, maintained, and used correctly."
+        ),
+        "keywords": [
+            "quality of care", "individual needs", "best practice", "food and drink",
+            "nutrition", "hydration", "equipment", "aids", "dietary needs",
+            "cultural needs", "special diets",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 13",
+        "name": "Health and welfare of residents",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "The home must promote residents' health and welfare, enabling them to make decisions "
+            "about their own care. Residents' wishes and feelings must be ascertained and taken into "
+            "account. Medicine management must be safe and well-documented. The home must respect "
+            "residents' privacy, dignity, and diversity, and staff must maintain professional relationships."
+        ),
+        "keywords": [
+            "health and welfare", "informed decisions", "wishes and feelings", "dignity",
+            "privacy", "medicines management", "medication records", "infection prevention",
+            "diversity", "respect", "professional relationships", "person-centred care",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 14",
+        "name": "Further requirements as to health and welfare",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "Residents must have arrangements to register with a GP and receive necessary professional "
+            "services. The home must be free from hazards, with safe systems for moving and handling. "
+            "Measures to prevent harm and abuse are mandatory. Restraint may only be used in "
+            "exceptional circumstances and must be recorded. Training in first aid is required."
+        ),
+        "keywords": [
+            "GP registration", "professional services", "hazard-free environment", "risk management",
+            "moving and handling", "manual handling", "safeguarding", "abuse prevention",
+            "restraint", "first aid training", "falls prevention",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 15",
+        "name": "Assessment of residents",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "Before admitting a resident, their needs must be assessed by a qualified person. "
+            "The registered person must confirm in writing that the home is suitable for the "
+            "resident's needs. Assessments must consider physical, mental, cultural and social "
+            "needs. Assessments must be reviewed at least annually or when needs change."
+        ),
+        "keywords": [
+            "needs assessment", "pre-admission assessment", "suitability", "holistic assessment",
+            "physical needs", "mental needs", "cultural needs", "social needs", "annual review",
+            "assessment review", "qualified assessor",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 16",
+        "name": "Residents' care plan",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "A written care plan must be prepared in consultation with the resident or their "
+            "representative, outlining how their needs will be met. The care plan must be available "
+            "to the resident, kept under regular review, and revised to reflect changing needs. "
+            "Residents must be notified of any revisions."
+        ),
+        "keywords": [
+            "care plan", "person-centred care plan", "care planning", "consultation",
+            "resident involvement", "care plan review", "changing needs", "individual outcomes",
+            "representative", "care plan update",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 17",
+        "name": "Review of quality of care and other service provision",
+        "key_questions": ["Management"],
+        "description": (
+            "Systems must be maintained for reviewing the quality of care and services at least "
+            "annually. A report of the review must be supplied to RQIA and made available to "
+            "residents. The review must include consultation with residents and their representatives "
+            "and analyse incidents, complaints, and areas for improvement."
+        ),
+        "keywords": [
+            "quality review", "annual review", "quality assurance", "RQIA report", "resident feedback",
+            "incident analysis", "complaints analysis", "quality improvement", "governance",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 19",
+        "name": "Records",
+        "key_questions": ["Management"],
+        "description": (
+            "Comprehensive records must be maintained for each resident and for the home overall, "
+            "as specified in Schedules 3 and 4 of the Regulations. Records must be up-to-date, "
+            "available to authorised persons, and retained for at least 6 years. Service users must "
+            "be informed about how to access their personal records."
+        ),
+        "keywords": [
+            "record keeping", "resident records", "care records", "incident records",
+            "staff records", "duty rosters", "training records", "complaint records",
+            "6-year retention", "data protection", "GDPR", "access to records",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 20",
+        "name": "Staffing",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "The home must have suitably qualified, competent and experienced staff in appropriate "
+            "numbers at all times. Staff must receive appraisal and training, be supported to maintain "
+            "professional registration (NISCC), and enabled to gain further qualifications. "
+            "Adequate supervision must be provided and job descriptions given to all staff."
+        ),
+        "keywords": [
+            "staffing levels", "qualified staff", "competent staff", "staff appraisal",
+            "training", "NISCC registration", "professional registration", "qualifications",
+            "supervision", "job description", "staffing policy", "care workers",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 21",
+        "name": "Fitness of workers",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "Persons employed must be fit to work in the home, with satisfactory background "
+            "information including AccessNI criminal record checks, authentic references, "
+            "and verification of qualifications and experience. This applies both to directly "
+            "employed staff and those employed by third parties working at the home."
+        ),
+        "keywords": [
+            "fitness to work", "AccessNI", "criminal record check", "references", "qualifications",
+            "employment vetting", "safer recruitment", "integrity", "character check",
+            "third party staff", "agency staff",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 23",
+        "name": "Staff views as to conduct of the home",
+        "key_questions": ["Management"],
+        "description": (
+            "Arrangements must be made to enable staff to inform the registered person, RQIA, and "
+            "local HSC Trust, in confidence, of their views on matters affecting the care, safety "
+            "or welfare of residents. This underpins a culture of openness, transparency and "
+            "psychological safety."
+        ),
+        "keywords": [
+            "staff views", "whistleblowing", "raising concerns", "confidential reporting",
+            "RQIA", "HSC Trust", "psychological safety", "transparency", "openness",
+            "duty of candour", "freedom to speak up",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 24",
+        "name": "Complaints",
+        "key_questions": ["Management"],
+        "description": (
+            "A complaints procedure must be established appropriate to residents' needs. "
+            "Complaints must be fully investigated, and the complainant informed of the process, "
+            "outcome, and any action taken within 28 days. A written copy of the procedure "
+            "must be given to residents, including RQIA contact details."
+        ),
+        "keywords": [
+            "complaints procedure", "investigation", "28-day response", "complainant",
+            "outcome", "RQIA complaints", "resident rights", "summary of complaints",
+            "complaints analysis",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 25",
+        "name": "Guidance for social care workers, nurses and health care professionals",
+        "key_questions": ["Conduct of the Home"],
+        "description": (
+            "Relevant Codes of Practice — including the NISCC Code of Practice for Social Care "
+            "Workers — must be made available to staff. Staff must be supported to meet the "
+            "standards set out in the Codes, and appropriate action must be taken when standards "
+            "are not met, including referral to NISCC where required."
+        ),
+        "keywords": [
+            "NISCC code of practice", "code of practice", "professional standards",
+            "NMC code", "NISCC referral", "fitness to practise", "professional conduct",
+            "standards of practice",
+        ],
+        "service_type": "residential",
+    },
+    {
+        "reference": "Reg 30",
+        "name": "Notification of death, illness and other events",
+        "key_questions": ["Management"],
+        "description": (
+            "The registered person must notify RQIA without delay of resident deaths (including "
+            "circumstances), outbreaks of serious infectious disease, serious injuries, "
+            "events adversely affecting care, theft, burglary, accidents, or allegations of "
+            "misconduct. Oral notifications must be confirmed in writing within 3 working days."
+        ),
+        "keywords": [
+            "notification", "RQIA notification", "death", "serious incident", "serious injury",
+            "infectious disease", "outbreak", "misconduct allegation", "reporting requirements",
+            "incident reporting", "3 working days",
+        ],
+        "service_type": "residential",
+    },
+]
+
+
+# ── Northern Ireland — NISCC Code of Practice for Social Care Workers ──────────
+# Both domiciliary and residential — service_type=None means shared/applicable to all NI.
+
+NISCC_CODE_STANDARDS = [
+    # Standards of Conduct (6 standards)
+    {
+        "reference": "NISCC Conduct 1",
+        "name": "Protect the rights and promote the interests of service users",
+        "description": (
+            "Social care workers must treat each person as an individual, treat them with respect "
+            "and compassion, empower service users and carers to communicate their views, support "
+            "their right to control their lives and make informed choices, gain appropriate consent, "
+            "and respect and maintain the dignity and privacy of service users."
+        ),
+        "keywords": [
+            "rights", "interests", "dignity", "respect", "compassion", "consent",
+            "informed choices", "privacy", "individual needs", "equality", "diversity",
+            "protected characteristics", "person-centred", "empowerment",
+        ],
+        "sub_outcomes": [
+            {"ref": "C1.1", "desc": "Treat each person as an individual"},
+            {"ref": "C1.2", "desc": "Treat people with consideration, respect and compassion"},
+            {"ref": "C1.3", "desc": "Empower service users and carers to communicate their views, needs and preferences"},
+            {"ref": "C1.4", "desc": "Support service users' right to control their lives and make informed choices"},
+            {"ref": "C1.5", "desc": "Gain consent appropriately before providing care or services"},
+            {"ref": "C1.6", "desc": "Respect and maintain the dignity and privacy of service users"},
+            {"ref": "C1.7", "desc": "Treat service users and carers fairly and promote equal opportunities"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Conduct 2",
+        "name": "Establish and maintain the trust and confidence of service users",
+        "description": (
+            "Workers must be honest and trustworthy, communicate openly and accurately, "
+            "respect confidential information and data protection obligations, be reliable and "
+            "dependable, honour work commitments, declare conflicts of interest, and refuse "
+            "inappropriate gifts, loans or financial transactions."
+        ),
+        "keywords": [
+            "trust", "honesty", "trustworthy", "confidentiality", "data protection",
+            "reliability", "conflicts of interest", "gifts policy", "financial boundaries",
+            "communication", "transparent", "straightforward",
+        ],
+        "sub_outcomes": [
+            {"ref": "C2.1", "desc": "Be honest and trustworthy"},
+            {"ref": "C2.2", "desc": "Communicate in an appropriate, open, accurate and straightforward way"},
+            {"ref": "C2.3", "desc": "Respect confidential information and explain confidentiality policies"},
+            {"ref": "C2.4", "desc": "Hold, use and store records in line with procedures and data protection"},
+            {"ref": "C2.5", "desc": "Be reliable and dependable, honour work commitments"},
+            {"ref": "C2.6", "desc": "Declare conflicts of interest and adhere to policies on accepting gifts"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Conduct 3",
+        "name": "Promote autonomy of service users while safeguarding from harm",
+        "description": (
+            "Workers must promote service users' independence, use processes to manage dangerous or "
+            "abusive behaviour, follow procedures to keep themselves and others safe, report "
+            "resource difficulties, inform employers of unsafe practice without delay, comply with "
+            "health and safety policies, and use power responsibly."
+        ),
+        "keywords": [
+            "autonomy", "independence", "safeguarding", "dangerous behaviour", "risk management",
+            "lone working", "health and safety", "unsafe practice", "power and control",
+            "duty of care", "reporting concerns",
+        ],
+        "sub_outcomes": [
+            {"ref": "C3.1", "desc": "Promote service users' independence and empower them to exercise their rights"},
+            {"ref": "C3.2", "desc": "Use processes to assess, respond to and manage dangerous, abusive or exploitative behaviour"},
+            {"ref": "C3.3", "desc": "Report resource or operational difficulties that hinder safe care delivery"},
+            {"ref": "C3.4", "desc": "Inform employer or authority of unsafe practice by colleagues without delay"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Conduct 4",
+        "name": "Respect service users' rights while protecting them from harm",
+        "description": (
+            "Workers must recognise service users' right to take positive risks and help manage "
+            "them. They must follow risk assessment policies to assess harm risks, take steps to "
+            "minimise risks, and inform relevant colleagues and agencies of risk assessment outcomes."
+        ),
+        "keywords": [
+            "positive risk", "risk assessment", "right to take risks", "harm minimisation",
+            "risk management plan", "informed risk", "risk enablement", "safety",
+        ],
+        "sub_outcomes": [
+            {"ref": "C4.1", "desc": "Recognise service users' right to take positive risks and help manage them"},
+            {"ref": "C4.2", "desc": "Follow risk assessment policies to assess harm risks"},
+            {"ref": "C4.3", "desc": "Take steps to minimise risks of harm and inform relevant colleagues of outcomes"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Conduct 5",
+        "name": "Uphold public trust and confidence in social care services",
+        "description": (
+            "Workers must not abuse, neglect or harm service users, carers or colleagues; "
+            "not exploit service users or abuse trust; not form inappropriate personal relationships; "
+            "not discriminate unlawfully; not put themselves or others at unnecessary risk; "
+            "not behave in a way that questions their suitability; and use social media appropriately."
+        ),
+        "keywords": [
+            "public trust", "abuse", "neglect", "exploitation", "professional boundaries",
+            "personal relationships", "discrimination", "social media", "professional conduct",
+            "suitability", "professional behaviour",
+        ],
+        "sub_outcomes": [
+            {"ref": "C5.1", "desc": "Not abuse, neglect or harm service users, carers or colleagues"},
+            {"ref": "C5.2", "desc": "Not exploit service users, carers or colleagues"},
+            {"ref": "C5.3", "desc": "Not form inappropriate personal relationships with service users"},
+            {"ref": "C5.4", "desc": "Not discriminate unlawfully or unjustifiably"},
+            {"ref": "C5.5", "desc": "Not use social media/electronic communication contravening professional boundaries or standards"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Conduct 6",
+        "name": "Be accountable for the quality of your work",
+        "description": (
+            "Workers must meet relevant standards of practice, work lawfully, safely and effectively, "
+            "take personal accountability for their actions, maintain clear and accurate records, "
+            "inform employers of personal difficulties, co-operate with investigations, work "
+            "collaboratively with colleagues, and commit to ongoing training and professional development."
+        ),
+        "keywords": [
+            "accountability", "quality of work", "accurate records", "professional development",
+            "training", "CPD", "openness", "duty of candour", "co-operation", "fitness to practise",
+            "NISCC registration", "supervision", "appraisal", "reflective practice",
+        ],
+        "sub_outcomes": [
+            {"ref": "C6.1", "desc": "Meet relevant standards of practice and work lawfully, safely and effectively"},
+            {"ref": "C6.2", "desc": "Take personal and collective responsibility for quality improvement and safety"},
+            {"ref": "C6.3", "desc": "Maintain clear and accurate records"},
+            {"ref": "C6.4", "desc": "Be open and honest if things go wrong — duty of candour"},
+            {"ref": "C6.5", "desc": "Co-operate with investigations and work openly with colleagues"},
+            {"ref": "C6.6", "desc": "Undertake relevant training and learning to improve knowledge and skills"},
+        ],
+        "service_type": None,
+    },
+    # Standards of Practice (6 standards)
+    {
+        "reference": "NISCC Practice 1",
+        "name": "Understand main duties and responsibilities of your role",
+        "description": (
+            "Workers must know the aims, objectives and values of their service, access and adhere "
+            "to policies and procedures, know their responsibilities to service users (including "
+            "duty of care), prioritise and manage their work effectively, work in partnership, "
+            "and keep accurate records. Includes reporting of adverse events and responding to complaints."
+        ),
+        "keywords": [
+            "duties", "responsibilities", "role understanding", "policies", "procedures",
+            "duty of care", "work management", "prioritisation", "partnership", "records",
+            "adverse events", "incident reporting", "complaints response", "job description",
+        ],
+        "sub_outcomes": [
+            {"ref": "P1.1", "desc": "Know the aims, objectives and values of the service in which you work"},
+            {"ref": "P1.2", "desc": "Access and adhere to policies, procedures and agreed ways of working"},
+            {"ref": "P1.3", "desc": "Know your main responsibilities to those service users and carers you support including duty of care"},
+            {"ref": "P1.4", "desc": "Prioritise and manage your work effectively"},
+            {"ref": "P1.5", "desc": "Keep records that are up to date, complete, accurate and legible"},
+            {"ref": "P1.6", "desc": "Report adverse events, incidents, errors and near misses"},
+            {"ref": "P1.7", "desc": "Respond appropriately to comments and complaints"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Practice 2",
+        "name": "Be able to communicate effectively",
+        "description": (
+            "Workers must develop effective relationships with service users and carers, establish "
+            "communication needs and preferences, use appropriate communication methods, "
+            "recognise and address barriers to communication, work effectively in teams, "
+            "and share information with other staff and agencies appropriately."
+        ),
+        "keywords": [
+            "communication", "effective communication", "communication needs", "language needs",
+            "barriers to communication", "non-verbal communication", "teamwork",
+            "information sharing", "confidentiality", "relationship building", "listening",
+        ],
+        "sub_outcomes": [
+            {"ref": "P2.1", "desc": "Develop effective relationships with service users and carers"},
+            {"ref": "P2.2", "desc": "Establish service user communication and language needs, wishes and preferences"},
+            {"ref": "P2.3", "desc": "Use a range of communication methods and styles to meet individual needs"},
+            {"ref": "P2.4", "desc": "Recognise and address barriers to effective communication"},
+            {"ref": "P2.5", "desc": "Work effectively as part of a team, sharing relevant information"},
+            {"ref": "P2.6", "desc": "Share information with other staff and agencies in a timely manner, adhering to confidentiality"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Practice 3",
+        "name": "Deliver person-centred care and support which is safe and effective",
+        "description": (
+            "Workers must promote person-centred values, deliver care in line with assessed needs "
+            "and preferences, undertake risk assessments in partnership, contribute to planning and "
+            "review, support service users' daily living, promote independence, enable informed "
+            "choices and support social network development."
+        ),
+        "keywords": [
+            "person-centred care", "care delivery", "assessed needs", "risk assessment",
+            "care planning", "independence", "daily living", "informed choices", "goal setting",
+            "care plan review", "skills development", "social inclusion", "wellbeing",
+        ],
+        "sub_outcomes": [
+            {"ref": "P3.1", "desc": "Promote and apply person-centred values in day to day work"},
+            {"ref": "P3.2", "desc": "Deliver care in line with assessed needs and service user preferences"},
+            {"ref": "P3.3", "desc": "Understand risk assessments appropriate to your role, in partnership"},
+            {"ref": "P3.4", "desc": "Contribute to care and support plans, risk management plans and their review"},
+            {"ref": "P3.5", "desc": "Support service users to retain, regain and develop skills for daily living"},
+            {"ref": "P3.6", "desc": "Enable service users and carers to make informed choices and participate in decision-making"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Practice 4",
+        "name": "Support the safeguarding of individuals",
+        "description": (
+            "Workers must know the main types of abuse and factors making individuals vulnerable, "
+            "know Northern Ireland regional safeguarding policies and procedures, know their own "
+            "role in safeguarding, recognise signs and symptoms of harm or abuse, take appropriate "
+            "actions, and report suspected or actual harm to the designated person."
+        ),
+        "keywords": [
+            "safeguarding", "types of abuse", "vulnerability", "NIAPSA", "safeguarding procedures",
+            "regional safeguarding", "signs of abuse", "harm", "designated safeguarding lead",
+            "reporting abuse", "safeguarding training", "recognition of abuse",
+        ],
+        "sub_outcomes": [
+            {"ref": "P4.1", "desc": "Know the main types of abuse and factors making a service user or carer vulnerable to harm or abuse"},
+            {"ref": "P4.2", "desc": "Know the regional policies and procedures relating to safeguarding in Northern Ireland"},
+            {"ref": "P4.3", "desc": "Know your own role and responsibilities in relation to safeguarding"},
+            {"ref": "P4.4", "desc": "Recognise the signs and symptoms of harm or abuse when present"},
+            {"ref": "P4.5", "desc": "Take appropriate actions to safeguard a service user if harm is suspected or disclosed"},
+            {"ref": "P4.6", "desc": "Report suspected or actual harm or abuse to the designated person in accordance with employer safeguarding policies"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Practice 5",
+        "name": "Maintain health and safety at work",
+        "description": (
+            "Workers must apply the organisation's health and safety policies and procedures, "
+            "apply procedures for medication and health care tasks, apply moving and handling "
+            "procedures, know what they can and cannot do regarding health and safety, and "
+            "recognise and minimise risks to their personal safety and wellbeing."
+        ),
+        "keywords": [
+            "health and safety", "medication procedures", "moving and handling", "manual handling",
+            "lone working", "personal safety", "risk minimisation", "infection control",
+            "PPE", "COSHH", "fire safety", "safe working practices",
+        ],
+        "sub_outcomes": [
+            {"ref": "P5.1", "desc": "Apply the organisation's policies and procedures in relation to health and safety"},
+            {"ref": "P5.2", "desc": "Apply the organisation's policies and procedures for medication and health care tasks"},
+            {"ref": "P5.3", "desc": "Apply the organisation's policies and procedures in relation to moving and handling"},
+            {"ref": "P5.4", "desc": "Know what you can and cannot do relating to general health and safety commensurate with your role"},
+            {"ref": "P5.5", "desc": "Recognise the risks to your personal safety and wellbeing and take steps to minimise these"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NISCC Practice 6",
+        "name": "Develop yourself as a social care worker",
+        "description": (
+            "Workers must be aware of relevant standards, evaluate their own knowledge and "
+            "performance against standards, reflect on practice to continuously improve, "
+            "use sources of support including supervision and appraisal, seek and use feedback, "
+            "and record progress in relation to personal development."
+        ),
+        "keywords": [
+            "professional development", "self-evaluation", "reflection", "reflective practice",
+            "supervision", "appraisal", "feedback", "CPD", "personal development",
+            "NISCC registration", "standards awareness", "improvement", "learning",
+        ],
+        "sub_outcomes": [
+            {"ref": "P6.1", "desc": "Be aware of the relevant standards that relate to your work role"},
+            {"ref": "P6.2", "desc": "Evaluate your knowledge, performance and understanding against relevant standards"},
+            {"ref": "P6.3", "desc": "Reflect on your practice to continuously improve the quality of service provided"},
+            {"ref": "P6.4", "desc": "Use sources of support for your personal development, including supervision, appraisals and training"},
+            {"ref": "P6.5", "desc": "Seek and use feedback, including that from service users and carers"},
+            {"ref": "P6.6", "desc": "Record progress in relation to your personal development"},
+        ],
+        "service_type": None,
+    },
+]
+
+
+# ── Northern Ireland — NISCC Induction Programme (NI Care Certificate equivalent) ──
+
+NISCC_INDUCTION_MODULES = [
+    {
+        "reference": "NI Induction 1",
+        "name": "Understand the main duties and responsibilities of your own role",
+        "description": (
+            "The worker understands their role within the organisation, its aims and values, "
+            "and how to access relevant policies and procedures. Covers duty of care, "
+            "managing and prioritising work, partnership working, literacy and communication skills, "
+            "record keeping, reporting adverse events, and responding to complaints."
+        ),
+        "keywords": [
+            "role understanding", "duties", "responsibilities", "policies and procedures",
+            "duty of care", "aims and values", "prioritisation", "partnership working",
+            "record keeping", "incident reporting", "near misses", "complaints response",
+        ],
+        "sub_outcomes": [
+            {"ref": "NI1.1", "desc": "Knowing the aims, objectives and values of the service in which you work"},
+            {"ref": "NI1.2", "desc": "Accessing full and up to date details of policies, procedures and agreed ways of working"},
+            {"ref": "NI1.3", "desc": "Knowing your main responsibilities to those service users and carers you support including duty of care"},
+            {"ref": "NI1.4", "desc": "Prioritising and managing your work effectively"},
+            {"ref": "NI1.5", "desc": "Working in partnership with key people, advocates and others significant to service users"},
+            {"ref": "NI1.6", "desc": "Possessing the required literacy, numeracy and communication skills necessary to carry out your role"},
+            {"ref": "NI1.7", "desc": "Keeping records that are up to date, complete, accurate and legible"},
+            {"ref": "NI1.8", "desc": "Reporting adverse events, incidents, errors and near misses affecting the quality of care"},
+            {"ref": "NI1.9", "desc": "Responding appropriately to comments and complaints in accordance with your organisation's complaints procedure"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NI Induction 2",
+        "name": "Be able to communicate effectively",
+        "description": (
+            "The worker develops effective communication skills for working with service users, "
+            "carers and colleagues. Covers building relationships, establishing communication "
+            "needs and preferences, using different communication methods, overcoming barriers, "
+            "and sharing information appropriately within confidentiality frameworks."
+        ),
+        "keywords": [
+            "communication", "effective communication", "communication needs", "language preferences",
+            "communication methods", "barriers to communication", "team communication",
+            "information sharing", "confidentiality", "relationship building",
+        ],
+        "sub_outcomes": [
+            {"ref": "NI2.1", "desc": "Developing effective relationships with service users and carers"},
+            {"ref": "NI2.2", "desc": "Establishing the service user's communication and language needs, wishes and preferences"},
+            {"ref": "NI2.3", "desc": "Using the range of communication methods and styles to meet the service user's needs"},
+            {"ref": "NI2.4", "desc": "Recognising and addressing barriers to effective communication"},
+            {"ref": "NI2.5", "desc": "Working effectively as part of a team, sharing relevant information"},
+            {"ref": "NI2.6", "desc": "Sharing information with other health and social care staff and agencies in a timely manner, adhering to confidentiality"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NI Induction 3",
+        "name": "Deliver person-centred care and support which is safe and effective",
+        "description": (
+            "The worker delivers care that centres on the individual, promotes independence, "
+            "and is grounded in assessed needs and preferences. Covers person-centred values, "
+            "risk assessment in partnership, care planning and review, supporting daily living, "
+            "enabling informed choices, and social network development."
+        ),
+        "keywords": [
+            "person-centred care", "care delivery", "assessed needs", "risk assessment",
+            "care planning", "independence", "daily living", "informed choices",
+            "care plan review", "skills development", "social inclusion", "goals",
+        ],
+        "sub_outcomes": [
+            {"ref": "NI3.1", "desc": "Promoting and applying person-centred values in day to day work"},
+            {"ref": "NI3.2", "desc": "Delivering care in line with assessed needs and service user and carer preferences"},
+            {"ref": "NI3.3", "desc": "Understanding risk assessments appropriate to your role, in partnership with service users"},
+            {"ref": "NI3.4", "desc": "Contributing to the risk assessment process by identifying and reporting risks"},
+            {"ref": "NI3.5", "desc": "Contributing to the planning process with service users and carers"},
+            {"ref": "NI3.6", "desc": "Working in partnership with service users to enable them to achieve their goals and be independent"},
+            {"ref": "NI3.7", "desc": "Developing care and support plans and/or risk management plans where appropriate"},
+            {"ref": "NI3.8", "desc": "Contributing to the implementation of care or support plans and risk management plans"},
+            {"ref": "NI3.9", "desc": "Participating in the review of care or support plans and/or risk management plans"},
+            {"ref": "NI3.10", "desc": "Supporting service users with their daily living"},
+            {"ref": "NI3.11", "desc": "Supporting service users to retain, regain and develop skills to manage their daily living"},
+            {"ref": "NI3.12", "desc": "Contributing to the physical and emotional well-being of service users and carers"},
+            {"ref": "NI3.13", "desc": "Enabling service users and carers to make informed choices and participate in decision-making"},
+            {"ref": "NI3.14", "desc": "Supporting service users to develop and maintain social networks and relationships"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NI Induction 4",
+        "name": "Support the safeguarding of individuals",
+        "description": (
+            "The worker understands adult safeguarding in a Northern Ireland context, recognises "
+            "abuse and vulnerability, knows NI regional safeguarding procedures, understands "
+            "their specific role and responsibilities, and can take appropriate action when "
+            "harm is suspected or disclosed."
+        ),
+        "keywords": [
+            "safeguarding", "types of abuse", "vulnerability factors", "NIAPSA",
+            "NI safeguarding procedures", "designated safeguarding lead", "recognition of abuse",
+            "disclosure", "reporting", "safeguarding training", "adult at risk",
+        ],
+        "sub_outcomes": [
+            {"ref": "NI4.1", "desc": "Knowing the main types of abuse and the factors that may make a service user or carer vulnerable"},
+            {"ref": "NI4.2", "desc": "Knowing the regional policies and procedures relating to safeguarding in Northern Ireland"},
+            {"ref": "NI4.3", "desc": "Knowing your own role and responsibilities in relation to safeguarding"},
+            {"ref": "NI4.4", "desc": "Recognising the signs and symptoms of harm or abuse when present"},
+            {"ref": "NI4.5", "desc": "Taking appropriate actions to safeguard a service user or carer if harm is suspected or disclosed"},
+            {"ref": "NI4.6", "desc": "Reporting suspected or actual harm or abuse to the designated person in accordance with employer safeguarding policies"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NI Induction 5",
+        "name": "Maintain health and safety at work",
+        "description": (
+            "The worker applies health and safety policies and procedures in their work setting. "
+            "Covers organisational H&S policies, medication and healthcare task procedures, "
+            "moving and handling, personal safety, and the boundaries of what they can safely "
+            "do within their role and training."
+        ),
+        "keywords": [
+            "health and safety", "medication procedures", "moving and handling", "manual handling",
+            "lone working", "personal safety", "infection control", "PPE", "fire safety",
+            "COSHH", "safe systems", "risk minimisation", "home environment",
+        ],
+        "sub_outcomes": [
+            {"ref": "NI5.1", "desc": "Applying the organisation's policies and procedures in relation to health and safety"},
+            {"ref": "NI5.2", "desc": "Applying the organisation's policies and procedures for medication and health care tasks"},
+            {"ref": "NI5.3", "desc": "Applying the organisation's policies and procedures in relation to moving and handling"},
+            {"ref": "NI5.4", "desc": "Knowing what you can and cannot do relating to general health and safety"},
+            {"ref": "NI5.5", "desc": "Recognising the risks to your personal safety and wellbeing and taking steps to minimise them"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NI Induction 6",
+        "name": "Develop yourself as a social care worker",
+        "description": (
+            "The worker commits to ongoing professional development. Covers awareness of "
+            "NISCC standards, self-evaluation against those standards, reflective practice, "
+            "using supervision and appraisal as development tools, seeking feedback from "
+            "service users and colleagues, and recording personal development progress."
+        ),
+        "keywords": [
+            "professional development", "NISCC standards", "self-evaluation", "reflection",
+            "reflective practice", "supervision", "appraisal", "feedback", "CPD",
+            "personal development plan", "improvement", "knowledge and skills",
+        ],
+        "sub_outcomes": [
+            {"ref": "NI6.1", "desc": "Being aware of the relevant standards that relate to your work role"},
+            {"ref": "NI6.2", "desc": "Evaluating your knowledge, performance and understanding against relevant standards"},
+            {"ref": "NI6.3", "desc": "Reflecting on your practice to continuously improve the quality of service provided"},
+            {"ref": "NI6.4", "desc": "Using sources of support for your personal development, including supervision, appraisals and training"},
+            {"ref": "NI6.5", "desc": "Seeking and using feedback, including that from service users and carers"},
+            {"ref": "NI6.6", "desc": "Recording progress in relation to your personal development"},
+        ],
+        "service_type": None,
+    },
+    {
+        "reference": "NI Induction 7",
+        "name": "Understand how the NISCC Standards of Conduct underpin all that you do",
+        "description": (
+            "The worker understands how the six NISCC Standards of Conduct provide the ethical "
+            "foundation for all their practice. Covers protecting service user rights and interests, "
+            "establishing trust, promoting autonomy while safeguarding, respecting rights while "
+            "preventing harm, upholding public trust, and professional accountability."
+        ),
+        "keywords": [
+            "NISCC standards", "standards of conduct", "ethical practice", "values",
+            "rights and interests", "trust and confidence", "autonomy", "public trust",
+            "accountability", "professional conduct", "code of practice",
+        ],
+        "sub_outcomes": [
+            {"ref": "NI7.1", "desc": "Protect the rights and promote the interests and wellbeing of service users and carers"},
+            {"ref": "NI7.2", "desc": "Strive to establish and maintain the trust and confidence of service users and carers"},
+            {"ref": "NI7.3", "desc": "Promote the autonomy of service users while safeguarding them as far as possible from danger or harm"},
+            {"ref": "NI7.4", "desc": "Respect the rights of service users while seeking to ensure their behaviour does not harm themselves or others"},
+            {"ref": "NI7.5", "desc": "Uphold public trust and confidence in social care services"},
+            {"ref": "NI7.6", "desc": "Be accountable for the quality of your work and take responsibility for improving your knowledge and skills"},
+        ],
+        "service_type": None,
+    },
+]
+
+
+async def seed_northern_ireland_standards():
+    """Seed Northern Ireland standards: RQIA Dom (16), RQIA Res (15), NISCC Code (12), NISCC Induction (7)."""
+    async with database.with_admin() as conn:
+        ni_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries WHERE is_system=TRUE AND jurisdiction='northern_ireland'"
+        )
+        if ni_count and ni_count > 0:
+            logger.info(f"Northern Ireland standards already seeded ({ni_count} entries) — skipping")
+            return
+
+        now = datetime.now(timezone.utc).isoformat()
+        entries = []
+
+        for std in NI_DOM_STANDARDS:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "rqia_dom",
+                "reference": std["reference"],
+                "name": std["name"],
+                "description": std["description"],
+                "keywords": std["keywords"],
+                "sub_outcomes": [],
+                "key_questions": std.get("key_questions", []),
+                "quality_statement": False,
+                "source": "RQIA — Domiciliary Care Agencies Minimum Standards (DHSSPS, August 2021)",
+                "service_type": "domiciliary",
+                "created_at": now,
+            })
+
+        for reg in NI_RES_REGULATIONS:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "rqia_res",
+                "reference": reg["reference"],
+                "name": reg["name"],
+                "description": reg["description"],
+                "keywords": reg["keywords"],
+                "sub_outcomes": [],
+                "key_questions": reg.get("key_questions", []),
+                "quality_statement": False,
+                "source": "RQIA — The Residential Care Homes Regulations (Northern Ireland) 2005",
+                "service_type": "residential",
+                "created_at": now,
+            })
+
+        for std in NISCC_CODE_STANDARDS:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "niscc_code",
+                "reference": std["reference"],
+                "name": std["name"],
+                "description": std["description"],
+                "keywords": std["keywords"],
+                "sub_outcomes": std.get("sub_outcomes", []),
+                "key_questions": [],
+                "quality_statement": False,
+                "source": "NISCC — Standards of Conduct and Practice for Social Care Workers (Northern Ireland Social Care Council)",
+                "service_type": None,
+                "created_at": now,
+            })
+
+        for mod in NISCC_INDUCTION_MODULES:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "niscc_induction",
+                "reference": mod["reference"],
+                "name": mod["name"],
+                "description": mod["description"],
+                "keywords": mod["keywords"],
+                "sub_outcomes": mod.get("sub_outcomes", []),
+                "key_questions": [],
+                "quality_statement": False,
+                "source": "NISCC — Induction Programme for Social Care Workers (Northern Ireland Social Care Council)",
+                "service_type": None,
+                "created_at": now,
+            })
+
+        await _insert_standards_entries(conn, entries, "northern_ireland")
+        logger.info(
+            f"Seeded {len(entries)} Northern Ireland standards entries "
+            f"({len(NI_DOM_STANDARDS)} RQIA Dom, {len(NI_RES_REGULATIONS)} RQIA Res, "
+            f"{len(NISCC_CODE_STANDARDS)} NISCC Code, {len(NISCC_INDUCTION_MODULES)} NISCC Induction)"
+        )
+
+
 async def seed_super_admin():
     """Create the super admin account (idempotent)."""
     from routers.auth import hash_password
@@ -1568,8 +2664,16 @@ async def seed_all():
         await conn.execute(
             "ALTER TABLE standards_entries ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'england'"
         )
+        # Northern Ireland: service_type distinguishes residential vs domiciliary
+        await conn.execute(
+            "ALTER TABLE organisations ADD COLUMN IF NOT EXISTS service_type TEXT"
+        )
+        await conn.execute(
+            "ALTER TABLE standards_entries ADD COLUMN IF NOT EXISTS service_type TEXT"
+        )
     await seed_standards()
     await seed_welsh_standards()
     await seed_scotland_standards()
+    await seed_northern_ireland_standards()
     await seed_super_admin()
     await seed_default_org()

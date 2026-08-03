@@ -48,7 +48,7 @@ export default function SuperAdminDashboard() {
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "", password: "" });
   const [showInviteAdmin, setShowInviteAdmin] = useState(false);
-  const [orgForm, setOrgForm] = useState({ name: "", jurisdiction: "england" });
+  const [orgForm, setOrgForm] = useState({ name: "", jurisdiction: "england", service_type: "domiciliary" });
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "manager" });
   const [inviteForm, setInviteForm] = useState({ name: "", email: "" });
   const [inviteResult, setInviteResult] = useState(null); // { message, invite_link?, email_failed? }
@@ -91,8 +91,12 @@ export default function SuperAdminDashboard() {
     setSubmitting(true);
     setError("");
     try {
-      await axios.post(`${API}/super-admin/orgs`, { name: orgForm.name.trim(), jurisdiction: orgForm.jurisdiction }, getAuthConfig());
-      setOrgForm({ name: "" });
+      const payload = { name: orgForm.name.trim(), jurisdiction: orgForm.jurisdiction };
+      if (orgForm.jurisdiction === "northern_ireland") {
+        payload.service_type = orgForm.service_type;
+      }
+      await axios.post(`${API}/super-admin/orgs`, payload, getAuthConfig());
+      setOrgForm({ name: "", jurisdiction: "england", service_type: "domiciliary" });
       setShowCreateOrg(false);
       await loadOrgs();
     } catch (err) {
@@ -251,10 +255,16 @@ export default function SuperAdminDashboard() {
                       className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                         org.jurisdiction === "wales"
                           ? "bg-green-100 text-green-700"
-                          : "bg-purple-100 text-purple-700"
+                          : org.jurisdiction === "scotland"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-orange-100 text-orange-700"
                       }`}
                     >
-                      {org.jurisdiction === "wales" ? "Wales" : "Scotland"}
+                      {org.jurisdiction === "wales" ? "Wales"
+                        : org.jurisdiction === "scotland" ? "Scotland"
+                        : org.jurisdiction === "northern_ireland"
+                          ? `N. Ireland${org.service_type ? ` · ${org.service_type === "domiciliary" ? "Dom" : "Res"}` : ""}`
+                          : org.jurisdiction}
                     </span>
                   )}
                   <StatusBadge status={org.status} />
@@ -497,11 +507,29 @@ export default function SuperAdminDashboard() {
                     <option value="england">England (CQC / Care Certificate)</option>
                     <option value="wales">Wales (CIW / AWIF / SCW)</option>
                     <option value="scotland">Scotland (Care Inspectorate)</option>
+                    <option value="northern_ireland">Northern Ireland (RQIA / NISCC)</option>
                   </select>
                   <p className="mt-1 text-xs text-gray-500">
                     Sets which regulatory framework is used for evidence mapping and compliance reporting.
                   </p>
                 </div>
+                {orgForm.jurisdiction === "northern_ireland" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                    <select
+                      data-testid="org-service-type-select"
+                      value={orgForm.service_type}
+                      onChange={e => setOrgForm(f => ({ ...f, service_type: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
+                    >
+                      <option value="domiciliary">Domiciliary Care (RQIA Dom Standards 2021)</option>
+                      <option value="residential">Residential Care (RQIA Regulations 2005)</option>
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Determines whether RQIA domiciliary or residential regulations are applied. NISCC Code and Induction are shown for both.
+                    </p>
+                  </div>
+                )}
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
