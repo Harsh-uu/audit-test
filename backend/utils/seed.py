@@ -181,126 +181,384 @@ async def seed_standards():
         logger.info(f"Seeded {len(entries)} England standards entries")
 
 
-# ── CIW (Care Inspectorate Wales) — 7 inspection key questions ────────────────
-# Based on RISCA 2016 and CIW's inspection framework for regulated services in Wales.
-# Equivalent to CQC's 5 key questions (Safe/Effective/Caring/Responsive/Well-led).
+# ── CIW (Care Inspectorate Wales) — RSI(SPRI)(W)R 2017 Numbered Regulations ──
+# The Regulated Services (Service Providers and Responsible Individuals) (Wales)
+# Regulations 2017 (as amended).  These are the actual regulations CIW inspects
+# against — equivalent to CQC's numbered regulations.  Grouped by 5 CIW
+# inspection themes (key_questions field).
+#
+# Themes: "Quality of Care and Support" | "Safeguarding" | "Staffing" |
+#         "Leadership and Management" | "Environment"
+#
+# Premises/environment regulations (Reg 43-55) excluded per design decision —
+# they do not generate supervision evidence.
 
 CIW_REGULATIONS = [
+    # ── Theme 1: Quality of Care and Support ─────────────────────────────────
     {
-        "reference": "CIW 1",
-        "name": "Well-being outcomes",
-        "key_questions": ["Well-being"],
+        "reference": "Reg 6",
+        "name": "Requirements in relation to the provision of the service",
+        "key_questions": ["Quality of Care and Support", "Leadership and Management"],
         "description": (
-            "Are people's individual well-being outcomes achieved? "
-            "Services must support people to achieve their personal outcomes and promote their physical, "
-            "mental and emotional well-being, social relationships, participation in the community, and "
-            "protection from abuse and neglect. Underpinned by the Social Services and Well-being (Wales) Act 2014."
+            "The service provider must ensure the service is provided with sufficient care, competence and skill. "
+            "Requires clear arrangements for oversight and governance; a rights-based, person-centred culture; "
+            "systems for assessment, care planning and review; safe staffing; and quality/audit systems."
         ),
         "keywords": [
-            "well-being", "personal outcomes", "voice and control", "co-production",
-            "social participation", "independence", "emotional health", "mental well-being",
-            "SSWB Act 2014", "well-being goals", "individual outcomes",
+            "care provision", "competence", "skill", "governance", "culture", "rights-based",
+            "person-centred", "assessment", "care planning", "monitoring", "review",
+            "safe staffing", "quality systems", "audit", "statement of purpose",
         ],
     },
     {
-        "reference": "CIW 2",
-        "name": "Care and support",
-        "key_questions": ["Care and Support"],
+        "reference": "Reg 14",
+        "name": "Suitability of the service",
+        "key_questions": ["Quality of Care and Support"],
         "description": (
-            "Is care and support appropriate, person-centred, safe and effective? "
-            "Providers must assess individual needs, plan and deliver care that respects rights, "
-            "dignity and preferences, and involves the person in all decisions about their care and support. "
-            "Regulated under RISCA 2016 National Minimum Standards."
+            "The service provider must not agree to provide care unless the service is suitable to meet "
+            "the individual's care and support needs and personal outcomes. Must involve the individual, "
+            "placing authority and representative. Must consider existing care plans, health assessments, "
+            "views, wishes, risks, and any reasonable adjustments."
         ),
         "keywords": [
-            "person-centred care", "care planning", "needs assessment", "consent", "dignity",
-            "individual rights", "preferences", "cultural needs", "communication", "advocacy",
-            "RISCA 2016", "statement of purpose", "active participation",
+            "suitability", "needs assessment", "personal outcomes", "admission policy",
+            "care and support plan", "individual views", "wishes and feelings", "risk",
+            "reasonable adjustments", "mental capacity", "commencement policy",
         ],
     },
     {
-        "reference": "CIW 3",
-        "name": "Safeguarding",
+        "reference": "Reg 15",
+        "name": "Personal plan",
+        "key_questions": ["Quality of Care and Support"],
+        "description": (
+            "The service provider must prepare a personal plan before care commences (or within 24 hours "
+            "in an emergency). The plan must set out how care needs will be met daily, how personal outcomes "
+            "will be supported, how risks will be mitigated, and how independence and positive risk-taking "
+            "will be supported. Must be co-produced with the individual."
+        ),
+        "keywords": [
+            "personal plan", "care planning", "personal outcomes", "risk management",
+            "positive risk-taking", "independence", "co-production", "daily care needs",
+            "individual preferences", "wishes", "aspirations", "reviewing plans",
+        ],
+    },
+    {
+        "reference": "Reg 21",
+        "name": "Standards of care and support – overarching requirements",
+        "key_questions": ["Quality of Care and Support"],
+        "description": (
+            "Care and support must protect, promote and maintain the safety and well-being of individuals, "
+            "and must be delivered in accordance with the personal plan. Must maintain good professional "
+            "relationships and encourage dignity, respect and responsiveness. Covers physical, mental, "
+            "emotional, cultural, religious and social needs."
+        ),
+        "keywords": [
+            "standards of care", "safety", "well-being", "personal plan compliance",
+            "dignity", "respect", "professional relationships", "person-centred",
+            "physical well-being", "mental well-being", "emotional well-being",
+            "cultural needs", "religious needs", "social care standards",
+        ],
+    },
+    {
+        "reference": "Reg 22",
+        "name": "Continuity of care",
+        "key_questions": ["Quality of Care and Support"],
+        "description": (
+            "The service provider must ensure individuals receive reasonable continuity of care. "
+            "Staffing arrangements must provide consistency; individuals must know their staff; "
+            "changes must be communicated; replacement staff must be familiar with individuals."
+        ),
+        "keywords": [
+            "continuity of care", "consistency", "staffing continuity", "staff changes",
+            "familiar staff", "replacement staff", "reliability", "service continuity",
+        ],
+    },
+    {
+        "reference": "Reg 23",
+        "name": "Information",
+        "key_questions": ["Quality of Care and Support"],
+        "description": (
+            "Individuals must have the information they need to make or participate in assessments, plans "
+            "and day-to-day decisions. Information must be in the appropriate language, format and style "
+            "having regard to the individual's understanding, communication needs and, for children, age."
+        ),
+        "keywords": [
+            "information provision", "accessible information", "informed decisions",
+            "language needs", "communication format", "advocacy", "self-advocacy",
+            "understanding", "participation", "easy read",
+        ],
+    },
+    {
+        "reference": "Reg 24",
+        "name": "Language and communication",
+        "key_questions": ["Quality of Care and Support"],
+        "description": (
+            "The service provider must take reasonable steps to meet individuals' language needs and "
+            "provide access to aids/equipment to facilitate communication. Includes Welsh language, "
+            "alternative communication methods (Makaton, BSL, PECS, TEACCH) and ensuring "
+            "active offering of Welsh language services."
+        ),
+        "keywords": [
+            "Welsh language", "language needs", "communication aids", "Makaton",
+            "British Sign Language", "BSL", "PECS", "TEACCH", "alternative communication",
+            "bilingual", "language of choice", "communication impairment",
+        ],
+    },
+    {
+        "reference": "Reg 25",
+        "name": "Respect and sensitivity",
+        "key_questions": ["Quality of Care and Support"],
+        "description": (
+            "Individuals must be treated with respect and sensitivity. This includes respecting privacy "
+            "and dignity, confidentiality, autonomy and independence, and having regard to protected "
+            "characteristics under the Equality Act 2010."
+        ),
+        "keywords": [
+            "respect", "dignity", "privacy", "confidentiality", "autonomy", "independence",
+            "equality", "protected characteristics", "sensitivity", "person-centred",
+            "courteous", "valued", "intimate care",
+        ],
+    },
+    # ── Theme 2: Safeguarding ────────────────────────────────────────────────
+    {
+        "reference": "Reg 26",
+        "name": "Safeguarding – overarching requirement",
         "key_questions": ["Safeguarding"],
         "description": (
-            "Are people protected from harm, abuse and neglect? "
-            "Providers must have robust safeguarding policies aligned with Wales Safeguarding Procedures 2019, "
-            "ensure all staff are trained, and act promptly on any concern. Includes adult and child "
-            "safeguarding responsibilities under the Social Services and Well-being (Wales) Act 2014."
+            "The service provider must ensure individuals are safe and protected from abuse, neglect and "
+            "improper treatment. Staff must receive safeguarding training at induction and regularly. "
+            "Service providers must work with other agencies, maintain safeguarding referral records, "
+            "and ensure governance oversight of safeguarding at board level."
         ),
         "keywords": [
-            "safeguarding", "abuse", "neglect", "harm", "whistleblowing",
-            "Wales Safeguarding Procedures", "referral", "disclosure", "Disclosure and Barring Service",
-            "DBS", "safeguarding adults", "safeguarding children", "exploitation",
-            "risk of harm", "reportable", "POVA", "restrictive practice",
+            "safeguarding", "abuse", "neglect", "improper treatment", "safeguarding training",
+            "induction", "referral", "multi-agency", "whistleblowing", "governance",
+            "Wales Safeguarding Procedures", "disclosure", "raising concerns",
         ],
     },
     {
-        "reference": "CIW 4",
-        "name": "Health and personal care",
-        "key_questions": ["Health"],
+        "reference": "Reg 27",
+        "name": "Safeguarding policies and procedures",
+        "key_questions": ["Safeguarding"],
         "description": (
-            "Are people's health and personal care needs assessed, planned for and met? "
-            "This includes medication management, nutrition and hydration, clinical healthcare needs, "
-            "personal care, pressure area care, end of life care and access to healthcare professionals. "
-            "Workers must understand their responsibilities and work within their competence."
+            "Service providers must have and effectively operate safeguarding policies and procedures "
+            "for prevention of and response to abuse, neglect and improper treatment. On any allegation: "
+            "act immediately, refer to other agencies, keep records. For children's services: must also "
+            "have anti-bullying policy and missing child procedures."
         ),
         "keywords": [
-            "health needs", "medication management", "nutrition", "hydration", "personal care",
-            "pressure area care", "end of life", "healthcare professionals", "GP", "district nurse",
-            "medication administration", "MAR", "continence", "oral health", "dementia",
-            "mental health", "sensory loss", "palliative care", "falls prevention",
+            "safeguarding policy", "safeguarding procedures", "prevention of abuse",
+            "responding to allegations", "referral", "immediate action", "records",
+            "local authority", "multi-agency safeguarding", "Wales Safeguarding Procedures",
+            "bullying", "missing child",
         ],
     },
     {
-        "reference": "CIW 5",
-        "name": "Leadership and management",
-        "key_questions": ["Well-led"],
+        "reference": "Reg 28",
+        "name": "Supporting individuals to manage their money",
+        "key_questions": ["Safeguarding"],
         "description": (
-            "Is there effective leadership, governance and a culture of continuous improvement? "
-            "The Responsible Individual and Registered Manager must demonstrate competent, values-led "
-            "leadership, maintain robust governance systems, and operate a culture of quality improvement "
-            "and learning. This includes the Quality of Care Review required under RISCA 2016 regulations."
+            "Service providers must have a policy to support individuals to manage their money and "
+            "protect them from financial abuse. Where money is held, it must be in the individual's "
+            "named account with clear demarcation. Staff must not act as an individual's financial agent "
+            "without lawful authority."
         ),
         "keywords": [
-            "registered manager", "responsible individual", "governance", "quality improvement",
-            "quality of care review", "statement of purpose", "supervision", "appraisal",
-            "policies and procedures", "audit", "complaints", "notifications to CIW",
-            "annual return", "learning culture", "values-led leadership", "openness",
+            "financial abuse", "money management", "individual finances", "financial support",
+            "bank accounts", "financial records", "financial policy", "budgeting",
+            "financial transactions", "receipts", "agent", "valuables",
         ],
     },
     {
-        "reference": "CIW 6",
-        "name": "Staffing",
+        "reference": "Reg 29",
+        "name": "The appropriate use of control and restraint",
+        "key_questions": ["Safeguarding"],
+        "description": (
+            "Control or restraint may only be used to prevent risk of harm and must be proportionate. "
+            "Must only be carried out by trained staff. Service providers must have a policy and must "
+            "record any incident within 24 hours. Reviews must inform the quality of care review."
+        ),
+        "keywords": [
+            "restraint", "control", "restrictive practice", "proportionate", "risk of harm",
+            "trained staff", "positive behaviour support", "mental capacity",
+            "deprivation of liberty safeguards", "DOLS", "recording incidents",
+        ],
+    },
+    {
+        "reference": "Reg 31",
+        "name": "Deprivation of liberty",
+        "key_questions": ["Safeguarding"],
+        "description": (
+            "Individuals must not be deprived of their liberty for care purposes without lawful authority. "
+            "Service providers and staff must act in accordance with the Mental Capacity Act 2005 and "
+            "Deprivation of Liberty Safeguards. Staff must receive training at appropriate intervals."
+        ),
+        "keywords": [
+            "deprivation of liberty", "lawful authority", "Mental Capacity Act", "MCA 2005",
+            "Deprivation of Liberty Safeguards", "DoLS", "best interests", "mental capacity",
+            "consent", "authorisation", "liberty protection safeguards",
+        ],
+    },
+    # ── Theme 3: Staffing ────────────────────────────────────────────────────
+    {
+        "reference": "Reg 34",
+        "name": "Staffing – overarching requirements",
         "key_questions": ["Staffing"],
         "description": (
-            "Is the workforce sufficient, appropriately qualified, registered and well-supported? "
-            "Providers must ensure safe staffing levels, that workers complete the All Wales Induction "
-            "Framework (AWIF) within 6 months, hold relevant qualifications, are registered with Social "
-            "Care Wales where required, and receive regular supervision and continuing professional development."
+            "The service provider must ensure that at all times a sufficient number of suitably qualified, "
+            "trained, skilled, competent and experienced staff are deployed. Must consider the statement of "
+            "purpose, individual needs, personal outcomes and all other regulatory requirements. "
+            "The staffing determination must be demonstrable and measurable."
         ),
         "keywords": [
-            "AWIF", "All Wales Induction Framework", "Social Care Wales", "SCW registration",
-            "staffing levels", "qualifications", "training", "supervision", "CPD",
-            "professional development", "workforce planning", "DBS", "references",
-            "mandatory training", "competency", "induction",
+            "staffing levels", "skill mix", "qualified staff", "competence", "deployment",
+            "staffing determination", "care needs", "personal outcomes", "temporary staff",
+            "agency staff", "nursing staff", "staff cover", "staffing policy",
         ],
     },
     {
-        "reference": "CIW 7",
-        "name": "Environment and safety",
-        "key_questions": ["Environment"],
+        "reference": "Reg 35",
+        "name": "Fitness of staff",
+        "key_questions": ["Staffing"],
         "description": (
-            "Is the environment safe, suitable, well-maintained and promoting of well-being? "
-            "Premises must meet health and safety requirements, infection prevention and control standards, "
-            "fire safety regulations, and provide a suitable, accessible environment that supports "
-            "people's dignity and promotes their well-being."
+            "Service providers must not employ or allow anyone to work at the service unless they are fit "
+            "to do so: suitable character, required qualifications/skills/experience, health, and satisfactory "
+            "DBS checks. Care workers and managers must be registered with Social Care Wales. "
+            "DBS checks must be renewed at least every 3 years."
         ),
         "keywords": [
-            "health and safety", "infection prevention", "fire safety", "COSHH",
-            "risk assessment", "moving and handling", "equipment maintenance", "premises",
-            "accessibility", "lone working", "food safety", "hazardous substances",
-            "security", "IPC", "PPE", "environmental safety",
+            "fitness of staff", "DBS", "Disclosure and Barring Service", "Social Care Wales",
+            "SCW registration", "character check", "qualifications", "skills", "experience",
+            "references", "employment checks", "health assessment", "recruitment vetting",
+        ],
+    },
+    {
+        "reference": "Reg 36",
+        "name": "Supporting and developing staff",
+        "key_questions": ["Staffing"],
+        "description": (
+            "Service providers must have a staff support and development policy. All staff must receive: "
+            "role-appropriate induction (AWIF within defined timescale), regular supervision (at least "
+            "quarterly), annual appraisal, core training, and specialist training as appropriate. "
+            "Staff must be supported to maintain professional registration with Social Care Wales."
+        ),
+        "keywords": [
+            "induction", "AWIF", "All Wales Induction Framework", "supervision", "quarterly supervision",
+            "appraisal", "annual appraisal", "training", "core training", "specialist training",
+            "CPD", "professional development", "Social Care Wales registration", "staff development policy",
+            "training needs analysis", "delegation",
+        ],
+    },
+    {
+        "reference": "Reg 37",
+        "name": "Compliance with employer's code of practice",
+        "key_questions": ["Staffing"],
+        "description": (
+            "The service provider must adhere to Social Care Wales's code of practice on the standards "
+            "of conduct and practice expected of persons employing or seeking to employ social care workers "
+            "(the Employer's Code of Practice)."
+        ),
+        "keywords": [
+            "employer's code of practice", "Social Care Wales", "SCW", "conduct standards",
+            "employment standards", "code of practice", "workforce standards",
+        ],
+    },
+    {
+        "reference": "Reg 38",
+        "name": "Information for staff",
+        "key_questions": ["Staffing"],
+        "description": (
+            "All staff and volunteers must be provided with information about the service and how it is "
+            "provided. Must include codes of professional practice, policies, confidentiality, "
+            "safeguarding arrangements, lone working, and disciplinary procedures. Regular staff "
+            "meetings (minimum 6 per year) must take place and be recorded."
+        ),
+        "keywords": [
+            "staff information", "code of practice", "policies and procedures", "induction",
+            "confidentiality", "data protection", "safeguarding awareness", "lone working",
+            "staff meetings", "job description", "accountability",
+        ],
+    },
+    {
+        "reference": "Reg 39",
+        "name": "Disciplinary procedures",
+        "key_questions": ["Staffing"],
+        "description": (
+            "Service providers must have and operate a disciplinary procedure. Must include provision "
+            "for suspension, and failure to report abuse is grounds for disciplinary action. "
+            "Where an employee leaves before completion of disciplinary proceedings, providers must "
+            "consider referral to DBS, Social Care Wales or police."
+        ),
+        "keywords": [
+            "disciplinary procedure", "suspension", "misconduct", "reporting abuse",
+            "DBS referral", "Social Care Wales referral", "police referral", "performance",
+            "conduct", "grievance", "employment law",
+        ],
+    },
+    # ── Theme 4: Leadership, Management and Governance ───────────────────────
+    {
+        "reference": "Reg 59",
+        "name": "Records",
+        "key_questions": ["Leadership and Management"],
+        "description": (
+            "Service providers must keep and maintain all records specified in Schedule 2 of the Regulations. "
+            "Records must be accurate, up to date and kept securely. Adults' records retained for 3 years; "
+            "children's for 15 years. Individuals must be able to access their own records. "
+            "Electronic records must be password protected."
+        ),
+        "keywords": [
+            "records management", "record keeping", "accuracy", "secure storage", "retention",
+            "data protection", "GDPR", "individual access", "electronic records",
+            "Schedule 2", "personal records", "staff records", "confidentiality",
+        ],
+    },
+    {
+        "reference": "Reg 64",
+        "name": "Complaints policy and procedure",
+        "key_questions": ["Leadership and Management"],
+        "description": (
+            "Service providers must have an accessible complaints policy and effective arrangements for "
+            "identifying, investigating and responding to complaints. Must include advocacy information "
+            "(Llais/Citizen Voice Body), timescales, and written responses to complainants. "
+            "Complaints must be analysed to identify areas for improvement."
+        ),
+        "keywords": [
+            "complaints", "complaints policy", "complaints procedure", "investigation",
+            "response timescales", "Llais", "Citizen Voice Body", "advocacy",
+            "complainant rights", "complaints analysis", "trends", "service improvement",
+            "Public Services Ombudsman", "whistleblowing",
+        ],
+    },
+    {
+        "reference": "Reg 65",
+        "name": "Whistleblowing",
+        "key_questions": ["Leadership and Management"],
+        "description": (
+            "Service providers must have a whistleblowing policy and effective arrangements to enable "
+            "staff to raise concerns about matters affecting individual health, safety or well-being. "
+            "Concerns must be investigated, appropriate action taken, and a record kept. "
+            "Staff must not suffer victimisation for raising concerns."
+        ),
+        "keywords": [
+            "whistleblowing", "raising concerns", "staff concerns", "whistleblowing policy",
+            "confidentiality", "investigation", "no victimisation", "safeguarding concerns",
+            "duty of candour", "speak up", "transparency",
+        ],
+    },
+    {
+        "reference": "Reg 80",
+        "name": "Quality of care review",
+        "key_questions": ["Leadership and Management"],
+        "description": (
+            "The responsible individual must establish and maintain a system for monitoring, reviewing "
+            "and improving quality of care — at least every 6 months. The review must analyse engagement "
+            "outcomes, incidents, safeguarding, whistleblowing, complaints and records audits. "
+            "A report with assessment and recommendations must be prepared for the service provider."
+        ),
+        "keywords": [
+            "quality of care review", "responsible individual", "monitoring", "quality improvement",
+            "six-monthly review", "incident analysis", "safeguarding analysis", "complaints review",
+            "records audit", "quality assurance", "governance report", "CIW inspection",
         ],
     },
 ]
@@ -660,35 +918,66 @@ SCW_CODE_STANDARDS = [
 
 
 async def seed_welsh_standards():
-    """Insert Welsh standards: CIW (7 key questions), AWIF (7 workbooks), SCW Code (6 sections)."""
+    """Seed Welsh standards: CIW (RSI(SPRI)(W)R 2017 regulations), AWIF (7 workbooks), SCW Worker's Code.
+
+    Migration-aware:
+    - If old 7-question CIW entries exist → replace with real numbered regulations.
+    - AWIF and SCW entries are only seeded once (idempotent).
+    """
     async with database.with_admin() as conn:
-        welsh_count = await conn.fetchval(
-            "SELECT COUNT(*) FROM standards_entries WHERE is_system=TRUE AND jurisdiction='wales'"
+        # ── CIW: detect old structure (7 entries) and migrate ────────────────
+        ciw_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries WHERE type='ciw' AND jurisdiction='wales' AND is_system=TRUE"
         )
-        if welsh_count and welsh_count > 0:
-            logger.info(f"Welsh standards already seeded ({welsh_count} entries) — skipping")
+        if ciw_count == 7:
+            logger.info(
+                "Migrating CIW standards: replacing old 7-question structure "
+                "with RSI(SPRI)(W)R 2017 numbered regulations…"
+            )
+            await conn.execute(
+                "DELETE FROM standards_entries WHERE type='ciw' AND jurisdiction='wales' AND is_system=TRUE"
+            )
+            ciw_count = 0
+
+        ciw_entries = []
+        if ciw_count == 0:
+            now = datetime.now(timezone.utc).isoformat()
+            for reg in CIW_REGULATIONS:
+                ciw_entries.append({
+                    "id": str(uuid.uuid4()),
+                    "type": "ciw",
+                    "reference": reg["reference"],
+                    "name": reg["name"],
+                    "description": reg["description"],
+                    "keywords": reg["keywords"],
+                    "sub_outcomes": [],
+                    "key_questions": reg.get("key_questions", []),
+                    "quality_statement": False,
+                    "source": (
+                        "The Regulated Services (Service Providers and Responsible Individuals) "
+                        "(Wales) Regulations 2017 (as amended)"
+                    ),
+                    "created_at": now,
+                })
+            await _insert_standards_entries(conn, ciw_entries, "wales")
+            logger.info(f"Seeded {len(ciw_entries)} CIW regulation entries")
+        else:
+            logger.info(f"CIW standards already current ({ciw_count} entries) — skipping")
+
+        # ── AWIF + SCW: seed once ────────────────────────────────────────────
+        awif_scw_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries "
+            "WHERE type IN ('awif','scw') AND jurisdiction='wales' AND is_system=TRUE"
+        )
+        if awif_scw_count > 0:
+            logger.info(f"AWIF/SCW standards already seeded ({awif_scw_count} entries) — skipping")
             return
 
         now = datetime.now(timezone.utc).isoformat()
-        entries = []
-
-        for reg in CIW_REGULATIONS:
-            entries.append({
-                "id": str(uuid.uuid4()),
-                "type": "ciw",
-                "reference": reg["reference"],
-                "name": reg["name"],
-                "description": reg["description"],
-                "keywords": reg["keywords"],
-                "sub_outcomes": [],
-                "key_questions": reg.get("key_questions", []),
-                "quality_statement": False,
-                "source": "Care Inspectorate Wales (CIW) — RISCA 2016 Inspection Framework",
-                "created_at": now,
-            })
+        awif_scw_entries = []
 
         for wb in AWIF_STANDARDS:
-            entries.append({
+            awif_scw_entries.append({
                 "id": str(uuid.uuid4()),
                 "type": "awif",
                 "reference": wb["reference"],
@@ -703,7 +992,7 @@ async def seed_welsh_standards():
             })
 
         for std in SCW_CODE_STANDARDS:
-            entries.append({
+            awif_scw_entries.append({
                 "id": str(uuid.uuid4()),
                 "type": "scw",
                 "reference": std["reference"],
@@ -717,10 +1006,10 @@ async def seed_welsh_standards():
                 "created_at": now,
             })
 
-        await _insert_standards_entries(conn, entries, "wales")
+        await _insert_standards_entries(conn, awif_scw_entries, "wales")
         logger.info(
-            f"Seeded {len(entries)} Welsh standards entries "
-            f"({len(CIW_REGULATIONS)} CIW, {len(AWIF_STANDARDS)} AWIF, {len(SCW_CODE_STANDARDS)} SCW)"
+            f"Seeded {len(awif_scw_entries)} AWIF/SCW entries "
+            f"({len(AWIF_STANDARDS)} AWIF, {len(SCW_CODE_STANDARDS)} SCW)"
         )
 
 
