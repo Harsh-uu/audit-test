@@ -927,6 +927,13 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
                 care_cert_rows = await conn.fetch(
                     "SELECT * FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
                 )
+            elif org_jurisdiction == "scotland":
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='ci' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='sssc' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
+                )
             else:
                 cqc_rows = await conn.fetch(
                     "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",

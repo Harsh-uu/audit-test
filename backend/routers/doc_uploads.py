@@ -188,6 +188,13 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
                 care_cert_rows = await conn.fetch(
                     "SELECT * FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
                 )
+            elif org_jurisdiction == "scotland":
+                cqc_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='ci' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT * FROM standards_entries WHERE type='sssc' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
+                )
             else:
                 cqc_rows = await conn.fetch(
                     "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE ORDER BY reference ASC",

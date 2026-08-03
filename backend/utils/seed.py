@@ -1014,6 +1014,511 @@ async def seed_welsh_standards():
 
 
 
+# ── CI (Care Inspectorate Scotland) — Quality Framework Indicators ────────────
+# 6 key questions with 17 quality indicators (plus KQ6 overall capacity).
+# Equivalent to CQC's 5 key questions + quality statements.
+# Source: Care Inspectorate Quality Framework for Care Homes for Adults and
+# Older People (covers all registered adult social care services).
+# Graded on 1–6 scale during inspection.
+
+CI_QUALITY_INDICATORS = [
+    # ── KQ1: How well do we support people's wellbeing? ──────────────────────
+    {
+        "reference": "CI 1.1",
+        "name": "People experience compassion, dignity and respect",
+        "key_questions": ["How well do we support people's wellbeing?"],
+        "description": (
+            "Inspectors evaluate whether people are treated with genuine compassion, dignity and respect. "
+            "Staff demonstrate person-centred values in their interactions; people are not subject to "
+            "discrimination; their human rights, privacy, individuality and cultural identity are upheld. "
+            "Underpinned by Health and Social Care Standards themes 1 and 2."
+        ),
+        "keywords": [
+            "dignity", "respect", "compassion", "equality", "inclusion", "discrimination",
+            "human rights", "person-centred", "privacy", "individuality", "cultural identity",
+            "diversity", "protected characteristics", "intimate care", "autonomy",
+        ],
+    },
+    {
+        "reference": "CI 1.2",
+        "name": "People get the most out of life",
+        "key_questions": ["How well do we support people's wellbeing?"],
+        "description": (
+            "People are supported to pursue meaningful activities, maintain relationships and fulfil "
+            "personal goals and aspirations. Independence is promoted; people participate in social, "
+            "creative and recreational activities; their interests and preferences are actively supported."
+        ),
+        "keywords": [
+            "quality of life", "independence", "meaningful activities", "social participation",
+            "community involvement", "interests", "aspirations", "goals", "relationships",
+            "positive risk", "enabling", "choice",
+        ],
+    },
+    {
+        "reference": "CI 1.3",
+        "name": "People's health and wellbeing benefits from their care and support",
+        "key_questions": ["How well do we support people's wellbeing?"],
+        "description": (
+            "Physical, mental and emotional health needs are assessed, planned for and consistently met. "
+            "Medication management is safe and effective; nutrition and hydration needs are addressed; "
+            "pressure area care, personal care and clinical needs are met; access to healthcare "
+            "professionals is supported. Includes end of life care."
+        ),
+        "keywords": [
+            "health needs", "medication management", "MAR", "nutrition", "hydration",
+            "pressure area care", "personal care", "clinical care", "healthcare professionals",
+            "mental health", "dementia", "end of life", "palliative care",
+            "continence", "falls prevention", "monitoring",
+        ],
+    },
+    {
+        "reference": "CI 1.4",
+        "name": "People experience meaningful contact that meets their outcomes, needs and wishes",
+        "key_questions": ["How well do we support people's wellbeing?"],
+        "description": (
+            "People have consistent, trusting relationships with staff; communication is adapted to "
+            "individual needs and preferences; contact is meaningful and contributes to well-being. "
+            "People's views, wishes and feelings are listened to and acted upon."
+        ),
+        "keywords": [
+            "communication", "relationships", "staff continuity", "person-centred",
+            "needs and wishes", "listening", "advocacy", "preferred communication",
+            "meaningful contact", "responsive", "trust",
+        ],
+    },
+    {
+        "reference": "CI 1.5",
+        "name": "People's health and wellbeing benefits from safe infection prevention and control practices",
+        "key_questions": ["How well do we support people's wellbeing?"],
+        "description": (
+            "Infection prevention and control (IPC) procedures are followed consistently; staff use "
+            "appropriate PPE; hand hygiene standards are maintained; environments are clean and "
+            "well-maintained; outbreak management procedures are in place and effective."
+        ),
+        "keywords": [
+            "IPC", "infection prevention", "infection control", "hand hygiene", "PPE",
+            "personal protective equipment", "cleanliness", "outbreak management",
+            "NIPCM", "decontamination", "environmental cleanliness",
+        ],
+    },
+    # ── KQ2: How good is our leadership? ─────────────────────────────────────
+    {
+        "reference": "CI 2.1",
+        "name": "Vision and values positively inform practice",
+        "key_questions": ["How good is our leadership?"],
+        "description": (
+            "The service has a clear, values-led vision which is understood and lived by all staff. "
+            "Leadership promotes a positive, rights-based culture; the statement of aims and objectives "
+            "reflects the Health and Social Care Standards; practice is informed by the service's values."
+        ),
+        "keywords": [
+            "vision", "values", "culture", "leadership", "person-centred", "rights-based",
+            "statement of aims", "culture of care", "continuous improvement", "positive culture",
+        ],
+    },
+    {
+        "reference": "CI 2.2",
+        "name": "Quality assurance and improvement is led well",
+        "key_questions": ["How good is our leadership?"],
+        "description": (
+            "Robust quality assurance systems are in place and actively used; improvements are "
+            "evidence-based and clearly driven by outcomes for people; complaints, incidents and "
+            "near-misses are analysed to drive learning; governance arrangements are transparent "
+            "and effective. The service can demonstrate continuous improvement."
+        ),
+        "keywords": [
+            "quality assurance", "governance", "audit", "monitoring", "continuous improvement",
+            "complaints analysis", "incident analysis", "learning culture", "self-evaluation",
+            "quality framework", "key performance indicators", "improvement planning",
+        ],
+    },
+    {
+        "reference": "CI 2.3",
+        "name": "Leaders collaborate to support people",
+        "key_questions": ["How good is our leadership?"],
+        "description": (
+            "Leadership works effectively with external agencies, commissioners, health professionals, "
+            "social work, families and other partners to support people's individual outcomes. "
+            "Partnership and integration arrangements are well-managed."
+        ),
+        "keywords": [
+            "partnership", "multi-agency", "collaboration", "external agencies", "commissioners",
+            "integrated care", "social work", "health professionals", "community links",
+            "referral pathways",
+        ],
+    },
+    {
+        "reference": "CI 2.4",
+        "name": "Staff are led well",
+        "key_questions": ["How good is our leadership?"],
+        "description": (
+            "Staff receive regular, meaningful supervision and annual appraisal; communication is "
+            "open and transparent; staff wellbeing is actively supported; leadership is visible, "
+            "accessible and responsive. Staff feel valued, supported and confident to raise concerns."
+        ),
+        "keywords": [
+            "supervision", "appraisal", "staff wellbeing", "open communication", "visible leadership",
+            "team meetings", "whistleblowing", "speaking up", "staff support", "team culture",
+            "staff engagement", "recognition",
+        ],
+    },
+    # ── KQ3: How good is our staff team? ─────────────────────────────────────
+    {
+        "reference": "CI 3.1",
+        "name": "Staff have been recruited well",
+        "key_questions": ["How good is our staff team?"],
+        "description": (
+            "Safer recruitment practices are followed; PVG (Protection of Vulnerable Groups) Scheme "
+            "checks are in place for all relevant staff; thorough references are obtained; "
+            "SSSC registration requirements are met before staff begin working; "
+            "fitness to practise is assessed and maintained."
+        ),
+        "keywords": [
+            "safer recruitment", "PVG", "Protection of Vulnerable Groups", "SSSC registration",
+            "references", "induction", "fitness to practise", "employment checks",
+            "pre-employment screening", "Disclosure Scotland",
+        ],
+    },
+    {
+        "reference": "CI 3.2",
+        "name": "Staff have the right knowledge, competence and development to care for and support people",
+        "key_questions": ["How good is our staff team?"],
+        "description": (
+            "Staff complete the National Induction Framework (NIF) and meet SSSC registration "
+            "requirements including mandatory qualifications. Ongoing CPD is actively supported; "
+            "training needs are systematically identified and met; staff can demonstrate competence "
+            "and reflect on practice. Specialist training is provided as needed."
+        ),
+        "keywords": [
+            "NIF", "National Induction Framework", "SSSC registration", "SVQ", "qualifications",
+            "CPD", "continuing professional development", "competency", "training",
+            "mandatory training", "specialist training", "reflection", "learning", "supervision",
+        ],
+    },
+    {
+        "reference": "CI 3.3",
+        "name": "Staffing arrangements are right and staff work well together",
+        "key_questions": ["How good is our staff team?"],
+        "description": (
+            "Staffing levels and skill mix are appropriate and safe at all times; staff work "
+            "cohesively as a team; effective handovers ensure continuity of care; deployment "
+            "decisions are driven by people's needs; temporary/agency staff are appropriately "
+            "inducted and supervised."
+        ),
+        "keywords": [
+            "staffing levels", "skill mix", "teamwork", "continuity of care", "handover",
+            "shift patterns", "safe staffing", "deployment", "agency staff", "bank staff",
+            "lone working", "team cohesion",
+        ],
+    },
+    # ── KQ4: How good is our setting? ────────────────────────────────────────
+    {
+        "reference": "CI 4.1",
+        "name": "People experience high quality facilities",
+        "key_questions": ["How good is our setting?"],
+        "description": (
+            "The physical environment is safe, well-maintained, clean and suited to the needs "
+            "of the people who use the service. Equipment is appropriate, well-maintained and "
+            "available. Health and safety requirements are met; fire safety, COSHH and "
+            "risk assessments are in place."
+        ),
+        "keywords": [
+            "facilities", "environment", "cleanliness", "maintenance", "equipment", "health and safety",
+            "fire safety", "COSHH", "risk assessment", "premises", "accessibility",
+        ],
+    },
+    {
+        "reference": "CI 4.2",
+        "name": "The setting promotes people's independence",
+        "key_questions": ["How good is our setting?"],
+        "description": (
+            "The environment is designed and managed to actively promote independence; assistive "
+            "technology is used where appropriate; people can move freely and safely around the "
+            "spaces available to them; the layout supports dignity and privacy."
+        ),
+        "keywords": [
+            "independence", "assistive technology", "accessibility", "mobility", "layout",
+            "privacy", "dignity", "enabling environment", "technology enabled care",
+        ],
+    },
+    {
+        "reference": "CI 4.3",
+        "name": "People can be connected to and involved in the wider community",
+        "key_questions": ["How good is our setting?"],
+        "description": (
+            "The service actively supports people to maintain community connections, access local "
+            "amenities and sustain relationships outside the service. Social isolation is proactively "
+            "addressed; people are supported to be active citizens in their local community."
+        ),
+        "keywords": [
+            "community connections", "social isolation", "community involvement", "outings",
+            "volunteers", "family contact", "citizenship", "community activities",
+        ],
+    },
+    # ── KQ5: How well is our care and support planned? ────────────────────────
+    {
+        "reference": "CI 5.1",
+        "name": "Assessment and personal planning reflects people's outcomes and wishes",
+        "key_questions": ["How well is our care and support planned?"],
+        "description": (
+            "Individual assessments are thorough, person-centred and co-produced; personal plans "
+            "are detailed, current and clearly reflect each person's outcomes, needs, wishes and "
+            "choices; plans are reviewed regularly and when needs change; the person is central to "
+            "all planning decisions."
+        ),
+        "keywords": [
+            "personal plan", "care planning", "assessment", "personal outcomes", "co-production",
+            "person-centred", "individual needs", "wishes", "review", "risk assessment",
+            "positive risk", "informed decisions",
+        ],
+    },
+    {
+        "reference": "CI 5.2",
+        "name": "Carers, friends and family members are encouraged to be involved",
+        "key_questions": ["How well is our care and support planned?"],
+        "description": (
+            "Carers, family members and people important to the individual are actively included "
+            "in assessment, care planning and reviews; their expertise about the person is valued; "
+            "their own support needs as carers are recognised and addressed."
+        ),
+        "keywords": [
+            "carers", "family involvement", "carer support", "carer assessment", "partnership",
+            "relatives", "significant others", "inclusive planning", "carer rights",
+        ],
+    },
+    # ── KQ6: Overall capacity for improvement ────────────────────────────────
+    {
+        "reference": "CI 6",
+        "name": "Overall capacity for improvement",
+        "key_questions": ["What is our overall capacity for improvement?"],
+        "description": (
+            "A global judgement based on evidence and evaluations from all other key questions. "
+            "Assesses whether the organisation has the leadership, culture, resources and systems "
+            "to sustain and improve quality over time. Takes account of contextual factors "
+            "such as staffing changes, restructuring plans or significant funding changes."
+        ),
+        "keywords": [
+            "capacity for improvement", "sustainability", "leadership capability", "change management",
+            "resources", "culture of improvement", "self-evaluation", "track record",
+            "forward planning", "resilience", "organisational health",
+        ],
+    },
+]
+
+
+# ── SSSC Code of Practice for Social Service Workers (Worker's Code 2024) ─────
+# 6 sections — equivalent to the SCW Worker's Code (Wales) and Care Certificate.
+# Source: Scottish Social Services Council, Codes of Practice 2024.
+
+SSSC_CODE_STANDARDS = [
+    {
+        "reference": "SSSC 1",
+        "name": "Protect and promote the rights and interests of individuals and carers",
+        "description": (
+            "Social service workers must work with kindness, compassion and respect; treat each "
+            "individual as unique; respect and promote people's rights, views, wishes and choices; "
+            "promote control and informed decision-making; use preferred communication methods; "
+            "maintain dignity and privacy; and promote diversity and respect all identities, "
+            "values and cultures."
+        ),
+        "keywords": [
+            "rights", "interests", "compassion", "respect", "kindness", "dignity", "privacy",
+            "choices", "individuality", "diversity", "identities", "values", "cultures",
+            "preferred communication", "informed decisions",
+        ],
+        "sub_outcomes": [
+            {"ref": "1.1", "desc": "Work with kindness, compassion and respect and treat each individual as unique"},
+            {"ref": "1.2", "desc": "Respect and promote the rights and, where appropriate, the views, wishes and choices of individuals and carers"},
+            {"ref": "1.3", "desc": "Promote the rights of individuals to have control over their lives and make informed choices about their care or support"},
+            {"ref": "1.4", "desc": "Work with individuals and carers to communicate using their preferred method and language"},
+            {"ref": "1.5", "desc": "Respect and maintain the dignity and privacy of individuals"},
+            {"ref": "1.6", "desc": "Promote diversity and respect all identities, values and cultures"},
+        ],
+    },
+    {
+        "reference": "SSSC 2",
+        "name": "Build and maintain the trust and confidence of individuals and carers",
+        "description": (
+            "Social service workers must be truthful, open, honest and trustworthy; communicate "
+            "respectfully and accurately; maintain confidentiality; be reliable and dependable; "
+            "declare conflicts of interest; follow policies on gifts and money; and maintain "
+            "professional boundaries that respect dignity, wellbeing and safety."
+        ),
+        "keywords": [
+            "trust", "honesty", "openness", "transparency", "confidentiality", "reliability",
+            "professional boundaries", "conflicts of interest", "dependability",
+            "communication", "gifts policy",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.1", "desc": "Be truthful, open, honest and trustworthy"},
+            {"ref": "2.2", "desc": "Communicate in a respectful, open, accurate and straightforward way"},
+            {"ref": "2.3", "desc": "Respect confidential information and clearly explain policies about confidentiality to individuals and carers"},
+            {"ref": "2.4", "desc": "Be reliable and dependable"},
+            {"ref": "2.5", "desc": "Honour work commitments, agreements and arrangements and explain why when not possible"},
+            {"ref": "2.6", "desc": "Declare issues that might create conflicts of interest and ensure they do not influence judgement or practice"},
+            {"ref": "2.7", "desc": "Follow policies and procedures about exchanging gifts and money with individuals and carers"},
+            {"ref": "2.8", "desc": "Form open, positive relationships and maintain professional boundaries with individuals, colleagues or carers"},
+        ],
+    },
+    {
+        "reference": "SSSC 3",
+        "name": "Promote the wellbeing and independence of individuals and carers while protecting them from harm",
+        "description": (
+            "Social service workers must report and challenge dangerous, abusive or discriminatory "
+            "behaviour; follow safety procedures; tell employers about resource or operational matters "
+            "affecting safe care delivery; report impaired fitness to practise of colleagues; "
+            "be open when practice causes harm; cooperate with investigations; work with "
+            "individuals to address concerns and complaints; and use power responsibly."
+        ),
+        "keywords": [
+            "wellbeing", "independence", "harm prevention", "safeguarding", "reporting",
+            "whistleblowing", "speaking up", "duty of candour", "safety procedures",
+            "complaints", "feedback", "power", "abuse reporting",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.1", "desc": "Report allegations of harm, challenge and report any dangerous, abusive or discriminatory behaviour"},
+            {"ref": "3.2", "desc": "Follow practices, procedures and policies designed to keep workers and other people safe at work"},
+            {"ref": "3.3", "desc": "Tell employer or relevant authority about any resourcing or operational matter that might affect care or support"},
+            {"ref": "3.4", "desc": "Tell employer or relevant authority when a colleague's fitness to practise may be impaired"},
+            {"ref": "3.5", "desc": "Be open and honest with employer, individuals and carers when practice has or may have caused harm or loss"},
+            {"ref": "3.6", "desc": "Cooperate with any investigations by employer, SSSC or relevant authority into fitness to practise"},
+            {"ref": "3.7", "desc": "Work with individuals and carers to give and receive feedback, raise concerns and complaints, and act upon them"},
+            {"ref": "3.8", "desc": "Recognise and use responsibly the power and authority held when working with individuals, carers and colleagues"},
+        ],
+    },
+    {
+        "reference": "SSSC 4",
+        "name": "Recognise that individuals have the right to take risks and work with them to understand and manage those risks",
+        "description": (
+            "Social service workers must support informed choices about potential and actual risks; "
+            "follow risk assessment policies; take steps to reduce identified risks; and ensure "
+            "relevant colleagues and agencies are informed about risk assessment findings."
+        ),
+        "keywords": [
+            "risk", "positive risk taking", "informed choice", "risk assessment",
+            "risk management", "autonomy", "safety", "harm reduction",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.1", "desc": "Work with individuals to make informed choices about potential and actual risks to themselves or others"},
+            {"ref": "4.2", "desc": "Follow risk assessment policies and procedures to assess whether behaviour presents a risk of harm"},
+            {"ref": "4.3", "desc": "Take necessary steps to reduce the risks of individuals harming themselves or others"},
+            {"ref": "4.4", "desc": "Make sure that individuals, relevant colleagues and agencies are informed about the findings and implications of risk assessments"},
+        ],
+    },
+    {
+        "reference": "SSSC 5",
+        "name": "Be accountable for the quality of work and take responsibility for maintaining and improving knowledge and skills",
+        "description": (
+            "Social service workers must meet relevant standards of practice; maintain accurate "
+            "records; tell employers about personal circumstances affecting job competence; seek "
+            "support when uncertain; engage in supervision to reflect on practice and development; "
+            "maintain CPL (Continuous Professional Learning) to improve knowledge and skills; "
+            "work openly with colleagues; understand responsibility for delegated work; "
+            "and work in a trauma-informed way."
+        ),
+        "keywords": [
+            "accountability", "quality of work", "records management", "documentation",
+            "professional development", "CPL", "continuous professional learning",
+            "supervision", "reflection", "delegated work", "competence",
+            "trauma-informed practice", "partnership working", "fitness to practise",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.1", "desc": "Meet relevant standards of practice and work in a lawful, safe and effective way"},
+            {"ref": "5.2", "desc": "Maintain clear, accurate and up-to-date records in line with policies and procedures"},
+            {"ref": "5.3", "desc": "Tell employer about personal circumstances or experiences that may affect ability to do job competently and safely"},
+            {"ref": "5.4", "desc": "Ask for support if not adequately prepared or unsure how to proceed"},
+            {"ref": "5.5", "desc": "Prepare for and engage in supervision to reflect on development, learning needs, wellbeing and practice"},
+            {"ref": "5.6", "desc": "Maintain continuous professional learning (CPL) to improve knowledge and skills and contribute to others' development"},
+            {"ref": "5.7", "desc": "Cooperate and work inclusively and openly with colleagues and treat them with respect"},
+            {"ref": "5.8", "desc": "Work in a way that is informed by an understanding of the impact that trauma may have on individuals, carers and colleagues"},
+            {"ref": "5.9", "desc": "Be responsible for the work delegated to others"},
+            {"ref": "5.10", "desc": "Respect the roles and expertise of colleagues from other professions and work in partnership with them"},
+            {"ref": "5.11", "desc": "Recognise and respect the roles, expertise and experience of carers, families and relevant others"},
+            {"ref": "5.12", "desc": "Invite and listen to feedback from individuals, carers and others and use this to improve practice"},
+        ],
+    },
+    {
+        "reference": "SSSC 6",
+        "name": "Uphold public trust and confidence",
+        "description": (
+            "Social service workers must not abuse, harm, neglect or exploit individuals, carers "
+            "or colleagues; must not abuse trust or misuse personal information; must not form "
+            "unprofessional relationships; must not discriminate or condone discrimination; "
+            "must not put people at unnecessary risk; and must not behave in a way that brings "
+            "into question suitability to work in social services — in or outside work."
+        ),
+        "keywords": [
+            "public trust", "professional conduct", "integrity", "exploitation", "abuse of trust",
+            "confidentiality", "professional relationships", "discrimination", "fitness to practise",
+            "SSSC registration", "conduct outside work", "social media",
+        ],
+        "sub_outcomes": [
+            {"ref": "6.1", "desc": "Must not abuse, harm, neglect or exploit individuals, carers or colleagues"},
+            {"ref": "6.2", "desc": "Must not abuse the trust of individuals, carers or colleagues, or misuse information about them"},
+            {"ref": "6.3", "desc": "Must not form unprofessional or harmful relationships with individuals or carers"},
+            {"ref": "6.4", "desc": "Must not discriminate against individuals, carers or colleagues"},
+            {"ref": "6.5", "desc": "Must not condone any discrimination by individuals, carers or colleagues"},
+            {"ref": "6.6", "desc": "Must not put self or other people at unnecessary risk"},
+            {"ref": "6.7", "desc": "Must not behave, while in or outside work, in a way that would bring suitability to work in social services into question"},
+        ],
+    },
+]
+
+
+async def seed_scotland_standards():
+    """Seed Scottish standards: CI Quality Indicators (18) and SSSC Worker's Code (6 sections)."""
+    async with database.with_admin() as conn:
+        scotland_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries WHERE is_system=TRUE AND jurisdiction='scotland'"
+        )
+        if scotland_count and scotland_count > 0:
+            logger.info(f"Scotland standards already seeded ({scotland_count} entries) — skipping")
+            return
+
+        now = datetime.now(timezone.utc).isoformat()
+        entries = []
+
+        for qi in CI_QUALITY_INDICATORS:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "ci",
+                "reference": qi["reference"],
+                "name": qi["name"],
+                "description": qi["description"],
+                "keywords": qi["keywords"],
+                "sub_outcomes": [],
+                "key_questions": qi.get("key_questions", []),
+                "quality_statement": False,
+                "source": (
+                    "Care Inspectorate Scotland — Quality Framework for Care Homes for Adults "
+                    "and Older People (applicable across registered adult social care services)"
+                ),
+                "created_at": now,
+            })
+
+        for std in SSSC_CODE_STANDARDS:
+            entries.append({
+                "id": str(uuid.uuid4()),
+                "type": "sssc",
+                "reference": std["reference"],
+                "name": std["name"],
+                "description": std["description"],
+                "keywords": std["keywords"],
+                "sub_outcomes": std["sub_outcomes"],
+                "key_questions": [],
+                "quality_statement": False,
+                "source": "Scottish Social Services Council — Code of Practice for Social Service Workers (2024)",
+                "created_at": now,
+            })
+
+        await _insert_standards_entries(conn, entries, "scotland")
+        logger.info(
+            f"Seeded {len(entries)} Scotland standards entries "
+            f"({len(CI_QUALITY_INDICATORS)} CI quality indicators, {len(SSSC_CODE_STANDARDS)} SSSC Code sections)"
+        )
+
+
+
 async def seed_super_admin():
     """Create the super admin account (idempotent)."""
     from routers.auth import hash_password
@@ -1055,7 +1560,7 @@ async def seed_default_org():
 
 async def seed_all():
     """Run all seed functions on startup."""
-    # Run one-time schema migrations (idempotent — IF NOT EXISTS guards)
+    # One-time schema migrations
     async with database.with_admin() as conn:
         await conn.execute(
             "ALTER TABLE organisations ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'england'"
@@ -1065,5 +1570,6 @@ async def seed_all():
         )
     await seed_standards()
     await seed_welsh_standards()
+    await seed_scotland_standards()
     await seed_super_admin()
     await seed_default_org()

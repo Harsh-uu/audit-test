@@ -826,6 +826,9 @@ async def analyze_doc_for_evidence(
     if jurisdiction == "wales":
         reg_label = "CIW REGULATIONS (Care Inspectorate Wales — RISCA 2016)"
         cert_label = "AWIF / SCW STANDARDS (All Wales Induction Framework & Social Care Wales Code)"
+    elif jurisdiction == "scotland":
+        reg_label = "CARE INSPECTORATE SCOTLAND QUALITY INDICATORS"
+        cert_label = "SSSC CODE OF PRACTICE (Scottish Social Services Council — Worker's Code 2024)"
     else:
         reg_label = "CQC REGULATIONS"
         cert_label = "CARE CERTIFICATE STANDARDS"
@@ -905,6 +908,9 @@ async def analyze_meeting(
     if jurisdiction == "wales":
         reg_label = "CIW REGULATIONS (Care Inspectorate Wales — RISCA 2016)"
         cert_label = "AWIF / SCW STANDARDS (All Wales Induction Framework & Social Care Wales Code)"
+    elif jurisdiction == "scotland":
+        reg_label = "CARE INSPECTORATE SCOTLAND QUALITY INDICATORS"
+        cert_label = "SSSC CODE OF PRACTICE (Scottish Social Services Council — Worker's Code 2024)"
     else:
         reg_label = "CQC REGULATIONS"
         cert_label = "CARE CERTIFICATE STANDARDS"
