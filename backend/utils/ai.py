@@ -847,7 +847,8 @@ async def analyze_doc_for_evidence(
     ])
 
     cc_lines = []
-    for s in care_cert_standards[:16]:
+    # NI has up to 19 NISCC standards; cap generously at 30 to fit all jurisdictions
+    for s in care_cert_standards[:30]:
         line = f"- {s['reference']}: {s['name']}"
         sub_outcomes = s.get("sub_outcomes", [])
         if sub_outcomes:
@@ -935,9 +936,10 @@ async def analyze_meeting(
         for s in cqc_standards[:60]
     ])
 
-    # Care Certificate context — includes granular sub-outcomes for precise mapping
+    # Care Certificate / NISCC context — includes granular sub-outcomes for precise mapping
+    # Cap at 30: England=16, Wales AWIF/SCW=13, Scotland SSSC=6, NI NISCC=19
     cc_lines = []
-    for s in care_cert_standards[:16]:
+    for s in care_cert_standards[:30]:
         line = f"- {s['reference']}: {s['name']}"
         sub_outcomes = s.get("sub_outcomes", [])
         outcomes = s.get("outcomes", [])

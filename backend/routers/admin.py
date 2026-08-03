@@ -464,15 +464,41 @@ async def get_team_insights(
                 "themes": {"coverage_gaps": [], "common_risks": [], "outstanding_actions": []},
             }
 
-        # Standards
-        std_rows = await conn.fetch(
-            "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND type IN ('cqc','care_cert') AND (is_system=TRUE OR org_id=$1) ORDER BY type, reference",
-            org_id,
-        )
+    # Get org jurisdiction to load the correct framework standards
+    async with database.with_admin() as conn:
+        org_info = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
+    org_jurisdiction = (org_info["jurisdiction"] if org_info else None) or "england"
+    org_service_type = (org_info["service_type"] if org_info else None)
+
+    # Standards — jurisdiction-aware (reg types map to "cqc" matrix key; cert types to "care_cert")
+    REG_TYPES = {"cqc", "ciw", "ci", "rqia_dom", "rqia_res"}
+    async with database.with_org(org_id) as conn:
+        if org_jurisdiction == "wales":
+            std_rows = await conn.fetch(
+                "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND is_system=TRUE AND jurisdiction='wales' ORDER BY type, reference",
+            )
+        elif org_jurisdiction == "scotland":
+            std_rows = await conn.fetch(
+                "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND is_system=TRUE AND jurisdiction='scotland' ORDER BY type, reference",
+            )
+        elif org_jurisdiction == "northern_ireland":
+            std_rows = await conn.fetch(
+                """SELECT type, reference, name, sub_outcomes FROM standards_entries
+                   WHERE is_active=TRUE AND jurisdiction='northern_ireland'
+                   AND (service_type IS NULL OR service_type=$1)
+                   ORDER BY type, reference""",
+                org_service_type,
+            )
+        else:
+            std_rows = await conn.fetch(
+                "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND type IN ('cqc','care_cert') AND (is_system=TRUE OR org_id=$1) ORDER BY type, reference",
+                org_id,
+            )
+
         cqc_stds, cc_stds, cc_sub_outcomes = [], [], {}
         for s in std_rows:
             s = dict(s)
-            if s["type"] == "cqc":
+            if s["type"] in REG_TYPES:
                 cqc_stds.append({"ref": s["reference"], "name": s["name"]})
             else:
                 cc_stds.append({"ref": s["reference"], "name": s["name"]})

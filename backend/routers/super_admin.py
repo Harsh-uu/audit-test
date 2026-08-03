@@ -118,12 +118,22 @@ async def update_org(org_id: str, data: UpdateOrgRequest, current_user=Depends(g
     elif data.service_type == "" or (data.jurisdiction and data.jurisdiction != "northern_ireland"):
         # Clear service_type when switching away from NI
         updates["service_type"] = None
+
+    # If switching TO northern_ireland, must provide service_type
+    effective_jurisdiction = updates.get("jurisdiction") or data.jurisdiction
+    if effective_jurisdiction == "northern_ireland":
+        resolved_service_type = updates.get("service_type")
+        if resolved_service_type is None and data.service_type not in VALID_SERVICE_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail="service_type ('residential' or 'domiciliary') is required for Northern Ireland organisations",
+            )
+
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     set_clause = ", ".join(f"{k}=${i+2}" for i, k in enumerate(updates.keys()))
-    values = list(updates.values()) + [org_id]
     async with database.with_admin() as conn:
         await conn.execute(f"UPDATE organisations SET {set_clause} WHERE id=$1", *([org_id] + list(updates.values())))
     return {"message": "Organisation updated"}
