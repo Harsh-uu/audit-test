@@ -204,7 +204,8 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - None outstanding
 
 ### P2 (Upcoming)
-- **AWIF granularity review** (Wales consultation needed): Current AWIF sub-outcomes are section headings (topic level, e.g. "1.1 Legislation and codes of conduct"). Decision pending from Welsh users on whether to drill down to the specific "I can/I understand" practice learning outcome statements within each section — same granularity as Care Certificate sub-outcomes. All 7 workbook .docx files are available in job assets for re-extraction when ready.
+- **AWIF granularity review** (Wales consultation pending): Current AWIF sub-outcomes are section headings (topic level). Decision pending from Welsh users on whether to drill down to the specific "I can/I understand" practice learning outcome statements. All 7 workbook .docx files available in job assets for re-extraction when ready.
+- **Scotland NIF** — parked indefinitely. Content entirely behind Turas login wall (launched May 2025, no public docs). Add as `type='nif'`, `jurisdiction='scotland'` when source material surfaces.
 - Role-specific competency framework upload (admin uploads per-role competency doc; AI maps evidence against it)
 - Skills for Care Effective Supervision Guide — per-org upload option
 
