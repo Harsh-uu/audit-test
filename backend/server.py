@@ -23,6 +23,7 @@ from routers.prep import router as prep_router  # noqa: E402
 from utils.storage import init_storage  # noqa: E402
 from utils.seed import seed_all  # noqa: E402
 from utils.job_worker import start_worker  # noqa: E402
+from init_db import create_schema  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +68,10 @@ async def startup():
     pool = await database.create_pool()
     app.state.pool = pool
     logger.info("PostgreSQL pool ready")
+
+    # Run schema creation/migration on every startup (all statements are idempotent)
+    await create_schema()
+    logger.info("Schema verified")
 
     await seed_all()
     logger.info("Seeding complete")
