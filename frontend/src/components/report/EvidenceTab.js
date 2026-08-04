@@ -465,14 +465,19 @@ export function EvidenceTab({
         </div>
       )}
 
-      {/* Sign-off info */}
-      {meeting.sign_off_record && (
+      {/* Sign-off info — only render when actually signed off */}
+      {meeting.sign_off_record?.signed_at && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-emerald-600" />
             <p className="text-sm font-medium text-emerald-800">Signed off by {meeting.sign_off_record.signed_by_name}</p>
           </div>
-          <p className="text-xs text-emerald-600 mt-1">{new Date(meeting.sign_off_record.signed_at).toLocaleString("en-GB")}</p>
+          <p className="text-xs text-emerald-600 mt-1">
+            {new Date(meeting.sign_off_record.signed_at).toLocaleString("en-GB", {
+              day: "2-digit", month: "short", year: "numeric",
+              hour: "2-digit", minute: "2-digit"
+            })}
+          </p>
         </div>
       )}
 
