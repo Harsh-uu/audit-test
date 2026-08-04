@@ -429,6 +429,9 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     return localTurns.findIndex(t => resolveExcerptQuery(t.text, highlightExcerpt) !== "");
   }, [highlightExcerpt, localTurns]);
 
+  // For raw text mode — declared here so all hooks below can reference it
+  const rawParas = useMemo(() => formatTranscript(meeting.transcript?.text || ""), [meeting.transcript?.text]);
+
   // What actually matched — may be a shorter word-prefix if the full excerpt wasn't verbatim.
   // Used to drive the yellow highlight so it renders on the right substring.
   const effectiveHighlightQuery = useMemo(() => {
@@ -446,9 +449,6 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
     }
     return "";
   }, [highlightExcerpt, localTurns, rawParas, hasSpeakerText]);
-
-  // For raw text mode
-  const rawParas = useMemo(() => formatTranscript(meeting.transcript?.text || ""), [meeting.transcript?.text]);
 
   // ── Find & Replace match computation ──────────────────────────────────────
   const findMatches = useMemo(() => {
