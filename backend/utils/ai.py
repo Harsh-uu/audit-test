@@ -11,12 +11,13 @@ from deepgram import DeepgramClient
 logger = logging.getLogger(__name__)
 
 
-async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str = None) -> str:
+async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360) -> str:
     """Single-shot OpenAI chat completion — direct to OpenAI, no proxy."""
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("OPENAI_API_KEY not set")
-    client = AsyncOpenAI(api_key=api_key)
+    import httpx
+    client = AsyncOpenAI(api_key=api_key, timeout=httpx.Timeout(timeout_secs, connect=10.0))
     messages: list = []
     if system:
         messages.append({"role": "system", "content": system})

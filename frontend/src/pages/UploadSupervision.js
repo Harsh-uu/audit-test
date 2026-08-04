@@ -21,9 +21,10 @@ const DOC_TYPE_OPTIONS = [
 ];
 
 const STATUS_CONFIG = {
-  processing: { icon: Loader, color: "text-amber-600", bg: "bg-amber-50 border-amber-200", label: "Analysing…", spin: true },
-  done:       { icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", label: "Analysis complete" },
-  failed:     { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50 border-red-200", label: "Failed" },
+  processing:  { icon: Loader, color: "text-amber-600", bg: "bg-amber-50 border-amber-200", label: "Analysing…", spin: true },
+  text_ready:  { icon: Loader, color: "text-amber-600", bg: "bg-amber-50 border-amber-200", label: "Mapping evidence…", spin: true },
+  done:        { icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", label: "Analysis complete" },
+  failed:      { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50 border-red-200", label: "Failed" },
 };
 
 function UploadCard({ upload, onDelete, navigate }) {

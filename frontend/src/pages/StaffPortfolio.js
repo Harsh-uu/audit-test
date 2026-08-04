@@ -588,9 +588,14 @@ export default function StaffPortfolio() {
                                 </span>
                               </div>
                             )}
-                            {u.status === "processing" && (
+                            {(u.status === "processing" || u.status === "text_ready") && (
                               <span className="text-xs text-amber-600 flex items-center gap-1 mt-1">
-                                <Clock className="w-3 h-3 animate-pulse" /> Scanning…
+                                <Clock className="w-3 h-3 animate-pulse" /> {u.status === "text_ready" ? "Mapping evidence…" : "Scanning…"}
+                              </span>
+                            )}
+                            {u.status === "failed" && (
+                              <span className="text-xs text-red-600 flex items-center gap-1 mt-1">
+                                <span>Analysis failed</span>
                               </span>
                             )}
                           </div>
