@@ -130,7 +130,7 @@ async def _generate_and_send_mfa(conn, user: dict) -> None:
                 f"<p style='color:#475569;font-size:15px;margin-bottom:20px;'>Hi {user.get('name','')}, "
                 "enter the code below to complete your sign-in. It expires in <strong>10 minutes</strong>.</p>"
                 f"<div style='font-size:36px;font-weight:700;letter-spacing:10px;color:#1E3A8A;"
-                "text-align:center;padding:20px 0;'>{code}</div>"
+                f"text-align:center;padding:20px 0;'>{code}</div>"
                 "<p style='color:#94a3b8;font-size:12px;margin-top:24px;'>"
                 "If you didn't attempt to sign in, your account may be at risk — "
                 "please change your password immediately.</p></div>"
