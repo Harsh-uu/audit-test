@@ -47,6 +47,8 @@ export default function SuperAdminDashboard() {
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "", password: "" });
+  const [showEditOrg, setShowEditOrg] = useState(false);
+  const [editOrgForm, setEditOrgForm] = useState({ name: "", jurisdiction: "england", service_type: "domiciliary" });
   const [showInviteAdmin, setShowInviteAdmin] = useState(false);
   const [orgForm, setOrgForm] = useState({ name: "", jurisdiction: "england", service_type: "domiciliary" });
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "manager" });
@@ -101,6 +103,43 @@ export default function SuperAdminDashboard() {
       await loadOrgs();
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to create organisation");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openEditOrg = (org) => {
+    setEditOrgForm({
+      name: org.name,
+      jurisdiction: org.jurisdiction || "england",
+      service_type: org.service_type || "domiciliary",
+    });
+    setShowEditOrg(org);
+    setError("");
+  };
+
+  const handleEditOrg = async (e) => {
+    e.preventDefault();
+    if (!editOrgForm.name.trim() || !showEditOrg) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const payload = { name: editOrgForm.name.trim(), jurisdiction: editOrgForm.jurisdiction };
+      if (editOrgForm.jurisdiction === "northern_ireland") {
+        payload.service_type = editOrgForm.service_type;
+      } else {
+        payload.service_type = "";  // clear service_type when not NI
+      }
+      await axios.patch(`${API}/super-admin/orgs/${showEditOrg.id}`, payload, getAuthConfig());
+      toast.success("Organisation updated");
+      setShowEditOrg(false);
+      await loadOrgs();
+      // Refresh slide-over if it's the currently selected org
+      if (selectedOrg?.id === showEditOrg.id) {
+        setSelectedOrg(prev => ({ ...prev, ...payload, service_type: payload.service_type || null }));
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to update organisation");
     } finally {
       setSubmitting(false);
     }
@@ -290,6 +329,14 @@ export default function SuperAdminDashboard() {
                 >
                   Manage
                   <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  data-testid={`edit-org-${org.id}`}
+                  onClick={() => openEditOrg(org)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  title="Edit organisation"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button
                   data-testid={`toggle-status-${org.id}`}
@@ -546,6 +593,87 @@ export default function SuperAdminDashboard() {
                   >
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                     Create
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Edit Organisation Modal ────────────────────────────────────── */}
+      {showEditOrg && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setShowEditOrg(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="font-bold font-display text-[#1E3A8A] text-lg">Edit Organisation</h2>
+                <button onClick={() => setShowEditOrg(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {error && <p className="mb-3 text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
+              <form onSubmit={handleEditOrg} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Organisation Name</label>
+                  <input
+                    data-testid="edit-org-name-input"
+                    type="text"
+                    required
+                    autoFocus
+                    value={editOrgForm.name}
+                    onChange={e => setEditOrgForm(f => ({ ...f, name: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Jurisdiction</label>
+                  <select
+                    data-testid="edit-org-jurisdiction-select"
+                    value={editOrgForm.jurisdiction}
+                    onChange={e => setEditOrgForm(f => ({ ...f, jurisdiction: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
+                  >
+                    <option value="england">England (CQC / Care Certificate)</option>
+                    <option value="wales">Wales (CIW / AWIF / SCW)</option>
+                    <option value="scotland">Scotland (Care Inspectorate)</option>
+                    <option value="northern_ireland">Northern Ireland (RQIA / NISCC)</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Changes which regulatory framework is used for all new evidence mappings in this org.
+                  </p>
+                </div>
+                {editOrgForm.jurisdiction === "northern_ireland" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                    <select
+                      data-testid="edit-org-service-type-select"
+                      value={editOrgForm.service_type}
+                      onChange={e => setEditOrgForm(f => ({ ...f, service_type: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
+                    >
+                      <option value="domiciliary">Domiciliary Care (RQIA Dom Standards 2021)</option>
+                      <option value="residential">Residential Care (RQIA Regulations 2005)</option>
+                    </select>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditOrg(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    data-testid="edit-org-submit"
+                    type="submit"
+                    disabled={submitting || !editOrgForm.name.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#1E3A8A] text-white rounded-lg text-sm font-semibold hover:bg-[#1e40af] disabled:opacity-50"
+                  >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+                    Save Changes
                   </button>
                 </div>
               </form>
