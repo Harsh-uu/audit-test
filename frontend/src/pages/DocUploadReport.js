@@ -92,6 +92,20 @@ export default function DocUploadReport() {
   const cfg = STATUS_CONFIG[upload.status] || STATUS_CONFIG.processing;
   const StatusIcon = cfg.icon;
 
+  const updateEvidence = async (evidenceId, updates) => {
+    await axios.put(`${API}/doc-uploads/${uploadId}/evidence/${evidenceId}`, updates, getAuthConfig());
+    // Optimistically update local state so buttons reflect immediately
+    setUpload(prev => {
+      const next = { ...prev };
+      for (const field of ["cqc_mappings", "care_cert_mappings", "custom_mappings"]) {
+        next[field] = (prev[field] || []).map(m =>
+          m.id === evidenceId ? { ...m, ...updates } : m
+        );
+      }
+      return next;
+    });
+  };
+
   const analysis = {
     cqc_mappings: upload.cqc_mappings || [],
     care_cert_mappings: upload.care_cert_mappings || [],
@@ -190,8 +204,9 @@ export default function DocUploadReport() {
           <div className="flex-1 overflow-hidden">
             <EvidenceSidebar
               analysis={analysis}
-              canReview={false}
-              updateEvidence={() => {}}
+              canReview={true}
+              updateEvidence={updateEvidence}
+              isLocked={false}
               className="h-full overflow-y-auto"
               noMaxHeight={true}
             />

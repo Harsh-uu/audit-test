@@ -5,6 +5,8 @@ extract its text, run AI evidence mapping, and link it to a specific staff membe
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from datetime import datetime, timezone
+from pydantic import BaseModel
+from typing import Optional
 import io
 import json
 import uuid
@@ -18,6 +20,12 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_MAX_CHARS = 20_000
 _JSONB_FIELDS = ("cqc_mappings", "care_cert_mappings", "custom_mappings")
+
+
+class UpdateUploadEvidenceRequest(BaseModel):
+    status: Optional[str] = None                    # accepted | rejected | needs_followup | pending
+    edited_evidence_summary: Optional[str] = None
+    notes: Optional[str] = None
 
 
 def _upload_dict(row) -> dict:
@@ -151,6 +159,55 @@ async def get_upload(
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
     return _upload_dict(row)
+
+
+@router.put("/{upload_id}/evidence/{evidence_id}")
+async def update_upload_evidence(
+    upload_id: str,
+    evidence_id: str,
+    data: UpdateUploadEvidenceRequest,
+    current_user=Depends(get_current_user),
+):
+    """Accept, reject, flag or edit wording on a mapped evidence item in an uploaded document."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
+    org_id = current_user.get("org_id")
+    async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM supervision_uploads WHERE id=$1 AND org_id=$2", upload_id, org_id
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    upload = _upload_dict(row)
+    updated_field = None
+    updated_list = None
+
+    for field in _JSONB_FIELDS:
+        mappings = list(upload.get(field) or [])
+        for i, m in enumerate(mappings):
+            if m.get("id") == evidence_id:
+                if data.status is not None:
+                    mappings[i]["status"] = data.status
+                if data.edited_evidence_summary is not None:
+                    mappings[i]["edited_evidence_summary"] = data.edited_evidence_summary
+                if data.notes is not None:
+                    mappings[i]["notes"] = data.notes
+                updated_field = field
+                updated_list = mappings
+                break
+        if updated_field:
+            break
+
+    if not updated_field:
+        raise HTTPException(status_code=404, detail="Evidence item not found")
+
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            f"UPDATE supervision_uploads SET {updated_field}=$1 WHERE id=$2",
+            updated_list, upload_id,
+        )
+    return {"message": "Evidence updated"}
 
 
 @router.delete("/{upload_id}")
