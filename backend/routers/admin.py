@@ -529,6 +529,20 @@ async def get_team_insights(
             if a_row:
                 all_items.append({"meeting": mtg, "analysis": dict(a_row)})
 
+        # Fetch accepted evidence from uploaded supervision documents
+        upload_date_conds = ["status='done'", "staff_id IS NOT NULL"]
+        upload_date_params: list = []
+        if date_from:
+            upload_date_params.append(date_from)
+            upload_date_conds.append(f"created_at >= ${len(upload_date_params)}")
+        if date_to:
+            upload_date_params.append(date_to + "T23:59:59")
+            upload_date_conds.append(f"created_at <= ${len(upload_date_params)}")
+        upload_rows = await conn.fetch(
+            f"SELECT staff_id, created_at, cqc_mappings, care_cert_mappings, custom_mappings FROM supervision_uploads WHERE {' AND '.join(upload_date_conds)}",
+            *upload_date_params,
+        )
+
     staff_ids = {s["id"] for s in staff}
 
     def empty_cqc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "latest_excerpt": "", "source_meeting_id": ""}
@@ -600,6 +614,56 @@ async def get_team_insights(
             if isinstance(action, dict) and not action.get("completed", False):
                 t = action.get("text", "").strip()
                 if t: all_outstanding.append(t)
+
+    # Merge accepted evidence from supervision_uploads into the same accumulators
+    import json as _json
+    for urow in upload_rows:
+        uid = str(urow["staff_id"] or "")
+        if uid not in staff_ids:
+            continue
+        date = str(urow["created_at"] or "")[:10]
+
+        def _parse(val):
+            if isinstance(val, str):
+                try: return _json.loads(val)
+                except Exception: return []
+            return val or []
+
+        for m in _parse(urow["cqc_mappings"]):
+            if m.get("status") not in ("accepted", "needs_followup"): continue
+            ref = m.get("regulation_ref", "")
+            if not ref: continue
+            if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = empty_cqc()
+            c = cqc_ev[uid][ref]
+            c["total"] += 1
+            if m.get("status") == "accepted": c["likely"] += 1
+            else: c["review"] += 1
+            if date > c["last_date"]: c["last_date"] = date
+
+        for m in _parse(urow["care_cert_mappings"]):
+            if m.get("status") not in ("accepted", "needs_followup"): continue
+            std_ref = m.get("standard_ref", "")
+            if not std_ref: continue
+            if std_ref not in cc_ev[uid]: cc_ev[uid][std_ref] = empty_cc()
+            c = cc_ev[uid][std_ref]
+            c["total"] += 1
+            if m.get("status") == "accepted": c["likely"] += 1
+            else: c["review"] += 1
+            if date > c["last_date"]: c["last_date"] = date
+            or_ref = m.get("outcome_ref", "")
+            if or_ref: c["covered_refs"].add(or_ref)
+
+        for m in _parse(urow["custom_mappings"]):
+            if m.get("status") not in ("accepted", "needs_followup"): continue
+            ref = m.get("criterion_ref", "") or m.get("document_name", "")
+            if not ref: continue
+            cust_names.setdefault(ref, m.get("criterion_name", ref))
+            if ref not in cust_ev[uid]: cust_ev[uid][ref] = empty_cqc()
+            c = cust_ev[uid][ref]
+            c["total"] += 1
+            if m.get("status") == "accepted": c["likely"] += 1
+            else: c["review"] += 1
+            if date > c["last_date"]: c["last_date"] = date
 
     def build_cqc_matrix(stds, ev_map):
         rows = []
