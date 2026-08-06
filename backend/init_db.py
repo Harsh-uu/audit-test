@@ -542,6 +542,11 @@ TO app_rls_user;
 
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_rls_user;
 
+-- The connection pool user must be a MEMBER of app_rls_user to be allowed
+-- to SET LOCAL ROLE app_rls_user. On Supabase (and other managed Postgres),
+-- the application user is not a true superuser so this grant is required.
+GRANT app_rls_user TO CURRENT_USER;
+
 -- Automatically grant privileges on tables created in the future
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_rls_user;
