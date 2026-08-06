@@ -200,7 +200,10 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 
 ## Prioritized Backlog
 
-### P0 (Next)
+### P0 (Done this session)
+- FFmpeg leading/trailing silence trim added to `_compress_to_mp3` to prevent AssemblyAI hallucinations (Option C: start_periods=1:start_threshold=-50dB with areverse chain; internal gaps preserved)
+
+### P1 (Next)
 - Super Admin "Edit Org" form needs Jurisdiction + Service Type fields (NI orgs need to be able to update service_type post-creation)
 
 ### P1
