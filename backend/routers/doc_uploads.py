@@ -17,6 +17,22 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 UPLOAD_MAX_CHARS = 20_000
+_JSONB_FIELDS = ("cqc_mappings", "care_cert_mappings", "custom_mappings")
+
+
+def _upload_dict(row) -> dict:
+    """Convert asyncpg Record → dict, ensuring JSONB mapping fields are lists."""
+    d = dict(row)
+    for field in _JSONB_FIELDS:
+        val = d.get(field)
+        if isinstance(val, str):
+            try:
+                d[field] = json.loads(val)
+            except Exception:
+                d[field] = []
+        elif val is None:
+            d[field] = []
+    return d
 
 
 @router.post("/")
@@ -116,7 +132,7 @@ async def list_uploads(
                 "FROM supervision_uploads WHERE org_id=$1 ORDER BY created_at DESC",
                 org_id,
             )
-    return [dict(r) for r in rows]
+    return [_upload_dict(r) for r in rows]
 
 
 @router.get("/{upload_id}")
@@ -134,7 +150,7 @@ async def get_upload(
         )
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
-    return dict(row)
+    return _upload_dict(row)
 
 
 @router.delete("/{upload_id}")
