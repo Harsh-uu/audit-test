@@ -149,9 +149,9 @@ export default function UploadSupervision() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll while any upload is processing
+  // Poll while any upload is still in-flight (processing = extracting text, text_ready = AI mapping)
   useEffect(() => {
-    const hasProcessing = uploads.some(u => u.status === "processing");
+    const hasProcessing = uploads.some(u => ["processing", "text_ready"].includes(u.status));
     if (hasProcessing && !pollRef.current) {
       pollRef.current = setInterval(fetchUploads, 3000);
     } else if (!hasProcessing && pollRef.current) {

@@ -44,7 +44,7 @@ export default function DocUploadReport() {
     try {
       const { data } = await axios.get(`${API}/doc-uploads/${uploadId}`, getAuthConfig());
       setUpload(data);
-      if (data.status !== "processing" && pollRef.current) {
+      if (!["processing", "text_ready"].includes(data.status) && pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
@@ -60,9 +60,9 @@ export default function DocUploadReport() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadId]);
 
-  // Start polling if status is processing
+  // Start polling if status is still in-flight (extracting text or AI mapping)
   useEffect(() => {
-    if (upload?.status === "processing" && !pollRef.current) {
+    if (["processing", "text_ready"].includes(upload?.status) && !pollRef.current) {
       pollRef.current = setInterval(fetchUpload, 3000);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
