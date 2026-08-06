@@ -35,6 +35,7 @@ class UpdateUserRequest(BaseModel):
     email: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    mfa_enabled: Optional[bool] = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -47,7 +48,7 @@ async def list_users(current_user=Depends(get_current_user)):
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
     scope = get_manager_scope(current_user)
-    _cols = "SELECT id, org_id, email, name, role, is_active, team_id, setting_id, created_at FROM users"
+    _cols = "SELECT id, org_id, email, name, role, is_active, mfa_enabled, team_id, setting_id, created_at FROM users"
     async with database.with_org(org_id) as conn:
         if scope["level"] == "team":
             rows = await conn.fetch(
@@ -88,13 +89,16 @@ async def create_user(data: CreateUserRequest, current_user=Depends(get_current_
 
 @router.put("/users/{user_id}")
 async def update_user(user_id: str, data: UpdateUserRequest, current_user=Depends(get_current_user)):
-    if current_user["role"] != "admin":
-        raise HTTPException(403, "Admin only")
+    if current_user["role"] not in ("admin", "manager"):
+        raise HTTPException(403, "Admin/Manager only")
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if not update_data:
         raise HTTPException(400, "No update data provided")
     if "email" in update_data:
         update_data["email"] = update_data["email"].lower().strip()
+    # Managers cannot promote users to admin or change mfa_enabled for admins
+    if current_user["role"] == "manager":
+        update_data.pop("role", None)
     set_parts = [f"{k}=${i+2}" for i, k in enumerate(update_data.keys())]
     org_id = current_user.get("org_id", "")
     async with database.with_admin() as conn:

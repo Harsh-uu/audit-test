@@ -277,7 +277,7 @@ export default function OrgStructure() {
   // ── User management ────────────────────────────────────────────────────────
   const openEditUser = (u) => {
     setEditingUser(u);
-    setEditUserForm({ name: u.name, email: u.email, role: u.role, is_active: u.is_active !== false });
+    setEditUserForm({ name: u.name, email: u.email, role: u.role, is_active: u.is_active !== false, mfa_enabled: Boolean(u.mfa_enabled) });
     setEditUserError("");
     setShowPwdReset(false);
     setNewPassword("");
@@ -784,6 +784,17 @@ export default function OrgStructure() {
                 <input type="checkbox" id="edit-user-active" checked={editUserForm.is_active} onChange={e => setEditUserForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4 accent-[#1E3A8A]" data-testid="edit-user-active" />
                 <label htmlFor="edit-user-active" className="text-sm text-gray-700 cursor-pointer">{editUserForm.is_active ? "Active" : "Inactive"}</label>
               </div>
+              {(editUserForm.role === "admin" || editUserForm.role === "manager") && (
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="edit-user-mfa" checked={Boolean(editUserForm.mfa_enabled)} onChange={e => setEditUserForm(f => ({ ...f, mfa_enabled: e.target.checked }))} className="w-4 h-4 accent-[#1E3A8A]" data-testid="edit-user-mfa" />
+                  <label htmlFor="edit-user-mfa" className="text-sm text-gray-700 cursor-pointer">
+                    Two-Factor Authentication (2FA)
+                  </label>
+                  {Boolean(editUserForm.mfa_enabled) && (
+                    <span className="text-xs text-emerald-600 font-medium">Enabled</span>
+                  )}
+                </div>
+              )}
               <div className="pt-2 border-t border-gray-100">
                 <button
                   type="button"

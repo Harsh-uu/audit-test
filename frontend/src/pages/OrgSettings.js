@@ -313,8 +313,7 @@ function TabBtn({ active, onClick, children }) {
 export default function OrgSettings() {
   const { getAuthConfig, API, user, updateMfaStatus } = useAuth();
   const canBrand = user?.role === "admin" || user?.role === "manager";
-
-  const [tab, setTab] = useState("template");
+  const [tab, setTab] = useState(user?.role === "manager" ? "security" : "template");
   const [message, setMessage] = useState("");
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(true);
