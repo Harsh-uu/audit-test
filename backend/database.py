@@ -54,8 +54,8 @@ async def with_org(org_id: str):
     Acquire a connection, start a transaction, set the RLS context, and
     switch to the limited `app_rls_user` role so PostgreSQL RLS policies
     are actually enforced (superusers bypass RLS; limited roles do not).
-    Uses a savepoint for the role switch so failure is non-fatal — the app
-    continues with app-level WHERE guards until the SQL script is run.
+    Raises RuntimeError (→ HTTP 500) if the role switch fails — silent
+    degradation to superuser would bypass RLS entirely.
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -63,14 +63,15 @@ async def with_org(org_id: str):
             await conn.execute(
                 "SELECT set_config('app.current_org_id', $1, TRUE)", org_id or ""
             )
-            # Attempt role switch inside a nested savepoint so a failure
-            # (role not created yet) rolls back only the savepoint, not the
-            # outer transaction.
+            # Hard fail if the role doesn't exist — silently running as
+            # superuser would bypass all RLS policies.
             try:
-                async with conn.transaction():  # creates SAVEPOINT
-                    await conn.execute("SET LOCAL ROLE app_rls_user")
-            except Exception:
-                pass  # savepoint rolled back; outer tx is intact
+                await conn.execute("SET LOCAL ROLE app_rls_user")
+            except Exception as exc:
+                raise RuntimeError(
+                    f"RLS role switch failed for org_id={org_id!r}: {exc}. "
+                    "Ensure the app_rls_user role exists in the database."
+                ) from exc
             yield conn
 
 

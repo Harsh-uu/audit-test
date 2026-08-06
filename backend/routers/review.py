@@ -1378,6 +1378,14 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
     if (meeting.get("status") or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="PDF export is only available for signed-off meetings")
 
+    # Fetch org jurisdiction to drive dynamic section labels
+    async with database.with_admin() as conn:
+        org_row = await conn.fetchrow(
+            "SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id
+        )
+    org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
+    org_service_type = (org_row["service_type"] if org_row else None) or ""
+
     analysis = {}
     if meeting.get("analysis_id"):
         async with database.with_org(org_id) as conn:
@@ -1406,14 +1414,16 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
         if analysis:
             analysis = _apply_redactions_deep(analysis, redactions)
 
-    pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text)
+    pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text,
+                              jurisdiction=org_jurisdiction, service_type=org_service_type)
     safe_title = "".join(c for c in (meeting.get("title") or "report") if c.isalnum() or c in " _-")
     filename = f"supervision_{safe_title[:40].strip().replace(' ', '_')}.pdf"
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
-def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_text: str = "") -> bytes:
+def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_text: str = "",
+                  jurisdiction: str = "england", service_type: str = "") -> bytes:
     from io import BytesIO
     from xml.sax.saxutils import escape as _xe
     from reportlab.lib.pagesizes import A4
@@ -1421,6 +1431,24 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+
+    # ── Jurisdiction-aware section labels ─────────────────────────────────────
+    if jurisdiction == "wales":
+        reg_section_label = "CIW Regulatory Evidence"
+        cert_section_label = "AWIF / Social Care Wales Evidence"
+    elif jurisdiction == "scotland":
+        reg_section_label = "Care Inspectorate Scotland Evidence"
+        cert_section_label = "SSSC Code of Practice Evidence"
+    elif jurisdiction == "northern_ireland":
+        if service_type == "domiciliary":
+            reg_section_label = "RQIA Domiciliary Standards Evidence"
+        else:
+            reg_section_label = "RQIA Residential Standards Evidence"
+        cert_section_label = "NISCC Code & Induction Evidence"
+    else:  # england (default)
+        reg_section_label = "CQC Regulatory Evidence"
+        cert_section_label = "Care Certificate Evidence"
+
 
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
@@ -1547,7 +1575,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     cqc_maps = analysis.get("cqc_mappings") or []
     if cqc_maps:
         story.append(Spacer(1, 4*mm))
-        story.append(section_header("CQC Regulatory Evidence", bg=colors.HexColor("#4C1D95")))
+        story.append(section_header(reg_section_label, bg=colors.HexColor("#4C1D95")))
         story.append(Spacer(1, 2*mm))
         for m in cqc_maps:
             kq = ", ".join(m.get("key_questions") or [])
@@ -1558,7 +1586,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     cc_maps = analysis.get("care_cert_mappings") or []
     if cc_maps:
         story.append(Spacer(1, 4*mm))
-        story.append(section_header("Care Certificate Evidence", bg=colors.HexColor("#1E40AF")))
+        story.append(section_header(cert_section_label, bg=colors.HexColor("#1E40AF")))
         story.append(Spacer(1, 2*mm))
         for m in cc_maps:
             badge = f"Outcome {m['outcome_ref']}: {m['outcome_name']}" if m.get("outcome_ref") else ""
