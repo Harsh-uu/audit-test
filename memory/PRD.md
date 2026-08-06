@@ -204,6 +204,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - FFmpeg leading/trailing silence trim added to `_compress_to_mp3` to prevent AssemblyAI hallucinations (Option C: start_periods=1:start_threshold=-50dB with areverse chain; internal gaps preserved)
 - PDF export labels made jurisdiction-aware: Wales → CIW / AWIF/SCW, Scotland → Care Inspectorate / SSSC, NI → RQIA (dom/res) / NISCC; `_generate_pdf` now accepts `jurisdiction` + `service_type` params
 - RLS hardening: `with_org()` now raises `RuntimeError` (→ HTTP 500) if `SET LOCAL ROLE app_rls_user` fails, instead of silently degrading to superuser
+- Fixed: `GRANT app_rls_user TO CURRENT_USER` added to `init_db.py` — required on Supabase where `postgres` is not a true superuser; applied live to staging DB
 
 ### P1 (Next)
 - Super Admin "Edit Org" form needs Jurisdiction + Service Type fields (NI orgs need to be able to update service_type post-creation)
