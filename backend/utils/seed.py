@@ -68,22 +68,98 @@ CQC_QUALITY_STATEMENTS = [
 ]
 
 CARE_CERT_STANDARDS = [
-    {"reference": "Standard 1",  "name": "Understand your role", "description": "The care worker understands their role and responsibilities, the importance of working within their scope of practice, and the impact of their role on the person they support.", "keywords": ["role", "responsibilities", "boundaries", "scope of practice", "code of conduct", "accountability"], "sub_outcomes": []},
-    {"reference": "Standard 2",  "name": "Your personal development", "description": "The care worker is committed to their personal development, including training, learning, CPD, and reflective practice. Includes supervision and appraisal.", "keywords": ["training", "learning", "CPD", "personal development", "reflective practice", "supervision", "appraisal", "development"], "sub_outcomes": []},
-    {"reference": "Standard 3",  "name": "Duty of care", "description": "The care worker understands their duty of care and how to balance this with an individual's rights. Includes dilemmas, complaints and incidents.", "keywords": ["duty of care", "duty of candour", "dilemmas", "complaints", "incidents", "rights", "wellbeing", "safeguarding"], "sub_outcomes": []},
-    {"reference": "Standard 4",  "name": "Equality, diversity, inclusion and human rights", "description": "The care worker works in an inclusive way that values diversity and treats people as individuals, respecting protected characteristics and challenging discrimination.", "keywords": ["equality", "diversity", "inclusion", "human rights", "discrimination", "protected characteristics", "individual needs", "culture", "religion"], "sub_outcomes": []},
-    {"reference": "Standard 5",  "name": "Work in a person-centred way", "description": "The care worker puts the individual at the centre of care, supporting their choices, promoting their wellbeing and independence.", "keywords": ["person-centred", "choices", "independence", "wellbeing", "preferences", "self-determination", "mental capacity", "consent", "dignity"], "sub_outcomes": []},
-    {"reference": "Standard 6",  "name": "Communication", "description": "The care worker communicates effectively in verbal and non-verbal ways, adapts to individuals' communication needs, and maintains accurate records.", "keywords": ["communication", "listening", "non-verbal", "language needs", "records", "handover", "reporting", "documentation", "confidentiality"], "sub_outcomes": []},
-    {"reference": "Standard 7",  "name": "Privacy and dignity", "description": "The care worker promotes and maintains the privacy, dignity and respect of each individual in their care, including supporting active participation and informed choice.", "keywords": ["privacy", "dignity", "respect", "confidentiality", "personal information", "intimate care", "active participation", "choices"], "sub_outcomes": []},
-    {"reference": "Standard 8",  "name": "Fluids and nutrition", "description": "The care worker supports individuals to have adequate nutrition and hydration, understands signs of malnutrition and dehydration.", "keywords": ["nutrition", "hydration", "fluid intake", "malnutrition", "dehydration", "diet", "eating", "drinking", "mealtime", "food safety"], "sub_outcomes": []},
-    {"reference": "Standard 9",  "name": "Awareness of mental health and dementia", "description": "The care worker has awareness of mental health conditions and dementia, including how these affect individuals' wellbeing, behaviour and the reasonable adjustments required in care delivery.", "keywords": ["mental health", "dementia", "behaviour", "wellbeing", "cognitive impairment", "anxiety", "depression", "positive attitudes", "reasonable adjustments"], "sub_outcomes": []},
-    {"reference": "Standard 10", "name": "Safeguarding adults", "description": "The care worker understands adult safeguarding, recognises signs of abuse and neglect, and knows how to report concerns.", "keywords": ["safeguarding", "abuse", "neglect", "reporting", "whistleblowing", "protection", "harm", "exploitation", "concerns", "restrictive practices"], "sub_outcomes": []},
-    {"reference": "Standard 11", "name": "Safeguarding children", "description": "The care worker is aware of child safeguarding responsibilities even when primarily working with adults.", "keywords": ["safeguarding children", "child protection", "young carers", "children", "abuse", "neglect"], "sub_outcomes": []},
-    {"reference": "Standard 12", "name": "Basic life support", "description": "The care worker knows how to provide basic life support, including CPR, and can respond to emergency situations.", "keywords": ["first aid", "CPR", "resuscitation", "basic life support", "emergency", "AED", "choking"], "sub_outcomes": []},
-    {"reference": "Standard 13", "name": "Health and safety", "description": "The care worker understands health and safety legislation, risk assessment, moving and handling, medication, fire safety, security and personal wellbeing.", "keywords": ["health and safety", "risk assessment", "COSHH", "moving and handling", "manual handling", "PPE", "lone working", "fire safety", "medication", "security"], "sub_outcomes": []},
-    {"reference": "Standard 14", "name": "Handling information", "description": "The care worker understands data protection, GDPR, confidentiality obligations, and maintains accurate, secure records.", "keywords": ["data protection", "GDPR", "confidentiality", "records management", "information governance", "sharing information", "data breach"], "sub_outcomes": []},
-    {"reference": "Standard 15", "name": "Infection prevention and control", "description": "The care worker understands and applies infection prevention and control measures, including hand hygiene, PPE, and standard precautions.", "keywords": ["infection control", "PPE", "hand hygiene", "standard precautions", "cleaning", "waste disposal", "decontamination", "chain of infection"], "sub_outcomes": []},
-    {"reference": "Standard 16", "name": "Awareness of learning disability and autism", "description": "It is a legal requirement that all staff working in CQC-regulated services undertake training on how to interact appropriately with people with a learning disability and autistic people, at a level appropriate to their role.", "keywords": ["learning disability", "autism", "training", "CQC regulation 18", "staffing", "awareness"], "sub_outcomes": []},
+    {"reference": "Standard 1",  "name": "Understand your role", "description": "The care worker understands their role and responsibilities, the importance of working within their scope of practice, and the impact of their role on the person they support.", "keywords": ["role", "responsibilities", "boundaries", "scope of practice", "code of conduct", "accountability"], "sub_outcomes": [
+        {"ref": "1.1a", "desc": "Describe the duties and responsibilities of own work role"},
+        {"ref": "1.1b", "desc": "Identify standards that influence the way the role is carried out"},
+        {"ref": "1.2a", "desc": "Explain why it is important to work in ways agreed with the employer"},
+        {"ref": "1.3a", "desc": "Describe the importance of working in partnership with others"}
+    ]},
+    {"reference": "Standard 2",  "name": "Your personal development", "description": "The care worker is committed to their personal development, including training, learning, CPD, and reflective practice. Includes supervision and appraisal.", "keywords": ["training", "learning", "CPD", "personal development", "reflective practice", "supervision", "appraisal", "development"], "sub_outcomes": [
+        {"ref": "2.1a", "desc": "Describe the processes for identifying own learning and development needs"},
+        {"ref": "2.1b", "desc": "Identify sources of support available for own learning and development"},
+        {"ref": "2.2a", "desc": "Explain the importance of reflective practice in continuously improving the quality of service"},
+        {"ref": "2.3a", "desc": "Describe why it is important to keep up to date with the latest thinking and changes in the area you work in"}
+    ]},
+    {"reference": "Standard 3",  "name": "Duty of care", "description": "The care worker understands their duty of care and how to balance this with an individual's rights. Includes dilemmas, complaints and incidents.", "keywords": ["duty of care", "duty of candour", "dilemmas", "complaints", "incidents", "rights", "wellbeing", "safeguarding"], "sub_outcomes": [
+        {"ref": "3.1a", "desc": "Define duty of care"},
+        {"ref": "3.2a", "desc": "Describe dilemmas that may arise between the duty of care and an individual's rights"},
+        {"ref": "3.3a", "desc": "Identify how to respond to complaints and concerns"},
+        {"ref": "3.3b", "desc": "Describe how comments and complaints are used to improve the quality of service"}
+    ]},
+    {"reference": "Standard 4",  "name": "Equality, diversity, inclusion and human rights", "description": "The care worker works in an inclusive way that values diversity and treats people as individuals, respecting protected characteristics and challenging discrimination.", "keywords": ["equality", "diversity", "inclusion", "human rights", "discrimination", "protected characteristics", "individual needs", "culture", "religion"], "sub_outcomes": [
+        {"ref": "4.1a", "desc": "Define what is meant by diversity, equality and inclusion"},
+        {"ref": "4.2a", "desc": "Describe ways in which discrimination may deliberately or inadvertently occur in the work setting"},
+        {"ref": "4.3a", "desc": "Explain the importance of inclusive practice"},
+        {"ref": "4.3b", "desc": "Describe how to challenge discrimination in a way that promotes change"}
+    ]},
+    {"reference": "Standard 5",  "name": "Work in a person-centred way", "description": "The care worker puts the individual at the centre of care, supporting their choices, promoting their wellbeing and independence.", "keywords": ["person-centred", "choices", "independence", "wellbeing", "preferences", "self-determination", "mental capacity", "consent", "dignity"], "sub_outcomes": [
+        {"ref": "5.1a", "desc": "Describe the key principles of person-centred care"},
+        {"ref": "5.2a", "desc": "Explain the importance of working in a way that promotes the individual's wellbeing"},
+        {"ref": "5.3a", "desc": "Describe ways of reducing the risk of harm when carrying out activities with individuals"},
+        {"ref": "5.4a", "desc": "Describe the importance of an individual's right to make choices and decisions"}
+    ]},
+    {"reference": "Standard 6",  "name": "Communication", "description": "The care worker communicates effectively in verbal and non-verbal ways, adapts to individuals' communication needs, and maintains accurate records.", "keywords": ["communication", "listening", "non-verbal", "language needs", "records", "handover", "reporting", "documentation", "confidentiality"], "sub_outcomes": [
+        {"ref": "6.1a", "desc": "Identify different forms of communication and how these may affect relationships"},
+        {"ref": "6.2a", "desc": "Describe the factors that may affect communication with an individual"},
+        {"ref": "6.3a", "desc": "Describe ways of adapting communication in response to an individual's reactions, needs and preferences"},
+        {"ref": "6.4a", "desc": "Explain why it is important to have accurate and up-to-date records and reports"}
+    ]},
+    {"reference": "Standard 7",  "name": "Privacy and dignity", "description": "The care worker promotes and maintains the privacy, dignity and respect of each individual in their care, including supporting active participation and informed choice.", "keywords": ["privacy", "dignity", "respect", "confidentiality", "personal information", "intimate care", "active participation", "choices"], "sub_outcomes": [
+        {"ref": "7.1a", "desc": "Describe what is meant by privacy and dignity"},
+        {"ref": "7.2a", "desc": "Explain the importance of maintaining the dignity and privacy of individuals"},
+        {"ref": "7.3a", "desc": "Describe how to maintain the privacy, dignity and respect of individuals during day-to-day activities"},
+        {"ref": "7.4a", "desc": "Describe ways to support active participation in activities"}
+    ]},
+    {"reference": "Standard 8",  "name": "Fluids and nutrition", "description": "The care worker supports individuals to have adequate nutrition and hydration, understands signs of malnutrition and dehydration.", "keywords": ["nutrition", "hydration", "fluid intake", "malnutrition", "dehydration", "diet", "eating", "drinking", "mealtime", "food safety"], "sub_outcomes": [
+        {"ref": "8.1a", "desc": "Understand the importance of food safety including storage, handling and preparation of food"},
+        {"ref": "8.2a", "desc": "Describe signs of poor nutrition and hydration and the impact on health and wellbeing"},
+        {"ref": "8.3a", "desc": "Describe ways to support individuals to have adequate nutrition and hydration"},
+        {"ref": "8.4a", "desc": "Identify nutritional needs and preferences including religious, cultural and personal choices"}
+    ]},
+    {"reference": "Standard 9",  "name": "Awareness of mental health and dementia", "description": "The care worker has awareness of mental health conditions and dementia, including how these affect individuals' wellbeing, behaviour and the reasonable adjustments required in care delivery.", "keywords": ["mental health", "dementia", "behaviour", "wellbeing", "cognitive impairment", "anxiety", "depression", "positive attitudes", "reasonable adjustments"], "sub_outcomes": [
+        {"ref": "9.1a", "desc": "Describe the main forms of mental ill health and their prevalence"},
+        {"ref": "9.2a", "desc": "Describe the key aspects of dementia including how it may affect the individual"},
+        {"ref": "9.3a", "desc": "Describe what is meant by learning disability and how it may affect an individual"},
+        {"ref": "9.4a", "desc": "Describe how the way an individual communicates may be affected by mental health, dementia or learning disability"}
+    ]},
+    {"reference": "Standard 10", "name": "Safeguarding adults", "description": "The care worker understands adult safeguarding, recognises signs of abuse and neglect, and knows how to report concerns.", "keywords": ["safeguarding", "abuse", "neglect", "reporting", "whistleblowing", "protection", "harm", "exploitation", "concerns", "restrictive practices"], "sub_outcomes": [
+        {"ref": "10.1a", "desc": "Define the term 'safeguarding'"},
+        {"ref": "10.2a", "desc": "Describe the types of abuse and neglect and the signs and symptoms associated with them"},
+        {"ref": "10.3a", "desc": "Describe what to do if abuse of an adult is suspected"},
+        {"ref": "10.4a", "desc": "Describe the importance of ensuring individuals are treated with dignity and respect"}
+    ]},
+    {"reference": "Standard 11", "name": "Safeguarding children", "description": "The care worker is aware of child safeguarding responsibilities even when primarily working with adults.", "keywords": ["safeguarding children", "child protection", "young carers", "children", "abuse", "neglect"], "sub_outcomes": [
+        {"ref": "11.1a", "desc": "Describe the main duties and responsibilities in relation to safeguarding children"},
+        {"ref": "11.2a", "desc": "Identify signs of abuse and what to do if abuse is suspected"}
+    ]},
+    {"reference": "Standard 12", "name": "Basic life support", "description": "The care worker knows how to provide basic life support, including CPR, and can respond to emergency situations.", "keywords": ["first aid", "CPR", "resuscitation", "basic life support", "emergency", "AED", "choking"], "sub_outcomes": [
+        {"ref": "12.1a", "desc": "Describe when it would be appropriate to administer basic life support"},
+        {"ref": "12.2a", "desc": "Demonstrate the ability to perform CPR using appropriate equipment"},
+        {"ref": "12.3a", "desc": "Describe how to reduce the risk of infection when administering first aid"}
+    ]},
+    {"reference": "Standard 13", "name": "Health and safety", "description": "The care worker understands health and safety legislation, risk assessment, moving and handling, medication, fire safety, security and personal wellbeing.", "keywords": ["health and safety", "risk assessment", "COSHH", "moving and handling", "manual handling", "PPE", "lone working", "fire safety", "medication", "security"], "sub_outcomes": [
+        {"ref": "13.1a", "desc": "Identify the health and safety legislation relevant to their role"},
+        {"ref": "13.2a", "desc": "Describe what is meant by a risk assessment and why they are carried out"},
+        {"ref": "13.3a", "desc": "Describe how to reduce the risk of accidents in the work setting"},
+        {"ref": "13.4a", "desc": "Describe what to do if an accident or incident occurs"},
+        {"ref": "13.5a", "desc": "Describe how to use PPE correctly to reduce risk of infection"}
+    ]},
+    {"reference": "Standard 14", "name": "Handling information", "description": "The care worker understands data protection, GDPR, confidentiality obligations, and maintains accurate, secure records.", "keywords": ["data protection", "GDPR", "confidentiality", "records management", "information governance", "sharing information", "data breach"], "sub_outcomes": [
+        {"ref": "14.1a", "desc": "Identify the legislation and agreed ways of working in relation to recording, storing and sharing information"},
+        {"ref": "14.2a", "desc": "Describe how to maintain confidentiality in day-to-day communication"},
+        {"ref": "14.3a", "desc": "Describe the potential consequences of a breach of confidentiality"}
+    ]},
+    {"reference": "Standard 15", "name": "Infection prevention and control", "description": "The care worker understands and applies infection prevention and control measures, including hand hygiene, PPE, and standard precautions.", "keywords": ["infection control", "PPE", "hand hygiene", "standard precautions", "cleaning", "waste disposal", "decontamination", "chain of infection"], "sub_outcomes": [
+        {"ref": "15.1a", "desc": "Describe the routes by which infection can enter the body"},
+        {"ref": "15.2a", "desc": "Demonstrate how to carry out hand washing technique"},
+        {"ref": "15.3a", "desc": "Describe the correct procedures for using and disposing of PPE"},
+        {"ref": "15.4a", "desc": "Describe how to reduce the risk of spreading infection"}
+    ]},
+    {"reference": "Standard 16", "name": "Awareness of learning disability and autism", "description": "It is a legal requirement that all staff working in CQC-regulated services undertake training on how to interact appropriately with people with a learning disability and autistic people, at a level appropriate to their role.", "keywords": ["learning disability", "autism", "training", "CQC regulation 18", "staffing", "awareness"], "sub_outcomes": [
+        {"ref": "16.1a", "desc": "Describe what is meant by learning disability"},
+        {"ref": "16.2a", "desc": "Describe what is meant by autism"},
+        {"ref": "16.3a", "desc": "Describe how to communicate and interact appropriately with people who have a learning disability or who are autistic"}
+    ]},
 ]
 
 
@@ -128,6 +204,20 @@ async def seed_standards():
                         kw, so, kq, row["id"],
                     )
                 logger.info("JSONB repair complete for standards_entries")
+
+            # One-time fix: backfill sub_outcomes for care_cert standards that have an empty list
+            cc_empty = await conn.fetchval(
+                "SELECT COUNT(*) FROM standards_entries WHERE type='care_cert' AND is_system=TRUE AND sub_outcomes='[]'::jsonb"
+            )
+            if cc_empty and cc_empty > 0:
+                logger.info("Backfilling sub_outcomes for %d Care Certificate standards…", cc_empty)
+                sub_map = {s["reference"]: s["sub_outcomes"] for s in CARE_CERT_STANDARDS}
+                for ref, sub_outcomes in sub_map.items():
+                    await conn.execute(
+                        "UPDATE standards_entries SET sub_outcomes=$1 WHERE type='care_cert' AND reference=$2 AND is_system=TRUE",
+                        sub_outcomes, ref,
+                    )
+                logger.info("Care Certificate sub_outcomes backfill complete")
             else:
                 logger.info(f"England standards already seeded ({count} entries) — skipping")
             return

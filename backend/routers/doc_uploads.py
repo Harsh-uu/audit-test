@@ -253,9 +253,9 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
                        custom_mappings=$4::jsonb, processed_at=$5
                    WHERE id=$6""",
                 "done",
-                json.dumps(result.get("cqc_mappings", [])),
-                json.dumps(result.get("care_cert_mappings", [])),
-                json.dumps(result.get("custom_mappings", [])),
+                result.get("cqc_mappings", []),
+                result.get("care_cert_mappings", []),
+                result.get("custom_mappings", []),
                 datetime.now(timezone.utc).isoformat(),
                 upload_id,
             )
