@@ -534,18 +534,22 @@ async def get_team_insights(
                 all_items.append({"meeting": mtg, "analysis": dict(a_row)})
 
         # Fetch accepted evidence from uploaded supervision documents
-        upload_date_conds = ["status='done'", "staff_id IS NOT NULL"]
-        upload_date_params: list = []
-        if date_from:
-            upload_date_params.append(date_from)
-            upload_date_conds.append(f"created_at >= ${len(upload_date_params)}")
-        if date_to:
-            upload_date_params.append(date_to + "T23:59:59")
-            upload_date_conds.append(f"created_at <= ${len(upload_date_params)}")
-        upload_rows = await conn.fetch(
-            f"SELECT staff_id, created_at, cqc_mappings, care_cert_mappings, custom_mappings FROM supervision_uploads WHERE {' AND '.join(upload_date_conds)}",
-            *upload_date_params,
-        )
+        upload_rows = []
+        try:
+            upload_date_conds = ["status='done'", "staff_id IS NOT NULL"]
+            upload_date_params: list = []
+            if date_from:
+                upload_date_params.append(date_from)
+                upload_date_conds.append(f"created_at >= ${len(upload_date_params)}")
+            if date_to:
+                upload_date_params.append(date_to + "T23:59:59")
+                upload_date_conds.append(f"created_at <= ${len(upload_date_params)}")
+            upload_rows = await conn.fetch(
+                f"SELECT staff_id, created_at, cqc_mappings, care_cert_mappings, custom_mappings FROM supervision_uploads WHERE {' AND '.join(upload_date_conds)}",
+                *upload_date_params,
+            )
+        except Exception as e:
+            logger.warning("Could not fetch upload evidence for team insights: %s", e)
 
     staff_ids = {s["id"] for s in staff}
 
@@ -621,10 +625,13 @@ async def get_team_insights(
 
     # Merge accepted evidence from supervision_uploads into the same accumulators
     import json as _json
+    # Build a string-keyed copy of the accumulators so UUID ↔ str comparison works
+    staff_id_str = {str(s["id"]): s["id"] for s in staff}
     for urow in upload_rows:
-        uid = str(urow["staff_id"] or "")
-        if uid not in staff_ids:
+        uid_str = str(urow["staff_id"] or "")
+        if uid_str not in staff_id_str:
             continue
+        uid = staff_id_str[uid_str]   # use the original UUID key for the accumulators
         date = str(urow["created_at"] or "")[:10]
 
         def _parse(val):
