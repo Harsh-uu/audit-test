@@ -206,6 +206,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - RLS hardening: `with_org()` now raises `RuntimeError` (→ HTTP 500) if `SET LOCAL ROLE app_rls_user` fails, instead of silently degrading to superuser
 - Fixed: `GRANT app_rls_user TO CURRENT_USER` added to `init_db.py` — required on Supabase where `postgres` is not a true superuser; applied live to staging DB
 
+- Team Intelligence `_jlist()` defensive JSONB parsing — fixes AttributeError when asyncpg prepared-statement cache is reset by `SET LOCAL ROLE` (production fix)
+- Upload evidence Accept/Reject/Flag → now feeds Team Intelligence accumulators (UUID/str key mismatch fixed)
+
 ### P1 (Next)
 - Super Admin "Edit Org" form needs Jurisdiction + Service Type fields (NI orgs need to be able to update service_type post-creation)
 
