@@ -642,9 +642,7 @@ export default function MeetingReport() {
                               {isDone ? "Complete" : isActive ? stage.eta : "Waiting"}
                             </span>
                           </div>
-                          <p className={`text-xs mt-0.5 ${isActive || isDone ? "text-gray-500" : "text-gray-300"}`}>
-                            {stage.desc}
-                          </p>
+
                         </div>
                       </div>
                       <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden ml-10">
