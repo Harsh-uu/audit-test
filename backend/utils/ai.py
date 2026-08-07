@@ -191,55 +191,7 @@ Rules:
 - If the transcript contains [MM:SS] timestamps, include the timestamp at the start of transcript_excerpt values (e.g. "[14:32] I always check the care plan before..."). This helps locate evidence within the session.
 - Include transcript excerpts as exact quotes from the provided text
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
-- Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections.
-
-CQC FIVE KEY DOMAINS — DETECTION GUIDE
-Workers and managers rarely name a domain or quality statement. Map based on what they describe. Apply this for every domain before finalising your output:
-
-SAFE — look for evidence of:
-  • A worker describing how they identified, reported or acted on a safety concern, near-miss or incident → QS Safe 1 (Learning culture)
-  • A worker describing handover, continuity or transition between services/shifts → QS Safe 2 (Safe systems and transitions)
-  • A worker describing recognising, reporting or responding to potential abuse, neglect, or harm → QS Safe 3 / Regulation 13 (Safeguarding)
-  • A worker describing how they involved a service user in assessing or managing a risk, or took a positive-risk approach → QS Safe 4 (Involving people in risks)
-  • A worker describing checking equipment, the environment, or health and safety hazards → QS Safe 5 (Safe environments)
-  • Discussion about staffing levels, workload, training compliance, or the supervision itself as a support mechanism → QS Safe 6 / Regulation 18 (Safe and effective staffing)
-  • A worker describing infection control practices, PPE, or hygiene procedures → QS Safe 7 (IPC)
-  • A worker describing medication administration, MAR chart checks, or handling a medication error → QS Safe 8 / Regulation 12 (Medicines optimisation)
-
-EFFECTIVE — look for evidence of:
-  • A worker describing carrying out or reviewing an assessment of a person's needs → QS Effective 1 / Regulation 9 (Assessing needs)
-  • A worker describing following a care plan, clinical guideline, or evidence-based approach → QS Effective 2 (Evidence-based care)
-  • A worker describing working with other professionals, attending MDT meetings, or sharing information across teams → QS Effective 3 (How staff and teams work together)
-  • A worker describing supporting a service user to maintain or build independence, manage their own health, or engage in activities → QS Effective 4 (Supporting healthier lives)
-  • A worker or manager discussing whether care is achieving good outcomes, reviewing someone's progress → QS Effective 5 (Monitoring and improving outcomes)
-  • A worker describing seeking consent before a care task, or navigating capacity and best-interests → QS Effective 6 / Regulation 11 (Consent to care and treatment)
-
-CARING — look for evidence of:
-  • A worker describing how they listened to a service user, responded to their emotional state, or treated them with patience and compassion → QS Caring 1 (Kindness, compassion and dignity)
-  • A worker describing how they adapted care or communication to the individual's preferences, background or personality → QS Caring 2 (Treating people as individuals)
-  • A worker describing how they encouraged a service user to make their own choices or maintain independence → QS Caring 3 (Independence, choice and control)
-  • A worker describing noticing and responding to a service user's immediate distress, comfort needs or wishes → QS Caring 4 (Responding to people's immediate needs)
-  • A supervision meeting itself where a manager demonstrates genuine interest in the worker's wellbeing, workload, stress or development → QS Caring 5 (Workforce wellbeing and enablement)
-  • A worker or manager discussing dignity, respect, privacy, or treating someone as a whole person → Regulation 10 (Dignity and respect)
-  Do not skip Caring evidence because nobody used the word "caring" — look for the described behaviour and attitude.
-
-RESPONSIVE — look for evidence of:
-  • A worker describing how they adapted or changed an approach based on a service user's changing needs or preferences → QS Responsive 1 / Regulation 9 (Person-centred care)
-  • A worker describing flexible, joined-up care or co-ordination across services → QS Responsive 2 (Care provision and continuity)
-  • A worker describing how they communicated information to a service user or family, including adapting format or language → QS Responsive 3 (Providing information)
-  • A worker describing how they listened to and acted on feedback, concerns or complaints from a service user or family → QS Responsive 4 / Regulation 16 (Listening to and involving people)
-  • A worker describing ensuring someone could access a service or support they needed → QS Responsive 5 (Equity in access)
-  • Discussion about protected characteristics, health inequalities, or tailoring care for specific groups → QS Responsive 6 (Equity in experiences and outcomes)
-  • A worker describing advance care planning, end-of-life discussions or planning for future changes in need → QS Responsive 7 (Planning for the future)
-
-WELL-LED — look for evidence of:
-  • A manager or worker discussing the organisation's values, vision, or cultural expectations → QS Well-led 1 (Shared direction and culture)
-  • The supervision meeting itself demonstrating inclusive, supportive, transparent leadership by the manager → QS Well-led 2 (Capable, compassionate and inclusive leaders)
-  • A worker describing raising a concern, speaking up about a problem, or a manager actively inviting honesty and challenge → QS Well-led 3 (Freedom to speak up)
-  • Discussion about workforce equality, diversity, inclusion, or belonging → QS Well-led 4 (Workforce EDI)
-  • Discussion about policies, procedures, accountability structures, quality audits, or CQC compliance → QS Well-led 5 / Regulation 17 (Governance and management)
-  • A worker describing working with external agencies, partners, or community organisations → QS Well-led 6 (Partnerships and communities)
-  • A worker or manager discussing what they've learned from an experience, quality improvement, or service innovation → QS Well-led 7 (Learning, improvement and innovation)"""
+- Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections."""
 
 
 CRITERIA_EXTRACTION_PROMPT = """You are reviewing a standards/policy document from a UK adult social care provider. Extract a structured list of criteria, standards, or competencies from this document.
@@ -1040,6 +992,73 @@ async def analyze_meeting(
     if custom_prompt and custom_prompt.strip():
         custom_prompt_note = f"\n\nADDITIONAL FOCUS FROM MANAGER — in addition to your full analysis above, please also specifically look for further evidence relating to: {custom_prompt.strip()}\nIMPORTANT: Do NOT reduce coverage of other standards. This is additive — find everything you can across all standards, then make sure you have given extra attention to the area mentioned here."
 
+    # Jurisdiction-specific domain detection guide — tells the AI what supervision
+    # conversation patterns map to each domain/theme, without requiring the speaker
+    # to name a standard. Keeps CQC references out of non-CQC prompts.
+    if jurisdiction == "england":
+        domain_guide = """
+EVIDENCE DETECTION GUIDE — apply before finalising mappings:
+Workers and managers rarely name a domain. Map based on described behaviour and attitude.
+
+SAFE: incident/near-miss reported or acted on → QS Safe 1; handover/shift continuity → QS Safe 2; recognising/reporting abuse or neglect → QS Safe 3/Reg 13; involving a person in risk assessment, positive risk → QS Safe 4; checking equipment/environment → QS Safe 5; staffing, workload, training, supervision as support → QS Safe 6/Reg 18; IPC/PPE/hygiene → QS Safe 7; medication administration, MAR charts, errors → QS Safe 8/Reg 12.
+
+EFFECTIVE: carrying out or reviewing a needs assessment → QS Effective 1/Reg 9; following a care plan or guideline → QS Effective 2; MDT working, information sharing across teams → QS Effective 3; supporting independence, health promotion → QS Effective 4; reviewing outcomes, monitoring progress → QS Effective 5; seeking consent or navigating capacity/best interests → QS Effective 6/Reg 11.
+
+CARING: listening to a service user, responding with compassion/patience → QS Caring 1; adapting care to the individual's culture, preferences, personality → QS Caring 2; encouraging independence, choice and control → QS Caring 3; noticing and responding to immediate distress or wishes → QS Caring 4; the supervision itself showing manager cares for worker's wellbeing → QS Caring 5; dignity, respect, privacy, treating someone as a whole person → Reg 10. Do NOT skip because the word "caring" was not used.
+
+RESPONSIVE: adapting care as needs change, co-producing decisions → QS Responsive 1/Reg 9; flexible or joined-up care across services → QS Responsive 2; tailoring information/communication to the person → QS Responsive 3; acting on feedback, complaints or concerns → QS Responsive 4/Reg 16; ensuring access to services → QS Responsive 5; protected characteristics, health inequalities → QS Responsive 6; advance care planning, end-of-life → QS Responsive 7.
+
+WELL-LED: discussing org values, vision or cultural expectations → QS Well-led 1; the supervision itself demonstrating inclusive/compassionate leadership → QS Well-led 2; raising a concern, speaking up, or manager inviting challenge → QS Well-led 3; workforce equality, diversity, inclusion → QS Well-led 4; policies, procedures, audits, governance, CQC compliance → QS Well-led 5/Reg 17; working with external partners or agencies → QS Well-led 6; reflecting on learning, quality improvement, innovation → QS Well-led 7."""
+
+    elif jurisdiction == "wales":
+        domain_guide = """
+EVIDENCE DETECTION GUIDE — apply before finalising mappings:
+Workers and managers rarely name a regulation. Map based on described behaviour and attitude.
+
+QUALITY OF CARE AND SUPPORT (CIW): worker describes person-centred care, following a personal plan, or involving a person in their care decisions → Reg 15/Reg 21; worker describes communicating appropriately with a service user, adapting language or format → Reg 23/Reg 24; worker describes treating someone with respect, sensitivity or dignity → Reg 25; discussion about continuity of care, consistent staffing → Reg 22; worker describes completing a needs assessment or ensuring the service is suitable → Reg 14.
+
+SAFEGUARDING (CIW): worker describes recognising, reporting or responding to abuse, neglect or harm → Reg 26/Reg 27; discussion about use of restraint, restrictive interventions, or deprivation of liberty → Reg 29/Reg 31; worker describes supporting someone to manage their finances safely → Reg 28.
+
+STAFFING (CIW): discussion about training, qualifications, supervision or professional development → Reg 36; worker describes following the professional code of conduct or organisational values → Reg 37; discussion about receiving or sharing information necessary to do the job → Reg 38; discussion about disciplinary matters or accountability → Reg 39.
+
+LEADERSHIP AND MANAGEMENT (CIW): manager or worker discusses governance, accountability, quality monitoring → Reg 80; worker describes how a complaint or concern was handled → Reg 64; worker describes raising a concern or whistleblowing → Reg 65; discussion about records, documentation or reporting → Reg 59.
+
+AWIF STANDARDS: worker discusses values, rights, dignity and a person-centred approach → AWIF 1/2; worker describes supporting a person's physical or mental health and wellbeing → AWIF 3/4; worker reflects on professional practice, learning or development → AWIF 5; worker describes safeguarding knowledge or actions → AWIF 6; discussion about health and safety in the care environment → AWIF 7.
+
+SCW CODE: worker describes promoting and respecting a service user's rights → SCW 1; worker describes maintaining honesty and trust with a person in their care → SCW 2; worker describes balancing wellbeing with safety and the person's voice → SCW 3; discussion about managing risk while preserving the person's rights → SCW 4; worker describes accountability, professional conduct, or acting with integrity → SCW 5; worker describes maintaining or improving their competence and knowledge → SCW 6."""
+
+    elif jurisdiction == "scotland":
+        domain_guide = """
+EVIDENCE DETECTION GUIDE — apply before finalising mappings:
+Workers and managers rarely name a quality indicator. Map based on described behaviour and attitude.
+
+QUALITY OF EXPERIENCE (CI 1.x): worker describes treating a person with compassion, dignity or respect → CI 1.1; worker describes supporting someone to engage in activities, interests or get the most from their life → CI 1.2; worker describes contributing to a person's health or wellbeing through their care → CI 1.3; worker describes spending meaningful time with a person or being responsive to their wishes → CI 1.4; worker describes infection prevention and control practices → CI 1.5.
+
+LEADERSHIP AND MANAGEMENT (CI 2.x): discussion about how organisational values shape day-to-day practice → CI 2.1; discussion about quality monitoring, audits, or service improvement → CI 2.2; worker describes working in partnership with other agencies or services → CI 2.3; the supervision itself demonstrating clear, supportive leadership by the manager → CI 2.4.
+
+STAFF (CI 3.x): discussion about recruitment processes, pre-employment checks → CI 3.1; worker reflects on their knowledge, skills or development needs; training discussed → CI 3.2; discussion about staffing levels, skill mix, or how the team works together → CI 3.3.
+
+SETTING (CI 4.x): worker describes the physical environment, equipment or facilities supporting care → CI 4.1; worker describes how the care environment supports independence → CI 4.2; worker describes helping a person stay connected with their community → CI 4.3.
+
+PERSONAL PLANNING (CI 5.x): worker describes co-producing a care plan, assessing needs, or reviewing outcomes with a person → CI 5.1; worker describes how family members or carers are included in care planning → CI 5.2.
+
+SSSC CODE: worker describes promoting a service user's rights or interests → SSSC 1; worker describes maintaining honesty and the trust of a person in their care → SSSC 2; worker describes supporting a person's wellbeing and independence while managing risk → SSSC 3; discussion about supporting someone to take risks they have chosen → SSSC 4; worker describes taking responsibility for the quality of their own work or seeking development → SSSC 5; worker describes acting with integrity and maintaining public trust in social care → SSSC 6."""
+
+    else:  # northern_ireland (dom or res)
+        domain_guide = """
+EVIDENCE DETECTION GUIDE — apply before finalising mappings:
+Workers and managers rarely name a regulation or standard. Map based on described behaviour and attitude.
+
+RQIA STANDARDS (SERVICE QUALITY): worker describes involving a service user in decisions about their care → Dom Std 1 / Reg 13; worker describes providing information to a service user or family in an accessible way → Dom Std 2; worker describes completing or reviewing a care plan, personal outcome or support agreement → Dom Std 4 / Reg 16; worker describes contributing to a care review or communicating with the placing authority → Dom Std 6; worker describes medication management or handling of medicines → Dom Std 7 / Reg 14; worker describes health, safety or risk management practices → Dom Std 9 / Reg 12; worker describes treating someone with dignity, privacy and respect → Reg 13/Reg 14; worker describes supporting someone's independence and daily living activities → Dom Std 10/Dom Std 11.
+
+SAFEGUARDING (RQIA): worker describes recognising, reporting or responding to abuse, neglect or harm → Dom Std 12 / Reg 17.
+
+STAFFING AND DEVELOPMENT (RQIA): discussion about training, supervision, professional development → Dom Std 15 / Reg 19; discussion about staffing levels, accountability, governance → Dom Std 16 / Reg 17; worker describes maintaining accurate records or reporting → Dom Std 5 / Reg 20.
+
+NISCC CODE OF PRACTICE: worker describes promoting and respecting a service user's rights and interests → NISCC Conduct 1; worker describes maintaining honesty, reliability and the trust of a person in their care → NISCC Conduct 2; worker describes supporting a person's autonomy while protecting them from harm → NISCC Conduct 3; discussion about balancing a person's rights with safety → NISCC Conduct 4; worker describes accountability, professional conduct and upholding public trust → NISCC Conduct 5; worker describes taking responsibility for the quality of their work → NISCC Conduct 6.
+
+NISCC INDUCTION: worker discusses their role, responsibilities and the regulatory framework → NI Induction 1; worker describes how they communicate with service users or colleagues → NI Induction 2; worker describes delivering person-centred, safe and effective care → NI Induction 3; worker describes safeguarding awareness or actions → NI Induction 4; worker describes health and safety practices → NI Induction 5; worker reflects on professional development, learning or performance → NI Induction 6."""
+
     user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
 
 TRANSCRIPT:{pause_note}
@@ -1049,7 +1068,8 @@ TRANSCRIPT:{pause_note}
 {cqc_context}
 
 {cert_label} TO MAP AGAINST:
-{cc_context}{custom_context}{template_context}{custom_prompt_note}
+{cc_context}{custom_context}{template_context}
+{domain_guide}{custom_prompt_note}
 
 Provide your analysis as JSON. Only map regulations/standards where there is actual evidence in the transcript."""
 
