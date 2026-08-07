@@ -780,7 +780,10 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
 
     values.append(transcript_id)
     async with database.with_org(org_id) as conn:
-        await conn.execute(f"UPDATE transcripts SET {', '.join(set_parts)} WHERE id=${idx}", *values)
+        result = await conn.execute(f"UPDATE transcripts SET {', '.join(set_parts)} WHERE id=${idx} AND org_id=${idx+1}", *values, org_id)
+        affected = int(result.split(" ")[-1]) if result else 0
+        if affected == 0:
+            raise HTTPException(status_code=500, detail="Speaker labels could not be saved — transcript not found or access denied. Please refresh and try again.")
 
         # Build targeted audit entries with meaningful detail
         audit_logs = []

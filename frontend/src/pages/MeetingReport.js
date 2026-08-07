@@ -105,8 +105,6 @@ export default function MeetingReport() {
   const fetchMeeting = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/meetings/${meetingId}`, getAuthConfig());
-      // Guard: never wipe an existing transcript if the API response omitted it
-      // (can happen on K8s pod restart when the transcript DB query transiently fails).
       setMeeting(prev => ({
         ...data,
         transcript: data.transcript || prev?.transcript,
