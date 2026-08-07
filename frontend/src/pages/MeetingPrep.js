@@ -651,13 +651,7 @@ export default function MeetingPrep() {
                   key={s.source_id}
                   source={s}
                   included={effectiveIds.includes(s.source_id)}
-                  onToggle={handleSourceToggle}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Generate button — full width, prominent */}
+                  onToggle={toggleSource}
           <button
             onClick={handleGenerate}
             disabled={generating}
@@ -728,7 +722,7 @@ export default function MeetingPrep() {
                     key={s.source_id}
                     source={s}
                     included={effectiveIds.includes(s.source_id)}
-                    onToggle={handleSourceToggle}
+                    onToggle={toggleSource}
                   />
                 ))}
               </div>
