@@ -5,6 +5,20 @@ import {
   FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award, RefreshCw, Loader, AlignLeft,
 } from "lucide-react";
 
+// ── Jurisdiction-aware label helper ──────────────────────────────────────────
+function getJurisdictionLabels(jurisdiction) {
+  switch (jurisdiction) {
+    case "wales":
+      return { regHeader: "CIW / AWIF Regulations", certHeader: "AWIF / SCW Standards", regBadge: "CIW" };
+    case "scotland":
+      return { regHeader: "Care Inspectorate Standards", certHeader: "SSSC Code Standards", regBadge: "CI" };
+    case "northern_ireland":
+      return { regHeader: "RQIA Standards", certHeader: "NISCC Standards", regBadge: "RQIA" };
+    default:
+      return { regHeader: "CQC Regulations", certHeader: "Care Certificate", regBadge: "CQC" };
+  }
+}
+
 const CONFIDENCE_CONFIG = {
   likely_evidence: { label: "Likely Evidence", color: "bg-emerald-100 text-emerald-800 border-emerald-200", dot: "bg-emerald-500" },
   needs_review: { label: "Needs Review", color: "bg-amber-100 text-amber-800 border-amber-200", dot: "bg-amber-500" },
@@ -45,7 +59,7 @@ function KeyQuestionBadge({ label }) {
   );
 }
 
-function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence, type, onShowInTranscript }) {
+function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence, type, onShowInTranscript, regBadge }) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(mapping.edited_evidence_summary || mapping.evidence_summary);
@@ -55,7 +69,7 @@ function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence,
   const statusCfg = EVIDENCE_STATUS_CONFIG[mapping.status] || EVIDENCE_STATUS_CONFIG.pending;
 
   const cardBg = type === "cqc" ? "bg-purple-50 border-b border-purple-100" : type === "custom" ? "bg-teal-50 border-b border-teal-100" : "bg-blue-50 border-b border-blue-100";
-  const typeLabel = type === "cqc" ? "CQC" : type === "custom" ? "Policy" : "Care Cert";
+  const typeLabel = type === "cqc" ? (regBadge || "CQC") : type === "custom" ? "Policy" : "Care Cert";
   const typeIcon = type === "cqc"
     ? <Shield className="w-3.5 h-3.5 text-[#1E3A8A] flex-shrink-0" />
     : type === "custom"
@@ -273,6 +287,8 @@ function CareCertDrillDown({ mappings }) {
 }
 
 export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence, onShowInTranscript, isLocked = false }) {
+  const { user } = useAuth();
+  const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction);
   const totalCount = (analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0);
   const wrapperClass = className !== undefined ? className : "lg:col-span-5 bg-[#F8F9FA] overflow-y-auto";
   const [rescanning, setRescanning] = useState(false);
@@ -363,11 +379,11 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <Shield className="w-3.5 h-3.5 text-[#1E3A8A]" />
-              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">CQC Regulations</h3>
+              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{regHeader}</h3>
               <span className="ml-auto text-xs text-gray-400">{analysis.cqc_mappings.length}</span>
             </div>
             {analysis.cqc_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="cqc" onShowInTranscript={onShowInTranscript} />
+              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="cqc" onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
             ))}
           </div>
         )}
@@ -376,11 +392,11 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <Award className="w-3.5 h-3.5 text-emerald-600" />
-              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Care Certificate</h3>
+              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{certHeader}</h3>
               <span className="ml-auto text-xs text-gray-400">{analysis.care_cert_mappings.length}</span>
             </div>
             {analysis.care_cert_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="care_cert" onShowInTranscript={onShowInTranscript} />
+              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="care_cert" onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
             ))}
             <CareCertDrillDown mappings={analysis.care_cert_mappings} />
           </div>

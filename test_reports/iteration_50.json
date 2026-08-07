@@ -1,0 +1,38 @@
+{
+  "summary": "Tested 3 features: (1) Re-transcribe Audio button removal from MeetingReport, (2) /api/auth/me returning org_jurisdiction and org_service_type, (3) Jurisdiction-aware labels in InspectionPrep and EvidenceSidebar. All 12 backend tests passed (100%). All frontend checks passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_me_jurisdiction.py",
+    "/app/test_reports/pytest/auth_me_jurisdiction_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MeetingReport.js: 'retranscribe-btn' data-testid is completely absent - confirmed removed",
+    "auth.py line 332: Fetches jurisdiction and service_type from organisations table and includes in /me response - verified",
+    "admin.py line 793: team-insights returns org_jurisdiction and org_service_type - verified by backend test",
+    "EvidenceSidebar.js: getJurisdictionLabels helper correctly maps jurisdictions to labels (england->CQC Regulations, northern_ireland->RQIA Standards, etc.) - code review verified",
+    "InspectionPrep.js: getInspectionLabels maps england->'CQC Inspection Prep', verified in live UI showing 'CQC Inspection Prep' with '47 CQC regs' stat chip",
+    "AuthContext.js: user is set directly from /me response (setUser(r.data)) so org_jurisdiction and org_service_type are available in user context automatically"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_me_jurisdiction.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 passed)",
+    "frontend": "100% - All checks passed"
+  },
+  "test_credentials": "admin@supervision.com / Admin123! (Test Company, jurisdiction=england), manager@supervision.com / Manager123!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 3 features fully verified. Re-transcribe button removed. org_jurisdiction='england' returned by /me for Test Company. InspectionPrep shows 'CQC Inspection Prep'. The only test environment meeting (ID: 91357f81-8092-4791-b7d5-e9b3ef646620) is a Draft with no analysis, so EvidenceSidebar jurisdiction labels could not be tested in live UI - verified via code review only. Backend test file: /app/backend/tests/test_auth_me_jurisdiction.py",
+  "rca_of_issues": "No issues found. All changes implemented correctly."
+}

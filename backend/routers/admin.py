@@ -792,6 +792,8 @@ async def get_team_insights(
 
     return {
         "staff_count": len(staff), "meeting_count": len(all_items),
+        "org_jurisdiction": org_jurisdiction,
+        "org_service_type": org_service_type or "",
         "matrix": {
             "cqc": build_cqc_matrix(cqc_stds, cqc_ev),
             "care_cert": build_cc_matrix(cc_stds, cc_ev),

@@ -329,7 +329,7 @@ async def me(current_user=Depends(get_current_user)):
     org_id = user.get("org_id")
     if org_id:
         async with database.with_admin() as conn:
-            org = await conn.fetchrow("SELECT name, branding FROM organisations WHERE id = $1", org_id)
+            org = await conn.fetchrow("SELECT name, branding, jurisdiction, service_type FROM organisations WHERE id = $1", org_id)
         if org:
             _b_raw = org["branding"] or {}
             import json as _json
@@ -339,6 +339,8 @@ async def me(current_user=Depends(get_current_user)):
                 "primary_color": b.get("primary_color"),
             }
             user["org_name"] = org["name"]
+            user["org_jurisdiction"] = org["jurisdiction"] or "england"
+            user["org_service_type"] = org["service_type"] or ""
     return user
 
 

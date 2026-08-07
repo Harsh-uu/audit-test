@@ -76,7 +76,6 @@ export default function MeetingReport() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingTranscript, setExportingTranscript] = useState(false);
   const [includeTranscript, setIncludeTranscript] = useState(false);
-  const [retranscribing, setRetranscribing] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -372,29 +371,6 @@ export default function MeetingReport() {
     finally { setExportingTranscript(false); }
   };
 
-  const handleRetranscribe = async () => {
-    const confirmed = window.confirm(
-      "Re-transcribe Audio will re-process the audio through AssemblyAI and will reset ALL speaker label corrections you have made. This cannot be undone.\n\nAre you sure you want to continue?"
-    );
-    if (!confirmed) return;
-    if (!window.confirm(`Re-scan this meeting's audio with AssemblyAI using ${meeting?.attendees?.length || "the"} expected speaker(s)?\n\nThis will update the transcript and speaker view. The meeting status and compliance evidence will not change.`)) return;
-    setRetranscribing(true);
-    try {
-      const token = localStorage.getItem("supervision_token");
-      const resp = await fetch(`${API}/processing/${meetingId}/retranscribe`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || "Failed");
-      toast.success("Re-transcription started — audio is being re-processed. Speaker labels will be reset. Refresh in 2–3 minutes.");
-    } catch (err) {
-      toast.error("Re-scan failed: " + err.message);
-    } finally {
-      setRetranscribing(false);
-    }
-  };
-
   const sendReport = async (recipients) => {
     if (!recipients || recipients.length === 0) {
       toast.error("No recipient email addresses found. Please add an email address in the recipients list.");
@@ -531,18 +507,6 @@ export default function MeetingReport() {
                       <FileText className="w-4 h-4 text-gray-500" />
                       <span className="hidden sm:inline">{exportingTranscript ? "Generating…" : "Transcript"}</span>
                     </button>
-                    {meeting?.audio_file_id && canEditSpeakers && (
-                      <button
-                        onClick={handleRetranscribe}
-                        disabled={retranscribing}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-md shadow-sm hover:bg-amber-100 transition-colors disabled:opacity-60"
-                        data-testid="retranscribe-btn"
-                        title="Re-transcribe audio through AssemblyAI — resets speaker labels"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        <span className="hidden sm:inline">{retranscribing ? "Re-transcribing…" : "Re-transcribe Audio"}</span>
-                      </button>
-                    )}
                   </div>
                 ) : (
                   <button

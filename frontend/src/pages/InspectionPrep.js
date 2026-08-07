@@ -10,6 +10,19 @@ import {
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
+function getInspectionLabels(jurisdiction) {
+  switch (jurisdiction) {
+    case "wales":
+      return { pageTitle: "CIW Inspection Prep", statSub: "CIW standards", exportFile: "ciw_evidence_excerpts.pdf" };
+    case "scotland":
+      return { pageTitle: "Care Inspectorate Prep", statSub: "CI standards", exportFile: "ci_evidence_excerpts.pdf" };
+    case "northern_ireland":
+      return { pageTitle: "RQIA Inspection Prep", statSub: "RQIA standards", exportFile: "rqia_evidence_excerpts.pdf" };
+    default:
+      return { pageTitle: "CQC Inspection Prep", statSub: "CQC regs", exportFile: "cqc_evidence_excerpts.pdf" };
+  }
+}
+
 function coverageTheme(pct) {
   if (pct >= 70) return { key: "green",  bar: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", ring: "border-emerald-200" };
   if (pct >= 30) return { key: "amber",  bar: "bg-amber-400",   badge: "bg-amber-50 text-amber-700 border-amber-200",     ring: "border-amber-200" };
@@ -154,7 +167,7 @@ const FILTER_OPTS = [
 ];
 
 export default function InspectionPrep() {
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, user } = useAuth();
   const navigate = useNavigate();
 
   const [insights, setInsights] = useState(null);
@@ -179,6 +192,7 @@ export default function InspectionPrep() {
 
   const handleExportExcerpts = async () => {
     setExporting(true);
+    const { exportFile } = getInspectionLabels(user?.org_jurisdiction || "england");
     try {
       const token = localStorage.getItem("supervision_token");
       const resp = await fetch(`${API}/admin/export-cqc-excerpts`, {
@@ -189,7 +203,7 @@ export default function InspectionPrep() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "cqc_evidence_excerpts.pdf";
+      a.download = exportFile;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -240,6 +254,9 @@ export default function InspectionPrep() {
   const cqcPartial = cqcCov.filter(s => s.evidenced > 0 && s.evidenced < s.total).length;
   const totalStaff = cqcRows.length;
 
+  const jurisdiction = insights?.org_jurisdiction || user?.org_jurisdiction || "england";
+  const { pageTitle, statSub, exportFile } = getInspectionLabels(jurisdiction);
+
   return (
     <Layout>
       <div className="p-6 md:p-8 fade-in">
@@ -250,7 +267,7 @@ export default function InspectionPrep() {
             <ClipboardCheck className="w-4 h-4 text-purple-700" />
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-semibold text-gray-900 font-display">CQC Inspection Prep</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 font-display">{pageTitle}</h1>
             <p className="text-sm text-gray-500 mt-0.5">Evidence coverage across {totalStaff} staff member{totalStaff !== 1 ? "s" : ""}</p>
           </div>
           <button
@@ -266,10 +283,10 @@ export default function InspectionPrep() {
 
         {/* Stats row */}
         <div className="flex gap-3 flex-wrap mb-6">
-          <StatChip label="Fully covered" value={cqcFull}    sub={`of ${cqcStds.length} CQC regs`}  color="green" />
-          <StatChip label="Partial cover" value={cqcPartial} sub="some staff have gaps"              color="amber" />
-          <StatChip label="No evidence"   value={cqcGaps}    sub="across all staff"                  color="red"   />
-          <StatChip label="Staff tracked" value={totalStaff} sub="signed-off meetings"               color="purple" />
+          <StatChip label="Fully covered" value={cqcFull}    sub={`of ${cqcStds.length} ${statSub}`}  color="green" />
+          <StatChip label="Partial cover" value={cqcPartial} sub="some staff have gaps"                color="amber" />
+          <StatChip label="No evidence"   value={cqcGaps}    sub="across all staff"                    color="red"   />
+          <StatChip label="Staff tracked" value={totalStaff} sub="signed-off meetings"                 color="purple" />
         </div>
 
         {/* Filter */}
