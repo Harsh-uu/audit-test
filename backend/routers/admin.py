@@ -562,15 +562,31 @@ async def get_team_insights(
     cust_names: dict = {}
     all_risks, all_outstanding = [], []
 
+    import json as _json
+
+    def _jlist(val):
+        """Ensure a JSONB field is a list — guards against raw strings when asyncpg
+        prepared-statement cache is reset by SET LOCAL ROLE."""
+        if val is None:
+            return []
+        if isinstance(val, str):
+            try:
+                parsed = _json.loads(val)
+                return parsed if isinstance(parsed, list) else []
+            except Exception:
+                return []
+        return val if isinstance(val, list) else []
+
     for item in all_items:
         mtg, ana = item["meeting"], item["analysis"]
         date = mtg.get("date", "")
         sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
-        for attendee in (mtg.get("attendees") or []):
-            uid = attendee.get("user_id", "")
+        for attendee in _jlist(mtg.get("attendees")):
+            uid = attendee.get("user_id", "") if isinstance(attendee, dict) else ""
             if uid not in staff_ids or (sign_off_mgr_id and uid == sign_off_mgr_id):
                 continue
-            for m in (ana.get("cqc_mappings") or []):
+            for m in _jlist(ana.get("cqc_mappings")):
+                if not isinstance(m, dict): continue
                 if m.get("status") == "rejected": continue
                 ref = m.get("regulation_ref", "")
                 if not ref: continue
@@ -584,7 +600,8 @@ async def get_team_insights(
                     if m.get("transcript_excerpt"):
                         c["latest_excerpt"] = m["transcript_excerpt"][:200]
                         c["source_meeting_id"] = str(mtg.get("id", ""))
-            for m in (ana.get("care_cert_mappings") or []):
+            for m in _jlist(ana.get("care_cert_mappings")):
+                if not isinstance(m, dict): continue
                 if m.get("status") == "rejected": continue
                 std_ref = m.get("standard_ref", "")
                 if not std_ref: continue
@@ -600,7 +617,8 @@ async def get_team_insights(
                         c["source_meeting_id"] = str(mtg.get("id", ""))
                 or_ref = m.get("outcome_ref", "")
                 if or_ref: c["covered_refs"].add(or_ref)
-            for m in (ana.get("custom_mappings") or []):
+            for m in _jlist(ana.get("custom_mappings")):
+                if not isinstance(m, dict): continue
                 if m.get("status") == "rejected": continue
                 ref = m.get("criterion_ref", "") or m.get("document_name", "")
                 if not ref: continue
@@ -615,7 +633,7 @@ async def get_team_insights(
                     if m.get("transcript_excerpt"):
                         c["latest_excerpt"] = m["transcript_excerpt"][:200]
                         c["source_meeting_id"] = str(mtg.get("id", ""))
-        for risk in (ana.get("risks") or []):
+        for risk in _jlist(ana.get("risks")):
             text = risk if isinstance(risk, str) else (risk.get("text", "") if isinstance(risk, dict) else "")
             if text.strip(): all_risks.append(text.strip())
         for action in (ana.get("actions") or []):
@@ -624,7 +642,6 @@ async def get_team_insights(
                 if t: all_outstanding.append(t)
 
     # Merge accepted evidence from supervision_uploads into the same accumulators
-    import json as _json
     # Build a string-keyed copy of the accumulators so UUID ↔ str comparison works
     staff_id_str = {str(s["id"]): s["id"] for s in staff}
     for urow in upload_rows:
