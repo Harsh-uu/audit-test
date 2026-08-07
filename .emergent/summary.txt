@@ -1,0 +1,137 @@
+<analysis>**original_problem_statement**: A web-based app for care providers (Supervision 2.0) that records meetings on demand, generates a post-meeting transcript and summary, and maps discussion points to regulatory standards. PRODUCT REQUIREMENTS: Secure login, meeting creation, recording, post-meeting transcription, AI-generated summary/actions/risks, evidence mapping, PDF export, Super Admin layer, custom supervision document upload, Dynamic Supervision Prep, background async processing queue, transcript find & replace, segregated inspection pages, organization sub-tenant hierarchy, Email OTP 2FA, Support for regional jurisdictions (England, Wales, Scotland, Northern Ireland), Timestamped transcripts & evidence, Robust 100% coverage audit trailing, and Strict UK/EU Data Governance.
+
+**User's preferred language**: English (INSTRUCT NEXT AGENT: You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in the user's preferred language only)
+
+**what currently exists?**: A fully functional React/FastAPI app backed by PostgreSQL (asyncpg). The staging/preview environment runs on a Supabase Pro instance, completely separated from production. Features include jurisdiction-specific standards mapping, MFA, robust Native DB RLS, background jobs for AssemblyAI/OpenAI, dynamic PDF export labels, document upload evidence mapping, and a 3-stage vertical UI stepper for meeting processing tracking.
+
+**Last working item**:
+    - Last item agent was working: Fixing silent save failures for Speaker Labels in . The  query was silently failing due to an RLS  mismatch, causing 0 rows to update but returning a 200 success. The next background UI poll would then overwrite the UI with the unchanged DB data. The agent added an explicit  check and a rowcount validation to raise a 500 error on failure.
+    - Status: USER VERIFICATION PENDING
+    - Agent Testing Done: Y
+    - Which testing method agent to use? manual testing by curl/python -c
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**:
+  Issue 1: Speaker Labels Silent Save Failure (Monitoring for RLS mismatch)
+     - Attempted fixes: Added rowcount check in  () and explicit  WHERE clause.
+     - Next debug checklist: Check if the user reports a 500 error (Speaker labels could not be saved) on their production test. If they do, investigate the RLS policy on the  table in  and ensure  is being properly set in the  DB context or correctly assigned during transcript creation in .
+     - Why fix this issue and what will be achieved with the fix? Ensures speaker labels actually persist to the DB and don't get reset by the background polling loop.
+     - Status: USER VERIFICATION PENDING
+     - Is recurring issue? Y (Speaker label reset has been an ongoing issue)
+     - Should Test frontend/backend/both after fix? both
+     - Blocked on other issue: None
+
+**In progress Task List**: None
+
+**Upcoming and Future Tasks**
+    Upcoming Tasks:
+    - Wales AWIF granularity review: Extract specific I can outcome statements instead of topic headings (P2 - Pending user consultation)
+    - Scotland National Induction Framework (NIF) Integration (P2 - Blocked on Turas login / document availability)
+    - Role-specific competency framework upload (P2)
+    - Skills for Care Effective Supervision Guide integration (Per-org upload option) (P2)
+    
+    Future Tasks:
+    - Pending invites dashboard (P2)
+    - Usage dashboard (meeting counts, last activity, storage per org) (P2)
+    - Billing hooks (tie orgs to a plan/subscription via Stripe) (P2)
+    - Impersonate org feature for Super Admins (P2)
+
+**Completed work in this session**
+- Attendee picker fix: Fixed No users found in meeting attendee picker for managers (, ). (DONE)
+- AssemblyAI config: Disabled content safety to prevent false positive hallucinations (). (DONE)
+- UI Cleanup: Removed grey description text under processing UI progress bars (), updated AI is generating to 1two.one is generating (), added company/ICO info to Login footer. (DONE)
+- Audit Trail JSONB fix: Fixed blank Audit Trail by handling  JSONB bug with  and  defensive parsing for , , and  (). (DONE)
+- Meeting Prep toggle: Fixed  undefined runtime error in . (DONE)
+- CQC Evidence Scan improvements: Fixed AI to correctly identify Quality Statements (QS). Replaced hardcoded system prompt guide with dynamically injected jurisdiction-specific guides. Fixed the JSON schema example which previously restricted AI output to Regulations only (). (DONE)
+- Evidence Re-scan logic: Fixed re-scan wiping out Care Cert evidence by changing prompt from prioritise to in addition to full coverage, and implementing a merge (instead of replace) for mapping arrays (). (DONE)
+- Re-scan Audio button confusion: Renamed to Re-transcribe Audio, added a confirmation guard, and clear toast warnings so users stop accidentally resetting speaker labels (). (DONE)
+- Speaker Label save failure: Added explicit  and rowcount check to raise 500 on failure instead of a false success (). (DONE)
+
+**Earlier issues found/mentioned but not fixed**
+   - None
+
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork:  JSONB stringification bug.
+  - Recurrence count: 2 (Impacted team insights previously, and impacted the Audit Trail in this session).
+  - Status: RESOLVED (Fixed via  /  helper workaround, but remains a structural risk for any new JSONB reads).
+
+**Code Architecture**
+- /app/backend/routers (admin.py, auth.py, review.py, doc_uploads.py, processing.py)
+- /app/backend/utils (ai.py, seed.py)
+- /app/frontend/src/pages (MeetingReport.js, NewMeeting.js, MeetingPrep.js, Login.js)
+- /app/frontend/src/components/report (AuditTrailTab.js, TranscriptTab.js)
+
+**Key Technical Concepts**
+React frontend, FastAPI backend, PostgreSQL (asyncpg), DB-Level Row Level Security (app_rls_user), Async Job Queue, Supabase Storage, AssemblyAI, OpenAI.
+
+**key DB schema**
+  - : , , , , 
+  - : , ,  (JSONB columns prone to asyncpg stringification bug)
+  - : , , 
+
+**changes in tech stack**
+  - None.
+
+**All files of reference** 
+  -  (Edited for audit trail JSONB fix, speaker labels save verification, and re-scan array merging).
+  -  (Edited for AssemblyAI config, jurisdiction-specific AI prompts, and JSON schema example fixes).
+  -  (Edited for UI progress bars and re-transcribe button guards).
+  -  (Speaker labels functionality).
+  -  (Fixed  toggle bug, UI text updates).
+  -  (Footer updates).
+
+**Areas that need refactoring**: 
+- Database access leveraging  (which issues ) systematically invalidates  JSONB codecs. We are having to implement defensive  ( / ) checks across various endpoints because JSON columns get returned as raw strings instead of dicts/lists.
+
+**key api endpoints**
+- 
+- 
+- 
+
+**Critical Info for New Agent** 
+- **Production vs Preview**: The user is actively testing and deploying code to production (). We ONLY fix issues in the Preview environment. The user manually pushes to production. Always ask if they are seeing an issue on Preview or Production.
+- **Asyncpg JSONB stringification bug**: When RLS is enforced via , the Postgres connection loses its mapped  codec. Queries that fetch JSONB columns will return  instead of  or . You must use  or the / helpers to parse them safely before accessing dictionary keys!
+- **AI Evidence Mapping (CQC/Quality Statements)**: Previously, AI wasn't finding Quality Statements (QS). This was fixed by adding QS examples into the JSON Schema prompt and injecting dynamic jurisdiction guides into the user prompt. DO NOT revert the JSON schema example to only show Regulation, as it restricts the model output.
+
+**documents and test reports created in this job** 
+  -  (Updated throughout)
+
+**Last 10 User Messages and any pending HUMAN messages** 
+ 1. User requested removal of small grey text below progress bars. (Done)
+ 2. User reported audit trail was blank despite recording/speaker label changes. (Fixed asyncpg JSONB bug).
+ 3. User uploaded context source (previous supervision), getting undefined error. (Fixed  typo).
+ 4. User requested changing text from AI is generating questions to 1two.one is generating questions. (Done)
+ 5. User requested adding company/ICO details to login footer. (Done)
+ 6. User reported CQC evidence scan performed poorly on Caring domain, and re-scan killed Care Cert evidence. (Fixed AI prompt for CQC, updated re-scan merge logic).
+ 7. User asked if similar needed adding for other jurisdictions. (Added dynamically injected per-jurisdiction prompts).
+ 8. User reported re-scan reset speaker labels and still reduced care cert evidence. (Renamed misleading UI button to Re-transcribe Audio, added confirmation).
+ 9. User reported speaker labels keep being reset, the save does nothing. (Fixed silent save failure in  where  hit 0 rows due to RLS mismatch. Added rowcount check).
+ 10. User asked about implications of forking the chat. (Agent explained).
+
+**Project Health Check:**
+Healthy.
+
+**3rd Party Integrations** 
+ - OpenAI (Analysis/Extraction) — requires User API Key
+ - AssemblyAI (Transcription) — requires User API Key (EU endpoint)
+ - Supabase (Database & Storage) — requires User Connection String
+ - Resend (Emails) — requires User API Key
+
+**Testing status**
+  - Testing agent used after significant changes: NO (Tested manually via curl & bash scripts).
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: None
+  - Known regressions: None
+
+**Credentials to test flow:**
+Check  
+
+**What agent forgot to execute**
+Nothing was overlooked, but we are awaiting the user to deploy the speaker label fix to production and confirm if the saving now works or if the new 500 error () surfaces, which would indicate a deeper RLS row issue.
+
+**Debugging checklist for current issue**
+    Issue: Speaker Labels Save failure / RLS Mismatch check
+    Action: 
+    1. Wait for user feedback on whether the Speaker Labels are now saving on production, or if they receive a 500 error toast.
+    2. If a 500 error occurs, inspect the RLS policy on the  table in .
+    3. Ensure  is being properly mapped and saved when a transcript is created in  and matches the user's  in the  database context.</analysis>

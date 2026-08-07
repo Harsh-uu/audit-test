@@ -10,7 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import asyncio
 from datetime import datetime, timezone
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL") or "https://transcript-vault-2.preview.emergentagent.com"
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL") or "https://evidence-link-4.preview.emergentagent.com"
 BASE_URL = BASE_URL.rstrip("/")
 
 # Test data IDs
