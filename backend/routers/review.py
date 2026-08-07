@@ -983,17 +983,43 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
 
+        # Merge with existing mappings — keep anything the re-scan didn't re-find
+        # so that a focused re-scan never silently loses previously found evidence.
         now = datetime.now(timezone.utc).isoformat()
         analysis_id = meeting["analysis_id"]
+        async with database.with_org(org_id) as conn:
+            existing_row = await conn.fetchrow("SELECT cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id=$1", analysis_id)
+
+        def _jlist_local(val):
+            if val is None: return []
+            if isinstance(val, str):
+                try: return json.loads(val)
+                except Exception: return []
+            return val if isinstance(val, list) else []
+
+        def _merge(existing, fresh, key_field):
+            """Keep existing items not covered by fresh; fresh items take precedence for shared keys."""
+            fresh_keys = {item.get(key_field) for item in fresh if item.get(key_field)}
+            kept = [item for item in existing if item.get(key_field) not in fresh_keys]
+            return fresh + kept
+
+        existing_cqc = _jlist_local(existing_row["cqc_mappings"] if existing_row else [])
+        existing_cc  = _jlist_local(existing_row["care_cert_mappings"] if existing_row else [])
+        existing_cu  = _jlist_local(existing_row["custom_mappings"] if existing_row else [])
+
+        merged_cqc = _merge(existing_cqc, analysis_result.get("cqc_mappings", []), "regulation_ref")
+        merged_cc  = _merge(existing_cc,  analysis_result.get("care_cert_mappings", []), "outcome_ref")
+        merged_cu  = _merge(existing_cu,  analysis_result.get("custom_mappings", []), "criterion_ref")
+
         async with database.with_org(org_id) as conn:
             await conn.execute(
                 """UPDATE analyses SET
                    cqc_mappings=$1::jsonb, care_cert_mappings=$2::jsonb, custom_mappings=$3::jsonb,
                    last_edited_at=$4, last_edited_by=$5, rescanned_at=$4, rescanned_by_name=$6
                    WHERE id=$7""",
-                json.dumps(analysis_result.get("cqc_mappings", [])),
-                json.dumps(analysis_result.get("care_cert_mappings", [])),
-                json.dumps(analysis_result.get("custom_mappings", [])),
+                json.dumps(merged_cqc),
+                json.dumps(merged_cc),
+                json.dumps(merged_cu),
                 now, user_id, user_name, analysis_id,
             )
             await conn.execute("UPDATE meetings SET rescan_status='done' WHERE id=$1", meeting_id)

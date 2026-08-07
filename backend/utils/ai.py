@@ -191,7 +191,17 @@ Rules:
 - If the transcript contains [MM:SS] timestamps, include the timestamp at the start of transcript_excerpt values (e.g. "[14:32] I always check the care plan before..."). This helps locate evidence within the session.
 - Include transcript excerpts as exact quotes from the provided text
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
-- Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections."""
+- Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections.
+
+CQC CARING DOMAIN — special guidance:
+The CQC Caring key question is evidenced when workers describe or demonstrate compassion, dignity, and treating people as individuals. You MUST actively look for this throughout the transcript:
+  • A worker describing how they listened to a service user, responded to their emotional state, or treated them with patience and compassion → QS Caring 1 (Kindness, compassion and dignity)
+  • A worker describing how they adapted care or communication to the individual's preferences, background or personality → QS Caring 2 (Treating people as individuals)
+  • A worker describing how they encouraged a service user to make their own choices or maintain independence → QS Caring 3 (Independence, choice and control)
+  • A worker describing noticing and responding to a service user's immediate distress, comfort needs or wishes → QS Caring 4 (Responding to people's immediate needs)
+  • A supervision meeting itself, where a manager demonstrates genuine interest in the worker's wellbeing, workload, stress or development → QS Caring 5 (Workforce wellbeing and enablement)
+  • A worker or manager discussing dignity, respect, privacy, or treating someone as a whole person → Regulation 10 (Dignity and respect)
+Do not skip Caring evidence because nobody used the word "caring". Look for the described behaviour and attitude."""
 
 
 CRITERIA_EXTRACTION_PROMPT = """You are reviewing a standards/policy document from a UK adult social care provider. Extract a structured list of criteria, standards, or competencies from this document.
@@ -990,7 +1000,7 @@ async def analyze_meeting(
 
     custom_prompt_note = ""
     if custom_prompt and custom_prompt.strip():
-        custom_prompt_note = f"\n\nADDITIONAL GUIDANCE FROM MANAGER (prioritise this when mapping evidence): {custom_prompt.strip()}"
+        custom_prompt_note = f"\n\nADDITIONAL FOCUS FROM MANAGER — in addition to your full analysis above, please also specifically look for further evidence relating to: {custom_prompt.strip()}\nIMPORTANT: Do NOT reduce coverage of other standards. This is additive — find everything you can across all standards, then make sure you have given extra attention to the area mentioned here."
 
     user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
 
