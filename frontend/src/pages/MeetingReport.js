@@ -577,26 +577,100 @@ export default function MeetingReport() {
           </div>
         </div>
 
-        {/* Processing state */}
-        {stageCfg && (
+        {/* Processing state — three-stage stepper */}
+        {stageCfg && !stageCfg.error && (
+          <div className="flex-1 flex items-center justify-center p-8" data-testid="processing-indicator">
+            <div className="w-full max-w-lg">
+              <div className="text-center mb-8">
+                <div className="w-12 h-12 border-[3px] border-[#1E3A8A] border-t-transparent rounded-full spin mx-auto mb-4"></div>
+                <h3 className="font-semibold text-gray-900 text-lg">Processing your recording</h3>
+                <p className="text-sm text-gray-500 mt-1">This page will update automatically — you can safely leave and come back</p>
+              </div>
+
+              <div className="space-y-5">
+                {[
+                  {
+                    key: "processing",
+                    icon: "1",
+                    title: "Uploading & Compressing Audio",
+                    desc: "Audio is compressed to 16 kHz mono MP3 for optimal transcription",
+                    eta: "~10–30 seconds",
+                  },
+                  {
+                    key: "transcribing",
+                    icon: "2",
+                    title: "Transcribing Recording",
+                    desc: "AssemblyAI converts the audio to a speaker-labelled transcript",
+                    eta: "~1–5 minutes",
+                  },
+                  {
+                    key: "analyzing",
+                    icon: "3",
+                    title: "Mapping Compliance Evidence",
+                    desc: "AI reviews the transcript and maps discussion points to regulatory standards",
+                    eta: "~30–90 seconds",
+                  },
+                ].map((stage, idx) => {
+                  const ORDER = ["processing", "transcribing", "analyzing"];
+                  const currentIdx = ORDER.indexOf(meeting.status);
+                  const stageIdx   = ORDER.indexOf(stage.key);
+                  const isDone     = stageIdx < currentIdx;
+                  const isActive   = stageIdx === currentIdx;
+                  const isPending  = stageIdx > currentIdx;
+                  return (
+                    <div key={stage.key} className={`rounded-xl border p-4 transition-all ${
+                      isActive  ? "border-[#1E3A8A] bg-blue-50/60 shadow-sm" :
+                      isDone    ? "border-emerald-200 bg-emerald-50/40" :
+                                  "border-gray-100 bg-gray-50/60 opacity-60"
+                    }`}>
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mt-0.5 ${
+                          isDone   ? "bg-emerald-500 text-white" :
+                          isActive ? "bg-[#1E3A8A] text-white" :
+                                     "bg-gray-200 text-gray-400"
+                        }`}>
+                          {isDone ? "✓" : stage.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-sm font-semibold ${
+                              isActive ? "text-[#1E3A8A]" : isDone ? "text-emerald-700" : "text-gray-400"
+                            }`}>{stage.title}</span>
+                            <span className={`text-xs flex-shrink-0 ${
+                              isActive ? "text-[#1E3A8A]" : isDone ? "text-emerald-600" : "text-gray-300"
+                            }`}>
+                              {isDone ? "Complete" : isActive ? stage.eta : "Waiting"}
+                            </span>
+                          </div>
+                          <p className={`text-xs mt-0.5 ${isActive || isDone ? "text-gray-500" : "text-gray-300"}`}>
+                            {stage.desc}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden ml-10">
+                        <div className={`h-full rounded-full transition-all duration-700 ${
+                          isDone   ? "w-full bg-emerald-500" :
+                          isActive ? "bg-[#1E3A8A] animate-pulse" :
+                                     "w-0"
+                        } ${isActive ? "w-3/4" : ""}`}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Processing failed state */}
+        {stageCfg && stageCfg.error && (
           <div className="p-8 flex flex-col items-center justify-center" data-testid="processing-indicator">
-            {stageCfg.error ? (
-              <div className="text-center">
-                <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
-                <h3 className="font-semibold text-gray-900 mb-1">Processing failed</h3>
-                <p className="text-sm text-gray-500 mb-4">Please try re-uploading the recording.</p>
-                <RetryButton meetingId={meetingId} onRetry={fetchMeeting} API={API} getAuthConfig={getAuthConfig} />
-              </div>
-            ) : (
-              <div className="text-center max-w-md">
-                <div className="w-12 h-12 border-3 border-[#1E3A8A] border-t-transparent rounded-full spin mx-auto mb-4"></div>
-                <h3 className="font-semibold text-gray-900 mb-2">{stageCfg.label}</h3>
-                <div className="w-64 bg-gray-200 rounded-full h-2 mx-auto">
-                  <div className="bg-[#1E3A8A] h-2 rounded-full transition-all duration-500" style={{ width: `${stageCfg.pct}%` }}></div>
-                </div>
-                <p className="text-xs text-gray-400 mt-3">This page will update automatically</p>
-              </div>
-            )}
+            <div className="text-center">
+              <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+              <h3 className="font-semibold text-gray-900 mb-1">Processing failed</h3>
+              <p className="text-sm text-gray-500 mb-4">Please try re-uploading the recording.</p>
+              <RetryButton meetingId={meetingId} onRetry={fetchMeeting} API={API} getAuthConfig={getAuthConfig} />
+            </div>
           </div>
         )}
 
