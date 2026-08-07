@@ -43,11 +43,11 @@ class ResetPasswordRequest(BaseModel):
 
 
 @router.get("/users")
-async def list_users(current_user=Depends(get_current_user)):
+async def list_users(ignore_scope: bool = False, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
-    scope = get_manager_scope(current_user)
+    scope = get_manager_scope(current_user) if not ignore_scope else {"level": "org"}
     _cols = "SELECT id, org_id, email, name, role, is_active, mfa_enabled, team_id, setting_id, created_at FROM users"
     async with database.with_org(org_id) as conn:
         if scope["level"] == "team":
