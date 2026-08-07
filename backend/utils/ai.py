@@ -266,28 +266,14 @@ Rules:
 
 def _check_transcript_safety(plain_text: str, transcript) -> list[str]:
     """
-    Returns a list of warning strings if the transcript contains:
-    1. AssemblyAI content safety flags (violence, hate speech, etc.)
-    2. Repetition hallucination patterns (looping phrases — classic ASR failure)
+    Returns a list of warning strings if the transcript contains
+    repetition hallucination patterns (looping phrases — classic ASR failure).
+    AssemblyAI content_safety is disabled; we rely only on hallucination detection.
     """
     import re
     warnings = []
 
-    # --- Layer 1: AssemblyAI content safety labels ---
-    try:
-        if hasattr(transcript, "content_safety_labels") and transcript.content_safety_labels:
-            flagged = set()
-            results = transcript.content_safety_labels.results or []
-            for result in results:
-                for label in (result.labels or []):
-                    if label.confidence >= 0.6:
-                        flagged.add(label.label)
-            if flagged:
-                warnings.append(f"Content safety flags from AssemblyAI: {', '.join(sorted(flagged))}")
-    except Exception:
-        pass
-
-    # --- Layer 2: Repetition / hallucination detector ---
+    # --- Repetition / hallucination detector ---
     # Split into sentences and check for excessive repetition
     if plain_text:
         sentences = [s.strip() for s in re.split(r'[.!?]', plain_text) if len(s.strip()) > 5]
@@ -341,7 +327,7 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
         speakers_expected=speakers_expected if speakers_expected and speakers_expected >= 2 else None,
         speech_models=["universal-3-5-pro", "universal-2"],  # Latest EU-available models
         language_detection=True,
-        content_safety=True,               # Flag violent/threatening/sensitive content
+        content_safety=False,              # Disabled — over-flags benign care sector discussions
         word_boost=[                        # Reinforce UK adult social care terminology
             "CQC", "safeguarding", "MCA", "DoLS", "LPS", "Care Certificate",
             "duty of candour", "deprivation of liberty", "best interests",
