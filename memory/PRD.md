@@ -212,11 +212,20 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ### P0 (Done — Aug 2026)
 - Fixed "No users found" in meeting attendee picker for managers with `team_id`: `NewMeeting.js` now calls `/admin/users?ignore_scope=true` so all org users are visible when creating a meeting, regardless of manager's team scope
 
-### P1 (Next)
-- Super Admin "Edit Org" form needs Jurisdiction + Service Type fields (NI orgs need to be able to update service_type post-creation)
+### P0 (Done — Aug 2026, Session 3)
+- **Removed Re-transcribe Audio button** from MeetingReport toolbar — was a legacy workaround; AssemblyAI EU endpoint now reliable; backend endpoint dormant as a recovery tool
+- **Jurisdiction-aware labels**: `org_jurisdiction` + `org_service_type` added to `/api/auth/me` and `/api/admin/team-insights` responses. EvidenceSidebar and InspectionPrep now show correct framework labels per jurisdiction:
+  - England → "CQC Regulations" / "Care Certificate" / "CQC Inspection Prep"
+  - Wales → "CIW / AWIF Regulations" / "AWIF / SCW Standards" / "CIW Inspection Prep"
+  - Scotland → "Care Inspectorate Standards" / "SSSC Code Standards" / "Care Inspectorate Prep"
+  - NI → "RQIA Standards" / "NISCC Standards" / "RQIA Inspection Prep"
+- **Super Admin Edit Org**: Confirmed Jurisdiction + Service Type fields already present in modal — P1 complete
 
-### P1
-- Jurisdiction-aware frontend labels: show "RQIA Evidence" and "NISCC Evidence" (instead of "CQC/Care Cert") in MeetingReport, InspectionPrep pages for NI orgs
+### P1 (Next)
+- ~~Super Admin "Edit Org" form needs Jurisdiction + Service Type fields~~ — DONE (was already implemented)
+- ~~Jurisdiction-aware frontend labels~~ — DONE (Aug 2026, Session 3)
+
+### P1 (Remaining)
 
 ### P2 (Upcoming)
 - **AWIF granularity review** (Wales consultation pending): Current AWIF sub-outcomes are section headings (topic level). Decision pending from Welsh users on whether to drill down to the specific "I can/I understand" practice learning outcome statements. All 7 workbook .docx files available in job assets for re-extraction when ready.
