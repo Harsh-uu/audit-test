@@ -375,6 +375,10 @@ export default function MeetingReport() {
   };
 
   const handleRetranscribe = async () => {
+    const confirmed = window.confirm(
+      "Re-transcribe Audio will re-process the audio through AssemblyAI and will reset ALL speaker label corrections you have made. This cannot be undone.\n\nAre you sure you want to continue?"
+    );
+    if (!confirmed) return;
     if (!window.confirm(`Re-scan this meeting's audio with AssemblyAI using ${meeting?.attendees?.length || "the"} expected speaker(s)?\n\nThis will update the transcript and speaker view. The meeting status and compliance evidence will not change.`)) return;
     setRetranscribing(true);
     try {
@@ -385,7 +389,7 @@ export default function MeetingReport() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || "Failed");
-      toast.success("Re-scan started — refresh this page in 2–3 minutes to see updated speaker diarization.");
+      toast.success("Re-transcription started — audio is being re-processed. Speaker labels will be reset. Refresh in 2–3 minutes.");
     } catch (err) {
       toast.error("Re-scan failed: " + err.message);
     } finally {
@@ -535,10 +539,10 @@ export default function MeetingReport() {
                         disabled={retranscribing}
                         className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-md shadow-sm hover:bg-amber-100 transition-colors disabled:opacity-60"
                         data-testid="retranscribe-btn"
-                        title={`Re-scan audio with ${meeting?.attendees?.length || "?"} expected speakers`}
+                        title="Re-transcribe audio through AssemblyAI — resets speaker labels"
                       >
                         <RefreshCw className="w-4 h-4" />
-                        <span className="hidden sm:inline">{retranscribing ? "Scanning…" : "Re-scan Audio"}</span>
+                        <span className="hidden sm:inline">{retranscribing ? "Re-transcribing…" : "Re-transcribe Audio"}</span>
                       </button>
                     )}
                   </div>

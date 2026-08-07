@@ -145,9 +145,17 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
   ],
   "cqc_mappings": [
     {
-      "id": "unique_id",
+      "id": "cqc_1",
       "regulation_ref": "Regulation 18",
       "regulation_name": "Staffing",
+      "evidence_summary": "Brief description of evidence",
+      "transcript_excerpt": "Exact quote from transcript",
+      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+    },
+    {
+      "id": "cqc_2",
+      "regulation_ref": "QS Caring 1",
+      "regulation_name": "Kindness, compassion and dignity",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
       "confidence": "likely_evidence|needs_review|not_enough_evidence"
@@ -181,6 +189,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 
 Rules:
 - Map evidence that is described, demonstrated, or shown through practice narration, explained reasoning, or confirmed observation. Do NOT require speakers to name the regulation or standard — map what they describe doing or understanding.
+- For CQC mappings, use `regulation_ref` for BOTH Regulations (e.g. "Regulation 18") AND Quality Statements (e.g. "QS Caring 1", "QS Safe 3", "QS Well-led 2"). Quality Statements are first-class evidence items — map to them whenever the described behaviour matches, even if no Regulation is also applicable. Do not restrict mappings to Regulations only.
 - Use "likely_evidence" when a participant directly narrates a practice example, explains their reasoning behind a decision, or a manager confirms an observed behaviour. This is the most common and valuable form of evidence in supervision transcripts.
 - Use "needs_review" when there is partial evidence: the topic is discussed but practice is not fully described, or the context is ambiguous about whether the competency is actually demonstrated.
 - Use "not_enough_evidence" when a topic is mentioned only briefly or in passing, with insufficient substance to constitute a meaningful compliance evidence item.
@@ -781,6 +790,14 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "id": "cqc_1",
       "regulation_ref": "Regulation 18",
       "regulation_name": "Staffing",
+      "evidence_summary": "Brief description of evidence found",
+      "transcript_excerpt": "Exact quote from the document",
+      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+    },
+    {
+      "id": "cqc_2",
+      "regulation_ref": "QS Safe 3",
+      "regulation_name": "Safeguarding",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
       "confidence": "likely_evidence|needs_review|not_enough_evidence"
