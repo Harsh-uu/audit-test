@@ -50,7 +50,7 @@ export default function NewMeeting() {
   });
 
   useEffect(() => {
-    axios.get(`${API}/admin/users`, getAuthConfig())
+    axios.get(`${API}/admin/users?ignore_scope=true`, getAuthConfig())
       .then(r => setUsers(r.data))
       .catch(console.error);
   // eslint-disable-next-line react-hooks/exhaustive-deps
