@@ -193,15 +193,53 @@ Rules:
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
 - Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections.
 
-CQC CARING DOMAIN — special guidance:
-The CQC Caring key question is evidenced when workers describe or demonstrate compassion, dignity, and treating people as individuals. You MUST actively look for this throughout the transcript:
+CQC FIVE KEY DOMAINS — DETECTION GUIDE
+Workers and managers rarely name a domain or quality statement. Map based on what they describe. Apply this for every domain before finalising your output:
+
+SAFE — look for evidence of:
+  • A worker describing how they identified, reported or acted on a safety concern, near-miss or incident → QS Safe 1 (Learning culture)
+  • A worker describing handover, continuity or transition between services/shifts → QS Safe 2 (Safe systems and transitions)
+  • A worker describing recognising, reporting or responding to potential abuse, neglect, or harm → QS Safe 3 / Regulation 13 (Safeguarding)
+  • A worker describing how they involved a service user in assessing or managing a risk, or took a positive-risk approach → QS Safe 4 (Involving people in risks)
+  • A worker describing checking equipment, the environment, or health and safety hazards → QS Safe 5 (Safe environments)
+  • Discussion about staffing levels, workload, training compliance, or the supervision itself as a support mechanism → QS Safe 6 / Regulation 18 (Safe and effective staffing)
+  • A worker describing infection control practices, PPE, or hygiene procedures → QS Safe 7 (IPC)
+  • A worker describing medication administration, MAR chart checks, or handling a medication error → QS Safe 8 / Regulation 12 (Medicines optimisation)
+
+EFFECTIVE — look for evidence of:
+  • A worker describing carrying out or reviewing an assessment of a person's needs → QS Effective 1 / Regulation 9 (Assessing needs)
+  • A worker describing following a care plan, clinical guideline, or evidence-based approach → QS Effective 2 (Evidence-based care)
+  • A worker describing working with other professionals, attending MDT meetings, or sharing information across teams → QS Effective 3 (How staff and teams work together)
+  • A worker describing supporting a service user to maintain or build independence, manage their own health, or engage in activities → QS Effective 4 (Supporting healthier lives)
+  • A worker or manager discussing whether care is achieving good outcomes, reviewing someone's progress → QS Effective 5 (Monitoring and improving outcomes)
+  • A worker describing seeking consent before a care task, or navigating capacity and best-interests → QS Effective 6 / Regulation 11 (Consent to care and treatment)
+
+CARING — look for evidence of:
   • A worker describing how they listened to a service user, responded to their emotional state, or treated them with patience and compassion → QS Caring 1 (Kindness, compassion and dignity)
   • A worker describing how they adapted care or communication to the individual's preferences, background or personality → QS Caring 2 (Treating people as individuals)
   • A worker describing how they encouraged a service user to make their own choices or maintain independence → QS Caring 3 (Independence, choice and control)
   • A worker describing noticing and responding to a service user's immediate distress, comfort needs or wishes → QS Caring 4 (Responding to people's immediate needs)
-  • A supervision meeting itself, where a manager demonstrates genuine interest in the worker's wellbeing, workload, stress or development → QS Caring 5 (Workforce wellbeing and enablement)
+  • A supervision meeting itself where a manager demonstrates genuine interest in the worker's wellbeing, workload, stress or development → QS Caring 5 (Workforce wellbeing and enablement)
   • A worker or manager discussing dignity, respect, privacy, or treating someone as a whole person → Regulation 10 (Dignity and respect)
-Do not skip Caring evidence because nobody used the word "caring". Look for the described behaviour and attitude."""
+  Do not skip Caring evidence because nobody used the word "caring" — look for the described behaviour and attitude.
+
+RESPONSIVE — look for evidence of:
+  • A worker describing how they adapted or changed an approach based on a service user's changing needs or preferences → QS Responsive 1 / Regulation 9 (Person-centred care)
+  • A worker describing flexible, joined-up care or co-ordination across services → QS Responsive 2 (Care provision and continuity)
+  • A worker describing how they communicated information to a service user or family, including adapting format or language → QS Responsive 3 (Providing information)
+  • A worker describing how they listened to and acted on feedback, concerns or complaints from a service user or family → QS Responsive 4 / Regulation 16 (Listening to and involving people)
+  • A worker describing ensuring someone could access a service or support they needed → QS Responsive 5 (Equity in access)
+  • Discussion about protected characteristics, health inequalities, or tailoring care for specific groups → QS Responsive 6 (Equity in experiences and outcomes)
+  • A worker describing advance care planning, end-of-life discussions or planning for future changes in need → QS Responsive 7 (Planning for the future)
+
+WELL-LED — look for evidence of:
+  • A manager or worker discussing the organisation's values, vision, or cultural expectations → QS Well-led 1 (Shared direction and culture)
+  • The supervision meeting itself demonstrating inclusive, supportive, transparent leadership by the manager → QS Well-led 2 (Capable, compassionate and inclusive leaders)
+  • A worker describing raising a concern, speaking up about a problem, or a manager actively inviting honesty and challenge → QS Well-led 3 (Freedom to speak up)
+  • Discussion about workforce equality, diversity, inclusion, or belonging → QS Well-led 4 (Workforce EDI)
+  • Discussion about policies, procedures, accountability structures, quality audits, or CQC compliance → QS Well-led 5 / Regulation 17 (Governance and management)
+  • A worker describing working with external agencies, partners, or community organisations → QS Well-led 6 (Partnerships and communities)
+  • A worker or manager discussing what they've learned from an experience, quality improvement, or service innovation → QS Well-led 7 (Learning, improvement and innovation)"""
 
 
 CRITERIA_EXTRACTION_PROMPT = """You are reviewing a standards/policy document from a UK adult social care provider. Extract a structured list of criteria, standards, or competencies from this document.
