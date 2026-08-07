@@ -1201,7 +1201,21 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
                        "actor": meeting.get("created_by_name", "Unknown"),
                        "timestamp": meeting["created_at"], "detail": meeting.get("title", "")})
 
-    rec_user_ids = list({ev.get("user_id") for ev in (meeting.get("recording_events") or []) if ev.get("user_id")})
+    def _jlist(val):
+        if val is None: return []
+        if isinstance(val, str):
+            try: parsed = json.loads(val); return parsed if isinstance(parsed, list) else []
+            except Exception: return []
+        return val if isinstance(val, list) else []
+
+    def _jobj(val):
+        if val is None: return {}
+        if isinstance(val, str):
+            try: parsed = json.loads(val); return parsed if isinstance(parsed, dict) else {}
+            except Exception: return {}
+        return val if isinstance(val, dict) else {}
+
+    rec_user_ids = list({ev.get("user_id") for ev in _jlist(meeting.get("recording_events")) if ev.get("user_id")})
     rec_users = {}
     for uid in rec_user_ids:
         try:
@@ -1214,7 +1228,7 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
 
     label_map_rec = {"notice_acknowledged": "Recording notice acknowledged", "started": "Recording started",
                      "paused": "Recording paused", "resumed": "Recording resumed", "stopped": "Recording stopped"}
-    for ev in (meeting.get("recording_events") or []):
+    for ev in _jlist(meeting.get("recording_events")):
         ev_type = ev.get("type") or ev.get("event_type", "unknown")
         actor = rec_users.get(ev.get("user_id", ""), ev.get("user_name", "System"))
         events.append({"type": f"recording_{ev_type}", "label": label_map_rec.get(ev_type, f"Recording {ev_type}"),
@@ -1257,12 +1271,12 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
                        "actor": edit.get("user_name", "Unknown"), "timestamp": edit.get("timestamp", ""),
                        "detail": edit.get("detail"), "flagged": is_post_signoff})
 
-    for a in (meeting.get("attendees") or []):
+    for a in _jlist(meeting.get("attendees")):
         if a.get("reviewed") and a.get("reviewed_at"):
             events.append({"type": "mark_reviewed", "label": "Marked as reviewed",
                            "actor": a.get("name", "Unknown"), "timestamp": a["reviewed_at"], "detail": None})
 
-    sign_off = meeting.get("sign_off_record") or {}
+    sign_off = _jobj(meeting.get("sign_off_record"))
     if sign_off:
         events.append({"type": "signed_off", "label": "Meeting signed off",
                        "actor": sign_off.get("signed_by_name", "Unknown"),
