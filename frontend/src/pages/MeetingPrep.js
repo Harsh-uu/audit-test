@@ -686,7 +686,7 @@ export default function MeetingPrep() {
       {generating && sections.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-4 py-24 bg-white rounded-xl border border-dashed border-indigo-200">
           <Loader className="w-10 h-10 text-indigo-400 animate-spin" />
-          <p className="text-sm text-gray-500 font-medium">AI is crafting personalised questions…</p>
+          <p className="text-sm text-gray-500 font-medium">1two.one is crafting personalised questions…</p>
         </div>
       )}
 
