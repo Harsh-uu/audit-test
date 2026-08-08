@@ -1045,7 +1045,7 @@ QS Safe 5 — Safe environments
 This standard is about maintaining a physically safe care environment. Map it whenever a worker mentions checking, repairing, reporting, or questioning the safety of equipment, premises, or the care environment.
 
 QS Safe 6 — Safe and effective staffing (also Reg 18)
-This standard is about whether staff are competent, supported and appropriately deployed. The supervision meeting itself is direct evidence — it demonstrates the organisation invests in staff support and oversight. Beyond that, map it whenever training is discussed, workload or capability concerns are raised, support from a manager is described, or the worker talks about whether they feel equipped to do their job.
+This standard is about whether staff are competent, supported and appropriately deployed. The supervision meeting itself is direct evidence — it demonstrates the organisation invests in staff support and oversight. Beyond that, map it whenever training is discussed, workload or capability concerns are raised, support from a manager is described, or the worker talks about whether they feel equipped to do their job. Also map it when the supervisee expresses personal welfare concerns — fatigue, tiredness, stress, feeling overwhelmed, or self-doubt about their own performance — because these signals directly engage the employer's Regulation 18 duty to ensure staff are fit and supported to carry out their role safely.
 
 QS Safe 7 — Infection prevention and control
 This standard is about hygiene and preventing the spread of infection. Map it whenever any IPC-related practice is mentioned, however routine — handwashing, wearing gloves or PPE, cleaning procedures, managing an infectious situation, or following isolation protocols.
