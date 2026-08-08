@@ -79,9 +79,9 @@ def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
     # trailing silence. start_periods=1 (no start_duration) stops trimming the instant
     # the first non-silent sample is found — internal gaps are never touched.
     silence_filter = (
-        "silenceremove=start_periods=1:start_threshold=-50dB,"
+        "silenceremove=start_periods=1:start_threshold=-40dB,"
         "areverse,"
-        "silenceremove=start_periods=1:start_threshold=-50dB,"
+        "silenceremove=start_periods=1:start_threshold=-40dB,"
         "areverse"
     )
     try:
@@ -1191,7 +1191,7 @@ NISCC INDUCTION: worker discusses their role, responsibilities and the regulator
     user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
 
 TRANSCRIPT:{pause_note}
-{transcript_text}
+{transcript_text[:80000]}{"[TRANSCRIPT TRUNCATED — analyse the above portion only]" if len(transcript_text) > 80000 else ""}
 
 {reg_label} TO MAP AGAINST:
 {cqc_context}
