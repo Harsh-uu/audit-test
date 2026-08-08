@@ -190,9 +190,12 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 Rules:
 - Map evidence that is described, demonstrated, or shown through practice narration, explained reasoning, or confirmed observation. Do NOT require speakers to name the regulation or standard — map what they describe doing or understanding.
 - For CQC mappings, use `regulation_ref` for BOTH Regulations (e.g. "Regulation 18") AND Quality Statements (e.g. "QS Caring 1", "QS Safe 3", "QS Well-led 2"). Quality Statements are first-class evidence items — map to them whenever the described behaviour matches, even if no Regulation is also applicable. Do not restrict mappings to Regulations only.
-- Use "likely_evidence" when a participant directly narrates a practice example where their response was appropriate and demonstrated understanding — they noticed something, acted on it correctly, and their described behaviour matches what best practice requires. Do NOT use "likely_evidence" when the worker noticed something but their response was insufficient, incomplete, or suggests a gap in knowledge.
-- Use "needs_review" when: (a) the worker described a situation but their response was passive, incomplete, or did not match what best practice requires (e.g. noticed a concern but did not escalate or record it); (b) the topic is discussed but practice is only partially described; or (c) the context is ambiguous about whether the competency was actually demonstrated. THIS LEVEL SHOULD APPEAR REGULARLY — use it whenever there is doubt about whether the response was adequate.
-- Use "not_enough_evidence" when a topic is mentioned only briefly or in passing, with insufficient substance to constitute a meaningful compliance evidence item.
+- CONFIDENCE RULES — read these carefully before assigning any confidence value:
+  - "needs_review" is the DEFAULT confidence. Start here and only upgrade if the evidence clearly meets the bar below.
+  - Use "likely_evidence" ONLY when ALL THREE of these are true: (1) the worker describes a specific real situation they personally encountered; (2) they explicitly state what they did or decided in response; AND (3) their described action matches what best practice requires. A worker simply explaining a policy, describing what they would do hypothetically, or agreeing with the manager's statement does NOT meet this bar — use "needs_review".
+  - Use "needs_review" for: any discussion, partial description, hypothetical, general awareness statement, situation where the worker noticed something but did not describe an appropriate response, agreement without elaboration, or any case where you are not certain the three criteria for "likely_evidence" are all met.
+  - Use "not_enough_evidence" only when a topic is mentioned in passing (a single sentence or a vague reference) with no substantive discussion at all.
+  - When in doubt between "likely_evidence" and "needs_review", always choose "needs_review".
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h", "13.9c"). Use the exact sub-outcome ref and its description as provided in the standards context below. One evidence item = one sub-outcome ref. Create separate mapping entries if evidence covers multiple sub-outcomes.
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
 - If no custom standards are provided, return custom_mappings as an empty array []
@@ -833,9 +836,12 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 
 Rules:
 - Map evidence that is described, demonstrated, or recorded in the document — including described practice, noted observations, identified learning needs, or explained reasoning. Do not require the standard or regulation to be named.
-- Use "likely_evidence" when practice or competency is explicitly described or confirmed.
-- Use "needs_review" when partially evidenced or context is ambiguous.
-- Use "not_enough_evidence" when barely touched on with no substantive content.
+- CONFIDENCE RULES — read these carefully before assigning any confidence value:
+  - "needs_review" is the DEFAULT confidence. Start here and only upgrade if the evidence clearly meets the bar below.
+  - Use "likely_evidence" ONLY when ALL THREE of these are true: (1) the worker describes a specific real situation they personally encountered; (2) they explicitly state what they did or decided in response; AND (3) their described action matches what best practice requires. A worker simply explaining a policy, describing what they would do hypothetically, or agreeing with the manager's statement does NOT meet this bar — use "needs_review".
+  - Use "needs_review" for: any discussion, partial description, hypothetical, general awareness statement, situation where the worker noticed something but did not describe an appropriate response, agreement without elaboration, or any case where you are not certain all three criteria for "likely_evidence" are met.
+  - Use "not_enough_evidence" only when a topic is mentioned in passing (a single sentence or vague reference) with no substantive discussion at all.
+  - When in doubt between "likely_evidence" and "needs_review", always choose "needs_review".
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h")
 - For custom_mappings, only include entries if custom standards are provided AND there is actual evidence
 - If no custom standards provided, return custom_mappings as an empty array []

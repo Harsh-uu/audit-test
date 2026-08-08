@@ -226,6 +226,7 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
             if t_row:
                 tr = dict(t_row)
                 tr["safety_warnings"] = _ensure_list(tr.get("safety_warnings"))
+                tr["speaker_colors"] = _ensure_dict(tr.get("speaker_colors"))
                 meeting["transcript"] = tr
 
         # Attach analysis
