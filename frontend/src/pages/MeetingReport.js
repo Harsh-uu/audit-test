@@ -84,6 +84,9 @@ export default function MeetingReport() {
   const [speakersDirty, setSpeakersDirty] = useState(false);
   const [piiGateDone, setPiiGateDone] = useState(false);
   const rescanInitiated = useRef(false);
+  const [warningDismissed, setWarningDismissed] = useState(
+    () => !!localStorage.getItem(`tw_dismissed_${meetingId}`)
+  );
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
   const isRescanning = meeting?.rescan_status === "processing";
@@ -437,7 +440,7 @@ export default function MeetingReport() {
     <Layout>
       <div className="flex flex-col h-full">
         {/* Safety warning banner — shown when transcript has AI hallucination or content flags */}
-        {meeting.transcript_has_warnings && (
+        {meeting.transcript_has_warnings && !warningDismissed && (
           <div className="bg-red-600 text-white px-4 py-3 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <div className="flex-1 text-sm">
@@ -445,6 +448,17 @@ export default function MeetingReport() {
               This transcript was automatically flagged for potentially hallucinated or inappropriate content.
               Review carefully before sharing. Use the <strong>Find &amp; Replace</strong> tool in the Transcript tab to remove any incorrect text.
             </div>
+            <button
+              onClick={() => {
+                localStorage.setItem(`tw_dismissed_${meetingId}`, "1");
+                setWarningDismissed(true);
+              }}
+              title="Dismiss warning"
+              className="flex-shrink-0 ml-2 text-white/70 hover:text-white transition-colors"
+              data-testid="dismiss-transcript-warning-btn"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
         )}
         {/* Top bar */}
