@@ -179,10 +179,10 @@ export default function Login() {
             Turn routine meetings into compliance evidence
           </h1>
           <p className="text-blue-200 text-lg leading-relaxed">
-            Record, transcribe, and map your supervision meetings to CQC regulations and Care Certificate standards automatically.
+            Record, transcribe, and map your supervision meetings to your regulatory framework and induction standards automatically.
           </p>
           <div className="mt-8 space-y-3">
-            {["Automatic CQC compliance mapping", "Care Certificate competence evidence", "Full audit trail with timestamps", "GDPR-aligned audio management"].map(f => (
+            {["Regulatory and induction evidence tracking", "Automatic compliance framework mapping", "Full audit trail with timestamps", "GDPR-aligned audio management"].map(f => (
               <div key={f} className="flex items-center gap-3 text-blue-100">
                 <div className="w-1.5 h-1.5 bg-[#059669] rounded-full flex-shrink-0"></div>
                 <span className="text-sm">{f}</span>
