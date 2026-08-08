@@ -197,7 +197,7 @@ export default function SupervisionMatrix() {
             </p>
             {schedules.length === 0 && (
               <button
-                onClick={() => navigate("/schedules")}
+                onClick={() => navigate("/admin/schedules")}
                 className="mt-3 text-xs text-[#1E3A8A] font-medium hover:underline"
               >
                 Go to Meeting Schedules →
