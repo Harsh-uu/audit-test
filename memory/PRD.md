@@ -228,6 +228,14 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
   - `prep.py`: `meetings.attendees`, `analyses.actions` (context + generate), `meeting_prep.sections/coverage_results` (carry_forward), get_prep return now parses sections/coverage_results before sending to frontend
   - `admin.py`: Added module-level `_jlist`/`_jdict` helpers; guarded `analyses.actions`, `meetings.attendees`, `meetings.pii_redactions` across all export/PDF endpoints
 
+### P0 (Done — Aug 2026, Session 4 cont.)
+- **Full meetings table migration guards**: Added `ALTER TABLE meetings ADD COLUMN IF NOT EXISTS` guards for ALL 22 columns that existed only in `CREATE TABLE` (recording_events, paused_periods, total_paused_duration_seconds, sign_off_record, pii_redactions, shared_with, audio_deletion_status, transcript_has_warnings, diarize_status, reopen_record, rescan_status, etc). Root cause: `CREATE TABLE IF NOT EXISTS` doesn't add new columns to existing tables — columns silently missing in production, causing recording events to fail on write.
+- **meeting_prep migration guards**: Added guards for coverage_results, coverage_checked_at, shared_with_attendees.
+- **Transcript warning dismiss**: Added `×` button to red warning banner; dismissal stored in localStorage per meeting, persists across page loads.
+- **Unified processing progress screen**: Merged 3 separate upload/processing screens into one. All 3 steps visible from start; real upload % on step 1; animated fake-progress bars for steps 2–3; polling every 3s; auto-navigates to report only when processing is fully done.
+- **Speaker colors persistent**: meetings.py was missing `_ensure_dict(speaker_colors)` when loading transcript — raw string from asyncpg was being used as initial React state, corrupting Object.entries spread on save.
+- **needs_review fires correctly**: Flipped confidence default to `needs_review` as baseline; `likely_evidence` now requires 3 explicit criteria. Applied to both main prompt and rescan/fallback prompt.
+
 ### P1 (Next)
 - ~~Super Admin "Edit Org" form needs Jurisdiction + Service Type fields~~ — DONE (was already implemented)
 - ~~Jurisdiction-aware frontend labels~~ — DONE (Aug 2026, Session 3)

@@ -499,6 +499,9 @@ ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS gen_status TEXT DEFAULT 'idle'
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS included_source_ids JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS shared_at TEXT;
+ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS coverage_results JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS coverage_checked_at TEXT;
+ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS shared_with_attendees BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE supervision_uploads ADD COLUMN IF NOT EXISTS full_text TEXT;
 ALTER TABLE supervision_uploads ADD COLUMN IF NOT EXISTS doc_type TEXT DEFAULT 'other';
@@ -520,7 +523,30 @@ ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_edited_at TEXT;
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_colors JSONB NOT NULL DEFAULT '{}';
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS updated_at TEXT;
 
-ALTER TABLE meetings ADD COLUMN IF NOT EXISTS processing_error TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS recording_events JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS paused_periods JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS total_paused_duration_seconds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS recording_notice_shown_at TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS sign_off_record JSONB;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_redactions JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_review_status TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS shared_with JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS audio_deletion_status TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS audio_grace_period_started_at TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS audio_deleted_at TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS transcript_has_warnings BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS diarize_status TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reopen_record JSONB;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS rescan_status TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS retranscribed_at TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS team_id TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS setting_id TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS schedule_id TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS meeting_type TEXT DEFAULT 'supervision';
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS meeting_type_id TEXT;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS notes TEXT;
+
+
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS last_edited_by TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS rescanned_at TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS rescanned_by_name TEXT;

@@ -143,7 +143,7 @@ async def get_events(meeting_id: str, current_user=Depends(get_current_user)):
     if not row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return {
-        "recording_events": row["recording_events"] or [],
-        "paused_periods": row["paused_periods"] or [],
+        "recording_events": row["recording_events"] if isinstance(row["recording_events"], list) else (json.loads(row["recording_events"]) if isinstance(row["recording_events"], str) else []),
+        "paused_periods": row["paused_periods"] if isinstance(row["paused_periods"], list) else (json.loads(row["paused_periods"]) if isinstance(row["paused_periods"], str) else []),
         "total_paused_duration_seconds": row["total_paused_duration_seconds"] or 0,
     }
