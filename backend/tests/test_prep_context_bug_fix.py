@@ -312,13 +312,12 @@ class TestInitDbGuards:
 
 
 class TestPrepTryExceptGuards:
-    """Verify prep.py has try/except guards around the dangerous queries."""
+    """Verify prep.py has try/except guards around all 4 dangerous queries."""
 
     def test_prep_has_try_except_for_supervision_uploads(self):
         """prep.py must have try/except around supervision_uploads query."""
         with open("/app/backend/routers/prep.py", "r") as f:
             content = f.read()
-        # Check that supervision_uploads query is inside try/except
         assert "supervision_uploads" in content, "supervision_uploads query missing from prep.py"
         assert "could not load supervision_uploads" in content, (
             "Missing warning log for supervision_uploads try/except in prep.py"
@@ -331,4 +330,139 @@ class TestPrepTryExceptGuards:
         assert "standards_documents" in content, "standards_documents query missing from prep.py"
         assert "could not load standards_documents" in content, (
             "Missing warning log for standards_documents try/except in prep.py"
+        )
+
+    def test_prep_has_try_except_for_previous_meetings(self):
+        """prep.py must have try/except around previous meetings (analyses SELECT) query."""
+        with open("/app/backend/routers/prep.py", "r") as f:
+            content = f.read()
+        assert "could not load previous meetings" in content, (
+            "Missing warning log for previous_meetings try/except in prep.py"
+        )
+
+    def test_prep_has_try_except_for_focus_topics(self):
+        """prep.py must have try/except around focus_topics query."""
+        with open("/app/backend/routers/prep.py", "r") as f:
+            content = f.read()
+        assert "could not load focus_topics" in content, (
+            "Missing warning log for focus_topics try/except in prep.py"
+        )
+
+    def test_prep_analyses_query_includes_edited_summary(self):
+        """prep.py analyses SELECT must include edited_summary column."""
+        with open("/app/backend/routers/prep.py", "r") as f:
+            content = f.read()
+        assert "edited_summary" in content, (
+            "prep.py analyses SELECT is missing 'edited_summary' column — this was the root cause of the 500"
+        )
+
+
+class TestInitDbAnalysesGuards:
+    """Verify init_db.py has the new ALTER TABLE IF NOT EXISTS guards for analyses."""
+
+    def test_init_db_has_analyses_edited_summary_guard(self):
+        """init_db.py must have ALTER TABLE guard for analyses.edited_summary"""
+        with open("/app/backend/init_db.py", "r") as f:
+            content = f.read()
+        assert "analyses ADD COLUMN IF NOT EXISTS edited_summary" in content, (
+            "Missing ALTER TABLE guard for analyses.edited_summary in init_db.py — "
+            "this was the root cause: edited_summary column not in production DB"
+        )
+
+    def test_init_db_has_analyses_last_edited_at_guard(self):
+        """init_db.py must have ALTER TABLE guard for analyses.last_edited_at"""
+        with open("/app/backend/init_db.py", "r") as f:
+            content = f.read()
+        assert "analyses ADD COLUMN IF NOT EXISTS last_edited_at" in content, (
+            "Missing ALTER TABLE guard for analyses.last_edited_at in init_db.py"
+        )
+
+
+class TestContextNoAttendees:
+    """Test that GET /api/prep/{meetingId}/context returns 200 for a brand new meeting with no attendees."""
+
+    @pytest.fixture(scope="class")
+    def no_attendees_meeting_id(self, admin_headers):
+        """Create a meeting with NO attendees."""
+        import uuid
+        payload = {
+            "title": f"TEST_NoAttendees_{uuid.uuid4().hex[:8]}",
+            "date": "2026-02-15",
+            "status": "draft",
+        }
+        resp = requests.post(f"{BASE_URL}/api/meetings/", json=payload, headers=admin_headers)
+        assert resp.status_code in (200, 201), f"Meeting creation failed: {resp.text}"
+        data = resp.json()
+        meeting_id = data.get("id") or data.get("meeting_id")
+        assert meeting_id
+        yield meeting_id
+        try:
+            requests.delete(f"{BASE_URL}/api/meetings/{meeting_id}", headers=admin_headers)
+        except Exception:
+            pass
+
+    def test_context_returns_200_no_attendees(self, admin_headers, no_attendees_meeting_id):
+        """Brand new meeting with NO attendees must return 200 not 500."""
+        resp = requests.get(
+            f"{BASE_URL}/api/prep/{no_attendees_meeting_id}/context",
+            headers=admin_headers
+        )
+        assert resp.status_code == 200, (
+            f"Context returned {resp.status_code} for no-attendees meeting. Response: {resp.text[:400]}"
+        )
+
+    def test_context_required_keys_no_attendees(self, admin_headers, no_attendees_meeting_id):
+        """No-attendees meeting context response must still have required keys."""
+        resp = requests.get(
+            f"{BASE_URL}/api/prep/{no_attendees_meeting_id}/context",
+            headers=admin_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for key in ("meeting_id", "supervisees", "sources", "current_focus_topic"):
+            assert key in data, f"Missing key '{key}' in context response: {data}"
+
+    def test_context_empty_supervisees_no_attendees(self, admin_headers, no_attendees_meeting_id):
+        """supervisees must be an empty list for a meeting with no attendees."""
+        resp = requests.get(
+            f"{BASE_URL}/api/prep/{no_attendees_meeting_id}/context",
+            headers=admin_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data["supervisees"], list), "supervisees must be a list"
+        assert data["supervisees"] == [], (
+            f"Expected empty supervisees list for meeting with no attendees, got: {data['supervisees']}"
+        )
+
+
+class TestContextExistingMeetingWithAnalysis:
+    """Test context endpoint for an existing meeting that may have attendees + analysis_id.
+    This specifically triggers the 'edited_summary' column path that caused the original 500."""
+
+    def test_context_existing_meeting_with_attendees_returns_200(self, admin_headers):
+        """Find an existing meeting with attendees/analysis_id and confirm context returns 200."""
+        # Fetch meetings list to find a real meeting
+        resp = requests.get(f"{BASE_URL}/api/meetings/", headers=admin_headers)
+        if resp.status_code != 200:
+            pytest.skip(f"Could not fetch meetings list: {resp.status_code}")
+        meetings = resp.json()
+        if isinstance(meetings, dict):
+            meetings = meetings.get("meetings", meetings.get("items", []))
+        # Find a meeting with attendees or analysis_id
+        target_meeting = None
+        for m in meetings:
+            if m.get("attendees") or m.get("analysis_id"):
+                target_meeting = m
+                break
+        if not target_meeting and meetings:
+            target_meeting = meetings[0]
+        if not target_meeting:
+            pytest.skip("No meetings found to test against")
+
+        meeting_id = target_meeting.get("id") or target_meeting.get("meeting_id")
+        resp2 = requests.get(f"{BASE_URL}/api/prep/{meeting_id}/context", headers=admin_headers)
+        assert resp2.status_code == 200, (
+            f"Context returned {resp2.status_code} for existing meeting {meeting_id}. "
+            f"This is the core bug. Response: {resp2.text[:500]}"
         )

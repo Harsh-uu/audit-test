@@ -195,43 +195,46 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
 
     # 1. Previous system supervision meetings for these supervisees
     if supervisee_ids:
-        async with database.with_org(org_id) as conn:
-            prev_rows = await conn.fetch(
-                """SELECT id, title, date, analysis_id FROM meetings
-                   WHERE org_id=$1
-                     AND status IN ('signed_off','shared','in_review','reviewed')
-                     AND analysis_id IS NOT NULL
-                     AND id != $2
-                     AND EXISTS (
-                         SELECT 1 FROM jsonb_array_elements(attendees) elem
-                         WHERE elem->>'user_id' = ANY($3::text[])
-                     )
-                   ORDER BY date DESC LIMIT 5""",
-                org_id, meeting_id, supervisee_ids,
-            )
-        for prev in prev_rows:
-            prev = dict(prev)
-            analysis = None
-            if prev.get("analysis_id"):
-                async with database.with_org(org_id) as conn:
-                    a_row = await conn.fetchrow(
-                        "SELECT summary, edited_summary, actions FROM analyses WHERE id=$1",
-                        prev["analysis_id"],
-                    )
-                if a_row:
-                    analysis = dict(a_row)
-            sources.append({
-                "source_id": prev["id"],
-                "source_type": "previous_meeting",
-                "label": prev.get("title", "Previous Supervision"),
-                "date": prev.get("date", ""),
-                "included": True,
-                "summary": ((analysis.get("edited_summary") or analysis.get("summary", ""))[:600] if analysis else ""),
-                "actions": [
-                    {"text": a.get("text", a.get("action", "")), "completed": a.get("completed", False)}
-                    for a in ((analysis.get("actions") or []) if analysis else [])
-                ][:10],
-            })
+        try:
+            async with database.with_org(org_id) as conn:
+                prev_rows = await conn.fetch(
+                    """SELECT id, title, date, analysis_id FROM meetings
+                       WHERE org_id=$1
+                         AND status IN ('signed_off','shared','in_review','reviewed')
+                         AND analysis_id IS NOT NULL
+                         AND id != $2
+                         AND EXISTS (
+                             SELECT 1 FROM jsonb_array_elements(attendees) elem
+                             WHERE elem->>'user_id' = ANY($3::text[])
+                         )
+                       ORDER BY date DESC LIMIT 5""",
+                    org_id, meeting_id, supervisee_ids,
+                )
+            for prev in prev_rows:
+                prev = dict(prev)
+                analysis = None
+                if prev.get("analysis_id"):
+                    async with database.with_org(org_id) as conn:
+                        a_row = await conn.fetchrow(
+                            "SELECT summary, edited_summary, actions FROM analyses WHERE id=$1",
+                            prev["analysis_id"],
+                        )
+                    if a_row:
+                        analysis = dict(a_row)
+                sources.append({
+                    "source_id": prev["id"],
+                    "source_type": "previous_meeting",
+                    "label": prev.get("title", "Previous Supervision"),
+                    "date": prev.get("date", ""),
+                    "included": True,
+                    "summary": ((analysis.get("edited_summary") or analysis.get("summary", ""))[:600] if analysis else ""),
+                    "actions": [
+                        {"text": a.get("text", a.get("action", "")), "completed": a.get("completed", False)}
+                        for a in ((analysis.get("actions") or []) if analysis else [])
+                    ][:10],
+                })
+        except Exception as e:
+            logger.warning(f"prep context: could not load previous meetings — {e}")
 
     # 2. Uploaded documents — strictly scoped to this meeting's supervisees + org
     if supervisee_ids:
@@ -282,10 +285,14 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
         logger.warning(f"prep context: could not load standards_documents — {e}")
 
     # 4. Current org focus topic
-    async with database.with_org(org_id) as conn:
-        focus_row = await conn.fetchrow(
-            "SELECT id, text FROM focus_topics WHERE org_id=$1 AND is_current=TRUE LIMIT 1", org_id,
-        )
+    focus_row = None
+    try:
+        async with database.with_org(org_id) as conn:
+            focus_row = await conn.fetchrow(
+                "SELECT id, text FROM focus_topics WHERE org_id=$1 AND is_current=TRUE LIMIT 1", org_id,
+            )
+    except Exception as e:
+        logger.warning(f"prep context: could not load focus_topics — {e}")
 
     return {
         "meeting_id": meeting_id,

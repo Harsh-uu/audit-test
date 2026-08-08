@@ -523,6 +523,8 @@ ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS updated_at TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS last_edited_by TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS rescanned_at TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS rescanned_by_name TEXT;
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS edited_summary TEXT;
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS last_edited_at TEXT;
 
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_at TEXT;
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by TEXT;
