@@ -15,6 +15,15 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _jlist(val):
+    """Parse a JSONB value that asyncpg may return as a raw string when RLS role is active."""
+    if isinstance(val, list): return val
+    if isinstance(val, str):
+        try: return json.loads(val)
+        except Exception: return []
+    return val or []
+
+
 async def _get_rolled_actions(conn, supervisee_ids: list, current_meeting_id: str, manager_id: str = None, attendee_names: list = None) -> list:
     """Return incomplete actions from previous meetings relevant to these supervisees."""
     if not supervisee_ids:
@@ -45,7 +54,7 @@ async def _get_rolled_actions(conn, supervisee_ids: list, current_meeting_id: st
         source_manager_id = prev.get("sign_off_manager_id")
         source_supervisee_ids = {
             a.get("user_id")
-            for a in (prev.get("attendees") or [])
+            for a in _jlist(prev.get("attendees"))
             if a.get("user_id") and a.get("user_id") != source_manager_id
         }
         if not source_supervisee_ids.intersection(set(supervisee_ids)):
@@ -94,7 +103,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id = $1", meeting_id)
 
         meeting = dict(meeting_row) if meeting_row else {}
-        attendee_count = len(meeting.get("attendees") or []) or None
+        attendee_count = len(_jlist(meeting.get("attendees"))) or None
         meeting_org_id = meeting.get("org_id")
 
         audio_data, _ = await get_audio(audio_path)
@@ -201,7 +210,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             supervision_template = tmpl_row["data"]
 
         # Fetch rolled-over actions
-        attendees = meeting.get("attendees") or []
+        attendees = _jlist(meeting.get("attendees"))
         attendee_ids = [a.get("user_id") for a in attendees]
         attendee_names = [a.get("name") for a in attendees]
         manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or "Manager"
@@ -485,7 +494,7 @@ async def diarize_meeting_transcript(
         raise HTTPException(status_code=400, detail="Transcript text is empty")
 
     manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or "Manager"
-    attendees = meeting.get("attendees") or []
+    attendees = _jlist(meeting.get("attendees"))
     attendee_names = [a.get("name") for a in attendees if a.get("name")]
     meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
 
@@ -576,7 +585,7 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
             await conn.execute("UPDATE meetings SET diarize_status='failed' WHERE id=$1", meeting_id)
         return
 
-    attendee_count = len(meeting.get("attendees") or []) or None
+    attendee_count = len(_jlist(meeting.get("attendees"))) or None
     try:
         plain_text, numbered_speaker_text, _, _ = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
     except Exception as e:
@@ -586,7 +595,7 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
         return
 
     manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or "Manager"
-    attendees = meeting.get("attendees") or []
+    attendees = _jlist(meeting.get("attendees"))
     attendee_names = [a.get("name") for a in attendees if a.get("name")]
     meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
 
