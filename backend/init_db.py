@@ -500,6 +500,18 @@ ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS included_source_ids JSONB NOT 
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE meeting_prep ADD COLUMN IF NOT EXISTS shared_at TEXT;
 
+ALTER TABLE supervision_uploads ADD COLUMN IF NOT EXISTS full_text TEXT;
+ALTER TABLE supervision_uploads ADD COLUMN IF NOT EXISTS doc_type TEXT DEFAULT 'other';
+ALTER TABLE supervision_uploads ADD COLUMN IF NOT EXISTS meeting_date TEXT;
+ALTER TABLE supervision_uploads ADD COLUMN IF NOT EXISTS label TEXT;
+
+ALTER TABLE standards_documents ADD COLUMN IF NOT EXISTS extracted_text TEXT;
+ALTER TABLE standards_documents ADD COLUMN IF NOT EXISTS parse_status TEXT DEFAULT 'parsing';
+ALTER TABLE standards_documents ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+
+ALTER TABLE focus_topics ADD COLUMN IF NOT EXISTS active_month TEXT;
+ALTER TABLE focus_topics ADD COLUMN IF NOT EXISTS created_by TEXT;
+
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup TEXT;
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup_at TEXT;
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup_by TEXT;

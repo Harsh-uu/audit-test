@@ -235,45 +235,51 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
 
     # 2. Uploaded documents — strictly scoped to this meeting's supervisees + org
     if supervisee_ids:
-        async with database.with_org(org_id) as conn:
-            doc_rows = await conn.fetch(
-                """SELECT id, label, filename, doc_type, meeting_date, status, full_text
-                   FROM supervision_uploads
-                   WHERE org_id=$1
-                     AND staff_id = ANY($2::text[])
-                     AND status IN ('text_ready','done')
-                   ORDER BY meeting_date DESC LIMIT 10""",
-                org_id, supervisee_ids,
-            )
-        for doc in doc_rows:
-            doc = dict(doc)
-            content = doc.get("full_text") or ""
-            sources.append({
-                "source_id": doc["id"],
-                "source_type": "doc_upload",
-                "label": doc.get("label") or doc.get("filename", "Document"),
-                "doc_type": doc.get("doc_type", "other"),
-                "date": doc.get("meeting_date", ""),
-                "status": doc.get("status", "done"),
-                "included": True,
-                "content_snippet": content[:800],
-            })
+        try:
+            async with database.with_org(org_id) as conn:
+                doc_rows = await conn.fetch(
+                    """SELECT id, label, filename, doc_type, meeting_date, status, full_text
+                       FROM supervision_uploads
+                       WHERE org_id=$1
+                         AND staff_id = ANY($2::text[])
+                         AND status IN ('text_ready','done')
+                       ORDER BY meeting_date DESC LIMIT 10""",
+                    org_id, supervisee_ids,
+                )
+            for doc in doc_rows:
+                doc = dict(doc)
+                content = doc.get("full_text") or ""
+                sources.append({
+                    "source_id": doc["id"],
+                    "source_type": "doc_upload",
+                    "label": doc.get("label") or doc.get("filename", "Document"),
+                    "doc_type": doc.get("doc_type", "other"),
+                    "date": doc.get("meeting_date", ""),
+                    "status": doc.get("status", "done"),
+                    "included": True,
+                    "content_snippet": content[:800],
+                })
+        except Exception as e:
+            logger.warning(f"prep context: could not load supervision_uploads — {e}")
 
     # 3. Org-level standards documents
-    async with database.with_org(org_id) as conn:
-        std_rows = await conn.fetch(
-            "SELECT id, label, filename, extracted_text FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed' LIMIT 5",
-            org_id,
-        )
-    for doc in std_rows:
-        doc = dict(doc)
-        sources.append({
-            "source_id": doc["id"],
-            "source_type": "org_standards",
-            "label": doc.get("label") or doc.get("filename", "Org Document"),
-            "included": True,
-            "content_snippet": (doc.get("extracted_text") or "")[:600],
-        })
+    try:
+        async with database.with_org(org_id) as conn:
+            std_rows = await conn.fetch(
+                "SELECT id, label, filename, extracted_text FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed' LIMIT 5",
+                org_id,
+            )
+        for doc in std_rows:
+            doc = dict(doc)
+            sources.append({
+                "source_id": doc["id"],
+                "source_type": "org_standards",
+                "label": doc.get("label") or doc.get("filename", "Org Document"),
+                "included": True,
+                "content_snippet": (doc.get("extracted_text") or "")[:600],
+            })
+    except Exception as e:
+        logger.warning(f"prep context: could not load standards_documents — {e}")
 
     # 4. Current org focus topic
     async with database.with_org(org_id) as conn:
