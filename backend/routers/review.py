@@ -51,8 +51,6 @@ def _parse_meeting_row(m: dict) -> dict:
 def _parse_analysis_row(a: dict) -> dict:
     for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions"):
         a[field] = _ensure_list(a.get(field))
-    for field in ("speaker_colors",):
-        a[field] = _ensure_dict(a.get(field))
     return a
 
 
@@ -191,6 +189,7 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
             if t_row:
                 t = dict(t_row)
                 t["safety_warnings"] = _ensure_list(t.get("safety_warnings"))
+                t["speaker_colors"] = _ensure_dict(t.get("speaker_colors"))
                 meeting["transcript"] = t
         except Exception:
             pass
