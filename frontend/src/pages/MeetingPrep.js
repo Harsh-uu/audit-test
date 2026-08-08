@@ -284,28 +284,43 @@ export default function MeetingPrep() {
   // ── Load ───────────────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
     try {
-      const [meetingRes, ctxRes, prepRes, ftRes] = await Promise.all([
+      const [meetingRes, ctxRes, prepRes, ftRes] = await Promise.allSettled([
         axios.get(`${API}/meetings/${meetingId}`, getAuthConfig()),
         axios.get(`${API}/prep/${meetingId}/context`, getAuthConfig()),
         axios.get(`${API}/prep/${meetingId}`, getAuthConfig()),
         axios.get(`${API}/prep/focus-topics`, getAuthConfig()),
       ]);
-      setMeeting(meetingRes.data);
-      setContext(ctxRes.data);
-      const p = prepRes.data;
-      setPrep(p);
-      if (p.sections?.length) setSections(p.sections);
-      if (p.focus_topic !== undefined) setFocusTopic(p.focus_topic || "");
-      if (p.included_source_ids?.length) setIncludedSourceIds(p.included_source_ids);
-      setFocusTopics(ftRes.data || []);
-      // If an org-level topic is active for this month, always override and lock
-      const activeTopic = (ftRes.data || []).find(t => t.effective_current || t.is_current);
+
+      // Meeting is critical — hard fail if it's missing
+      if (meetingRes.status === "rejected") {
+        toast.error("Failed to load meeting data");
+        return;
+      }
+      setMeeting(meetingRes.value.data);
+
+      // Context — soft fail (page still usable without it)
+      if (ctxRes.status === "fulfilled") setContext(ctxRes.value.data);
+
+      // Prep data — soft fail (new meeting won't have prep yet)
+      if (prepRes.status === "fulfilled") {
+        const p = prepRes.value.data;
+        setPrep(p);
+        if (p.sections?.length) setSections(p.sections);
+        if (p.focus_topic !== undefined) setFocusTopic(p.focus_topic || "");
+        if (p.included_source_ids?.length) setIncludedSourceIds(p.included_source_ids);
+      }
+
+      // Focus topics — soft fail
+      const ftData = ftRes.status === "fulfilled" ? (ftRes.value.data || []) : [];
+      setFocusTopics(ftData);
+      const activeTopic = ftData.find(t => t.effective_current || t.is_current);
       if (activeTopic) {
         setFocusTopic(activeTopic.topic);
-      } else if (!p.focus_topic) {
+      } else if (prepRes.status === "fulfilled" && !prepRes.value.data?.focus_topic) {
         setFocusTopic("");
       }
-    } catch {
+    } catch (err) {
+      console.error("loadAll error:", err);
       toast.error("Failed to load prep data");
     } finally { setLoading(false); }
   }, [API, meetingId, getAuthConfig]);
