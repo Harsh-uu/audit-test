@@ -311,7 +311,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
     update_cols = {}
     changed_fields = []
     for mapping_type in ["cqc_mappings", "care_cert_mappings", "custom_mappings"]:
-        mappings = list(analysis.get(mapping_type) or [])
+        mappings = _ensure_list(analysis.get(mapping_type))
         for i, m in enumerate(mappings):
             if m.get("id") == evidence_id:
                 if is_finalised:
@@ -371,7 +371,7 @@ async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, cu
     if not a_row:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
-    risks = list(a_row["risks"] or [])
+    risks = _ensure_list(a_row["risks"])
     is_locked = (m_row["status"] or "") in ["signed_off", "shared"]
     updated = False
     for i, r in enumerate(risks):
@@ -417,7 +417,7 @@ async def get_risk_suggestions(meeting_id: str, risk_id: str, current_user=Depen
     if not a_row:
         raise HTTPException(status_code=404, detail="Analysis not found")
     analysis = dict(a_row)
-    risk = next((r for r in (analysis.get("risks") or []) if r.get("id") == risk_id), None)
+    risk = next((r for r in _ensure_list(analysis.get("risks")) if r.get("id") == risk_id), None)
     if not risk:
         raise HTTPException(status_code=404, detail="Risk not found")
 
@@ -431,7 +431,7 @@ async def get_risk_suggestions(meeting_id: str, risk_id: str, current_user=Depen
     from utils.ai import generate_risk_suggestions
     result = await generate_risk_suggestions(risk["text"], risk.get("severity", "medium"), transcript_text[:6000])
 
-    risks = list(analysis.get("risks") or [])
+    risks = _ensure_list(analysis.get("risks"))
     for i, r in enumerate(risks):
         if r.get("id") == risk_id:
             risks[i]["transcript_excerpt"] = result.get("transcript_excerpt", "")
@@ -457,7 +457,7 @@ async def mark_reviewed(meeting_id: str, current_user=Depends(get_current_user))
 
     user_id = current_user["id"]
     now = datetime.now(timezone.utc).isoformat()
-    attendees = list(meeting.get("attendees") or [])
+    attendees = _ensure_list(meeting.get("attendees"))
     found = False
     for a in attendees:
         if a.get("user_id") == user_id:
@@ -496,7 +496,7 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_u
         raise HTTPException(status_code=400, detail="Meeting must be reviewed before sign-off")
 
     now = datetime.now(timezone.utc).isoformat()
-    attendees = list(meeting.get("attendees") or [])
+    attendees = _ensure_list(meeting.get("attendees"))
     unreviewed_names = [a["name"] for a in attendees if not a.get("reviewed", False)]
     sign_off_record = {"signed_by": current_user["id"], "signed_by_name": current_user["name"], "signed_at": now}
 
@@ -529,7 +529,7 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
 
     completed = bool(data.get("completed", False))
     now = datetime.now(timezone.utc).isoformat()
-    actions = list(a_row["actions"] or [])
+    actions = _ensure_list(a_row["actions"])
     updated = False
     matched_action = None
     for a in actions:
@@ -568,7 +568,7 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
                             "SELECT id, actions FROM analyses WHERE id=$1", src_row["analysis_id"]
                         )
                     if src_analysis:
-                        src_actions = list(src_analysis["actions"] or [])
+                        src_actions = _ensure_list(src_analysis["actions"])
                         for sa in src_actions:
                             if sa.get("id") == source_action_id:
                                 sa["completed"] = True
@@ -960,8 +960,8 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             tmpl_row = await conn.fetchrow("SELECT data FROM settings WHERE id=$1", f"supervision_template:{org_id}")
             if not tmpl_row:
                 tmpl_row = await conn.fetchrow("SELECT data FROM settings WHERE id='supervision_template'")
-        if tmpl_row and (tmpl_row["data"] or {}).get("steps"):
-            supervision_template = tmpl_row["data"]
+        if tmpl_row and _ensure_dict(tmpl_row["data"]).get("steps"):
+            supervision_template = _ensure_dict(tmpl_row["data"])
 
         paused_periods = meeting.get("paused_periods") or []
         analysis_result = await _analyze_meeting(
@@ -1091,7 +1091,7 @@ async def scan_pii(meeting_id: str, current_user=Depends(get_current_user)):
         return {"flags": []}
 
     from utils.ai import scan_pii_in_transcript
-    attendees = m_row["attendees"] or []
+    attendees = _ensure_list(m_row["attendees"])
     manager_name = m_row["sign_off_manager_name"] or m_row["created_by_name"] or ""
     flags = await scan_pii_in_transcript(text, attendees, manager_name)
     return {"flags": flags}
@@ -1153,7 +1153,7 @@ async def share_meeting(meeting_id: str, data: ShareRequest, current_user=Depend
         raise HTTPException(status_code=400, detail="Meeting must be signed off before sharing")
 
     now = datetime.now(timezone.utc).isoformat()
-    shared_with = list(m_row["shared_with"] or [])
+    shared_with = _ensure_list(m_row["shared_with"])
     added = []
     for uid in data.user_ids:
         if not any(s.get("user_id") == uid for s in shared_with):
@@ -1416,7 +1416,7 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
         m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = dict(m_row)
+    meeting = _parse_meeting_row(dict(m_row))
     if (meeting.get("status") or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="PDF export is only available for signed-off meetings")
 
@@ -1433,7 +1433,7 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
         async with database.with_org(org_id) as conn:
             a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", meeting["analysis_id"])
         if a_row:
-            analysis = dict(a_row)
+            analysis = _parse_analysis_row(dict(a_row))
 
     transcript_text = ""
     speaker_text = ""
@@ -1712,7 +1712,7 @@ async def export_transcript(meeting_id: str, current_user=Depends(get_current_us
         m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = dict(m_row)
+    meeting = _parse_meeting_row(dict(m_row))
     if (meeting.get("status") or "") != "signed_off":
         raise HTTPException(status_code=400, detail="Transcript export only available for signed-off meetings")
     if not meeting.get("transcript_id"):
@@ -1874,7 +1874,7 @@ async def approve_reopen(meeting_id: str, current_user=Depends(get_current_user)
         raise HTTPException(status_code=400, detail="No re-open request is pending for this meeting")
 
     user_id = current_user.get("id", "")
-    attendee_ids = [a.get("user_id", "") for a in (meeting.get("attendees") or [])]
+    attendee_ids = [a.get("user_id", "") for a in _ensure_list(meeting.get("attendees"))]
     requester_id = meeting.get("reopen_requested_by", "")
     is_attendee = user_id in attendee_ids and user_id != requester_id
     is_different_manager = current_user["role"] in ["manager", "admin"] and user_id != requester_id

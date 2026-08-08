@@ -38,6 +38,16 @@ def _ensure_list(val):
     return val or []
 
 
+def _ensure_dict(val):
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return val or {}
+
+
 class FocusTopicCreate(BaseModel):
     topic: str
     is_current: bool = False
@@ -230,7 +240,7 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
                     "summary": ((analysis.get("edited_summary") or analysis.get("summary", ""))[:600] if analysis else ""),
                     "actions": [
                         {"text": a.get("text", a.get("action", "")), "completed": a.get("completed", False)}
-                        for a in ((analysis.get("actions") or []) if analysis else [])
+                        for a in (_ensure_list(analysis.get("actions")) if analysis else [])
                     ][:10],
                 })
         except Exception as e:
@@ -319,6 +329,8 @@ async def get_prep(meeting_id: str, current_user=Depends(get_current_user)):
         return {"meeting_id": meeting_id, "exists": False, "gen_status": "idle", "sections": [], "shared_with_attendees": False}
     d = dict(row)
     d["exists"] = True
+    d["sections"] = _ensure_list(d.get("sections"))
+    d["coverage_results"] = _ensure_dict(d.get("coverage_results"))
     return d
 
 
@@ -336,12 +348,13 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
             meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
         meeting = dict(meeting_row) if meeting_row else {}
         manager_id = meeting.get("sign_off_manager_id")
+        _attendees = _ensure_list(meeting.get("attendees"))
         supervisee_ids = [
-            a.get("user_id") for a in (meeting.get("attendees") or [])
+            a.get("user_id") for a in _attendees
             if a.get("user_id") and a.get("user_id") != manager_id
         ]
         supervisee_names = [
-            a.get("name", "") for a in (meeting.get("attendees") or [])
+            a.get("name", "") for a in _attendees
             if a.get("user_id") and a.get("user_id") != manager_id
         ]
         supervisee_name = ", ".join(supervisee_names) if supervisee_names else "the supervisee"
@@ -377,7 +390,7 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
                         "title": prev.get("title", ""),
                         "date": prev.get("date", ""),
                         "summary": ((analysis.get("edited_summary") or analysis.get("summary", ""))[:600] if analysis else ""),
-                        "actions": ((analysis.get("actions") or []) if analysis else [])[:8],
+                        "actions": (_ensure_list(analysis.get("actions")) if analysis else [])[:8],
                     })
 
         uploaded_docs = []
@@ -584,12 +597,12 @@ async def carry_forward_missed(meeting_id: str, current_user=Depends(get_current
     if not prep_row:
         raise HTTPException(status_code=404, detail="No prep found")
 
-    coverage = prep_row.get("coverage_results") or {}
+    coverage = _ensure_dict(prep_row.get("coverage_results"))
     if not coverage:
         raise HTTPException(status_code=400, detail="Coverage check hasn't run yet — process the meeting first")
 
     missed = []
-    for section in (prep_row.get("sections") or []):
+    for section in _ensure_list(prep_row.get("sections")):
         for q in section.get("questions", []):
             if q.get("included", True) and coverage.get(q["id"], {}).get("status") == "missed":
                 missed.append({
@@ -611,7 +624,7 @@ async def carry_forward_missed(meeting_id: str, current_user=Depends(get_current
     if not a_row:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
-    existing_actions = a_row["actions"] or []
+    existing_actions = _ensure_list(a_row["actions"])
     existing_ids = {a.get("id") for a in existing_actions}
     new_actions = [a for a in missed if a["id"] not in existing_ids]
     all_actions = existing_actions + new_actions

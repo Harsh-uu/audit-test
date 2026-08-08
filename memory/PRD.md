@@ -221,6 +221,13 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
   - NI → "RQIA Standards" / "NISCC Standards" / "RQIA Inspection Prep"
 - **Super Admin Edit Org**: Confirmed Jurisdiction + Service Type fields already present in modal — P1 complete
 
+### P0 (Done — Aug 2026, Session 4)
+- **Full JSONB audit & hardening**: Applied `_jlist()`/`_jdict()` guards to ALL unprotected JSONB column reads across `processing.py`, `review.py`, `prep.py`, and `admin.py`. Specific fixes:
+  - `processing.py`: `analyses.actions` (crash fix), `settings.data`, `meeting_prep.sections`
+  - `review.py`: `analyses.risks`, `analyses.actions`, `analyses.cqc/care_cert/custom_mappings`, `meetings.attendees` (mark_reviewed, sign_off, approve_reopen, scan_pii, share, PDF exports), `meetings.shared_with`, `settings.data` (rescan background)
+  - `prep.py`: `meetings.attendees`, `analyses.actions` (context + generate), `meeting_prep.sections/coverage_results` (carry_forward), get_prep return now parses sections/coverage_results before sending to frontend
+  - `admin.py`: Added module-level `_jlist`/`_jdict` helpers; guarded `analyses.actions`, `meetings.attendees`, `meetings.pii_redactions` across all export/PDF endpoints
+
 ### P1 (Next)
 - ~~Super Admin "Edit Org" form needs Jurisdiction + Service Type fields~~ — DONE (was already implemented)
 - ~~Jurisdiction-aware frontend labels~~ — DONE (Aug 2026, Session 3)

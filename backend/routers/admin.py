@@ -17,6 +17,24 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _jlist(val):
+    """Parse a JSONB value that asyncpg may return as a raw string when RLS role is active."""
+    if isinstance(val, list): return val
+    if isinstance(val, str):
+        try: return json.loads(val)
+        except Exception: return []
+    return val or []
+
+
+def _jdict(val):
+    """Parse a JSONB value (dict-typed) that asyncpg may stringify under RLS."""
+    if isinstance(val, dict): return val
+    if isinstance(val, str):
+        try: return json.loads(val)
+        except Exception: return {}
+    return val or {}
+
+
 def _ref_nums(ref: str):
     return [int(n) for n in _re.findall(r'\d+', ref)] or [0]
 
@@ -636,7 +654,7 @@ async def get_team_insights(
         for risk in _jlist(ana.get("risks")):
             text = risk if isinstance(risk, str) else (risk.get("text", "") if isinstance(risk, dict) else "")
             if text.strip(): all_risks.append(text.strip())
-        for action in (ana.get("actions") or []):
+        for action in _jlist(ana.get("actions")):
             if isinstance(action, dict) and not action.get("completed", False):
                 t = action.get("text", "").strip()
                 if t: all_outstanding.append(t)
@@ -830,7 +848,7 @@ async def list_meetings_brief(current_user=Depends(get_current_user)):
                 "SELECT id, title, date, attendees FROM meetings WHERE status IN ('signed_off','shared') ORDER BY date DESC"
             )
     return [{"id": r["id"], "title": r["title"], "date": r["date"],
-             "attendees": [{"user_id": a.get("user_id"), "name": a.get("name")} for a in (r["attendees"] or [])]}
+             "attendees": [{"user_id": a.get("user_id"), "name": a.get("name")} for a in _jlist(r["attendees"])]}
             for r in rows]
 
 
@@ -874,12 +892,12 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
             if not a_row:
                 continue
             adoc = dict(a_row)
-            redactions = mtg.get("pii_redactions") or []
+            redactions = _jlist(mtg.get("pii_redactions"))
             if redactions:
                 adoc = _apply_redactions_deep(adoc, redactions)
             mtg_analyses.append({"meeting": mtg, "analysis": adoc})
             sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
-            for attendee in (mtg.get("attendees") or []):
+            for attendee in _jlist(mtg.get("attendees")):
                 if sign_off_mgr_id and attendee.get("user_id") == sign_off_mgr_id:
                     continue
                 staff_name = attendee.get("name", "Unknown")
@@ -919,10 +937,10 @@ async def export_cqc_excerpts(current_user=Depends(get_current_user)):
             a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", mtg["analysis_id"])
             if not a_row: continue
             adoc = dict(a_row)
-            redactions = mtg.get("pii_redactions") or []
+            redactions = _jlist(mtg.get("pii_redactions"))
             if redactions:
                 adoc = _apply_redactions_deep(adoc, redactions)
-            attendees = ", ".join(a.get("name", "") for a in (mtg.get("attendees") or []))
+            attendees = ", ".join(a.get("name", "") for a in _jlist(mtg.get("attendees")))
             ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees, "manager": mtg.get("sign_off_manager_name", "")}
             for m in (adoc.get("cqc_mappings") or []):
                 if m.get("status") == "rejected": continue
@@ -954,16 +972,16 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
         )
         for mtg_row in mtg_rows:
             mtg = dict(mtg_row)
-            if selected_ids and not any(a.get("user_id") in selected_ids for a in (mtg.get("attendees") or [])):
+            if selected_ids and not any(a.get("user_id") in selected_ids for a in _jlist(mtg.get("attendees"))):
                 continue
             a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", mtg["analysis_id"])
             if not a_row: continue
             adoc = dict(a_row)
-            redactions = mtg.get("pii_redactions") or []
+            redactions = _jlist(mtg.get("pii_redactions"))
             if redactions:
                 adoc = _apply_redactions_deep(adoc, redactions)
             sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
-            include = [a for a in (mtg.get("attendees") or []) if str(a.get("user_id", "")) != sign_off_mgr_id and (not selected_ids or a.get("user_id") in selected_ids)]
+            include = [a for a in _jlist(mtg.get("attendees")) if str(a.get("user_id", "")) != sign_off_mgr_id and (not selected_ids or a.get("user_id") in selected_ids)]
             if not include: continue
             attendees_str = ", ".join(a.get("name", "") for a in include)
             ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees_str, "manager": mtg.get("sign_off_manager_name", "")}
@@ -1197,7 +1215,7 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
         mtg = item["meeting"]; ana = item["analysis"]
         if i > 0: story.append(PageBreak())
         story.append(Paragraph(e(mtg.get("title", "Meeting")), title_s))
-        attendees = ", ".join(a.get("name", "") for a in (mtg.get("attendees") or []))
+        attendees = ", ".join(a.get("name", "") for a in _jlist(mtg.get("attendees")))
         story.append(Paragraph(f'Date: {e(mtg.get("date", "—"))} | Attendees: {e(attendees)} | Manager: {e(mtg.get("sign_off_manager_name", "—"))}', small_s))
         story.append(Spacer(1, 3*mm))
         for maps, label, bg, ref_key, name_key in [
@@ -1250,7 +1268,7 @@ def _generate_bulk_transcripts_pdf(meetings_data: list) -> bytes:
         if idx > 0: story.append(PageBreak())
         meeting = item["meeting"]; speaker_text = item["speaker_text"]; transcript_text = item["transcript_text"]
         sign_off_mgr_id = str(meeting.get("sign_off_manager_id") or "")
-        supervisees = [a.get("name", "") for a in (meeting.get("attendees") or []) if a.get("user_id") != sign_off_mgr_id]
+        supervisees = [a.get("name", "") for a in _jlist(meeting.get("attendees")) if a.get("user_id") != sign_off_mgr_id]
         mtg_hdr = Table([[Paragraph(e(meeting.get("title", "Meeting")), title_s), Paragraph(e(meeting.get("date", "")[:10]), small_s)]], colWidths=[140*mm, 30*mm])
         mtg_hdr.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "BOTTOM"), ("TOPPADDING", (0,0), (-1,-1), 0), ("BOTTOMPADDING", (0,0), (-1,-1), 4), ("LEFTPADDING", (0,0), (-1,-1), 0), ("RIGHTPADDING", (1,0), (1,0), 0), ("ALIGN", (1,0), (1,0), "RIGHT")]))
         story.append(mtg_hdr)
