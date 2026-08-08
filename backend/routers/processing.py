@@ -274,12 +274,11 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
         async with database.with_admin() as conn:
             await conn.execute(
                 """INSERT INTO analyses
-                   (id, meeting_id, org_id, summary, edited_summary, actions, risks,
-                    cqc_mappings, care_cert_mappings, custom_mappings, created_at, last_edited_at)
-                   VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$11)""",
+                   (id, meeting_id, org_id, summary, actions, risks,
+                    cqc_mappings, care_cert_mappings, custom_mappings, created_at)
+                   VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10)""",
                 analysis_id, meeting_id, meeting_org_id,
                 analysis_result.get("summary", ""),
-                None,
                 json.dumps(analysis_result.get("actions", [])),
                 json.dumps(analysis_result.get("risks", [])),
                 json.dumps(analysis_result.get("cqc_mappings", [])),
