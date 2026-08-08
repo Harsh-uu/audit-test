@@ -1014,18 +1014,128 @@ async def analyze_meeting(
     # to name a standard. Keeps CQC references out of non-CQC prompts.
     if jurisdiction == "england":
         domain_guide = """
-EVIDENCE DETECTION GUIDE — apply before finalising mappings:
-Workers and managers rarely name a domain. Map based on described behaviour and attitude.
+EVIDENCE DETECTION GUIDE — read this before mapping any standard:
+Your task is not to match phrases — it is to understand what each person is DOING and THINKING, then identify which standard governs that behaviour. Workers rarely use compliance language. Reason from the human behaviour described in the transcript to the standard that captures it.
 
-SAFE: incident/near-miss reported or acted on → QS Safe 1; handover/shift continuity → QS Safe 2; recognising/reporting abuse or neglect → QS Safe 3/Reg 13; involving a person in risk assessment, positive risk → QS Safe 4; checking equipment/environment → QS Safe 5; staffing, workload, training, supervision as support → QS Safe 6/Reg 18; IPC/PPE/hygiene → QS Safe 7; medication administration, MAR charts, errors → QS Safe 8/Reg 12.
+── SAFE ──────────────────────────────────────────────────────────────────────
 
-EFFECTIVE: carrying out or reviewing a needs assessment → QS Effective 1/Reg 9; following a care plan or guideline → QS Effective 2; MDT working, information sharing across teams → QS Effective 3; supporting independence, health promotion → QS Effective 4; reviewing outcomes, monitoring progress → QS Effective 5; seeking consent or navigating capacity/best interests → QS Effective 6/Reg 11.
+QS Safe 1 — Learning from safety events
+This standard is about a worker or organisation that notices when something went wrong or nearly went wrong, reflects on it, and uses it to inform what happens next. Map it whenever any event — however minor — is described, reported, reflected on, or used to justify a change in approach. Does not require the word "incident": "there was a situation", "something happened", "I wasn't sure what to do", "we changed how we do it after that" are all evidence of this standard.
 
-CARING: listening to a service user, responding with compassion/patience → QS Caring 1; adapting care to the individual's culture, preferences, personality → QS Caring 2; encouraging independence, choice and control → QS Caring 3; noticing and responding to immediate distress or wishes → QS Caring 4; the supervision itself showing manager cares for worker's wellbeing → QS Caring 5; dignity, respect, privacy, treating someone as a whole person → Reg 10. Do NOT skip because the word "caring" was not used.
+QS Safe 2 — Safe systems, pathways and transitions
+This standard is about ensuring nothing is lost or missed when care moves between people, shifts, or settings. Map it whenever a worker describes how they ensured continuity — what they recorded, who they handed over to, what they checked before taking someone to an appointment, or how they made sure the next carer knew what was needed. Written notes, verbal handovers, following up on referrals, or checking what a previous carer had done are all evidence.
 
-RESPONSIVE: adapting care as needs change, co-producing decisions → QS Responsive 1/Reg 9; flexible or joined-up care across services → QS Responsive 2; tailoring information/communication to the person → QS Responsive 3; acting on feedback, complaints or concerns → QS Responsive 4/Reg 16; ensuring access to services → QS Responsive 5; protected characteristics, health inequalities → QS Responsive 6; advance care planning, end-of-life → QS Responsive 7.
+QS Safe 3 — Safeguarding (also Reg 13)
+This standard is about recognising that a person may be at risk and acting on that concern. Map it whenever a worker describes noticing something concerning about a person's welfare, reporting a concern, following safeguarding procedures, or demonstrating awareness of their duty to protect. This includes situations involving potential abuse, neglect, financial exploitation, or self-harm — and also includes a worker simply expressing that they were worried about someone and did something about it.
 
-WELL-LED: discussing org values, vision or cultural expectations → QS Well-led 1; the supervision itself demonstrating inclusive/compassionate leadership → QS Well-led 2; raising a concern, speaking up, or manager inviting challenge → QS Well-led 3; workforce equality, diversity, inclusion → QS Well-led 4; policies, procedures, audits, governance, CQC compliance → QS Well-led 5/Reg 17; working with external partners or agencies → QS Well-led 6; reflecting on learning, quality improvement, innovation → QS Well-led 7."""
+QS Safe 4 — Involving people in safety decisions
+This standard is about working WITH a person to understand and manage risk — not assessing risk and restricting them without their involvement. Map it whenever a worker describes discussing a risk WITH a service user, explaining why something is a concern, or supporting someone to take a risk they have chosen. The key signal: the person's own voice was part of the risk conversation.
+
+QS Safe 5 — Safe environments
+This standard is about maintaining a physically safe care environment. Map it whenever a worker mentions checking, repairing, reporting, or questioning the safety of equipment, premises, or the care environment.
+
+QS Safe 6 — Safe and effective staffing (also Reg 18)
+This standard is about whether staff are competent, supported and appropriately deployed. The supervision meeting itself is direct evidence — it demonstrates the organisation invests in staff support and oversight. Beyond that, map it whenever training is discussed, workload or capability concerns are raised, support from a manager is described, or the worker talks about whether they feel equipped to do their job.
+
+QS Safe 7 — Infection prevention and control
+This standard is about hygiene and preventing the spread of infection. Map it whenever any IPC-related practice is mentioned, however routine — handwashing, wearing gloves or PPE, cleaning procedures, managing an infectious situation, or following isolation protocols.
+
+QS Safe 8 — Medicines optimisation (also Reg 12)
+This standard is about safe handling, administration and recording of medications. Map it whenever medication is mentioned in any context — routine administration, a medication error, uncertainty about a dose, checking a MAR chart, administering controlled drugs, or a medication-related concern. Any engagement with medicines in the transcript is evidence of this standard.
+
+── EFFECTIVE ─────────────────────────────────────────────────────────────────
+
+QS Effective 1 — Assessing needs and planning care (also Reg 9)
+This standard is about understanding what a person actually needs and ensuring care reflects that. Map it whenever a worker or manager describes reviewing or updating an assessment, noticing that someone's needs have changed, or questioning whether the current care plan still fits. Does not require formal assessment language: "I noticed she was struggling more" or "the plan doesn't really reflect where she is now" are both evidence of this standard.
+
+QS Effective 2 — Best practice and evidence-based care
+This standard is about delivering care in line with established knowledge, training, and professional guidance. Map it whenever a worker describes following a care plan, a procedure, or a training-informed approach. Any reference to "the way we're supposed to do it", a technique learned in training, or a protocol being followed is evidence.
+
+QS Effective 3 — Multi-disciplinary and inter-agency working
+This standard is about working across professional boundaries to coordinate care. Map it whenever a worker mentions any contact with a professional from another service — GP, district nurse, social worker, hospital team, occupational therapist, or any other agency or service. The contact does not need to be described in detail; mentioning it happened is sufficient evidence.
+
+QS Effective 4 — Supporting independence and health promotion
+This standard is about actively enabling a person to do things for themselves rather than just doing everything for them. Map it whenever a worker describes encouraging a person to maintain or develop a capability, supporting healthy choices, or taking a reablement approach. The key signal: the worker is working toward the person being MORE able, not just caring for them.
+
+QS Effective 5 — Monitoring outcomes and improving
+This standard is about checking whether care is working and whether the person's situation is changing. Map it whenever a worker describes noticing a change in someone's condition, reporting that something is getting better or worse, or escalating because an approach is not working.
+
+QS Effective 6 — Consent, capacity and best interests (also Reg 11)
+This standard is about ensuring people give genuine consent to their care, and managing situations where the ability to consent is uncertain. Map it whenever a worker describes asking permission, explaining what they are about to do, checking someone understood, or navigating a situation where a person's decision-making capacity was a factor. "I always ask first" is consent evidence. "She said yes so I went ahead" is consent evidence. "We had to think about what was best for her" is capacity and best-interests evidence.
+
+── CARING ────────────────────────────────────────────────────────────────────
+
+QS Caring 1 — Kindness, compassion and dignity
+This is the most commonly under-evidenced standard because the evidence is not in compliance language — it is in the texture of how a worker talks about their work. This standard is evidenced whenever a worker demonstrates they noticed, cared about, or responded to the emotional state, preferences, or humanity of a person — not just completed a task. A worker who mentions staying a bit longer because someone seemed unsettled, adjusting their pace because someone was having a hard day, taking time to have a proper conversation, or noticing that a person seemed different is demonstrating this standard. Map it whenever the worker shows they were present with the person, not just executing tasks. Do not require the word "caring" or "compassionate".
+
+QS Caring 2 — Treating people as individuals
+This standard is about recognising and responding to a person as unique — with their own history, preferences, personality, culture and identity. Map it whenever a worker describes doing something specifically because of who this particular person is. "She likes it done a certain way" is evidence. "He doesn't like being called by his first name" is evidence. "I know she's religious so that matters to how we do things" is evidence.
+
+QS Caring 3 — Independence, choice and control
+This standard is about supporting a person to exercise agency over their own life. Map it whenever a worker describes offering a genuine choice, respecting a decision even when they had reservations about it, or actively supporting someone to do something for themselves. "It was her choice" is evidence. "I gave her options" is evidence. "He didn't want to and I respected that" is evidence.
+
+QS Caring 4 — Responding to people's immediate needs
+This standard is about being attentive and responsive in the moment — adjusting to what a person needs right now rather than following a fixed task list. Map it whenever a worker describes noticing something in the moment and adapting accordingly: pausing a task because someone was distressed, staying longer because it was needed, or responding to something unexpected that happened during a visit.
+
+QS Caring 5 — Supporting workforce wellbeing and development
+This standard is about the organisation and manager actively caring for and investing in the worker. The supervision meeting itself is strong evidence of this standard — the manager is spending dedicated time on the worker's wellbeing and development. Further evidence includes: the manager checking how the worker is doing, discussing workload, following up on a previous commitment, offering support for a difficult situation, or the worker describing feeling valued, heard, or supported.
+
+Reg 10 — Dignity and respect
+This regulation is about maintaining every person's dignity and treating them with respect in every interaction — physical dignity during personal care, psychological dignity in how they are spoken about, and social dignity in being treated as a capable adult. Map it whenever a worker describes how they approach personal care, how they speak about service users, or how they handled a sensitive moment. Knocking before entering, explaining what you are doing before you do it, maintaining privacy, not discussing a person in front of others — all are Reg 10 evidence. This is frequently missed because workers describe these behaviours as routine rather than highlighting them as significant.
+
+── RESPONSIVE ────────────────────────────────────────────────────────────────
+
+QS Responsive 1 — Personalised care and support (also Reg 9)
+This standard is about care that is shaped around what this individual person wants and needs — co-produced with them and flexible to their changing circumstances. Map it whenever care is described as having been adjusted, updated, or personalised in response to what the person has expressed. "We changed it because she wanted it different" is evidence. "The plan doesn't reflect what he wants now" is evidence.
+
+QS Responsive 2 — Flexible and coordinated care
+This standard is about the service adapting to what a person needs across settings and over time. Map it whenever care is described as having been flexed — different timing, different approach, adapted when circumstances changed — or when the worker describes coordination with other services around a single person.
+
+QS Responsive 3 — Information and communication
+This standard is about ensuring people receive information in a way they can understand and use. Map it whenever a worker describes explaining something to a service user or family member, checking they understood, adapting how they communicated to suit the person, or ensuring someone was kept informed. "I made sure she knew what was happening" is evidence. "I explained it in plain language" is evidence.
+
+QS Responsive 4 — Feedback, concerns and complaints (also Reg 16)
+This standard is about taking feedback and concerns seriously and acting on them. Map it whenever a worker or service user raised a concern, gave feedback, made a complaint, or where the worker describes escalating something on a person's behalf. "She wasn't happy so I passed it on" is evidence. "I raised it because I didn't think it was right" is evidence.
+
+QS Responsive 5 — Equitable access to care and treatment
+This standard is about ensuring people can access the care and support they are entitled to. Map it whenever a worker describes helping someone access a service, facilitating a referral, or flagging that someone was not getting what they needed.
+
+QS Responsive 6 — Equality, diversity and protected characteristics
+This standard is about recognising that different backgrounds and identities create different needs, and adapting care accordingly. Map it whenever a worker describes adapting their approach because of a person's language, culture, religion, disability, gender, sexuality, or any protected characteristic.
+
+QS Responsive 7 — Advance care planning and end-of-life care
+This standard is about planning ahead for future care needs, particularly around a person's wishes for end of life. Map it whenever advance directives, DNACPR, palliative care, end-of-life preferences, or conversations about what a person would want in the future are mentioned.
+
+── WELL-LED ──────────────────────────────────────────────────────────────────
+
+QS Well-led 1 — Shared vision, values and culture
+This standard is about the organisation's values being genuinely understood and embedded in how staff work — not just posted on a wall. Map it whenever a worker or manager connects their actions or decisions to what the organisation stands for, references expectations about how things should be done, or describes a cultural norm in how the team operates.
+
+QS Well-led 2 — Inclusive and compassionate leadership
+The supervision meeting itself is direct evidence of this standard — a manager engaging in dedicated, attentive one-to-one supervision is inclusive, compassionate leadership in practice. Additionally map it whenever: the manager follows up on previous commitments, the worker describes feeling heard or supported, the manager adapts their approach to the worker's needs, or the quality of the supervisory relationship visible in this transcript demonstrates active investment in the worker.
+
+QS Well-led 3 — Freedom to speak up, psychological safety
+This standard is about whether staff feel safe to raise concerns, challenge things they disagree with, or ask questions without fear. Map it whenever a worker describes having raised a concern, feels able to speak honestly, or when the manager actively creates space for challenge or honest feedback in this transcript.
+
+QS Well-led 4 — Workforce equality, diversity and inclusion
+This standard is about the organisation ensuring fair treatment and full inclusion for all staff. Map it whenever equality, diversity or inclusion in the workforce is discussed — the worker's own experience of inclusion, training on equality, or the manager discussing equitable treatment of staff.
+
+QS Well-led 5 — Governance, management and accountability (also Reg 17)
+This standard is about whether systematic processes are in place to ensure safe, well-managed care. Map it whenever a worker describes following a formal procedure, referencing a policy, participating in an audit, understanding the governance structure, or knowing what the process is when something goes wrong.
+
+QS Well-led 6 — Partnerships and external working
+This standard is about the organisation working constructively with external partners — commissioners, local authorities, other services, regulators. Map it when a worker or manager references a formal relationship with an external body or describes work done in partnership at an organisational level (distinct from individual MDT contacts, which map to QS Effective 3).
+
+QS Well-led 7 — Learning, innovation and improvement
+This standard is about a culture of continuous improvement — reflecting on practice, learning from experience, and actively seeking to do things better. Map it whenever a worker or manager describes what they learned from an experience, how something changed for the better, or what they want to develop. "I've been thinking about how to do that differently" is evidence. Post-supervision reflection on the quality of the session itself is evidence.
+
+── STANDALONE REGULATIONS ────────────────────────────────────────────────────
+
+Reg 14 — Nutrition and hydration
+This regulation is about ensuring people receive adequate food and drink that meets their needs. Map it whenever a worker mentions meals, dietary needs, monitoring food or fluid intake, nutrition concerns, weight changes, or MUST scoring. Any engagement with eating, drinking, or nutrition in the transcript maps here.
+
+Reg 20 — Duty of candour
+This regulation is about being open and transparent when things go wrong — informing and apologising to people affected. Map it whenever a worker or manager describes communicating openly about an error or adverse event, apologising to a service user or family, or demonstrating that the organisation expects honesty about mistakes."""
 
     elif jurisdiction == "wales":
         domain_guide = """
