@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 58: Verified all 5 code changes for the processing_failed bug fix. 25/25 tests passed. Core changes confirmed: (1) INSERT INTO analyses now has exactly 9 columns (custom_mappings removed), (2) separate try/except UPDATE for custom_mappings exists, (3) exception handler stores error in meetings.processing_error, (4) init_db.py has all required ALTER TABLE IF NOT EXISTS guards, (5) MeetingReport.js shows processing_error in a red mono box when status=processing_failed. GET /api/meetings/{id} confirmed to return processing_error field (NULL for new meetings). Backend starts cleanly. Frontend loads without errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_processing_error_iter58.py",
+    "/app/test_reports/pytest/processing_error_iter58.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "processing.py lines 276-288: INSERT INTO analyses confirmed — exactly 9 columns: id, meeting_id, org_id, summary, actions, risks, cqc_mappings, care_cert_mappings, created_at. No custom_mappings, no edited_summary, no last_edited_at. This is the target 9-column schema-safe insert.",
+    "processing.py lines 290-296: Separate try/except UPDATE for custom_mappings exists and logs a warning on failure — correct pattern for optional columns.",
+    "processing.py lines 328-335: Exception handler sets status='processing_failed' and stores str(e)[:500] in meetings.processing_error. Both in a single UPDATE.",
+    "init_db.py line 523: ALTER TABLE meetings ADD COLUMN IF NOT EXISTS processing_error TEXT — confirmed.",
+    "init_db.py lines 529-530: ALTER TABLE analyses ADD COLUMN IF NOT EXISTS custom_mappings and pii_redactions — both confirmed.",
+    "MeetingReport.js lines 635-639: Conditional render of meeting.processing_error in red mono box (text-red-600 font-mono bg-red-50 border-red-200) — confirmed.",
+    "Note: No processing_failed meetings currently exist in DB, so end-to-end error-surface test can only be done after a real processing failure in production. The surfacing mechanism is verified at code level and via API field presence test."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_processing_error_iter58.py"
+  ],
+  "success_rate": {
+    "backend": "100% (25/25 tests passed)",
+    "frontend": "100% — app loads, login works, no JS errors"
+  },
+  "test_credentials": "admin@supervision.com / Admin123!",
+  "seed_data_creation": "One TEST_ProcessingError_ meeting created and immediately deleted to test processing_error field in GET response",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 5 iteration-58 changes confirmed passing: (1) 9-col INSERT, (2) separate custom_mappings UPDATE with try/except, (3) processing_error stored on failure, (4) init_db ALTER TABLE guards, (5) MeetingReport.js red error box. Test file: /app/backend/tests/test_processing_error_iter58.py (25 tests, 100% pass). Public URL: https://evidence-link-4.preview.emergentagent.com is reachable. No processing_failed meetings exist in DB at time of testing — the processing_error surfacing can only be end-to-end verified after a real failure retry in production.",
+  "rca_of_issue": "Previous iteration (57) had a 10-column INSERT that included custom_mappings — which may not exist in older production DB schemas. This iteration removes custom_mappings from the INSERT (now 9 columns guaranteed-safe) and instead updates it via a separate try/except UPDATE that safely skips if the column doesn't exist. Additionally, the exception handler now stores the actual error message in meetings.processing_error so that after a failed retry, the UI can surface the exact failure reason (e.g., column does not exist, LLM error, etc.) in a red mono box on the MeetingReport page."
+}

@@ -632,6 +632,11 @@ export default function MeetingReport() {
             <div className="text-center">
               <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
               <h3 className="font-semibold text-gray-900 mb-1">Processing failed</h3>
+              {meeting?.processing_error && (
+                <p className="text-xs text-red-600 font-mono bg-red-50 border border-red-200 rounded px-3 py-2 mb-3 max-w-md text-left break-words">
+                  {meeting.processing_error}
+                </p>
+              )}
               <p className="text-sm text-gray-500 mb-4">Please try re-uploading the recording.</p>
               <RetryButton meetingId={meetingId} onRetry={fetchMeeting} API={API} getAuthConfig={getAuthConfig} />
             </div>

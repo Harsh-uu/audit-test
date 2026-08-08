@@ -272,22 +272,30 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         analysis_id = str(uuid.uuid4())
         async with database.with_admin() as conn:
+            # Core INSERT — only columns guaranteed to exist in any schema version
             await conn.execute(
                 """INSERT INTO analyses
                    (id, meeting_id, org_id, summary, actions, risks,
-                    cqc_mappings, care_cert_mappings, custom_mappings, created_at)
-                   VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10)""",
+                    cqc_mappings, care_cert_mappings, created_at)
+                   VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9)""",
                 analysis_id, meeting_id, meeting_org_id,
                 analysis_result.get("summary", ""),
                 json.dumps(analysis_result.get("actions", [])),
                 json.dumps(analysis_result.get("risks", [])),
                 json.dumps(analysis_result.get("cqc_mappings", [])),
                 json.dumps(analysis_result.get("care_cert_mappings", [])),
-                json.dumps(analysis_result.get("custom_mappings", [])),
                 now,
             )
+            # Optional UPDATE for columns added after initial schema — safe to fail
+            try:
+                await conn.execute(
+                    "UPDATE analyses SET custom_mappings=$1::jsonb WHERE id=$2",
+                    json.dumps(analysis_result.get("custom_mappings", [])), analysis_id,
+                )
+            except Exception as _col_err:
+                logger.warning(f"custom_mappings update skipped (column may not exist yet): {_col_err}")
             await conn.execute(
-                "UPDATE meetings SET analysis_id=$1, status='in_review', updated_at=$2 WHERE id=$3",
+                "UPDATE meetings SET analysis_id=$1, status='in_review', processing_error=NULL, updated_at=$2 WHERE id=$3",
                 analysis_id, datetime.now(timezone.utc).isoformat(), meeting_id,
             )
         logger.info(f"Analysis complete for meeting {meeting_id}")
@@ -318,11 +326,12 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             logger.warning(f"Prep coverage check non-fatal failure for {meeting_id}: {cov_exc}")
 
     except Exception as e:
-        logger.error(f"Processing failed for meeting {meeting_id}: {e}")
+        err_msg = str(e)[:500]
+        logger.error(f"Processing failed for meeting {meeting_id}: {err_msg}")
         async with database.with_admin() as conn:
             await conn.execute(
-                "UPDATE meetings SET status='processing_failed', updated_at=$1 WHERE id=$2",
-                datetime.now(timezone.utc).isoformat(), meeting_id,
+                "UPDATE meetings SET status='processing_failed', processing_error=$1, updated_at=$2 WHERE id=$3",
+                err_msg, datetime.now(timezone.utc).isoformat(), meeting_id,
             )
 
 

@@ -520,11 +520,14 @@ ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_edited_at TEXT;
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_colors JSONB NOT NULL DEFAULT '{}';
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS updated_at TEXT;
 
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS processing_error TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS last_edited_by TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS rescanned_at TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS rescanned_by_name TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS edited_summary TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS last_edited_at TEXT;
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS custom_mappings JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS pii_redactions JSONB NOT NULL DEFAULT '[]';
 
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_at TEXT;
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by TEXT;
