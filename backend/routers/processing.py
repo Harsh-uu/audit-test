@@ -24,6 +24,15 @@ def _jlist(val):
     return val or []
 
 
+def _jdict(val):
+    """Parse a JSONB value that asyncpg may return as a raw string; returns a dict."""
+    if isinstance(val, dict): return val
+    if isinstance(val, str):
+        try: return json.loads(val)
+        except Exception: return {}
+    return val or {}
+
+
 async def _get_rolled_actions(conn, supervisee_ids: list, current_meeting_id: str, manager_id: str = None, attendee_names: list = None) -> list:
     """Return incomplete actions from previous meetings relevant to these supervisees."""
     if not supervisee_ids:
@@ -67,7 +76,7 @@ async def _get_rolled_actions(conn, supervisee_ids: list, current_meeting_id: st
         if not analysis_row:
             continue
 
-        for action in (analysis_row["actions"] or []):
+        for action in _jlist(analysis_row["actions"]):
             if action.get("completed") or action.get("is_rolled_over"):
                 continue
             key = (prev["id"], action.get("id", ""))
@@ -206,8 +215,8 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 tmpl_row = await conn.fetchrow(
                     "SELECT data FROM settings WHERE id='supervision_template'"
                 )
-        if tmpl_row and (tmpl_row["data"] or {}).get("steps"):
-            supervision_template = tmpl_row["data"]
+        if tmpl_row and _jdict(tmpl_row["data"]).get("steps"):
+            supervision_template = _jdict(tmpl_row["data"])
 
         # Fetch rolled-over actions
         attendees = _jlist(meeting.get("attendees"))
@@ -315,10 +324,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 prep_row = await conn.fetchrow(
                     "SELECT * FROM meeting_prep WHERE meeting_id=$1", meeting_id
                 )
-            if prep_row and (prep_row.get("sections") or []):
+            if prep_row and _jlist(prep_row.get("sections")):
                 from utils.ai import check_prep_coverage
                 all_questions = []
-                for section in (prep_row["sections"] or []):
+                for section in _jlist(prep_row.get("sections")):
                     for q in section.get("questions", []):
                         if q.get("included", True) and q.get("text"):
                             all_questions.append({"id": q["id"], "text": q["text"]})
