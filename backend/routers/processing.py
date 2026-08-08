@@ -204,7 +204,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
         attendees = meeting.get("attendees") or []
         attendee_ids = [a.get("user_id") for a in attendees]
         attendee_names = [a.get("name") for a in attendees]
-        manager_name = meeting.get("sign_off_manager_name") or "Manager"
+        manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or "Manager"
         manager_id = meeting.get("sign_off_manager_id")
 
         async with database.with_admin() as conn:
@@ -476,7 +476,7 @@ async def diarize_meeting_transcript(
     if not transcript_text:
         raise HTTPException(status_code=400, detail="Transcript text is empty")
 
-    manager_name = meeting.get("sign_off_manager_name") or "Manager"
+    manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or "Manager"
     attendees = meeting.get("attendees") or []
     attendee_names = [a.get("name") for a in attendees if a.get("name")]
     meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
@@ -577,7 +577,7 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
             await conn.execute("UPDATE meetings SET diarize_status='failed' WHERE id=$1", meeting_id)
         return
 
-    manager_name = meeting.get("sign_off_manager_name") or "Manager"
+    manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or "Manager"
     attendees = meeting.get("attendees") or []
     attendee_names = [a.get("name") for a in attendees if a.get("name")]
     meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
