@@ -1287,17 +1287,20 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
                       "evidence_rescan": "Evidence re-scanned", "post_signoff_evidence_edit": "Evidence edited after sign-off",
                       "risk": "Risk item updated", "action_completion": "Action item updated",
                       "summary_regenerated": "Summary regenerated (AI)"}
-    async with database.with_org(org_id) as conn:
-        edit_rows = await conn.fetch(
-            "SELECT * FROM review_edits WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id,
-        )
-    for edit in edit_rows:
-        edit = dict(edit)
-        edit_type = edit.get("action", "unknown")
-        is_post_signoff = edit_type == "post_signoff_evidence_edit"
-        events.append({"type": f"edit_{edit_type}", "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
-                       "actor": edit.get("user_name", "Unknown"), "timestamp": edit.get("timestamp", ""),
-                       "detail": edit.get("detail"), "flagged": is_post_signoff})
+    try:
+        async with database.with_org(org_id) as conn:
+            edit_rows = await conn.fetch(
+                "SELECT * FROM review_edits WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id,
+            )
+        for edit in edit_rows:
+            edit = dict(edit)
+            edit_type = edit.get("action", "unknown")
+            is_post_signoff = edit_type == "post_signoff_evidence_edit"
+            events.append({"type": f"edit_{edit_type}", "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
+                           "actor": edit.get("user_name", "Unknown"), "timestamp": edit.get("timestamp", ""),
+                           "detail": edit.get("detail"), "flagged": is_post_signoff})
+    except Exception:
+        pass
 
     for a in _jlist(meeting.get("attendees")):
         if a.get("reviewed") and a.get("reviewed_at"):
@@ -1310,13 +1313,16 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
                        "actor": sign_off.get("signed_by_name", "Unknown"),
                        "timestamp": sign_off.get("signed_at", ""), "detail": None})
 
-    async with database.with_org(org_id) as conn:
-        c_rows = await conn.fetch("SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id)
-    for c in c_rows:
-        c = dict(c)
-        text = c.get("text", "")
-        events.append({"type": "comment_added", "label": "Comment added", "actor": c.get("user_name", "Unknown"),
-                       "timestamp": c.get("created_at", ""), "detail": text[:100] + ("…" if len(text) > 100 else "")})
+    try:
+        async with database.with_org(org_id) as conn:
+            c_rows = await conn.fetch("SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id)
+        for c in c_rows:
+            c = dict(c)
+            text = c.get("text", "")
+            events.append({"type": "comment_added", "label": "Comment added", "actor": c.get("user_name", "Unknown"),
+                           "timestamp": c.get("created_at", ""), "detail": text[:100] + ("…" if len(text) > 100 else "")})
+    except Exception:
+        pass
 
     label_map_audit = {"speaker_correction": "Speaker labels edited", "transcript_text_edited": "Transcript text edited",
                        "speaker_reset": "Speaker labels reset to raw transcript",
@@ -1328,14 +1334,17 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
                        "reopen_requested": "Re-open requested",
                        "reopen_approved": "Re-open approved",
                        "meeting_shared": "Meeting shared with reviewer"}
-    async with database.with_org(org_id) as conn:
-        log_rows = await conn.fetch("SELECT * FROM audit_logs WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id)
-    for log in log_rows:
-        log = dict(log)
-        action = log.get("action", "unknown")
-        events.append({"type": action, "label": label_map_audit.get(action, action.replace("_", " ").title()),
-                       "actor": log.get("user_name", "System"), "timestamp": log.get("timestamp", ""),
-                       "detail": log.get("detail")})
+    try:
+        async with database.with_org(org_id) as conn:
+            log_rows = await conn.fetch("SELECT * FROM audit_logs WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id)
+        for log in log_rows:
+            log = dict(log)
+            action = log.get("action", "unknown")
+            events.append({"type": action, "label": label_map_audit.get(action, action.replace("_", " ").title()),
+                           "actor": log.get("user_name", "System"), "timestamp": log.get("timestamp", ""),
+                           "detail": log.get("detail")})
+    except Exception:
+        pass
 
     if (meeting.get("audio_deletion_status") == "deleted") and meeting.get("audio_deleted_at"):
         events.append({"type": "audio_deleted", "label": "Raw audio deleted (GDPR)", "actor": "System",

@@ -150,7 +150,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Staffing",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+      "confidence": "needs_review|likely_evidence|not_enough_evidence"
     },
     {
       "id": "cqc_2",
@@ -158,7 +158,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Kindness, compassion and dignity",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+      "confidence": "needs_review|likely_evidence|not_enough_evidence"
     }
   ],
   "care_cert_mappings": [
@@ -170,7 +170,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "outcome_name": "Describe the processes for identifying own learning needs",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+      "confidence": "needs_review|likely_evidence|not_enough_evidence"
     }
   ],
   "custom_mappings": [
@@ -182,7 +182,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "criterion_name": "Compassion",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+      "confidence": "needs_review|likely_evidence|not_enough_evidence"
     }
   ]
 }
@@ -190,12 +190,12 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 Rules:
 - Map evidence that is described, demonstrated, or shown through practice narration, explained reasoning, or confirmed observation. Do NOT require speakers to name the regulation or standard — map what they describe doing or understanding.
 - For CQC mappings, use `regulation_ref` for BOTH Regulations (e.g. "Regulation 18") AND Quality Statements (e.g. "QS Caring 1", "QS Safe 3", "QS Well-led 2"). Quality Statements are first-class evidence items — map to them whenever the described behaviour matches, even if no Regulation is also applicable. Do not restrict mappings to Regulations only.
-- CONFIDENCE RULES — read these carefully before assigning any confidence value:
-  - "needs_review" is the DEFAULT confidence. Start here and only upgrade if the evidence clearly meets the bar below.
-  - Use "likely_evidence" ONLY when ALL THREE of these are true: (1) the worker describes a specific real situation they personally encountered; (2) they explicitly state what they did or decided in response; AND (3) their described action matches what best practice requires. A worker simply explaining a policy, describing what they would do hypothetically, or agreeing with the manager's statement does NOT meet this bar — use "needs_review".
-  - Use "needs_review" for: any discussion, partial description, hypothetical, general awareness statement, situation where the worker noticed something but did not describe an appropriate response, agreement without elaboration, or any case where you are not certain the three criteria for "likely_evidence" are all met.
-  - Use "not_enough_evidence" only when a topic is mentioned in passing (a single sentence or a vague reference) with no substantive discussion at all.
-  - When in doubt between "likely_evidence" and "needs_review", always choose "needs_review".
+- CONFIDENCE GATE — apply this exact three-question test before assigning any confidence value. The ONLY valid output values are: needs_review, likely_evidence, not_enough_evidence.
+  Step 1: Did the worker or manager describe a specific, real situation that actually occurred (not a hypothetical, not a policy statement, not an agreement)? → If NO → use "not_enough_evidence" if the topic was barely mentioned, otherwise "needs_review".
+  Step 2: Did they explicitly state what THEY did or decided in response to that situation? → If NO → use "needs_review".
+  Step 3: Is their described action clearly consistent with best practice (not passive, not incomplete, not ambiguous)? → If NO → use "needs_review".
+  Only if the answer to ALL THREE is YES → use "likely_evidence".
+  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass Step 1. These must be "needs_review".
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h", "13.9c"). Use the exact sub-outcome ref and its description as provided in the standards context below. One evidence item = one sub-outcome ref. Create separate mapping entries if evidence covers multiple sub-outcomes.
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
 - If no custom standards are provided, return custom_mappings as an empty array []
@@ -205,7 +205,7 @@ Rules:
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
 - Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections.
 - For RISKS: when a worker describes noticing a concern but failing to escalate, record, or act on it appropriately, the risk text must capture the ACTION GAP — not just the underlying concern. Frame it as what was missed or what requires follow-up (e.g. "Possible welfare indicator noted but not escalated or recorded — requires investigation" rather than "potential self-harm risk"). The suggested_resolutions must include both the immediate escalation action AND a training implication for the worker who missed it.
-- For RISKS: also detect SUPERVISEE WELLBEING SIGNALS — expressions from the person being supervised that suggest they may be struggling with their own health, wellbeing, or self-perception at work. Flag these as risks regardless of whether an action was already agreed in the meeting. Specific patterns to watch for: expressing tiredness, exhaustion, or fatigue (especially if mentioned more than once — repetition is itself a signal of severity); saying they feel they are not performing well, not doing a good job, or doubting their own competence; describing feeling overwhelmed, stressed, or unable to cope; emotional distress indicators. When multiple wellbeing signals appear across the same meeting, generate a single consolidated risk describing the overall pattern rather than individual entries per mention. Use severity "high" if the worker appears distressed or repeats the concern three or more times; "medium" for one or two mentions. Risk text example: "Worker expressed tiredness and self-doubt about performance repeatedly across the session — potential welfare and burnout concern requiring pastoral follow-up." Suggested resolutions should include: pastoral follow-up before next supervision, EAP signposting if not already offered, workload review, and a manager note to monitor.
+- For RISKS: also detect SUPERVISEE WELLBEING SIGNALS — expressions from the person being supervised that suggest they may be struggling with their own health, wellbeing, or self-perception at work. Flag these as risks regardless of whether an action was already agreed in the meeting. Specific patterns to watch for: expressing tiredness, exhaustion, or fatigue (especially if mentioned more than once — repetition is itself a signal of severity); describing feeling overwhelmed, stressed, or unable to cope; expressing general emotional distress or low mood about their work. IMPORTANT DISTINCTION: a worker saying "I felt bad for not doing X" or "I should have reported that" is NOT a wellbeing signal — that is guilt about a specific action gap and belongs in the action gap risks category. A wellbeing signal is about the person's general personal state (e.g. "I'm really tired", "I've been struggling lately", "I don't feel myself"), NOT about remorse over a specific professional incident. When multiple genuine wellbeing signals appear across the same meeting, generate a single consolidated risk describing the overall pattern rather than individual entries per mention. Use severity "high" if the worker appears distressed or repeats the concern three or more times; "medium" for one or two mentions. Risk text example: "Worker expressed repeated tiredness across the session — potential welfare concern requiring pastoral follow-up." Suggested resolutions should include: pastoral follow-up before next supervision, EAP signposting if not already offered, workload review, and a manager note to monitor.
 - For ACTIONS: when a risk arises from a worker's insufficient response (missed escalation, not recording a concern, not following a protocol), always generate a paired training action item assigned to the supervisor — not just an action on the concern itself. This ensures supervision gaps are captured, not just clinical risks."""
 
 
@@ -615,7 +615,7 @@ async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
     system = """Map evidence from a meeting transcript against provided criteria.
 Evidence includes described practice ("I always do X"), explained reasoning ("I did it because..."), manager-confirmed observations, and identified learning needs. You do NOT require the criterion to be named explicitly — map based on what participants describe doing or understanding.
 Return valid JSON only:
-{"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "likely_evidence|needs_review|not_enough_evidence"}]}
+{"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "needs_review|likely_evidence|not_enough_evidence"}]}
 Only include criteria with actual evidence. Return empty mappings array if nothing found."""
 
     chat = await _openai_chat("o4-mini", system, f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\nTranscript:\n{transcript_text[:5000]}", reasoning_effort="high")
@@ -798,7 +798,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Staffing",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
-      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+      "confidence": "needs_review|likely_evidence|not_enough_evidence"
     },
     {
       "id": "cqc_2",
@@ -806,7 +806,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Safeguarding",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
-      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+      "confidence": "needs_review|likely_evidence|not_enough_evidence"
     }
   ],
   "care_cert_mappings": [
@@ -818,7 +818,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "outcome_name": "Describe the processes for identifying own learning needs",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
-      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+      "confidence": "needs_review|likely_evidence|not_enough_evidence"
     }
   ],
   "custom_mappings": [
@@ -830,24 +830,24 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "criterion_name": "Compassion",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
-      "confidence": "likely_evidence|needs_review|not_enough_evidence"
+      "confidence": "needs_review|likely_evidence|not_enough_evidence"
     }
   ]
 }
 
 Rules:
 - Map evidence that is described, demonstrated, or recorded in the document — including described practice, noted observations, identified learning needs, or explained reasoning. Do not require the standard or regulation to be named.
-- CONFIDENCE RULES — read these carefully before assigning any confidence value:
-  - "needs_review" is the DEFAULT confidence. Start here and only upgrade if the evidence clearly meets the bar below.
-  - Use "likely_evidence" ONLY when ALL THREE of these are true: (1) the worker describes a specific real situation they personally encountered; (2) they explicitly state what they did or decided in response; AND (3) their described action matches what best practice requires. A worker simply explaining a policy, describing what they would do hypothetically, or agreeing with the manager's statement does NOT meet this bar — use "needs_review".
-  - Use "needs_review" for: any discussion, partial description, hypothetical, general awareness statement, situation where the worker noticed something but did not describe an appropriate response, agreement without elaboration, or any case where you are not certain all three criteria for "likely_evidence" are met.
-  - Use "not_enough_evidence" only when a topic is mentioned in passing (a single sentence or vague reference) with no substantive discussion at all.
-  - When in doubt between "likely_evidence" and "needs_review", always choose "needs_review".
+- CONFIDENCE GATE — apply this exact three-question test before assigning any confidence value. The ONLY valid output values are: needs_review, likely_evidence, not_enough_evidence.
+  Step 1: Did the worker or manager describe a specific, real situation that actually occurred (not a hypothetical, not a policy statement, not an agreement)? → If NO → use "not_enough_evidence" if the topic was barely mentioned, otherwise "needs_review".
+  Step 2: Did they explicitly state what THEY did or decided in response to that situation? → If NO → use "needs_review".
+  Step 3: Is their described action clearly consistent with best practice (not passive, not incomplete, not ambiguous)? → If NO → use "needs_review".
+  Only if the answer to ALL THREE is YES → use "likely_evidence".
+  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass Step 1. These must be "needs_review".
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h")
 - For custom_mappings, only include entries if custom standards are provided AND there is actual evidence
 - If no custom standards provided, return custom_mappings as an empty array []
 - Generate unique IDs for each item (e.g. "cqc_1", "cc_1", "custom_1")
-- For RISKS: also detect SUPERVISEE WELLBEING SIGNALS — expressions from the person being supervised that suggest they may be struggling with their own health, wellbeing, or self-perception. Flag tiredness (especially if repeated), self-doubt about performance, stress, or inability to cope as medium/high risks. When multiple wellbeing signals appear across the session, generate a single consolidated risk describing the overall pattern. Suggested resolutions should include pastoral follow-up, EAP signposting, workload review, and a note to monitor."""
+- For RISKS: also detect SUPERVISEE WELLBEING SIGNALS — expressions from the person being supervised that suggest they may be struggling with their own health, wellbeing, or self-perception. Flag tiredness (especially if repeated), stress, feeling overwhelmed, or inability to cope as medium/high risks. IMPORTANT DISTINCTION: "I felt bad for not doing X" is guilt about an action gap, NOT a wellbeing signal — keep those separate. A wellbeing signal is about the worker's general personal state, not remorse about a specific incident. When multiple genuine wellbeing signals appear across the session, generate a single consolidated risk describing the overall pattern. Suggested resolutions should include pastoral follow-up, EAP signposting, workload review, and a note to monitor."""
 
 
 async def analyze_doc_for_evidence(
