@@ -1,4 +1,6 @@
 import json
+import uuid
+import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -7,6 +9,20 @@ from deps import get_db, get_current_user
 import database
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _write_audit_log(conn, meeting_id: str, org_id: str, action: str, user_id: str, user_name: str, detail: str = ""):
+    """Fallback: always write recording events to audit_logs so the audit trail is never blank."""
+    try:
+        await conn.execute(
+            "INSERT INTO audit_logs (id, meeting_id, org_id, action, user_id, user_name, detail, timestamp) "
+            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            str(uuid.uuid4()), meeting_id, org_id, action, user_id, user_name, detail,
+            datetime.now(timezone.utc).isoformat(),
+        )
+    except Exception as e:
+        logger.warning(f"audit_log write failed for {action}/{meeting_id}: {e}")
 
 
 class RecordingEventRequest(BaseModel):
@@ -37,14 +53,25 @@ async def start_recording(meeting_id: str, request: Request, current_user=Depend
     event = {"type": "started", "timestamp": ts, "user_id": current_user["id"]}
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        await conn.execute(
-            """UPDATE meetings
-               SET recording_events = recording_events || $1::jsonb,
-                   status = 'recording',
-                   updated_at = $2
-               WHERE id = $3""",
-            json.dumps([event]), datetime.now(timezone.utc).isoformat(), meeting_id,
-        )
+        try:
+            await conn.execute(
+                """UPDATE meetings
+                   SET recording_events = recording_events || $1::jsonb,
+                       status = 'recording',
+                       updated_at = $2
+                   WHERE id = $3""",
+                json.dumps([event]), datetime.now(timezone.utc).isoformat(), meeting_id,
+            )
+        except Exception as e:
+            logger.warning(f"recording_events update failed for start/{meeting_id}: {e}")
+            # Even if recording_events update fails, still set status
+            try:
+                await conn.execute("UPDATE meetings SET status='recording', updated_at=$1 WHERE id=$2",
+                                   datetime.now(timezone.utc).isoformat(), meeting_id)
+            except Exception:
+                pass
+        await _write_audit_log(conn, meeting_id, org_id, "recording_started",
+                               current_user.get("id", ""), current_user.get("name", ""), ts)
     return {"message": "Recording started", "timestamp": ts}
 
 
@@ -121,14 +148,24 @@ async def stop_recording(meeting_id: str, request: Request, current_user=Depends
     event = {"type": "stopped", "timestamp": ts, "user_id": current_user["id"]}
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        await conn.execute(
-            """UPDATE meetings
-               SET recording_events = recording_events || $1::jsonb,
-                   status = 'stopped',
-                   updated_at = $2
-               WHERE id = $3""",
-            json.dumps([event]), datetime.now(timezone.utc).isoformat(), meeting_id,
-        )
+        try:
+            await conn.execute(
+                """UPDATE meetings
+                   SET recording_events = recording_events || $1::jsonb,
+                       status = 'stopped',
+                       updated_at = $2
+                   WHERE id = $3""",
+                json.dumps([event]), datetime.now(timezone.utc).isoformat(), meeting_id,
+            )
+        except Exception as e:
+            logger.warning(f"recording_events update failed for stop/{meeting_id}: {e}")
+            try:
+                await conn.execute("UPDATE meetings SET status='stopped', updated_at=$1 WHERE id=$2",
+                                   datetime.now(timezone.utc).isoformat(), meeting_id)
+            except Exception:
+                pass
+        await _write_audit_log(conn, meeting_id, org_id, "recording_stopped",
+                               current_user.get("id", ""), current_user.get("name", ""), ts)
     return {"message": "Recording stopped", "timestamp": ts}
 
 

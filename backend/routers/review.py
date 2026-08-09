@@ -1216,9 +1216,19 @@ async def get_comments(meeting_id: str, current_user=Depends(get_current_user)):
 
 @router.get("/{meeting_id}/audit-trail")
 async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user)):
+    import logging as _log
+    _logger = _log.getLogger(__name__)
     org_id = current_user.get("org_id", "")
-    async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    try:
+        async with database.with_org(org_id) as conn:
+            m_row = await conn.fetchrow(
+                "SELECT id, org_id, title, created_at, created_by_name, recording_events, "
+                "attendees, sign_off_record, transcript_id, analysis_id "
+                "FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+            )
+    except Exception as e:
+        _logger.error(f"audit-trail meeting fetch failed for {meeting_id}: {e}")
+        return {"events": [], "error": str(e)}
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(m_row)
@@ -1333,7 +1343,11 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
                        "report_emailed": "Report emailed to recipients",
                        "reopen_requested": "Re-open requested",
                        "reopen_approved": "Re-open approved",
-                       "meeting_shared": "Meeting shared with reviewer"}
+                       "meeting_shared": "Meeting shared with reviewer",
+                       "recording_started": "Recording started",
+                       "recording_stopped": "Recording stopped",
+                       "recording_paused": "Recording paused",
+                       "recording_resumed": "Recording resumed"}
     try:
         async with database.with_org(org_id) as conn:
             log_rows = await conn.fetch("SELECT * FROM audit_logs WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id)
