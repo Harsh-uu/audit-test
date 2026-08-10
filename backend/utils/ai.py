@@ -1161,52 +1161,294 @@ This regulation is about being open and transparent when things go wrong — inf
 
     elif jurisdiction == "wales":
         domain_guide = """
-EVIDENCE DETECTION GUIDE — apply before finalising mappings:
-Workers and managers rarely name a regulation. Map based on described behaviour and attitude.
+EVIDENCE DETECTION GUIDE — read this before mapping any standard:
+Your task is not to match phrases — it is to understand what each person is DOING and THINKING, then identify which Welsh standard governs that behaviour. Workers in Wales rarely name a regulation number. Reason from the described behaviour to the standard that captures its intent.
 
-QUALITY OF CARE AND SUPPORT (CIW): worker describes person-centred care, following a personal plan, or involving a person in their care decisions → Reg 15/Reg 21; worker describes communicating appropriately with a service user, adapting language or format → Reg 23/Reg 24; worker describes treating someone with respect, sensitivity or dignity → Reg 25; discussion about continuity of care, consistent staffing → Reg 22; worker describes completing a needs assessment or ensuring the service is suitable → Reg 14.
+── QUALITY OF CARE AND SUPPORT ──────────────────────────────────────────────
 
-SAFEGUARDING (CIW): worker describes recognising, reporting or responding to abuse, neglect or harm → Reg 26/Reg 27; discussion about use of restraint, restrictive interventions, or deprivation of liberty → Reg 29/Reg 31; worker describes supporting someone to manage their finances safely → Reg 28.
+Reg 15 — Personal plan
+This regulation is about whether care is planned around what a specific individual actually needs, co-produced with them, and kept current as circumstances change. Map it whenever a worker describes reviewing, updating, or questioning whether a care plan still fits a person. Does not require formal language: "I checked with her before we changed it", "the plan doesn't really capture what he needs now", "we went through it together and she said she wanted it different" are all Reg 15 evidence. Any moment where documented planning, goal-setting or reviewing personal outcomes is mentioned connects here.
 
-STAFFING (CIW): discussion about training, qualifications, supervision or professional development → Reg 36; worker describes following the professional code of conduct or organisational values → Reg 37; discussion about receiving or sharing information necessary to do the job → Reg 38; discussion about disciplinary matters or accountability → Reg 39.
+Reg 14 — Suitability
+This regulation is about ensuring the service is genuinely able to meet a person's needs before agreeing to provide care. Map it whenever a worker describes an initial assessment, questions whether a new referral is appropriate, or recognises that a person's needs have changed to the point where the current service may no longer be adequate.
 
-LEADERSHIP AND MANAGEMENT (CIW): manager or worker discusses governance, accountability, quality monitoring → Reg 80; worker describes how a complaint or concern was handled → Reg 64; worker describes raising a concern or whistleblowing → Reg 65; discussion about records, documentation or reporting → Reg 59.
+Reg 21 — Standards of care and support (overarching)
+This is the broadest quality-of-care standard — it governs the general delivery of care in accordance with the personal plan. Map it whenever a worker describes day-to-day care that addresses a person's physical, emotional, cultural or social needs and cannot be mapped more precisely to a specific regulation. Any description of doing the job attentively and in accordance with the agreed plan is Reg 21 evidence.
 
-AWIF STANDARDS: worker discusses values, rights, dignity and a person-centred approach → AWIF 1/2; worker describes supporting a person's physical or mental health and wellbeing → AWIF 3/4; worker reflects on professional practice, learning or development → AWIF 5; worker describes safeguarding knowledge or actions → AWIF 6; discussion about health and safety in the care environment → AWIF 7.
+Reg 22 — Continuity of care
+This regulation is about a person receiving consistent, predictable care from familiar people. Map it whenever a worker or manager discusses staffing continuity — whether someone always has the same carer, how changes in staff are handled, what happens when a replacement visits. "She knows me now, so it's easier" is Reg 22 evidence. "They don't always send the same person and she finds it unsettling" is Reg 22 evidence.
 
-SCW CODE: worker describes promoting and respecting a service user's rights → SCW 1; worker describes maintaining honesty and trust with a person in their care → SCW 2; worker describes balancing wellbeing with safety and the person's voice → SCW 3; discussion about managing risk while preserving the person's rights → SCW 4; worker describes accountability, professional conduct, or acting with integrity → SCW 5; worker describes maintaining or improving their competence and knowledge → SCW 6."""
+Reg 23 / Reg 24 — Information and communication
+These regulations are about the person having information they need in a format they can actually use. Reg 23 covers the content — decisions, care choices, what is happening. Reg 24 covers the format — language, Welsh, communication aids. Map Reg 23 whenever a worker describes explaining something to a service user, checking understanding, or ensuring someone was kept informed. Map Reg 24 whenever language or communication method is discussed — adapting vocabulary, using a picture board, offering Welsh, or noting that someone communicates differently. "I always check she's understood before I leave" is Reg 23. "He uses Makaton so I sign when I can" is Reg 24. These are frequently missed because workers describe these behaviours as routine rather than significant.
+
+Reg 25 — Respect and sensitivity
+This regulation is about maintaining a person's dignity, privacy and autonomy in every interaction. Map it whenever a worker describes how they approach personal or intimate care, how they knock before entering, how they speak about someone, or how they handle a culturally sensitive situation. "I always explain what I'm doing before I start" is Reg 25. "I make sure the curtains are closed" is Reg 25. This is one of the most commonly under-evidenced regulations because workers describe this behaviour as routine rather than noting it as significant.
+
+── SAFEGUARDING ───────────────────────────────────────────────────────────────
+
+Reg 26 / Reg 27 — Safeguarding
+These regulations are about recognising that a person may be at risk and taking action. Map whenever a worker describes noticing something concerning about a person's welfare, raising or reporting a safeguarding concern, following or questioning safeguarding procedures, or demonstrating awareness of categories of harm. Does not require the word "safeguarding": "I was worried about what she told me so I reported it", "something didn't seem right so I raised it", "I wasn't sure so I flagged it" are all safeguarding evidence. Reg 26 is the overarching duty; Reg 27 covers specific policies and procedures for responding to allegations.
+
+Reg 28 — Supporting individuals to manage their money
+Map it whenever money is discussed in the context of a service user — handling cash, accompanying someone to a bank, receiving gifts, holding someone's money, or any concern that someone is being financially taken advantage of.
+
+Reg 29 / Reg 31 — Restraint and deprivation of liberty
+Map Reg 29 whenever physical control, restraint techniques, or any restrictive intervention is mentioned — even a brief reference. Map Reg 31 whenever mental capacity, Deprivation of Liberty Safeguards (DoLS), best interests decisions, or situations where a person's liberty is restricted for their own safety are discussed.
+
+── STAFFING ───────────────────────────────────────────────────────────────────
+
+Reg 34 — Staffing levels
+Map whenever workload, staffing levels, skill mix, or deployment decisions are discussed — the team being short-staffed, matching worker skills to care complexity, or capacity concerns.
+
+Reg 35 — Fitness of staff
+Map whenever recruitment processes, DBS checks, Social Care Wales registration, references, or fitness to work are mentioned.
+
+Reg 36 — Supporting and developing staff
+The supervision meeting itself is direct evidence of Reg 36 — it requires regular supervision (at least quarterly), annual appraisal, AWIF induction completion, and ongoing training. Map it whenever training is discussed, a training need is identified, AWIF or SCW registration is mentioned, or any form of professional development arises. The manager following up on a previous commitment, asking how the worker is doing, or identifying a learning need is all Reg 36 evidence. This is the most frequently evidenced regulation in supervision.
+
+Reg 38 — Information for staff
+Map whenever a worker describes knowing or not knowing the policies and information they need to do their job — references to the code of conduct, lone working arrangements, what to do in an emergency, or how to escalate concerns.
+
+Reg 39 — Disciplinary procedures
+Map when any disciplinary matter, misconduct concern, formal process, or safeguarding allegation that might trigger an employment process is discussed.
+
+── LEADERSHIP AND MANAGEMENT ────────────────────────────────────────────────
+
+Reg 80 — Quality of care review
+Map whenever a worker or manager references any form of quality audit, monitoring system, six-monthly review, governance report, or organisational quality assurance process. "We had a review of the service last month" is Reg 80 evidence.
+
+Reg 64 — Complaints
+Map whenever a complaint, a concern raised by a service user or family, or the handling of feedback is discussed. The worker does not need to use the word "complaint" — "she was unhappy about how it was handled", "I escalated the family's concern to my manager", or "we had a difficult situation with a family member" are all Reg 64 territory.
+
+Reg 65 — Whistleblowing
+Map whenever a worker describes raising a concern about the organisation or a colleague — not a safeguarding concern about a service user (that is Reg 26), but a concern about how the service is being run, a colleague's conduct, or a systemic practice that seems wrong.
+
+Reg 59 — Records
+Map whenever documentation, record-keeping, completing care notes, accuracy of records, or access to individual records is mentioned in any context.
+
+── AWIF — INDUCTION FRAMEWORK ──────────────────────────────────────────────
+
+AWIF standards map to specific knowledge domains a worker should develop during and after induction. Map them when the content of what the worker knows or is learning fits the workbook's scope.
+
+AWIF 1 / AWIF 2 — Principles and values (adults / children)
+Map when a worker discusses the underlying values that shape their approach — person-centred practice, the SSWB Act, equality and diversity, positive risk-taking, professional boundaries, or Welsh language. Reflects the worker's value base rather than a specific task.
+
+AWIF 3 / AWIF 4 — Health and well-being (adults / children)
+Map when a worker discusses anything related to a person's physical or mental health care needs — medication, nutrition, personal care, dementia, mental health, palliative care, pressure area care, or falls prevention.
+
+AWIF 5 — Professional practice
+Map when a worker reflects on their own professional responsibilities, CPD, teamwork, information handling, GDPR, data protection, or SCW registration. Any discussion of professional development, continuing learning or accountability maps here.
+
+AWIF 6 — Safeguarding
+Map when a worker demonstrates personal awareness of safeguarding responsibilities or describes how they responded to a concern. This overlaps with CIW Reg 26/27 — map both when a safeguarding conversation reflects both the regulatory requirement and the worker's own knowledge and skill.
+
+AWIF 7 — Health and safety
+Map when health and safety is discussed in any form — risk assessments, manual handling, infection control, PPE, lone working, fire safety, or stress management.
+
+── SCW WORKER'S CODE ─────────────────────────────────────────────────────────
+
+The SCW Code describes the expected conduct and professional values of the worker themselves. Map alongside CIW regulations when the worker reflects on their own behaviour, values or professional identity.
+
+SCW 1 — Rights and interests
+Map when a worker describes promoting a service user's rights, supporting their voice and choices, treating someone as an individual, or maintaining dignity and privacy in care.
+
+SCW 2 — Trust and honesty
+Map when a worker describes reliability, maintaining confidentiality, professional boundaries, or being honest with a service user or family in a difficult situation.
+
+SCW 3 — Wellbeing and safety
+Map when a worker balances a person's right to make their own choices with the responsibility to keep them safe — including escalating safeguarding concerns, following safety procedures, or being open when something went wrong.
+
+SCW 4 — Managing risk
+Map when a worker describes actively supporting a person to take an informed risk, co-producing a risk assessment, or navigating a situation where autonomy and safety are in tension.
+
+SCW 5 — Accountability
+Map when a worker describes taking responsibility for their own practice, understanding their accountability, raising concerns about poor practice, or upholding professional standards.
+
+SCW 6 — Professional development
+Map when a worker describes maintaining or improving their own knowledge and skills, engaging with training, or reflecting on their development needs and what they want to learn."""
 
     elif jurisdiction == "scotland":
         domain_guide = """
-EVIDENCE DETECTION GUIDE — apply before finalising mappings:
-Workers and managers rarely name a quality indicator. Map based on described behaviour and attitude.
+EVIDENCE DETECTION GUIDE — read this before mapping any standard:
+Your task is not to match phrases — it is to understand what each person is DOING and THINKING, then identify which Scottish standard governs that behaviour. Workers in Scotland rarely name a quality indicator. Reason from the described behaviour to the standard that captures its intent.
 
-QUALITY OF EXPERIENCE (CI 1.x): worker describes treating a person with compassion, dignity or respect → CI 1.1; worker describes supporting someone to engage in activities, interests or get the most from their life → CI 1.2; worker describes contributing to a person's health or wellbeing through their care → CI 1.3; worker describes spending meaningful time with a person or being responsive to their wishes → CI 1.4; worker describes infection prevention and control practices → CI 1.5.
+── QUALITY OF EXPERIENCE (CI 1.x) ──────────────────────────────────────────
 
-LEADERSHIP AND MANAGEMENT (CI 2.x): discussion about how organisational values shape day-to-day practice → CI 2.1; discussion about quality monitoring, audits, or service improvement → CI 2.2; worker describes working in partnership with other agencies or services → CI 2.3; the supervision itself demonstrating clear, supportive leadership by the manager → CI 2.4.
+CI 1.1 — Relationships and interactions
+This indicator is about how a worker actually shows up with the people they care for — with warmth, compassion, presence and humanity. Map it whenever a worker describes the texture of their relationship with a service user: noticing how someone was feeling, responding with kindness, adjusting their pace or approach to the person's mood. "She seemed low so I sat with her for a bit" is CI 1.1. "He always likes to have a proper chat before we start" is CI 1.1. "I stayed a bit longer because she was unsettled" is CI 1.1. This is frequently missed because workers describe these moments as informal or unremarkable rather than recognising them as evidence of quality practice.
 
-STAFF (CI 3.x): discussion about recruitment processes, pre-employment checks → CI 3.1; worker reflects on their knowledge, skills or development needs; training discussed → CI 3.2; discussion about staffing levels, skill mix, or how the team works together → CI 3.3.
+CI 1.2 — Quality of life and engagement
+This indicator is about whether a person is able to engage with life in ways that are meaningful to them — activities, interests, social connection, a sense of purpose. Map it whenever a worker describes supporting someone to do something that matters to them personally, enabling participation in activities, or helping someone stay connected to the things they enjoy. "She loves the garden so I make sure she gets out there" is CI 1.2. "He wanted to try the community café so we planned it together" is CI 1.2.
 
-SETTING (CI 4.x): worker describes the physical environment, equipment or facilities supporting care → CI 4.1; worker describes how the care environment supports independence → CI 4.2; worker describes helping a person stay connected with their community → CI 4.3.
+CI 1.3 — Health and wellbeing
+This indicator is about how care actively contributes to a person's physical and mental health. Map it whenever a worker describes monitoring a person's condition, responding to changes in health or behaviour, supporting nutrition, mobility or clinical needs, or noticing that someone's wellbeing has changed in a way that needed attention.
 
-PERSONAL PLANNING (CI 5.x): worker describes co-producing a care plan, assessing needs, or reviewing outcomes with a person → CI 5.1; worker describes how family members or carers are included in care planning → CI 5.2.
+CI 1.4 — A responsive, trusted service
+This indicator is about care that responds to what a person actually needs in the moment — attentive, flexible, led by the person. Map it whenever a worker describes pausing or adapting what they were doing because of how the person was feeling, responding to something unexpected that arose during a visit, or demonstrating that the person's immediate state shaped what happened rather than a fixed task list.
 
-SSSC CODE: worker describes promoting a service user's rights or interests → SSSC 1; worker describes maintaining honesty and the trust of a person in their care → SSSC 2; worker describes supporting a person's wellbeing and independence while managing risk → SSSC 3; discussion about supporting someone to take risks they have chosen → SSSC 4; worker describes taking responsibility for the quality of their own work or seeking development → SSSC 5; worker describes acting with integrity and maintaining public trust in social care → SSSC 6."""
+CI 1.5 — Infection prevention and control
+Map whenever any IPC-related practice is mentioned — handwashing, wearing PPE, cleaning procedures, managing an infectious illness or outbreak, or following isolation protocols. Entirely routine mentions count as evidence of this indicator.
+
+── LEADERSHIP AND MANAGEMENT (CI 2.x) ─────────────────────────────────────
+
+CI 2.1 — Vision, values and culture
+This indicator is about whether the organisation's values are genuinely embedded in how staff work — not just written on a wall. Map it whenever a worker or manager connects their actions or decisions to what the organisation stands for, references shared expectations about how things should be done, or describes a cultural norm in how the team operates. "That's just how we do things here" said with pride is CI 2.1 evidence. A manager modelling openness and care in how they conduct this supervision session is CI 2.1 evidence.
+
+CI 2.2 — Quality assurance and improvement
+Map whenever a worker or manager describes any formal quality process — audits, monitoring systems, self-evaluation, governance reviews, significant incident reviews, or systematically identifying areas for improvement.
+
+CI 2.3 — Partnership working
+Map whenever a worker mentions contact or collaboration with any professional from another service — community nurse, GP, social worker, occupational therapist, housing support, or any other external agency or body. The contact does not need to be described in detail; mentioning it happened is sufficient evidence.
+
+CI 2.4 — Staff are led well
+The supervision meeting itself is direct evidence of this indicator — a manager investing in structured, supportive one-to-one time with a worker is CI 2.4 in action. Additionally map it whenever: the worker describes feeling valued or supported, the manager follows up on a commitment from a previous session, the manager adapts to the worker's needs in this conversation, or the quality of the supervisory relationship visible in this transcript demonstrates active investment in the worker. Also map it when a worker expresses welfare concerns — fatigue, stress, feeling overwhelmed, or doubting their performance — because these signals confirm supervision is fulfilling its CI 2.4 function of surfacing and addressing staff wellbeing.
+
+── STAFF TEAM (CI 3.x) ─────────────────────────────────────────────────────
+
+CI 3.1 — Staff recruited well
+Map whenever recruitment processes, PVG (Protection of Vulnerable Groups) Scheme checks, Disclosure Scotland, SSSC registration at the point of hiring, references, or pre-employment vetting are discussed.
+
+CI 3.2 — Knowledge, competence and development
+This is the most evidence-rich staffing indicator for a supervision session. Map it whenever training is discussed, a development need is identified, qualifications or CPD are mentioned, the National Induction Framework (NIF) is referenced, SSSC registration requirements are discussed, or a worker reflects on what they have learned or what they want to learn. "I wasn't sure how to handle that so I asked my manager" is CI 3.2 evidence — it demonstrates reflective practice and seeking support. "I've been doing much better with that since the training" is CI 3.2 evidence. Any SVQ or mandatory training discussion maps here.
+
+CI 3.3 — Staffing arrangements
+Map whenever staffing levels, shift patterns, team composition, handovers, continuity of care, or deployment decisions are discussed — including concerns about the team being short-staffed, or questions about skill mix.
+
+── SETTING (CI 4.x) ────────────────────────────────────────────────────────
+
+CI 4.1 — Quality facilities and environment
+Map whenever the physical care environment is discussed — maintenance, safety checks, equipment condition, cleanliness, health and safety risks, fire safety, or the accessibility of the building or space.
+
+CI 4.2 — Independence-promoting environment
+Map when a worker describes how the physical space, layout, or assistive technology enables someone to do things for themselves — adapting the environment to promote mobility, independence, or autonomy.
+
+CI 4.3 — Connected to community
+Map when a worker describes supporting a person to maintain community connections, access local amenities, take part in activities outside the service, or sustain relationships beyond the care setting.
+
+── PERSONAL PLANNING (CI 5.x) ──────────────────────────────────────────────
+
+CI 5.1 — Assessment and personal planning
+This indicator is about whether care planning is genuinely person-centred and co-produced with the individual. Map it whenever a worker describes reviewing or updating a personal plan, noticing that someone's needs or wishes have changed, co-producing a plan with a person, or questioning whether the current approach is working for this person. "I noticed she'd changed her mind about that so we updated it" is CI 5.1. "The plan doesn't really reflect where he is now" is CI 5.1. Any reference to plans being reviewed or revised is evidence here.
+
+CI 5.2 — Involving carers and family
+Map when family members, carers, or people important to the service user are mentioned in relation to care planning or reviews — including when a worker describes including a carer's expertise or a family member's knowledge of the person.
+
+── SSSC CODE OF PRACTICE ────────────────────────────────────────────────────
+
+The SSSC Code describes the expected conduct and professional values of the worker themselves. Map alongside CI quality indicators when the worker reflects on their own values, professional behaviour, honesty, risk approach, accountability or development.
+
+SSSC 1 — Rights and interests
+Map when a worker describes treating a person with kindness, compassion and respect, supporting their right to make their own decisions, maintaining dignity and privacy, or adapting to their individual preferences and identity. Does not require the word "rights" — "I always make sure she knows she's got a choice" is SSSC 1 evidence. "He has his own way of wanting things done and I follow his lead" is SSSC 1 evidence.
+
+SSSC 2 — Trust and confidence
+Map when a worker describes honesty with a service user or family member, reliability, respecting confidentiality, maintaining professional boundaries, or handling a situation where trust was at stake. "I told her the truth even though it was hard to say" is SSSC 2 evidence.
+
+SSSC 3 — Wellbeing and protection
+Map when a worker describes raising a concern about a colleague or a systemic practice, following safety procedures, or taking action to prevent harm. Also map when a worker describes being open about something that went wrong — the duty of candour dimension of SSSC 3.
+
+SSSC 4 — Right to take risks
+Map when a worker describes supporting a person to take an informed risk they have chosen, working with someone to understand and manage a risk, co-producing a risk assessment, or navigating a situation where autonomy and safety are in tension.
+
+SSSC 5 — Accountability for quality
+Map when a worker describes taking responsibility for the quality of their own work, maintaining records, seeking support when uncertain, preparing for and engaging in supervision, or committing to their own continuous professional learning (CPL). The act of engaging meaningfully in this supervision session is itself SSSC 5 evidence.
+
+SSSC 6 — Uphold public trust
+Map when professional conduct — inside or outside work — is discussed, including anything that could affect SSSC registration, social media behaviour, relationship boundaries with service users, or anything that affects the public's trust in social care."""
 
     else:  # northern_ireland (dom or res)
         domain_guide = """
-EVIDENCE DETECTION GUIDE — apply before finalising mappings:
-Workers and managers rarely name a regulation or standard. Map based on described behaviour and attitude.
+EVIDENCE DETECTION GUIDE — read this before mapping any standard:
+Your task is not to match phrases — it is to understand what each person is DOING and THINKING, then identify which Northern Ireland standard governs that behaviour. Workers rarely use standard numbers or formal language. Reason from the described behaviour to the standard that captures its intent.
 
-RQIA STANDARDS (SERVICE QUALITY): worker describes involving a service user in decisions about their care → Dom Std 1 / Reg 13; worker describes providing information to a service user or family in an accessible way → Dom Std 2; worker describes completing or reviewing a care plan, personal outcome or support agreement → Dom Std 4 / Reg 16; worker describes contributing to a care review or communicating with the placing authority → Dom Std 6; worker describes medication management or handling of medicines → Dom Std 7 / Reg 14; worker describes health, safety or risk management practices → Dom Std 9 / Reg 12; worker describes treating someone with dignity, privacy and respect → Reg 13/Reg 14; worker describes supporting someone's independence and daily living activities → Dom Std 10/Dom Std 11.
+Note on service type: Dom Std numbers apply to domiciliary services; Reg numbers used alone refer to RQIA Residential Care Home Regulations 2005. NISCC standards apply to workers in both service types.
 
-SAFEGUARDING (RQIA): worker describes recognising, reporting or responding to abuse, neglect or harm → Dom Std 12 / Reg 17.
+── PERSON-CENTRED CARE ─────────────────────────────────────────────────────
 
-STAFFING AND DEVELOPMENT (RQIA): discussion about training, supervision, professional development → Dom Std 15 / Reg 19; discussion about staffing levels, accountability, governance → Dom Std 16 / Reg 17; worker describes maintaining accurate records or reporting → Dom Std 5 / Reg 20.
+Dom Std 1 / Reg 13 — Involvement and person-centred care
+This standard is about whether the service user actively shapes their own care. Map it whenever a worker describes checking with a person before doing something, involving them in deciding how care is delivered, or respecting their preference for how things are done. "I always ask her how she wants it done" is Dom Std 1. "He has his own way of doing things and I follow his lead" is Dom Std 1. The supervision session itself — if the worker is being asked for their view and involved in decisions — is also a model of this standard in the staffing relationship. This is frequently missed because workers describe involving people as just part of doing the job.
 
-NISCC CODE OF PRACTICE: worker describes promoting and respecting a service user's rights and interests → NISCC Conduct 1; worker describes maintaining honesty, reliability and the trust of a person in their care → NISCC Conduct 2; worker describes supporting a person's autonomy while protecting them from harm → NISCC Conduct 3; discussion about balancing a person's rights with safety → NISCC Conduct 4; worker describes accountability, professional conduct and upholding public trust → NISCC Conduct 5; worker describes taking responsibility for the quality of their work → NISCC Conduct 6.
+Dom Std 2 / Reg 5 — Information
+Map whenever a worker describes giving a service user or their family information about their care, explaining something in a way they can understand, ensuring someone knows their rights, or giving them information about the complaints procedure or how to access RQIA. The format of information matters too — offering it in the person's language or in an accessible format maps here.
 
-NISCC INDUCTION: worker discusses their role, responsibilities and the regulatory framework → NI Induction 1; worker describes how they communicate with service users or colleagues → NI Induction 2; worker describes delivering person-centred, safe and effective care → NI Induction 3; worker describes safeguarding awareness or actions → NI Induction 4; worker describes health and safety practices → NI Induction 5; worker reflects on professional development, learning or performance → NI Induction 6."""
+Dom Std 4 / Reg 16 — Care plans and personal outcomes
+This standard is about whether care is planned to achieve outcomes that are meaningful to this individual — and whether those plans are kept current. Map it whenever a worker describes reviewing a care plan, updating it when needs change, working toward a specific personal goal, or contributing to a planning review. "We reviewed it together last week and adjusted it" is Dom Std 4. "His goals have changed so we need to update the plan" is Dom Std 4. Any engagement with planning, reviewing, or assessing needs is evidence here.
+
+Dom Std 6 — Contributing to service user reviews
+Map when a worker describes participating in a review meeting, communicating with other professionals or the placing authority, or contributing their observations about a person's changing needs to a formal review process.
+
+Dom Std 7 / Reg 14 — Medicines management
+Map whenever medication is mentioned in any context — routine administration, a medication error or near-miss, checking a MAR chart, uncertainty about a dose, controlled drugs, self-administration, medication disposal, or a medication-related concern. Any engagement with medicines in the transcript maps here.
+
+Dom Std 5 / Dom Std 10 / Reg 20 — Recording and documentation
+Map whenever a worker describes completing care records, documenting what they did during a visit, reporting an incident, or maintaining accurate documentation about a service user. "I always write it up before I leave" is evidence. Any concern about inaccurate records maps here too.
+
+Dom Std 9 / Reg 12 — Health, safety and risk
+Map when health and safety is discussed — risk assessments in the care environment, lone working, manual handling, infection control, PPE provision, home environment hazards, or anything about keeping workers and service users safe in domiciliary settings. Reg 12 applies to the residential context.
+
+── SAFEGUARDING ────────────────────────────────────────────────────────────
+
+Dom Std 14 / Reg 17 — Safeguarding
+This standard is about recognising when a person may be at risk of harm and acting on that concern. Map it whenever a worker describes noticing something concerning about a person's welfare, raising or reporting a safeguarding concern, following or questioning safeguarding procedures, or demonstrating awareness of categories of harm. Does not require the word "safeguarding": "I was worried about what she told me and I raised it", "something didn't seem right so I flagged it to my manager", or "I reported it to the designated person" are all evidence. Dom Std 14 applies in domiciliary services; Reg 17 in residential care.
+
+NISCC Conduct 3 / NISCC Conduct 4 — Autonomy and risk
+Map NISCC Conduct 3 when a worker promotes independence, challenges an unnecessary restriction on a person's choices, reports a concern about how the service is operating, or describes the duty to keep people safe. Map NISCC Conduct 4 when a worker describes supporting a person to take a risk they have chosen, co-producing a risk assessment, or navigating a situation where autonomy and safety are in tension.
+
+── STAFFING AND DEVELOPMENT ─────────────────────────────────────────────────
+
+Dom Std 13 / Reg 19 — Staff supervision and appraisal
+The supervision meeting itself is direct evidence of Dom Std 13 — demonstrating that the organisation provides regular, documented supervision to support staff development. Map it whenever the purpose of supervision is discussed, previous supervision commitments are followed up, the worker's development needs are identified, or the manager demonstrates active investment in the worker's growth. The manager checking on the worker's wellbeing — asking how they are, noticing if they seem stressed — is Dom Std 13 evidence. A worker expressing tiredness, feeling overwhelmed, or doubting their ability maps here because it confirms the supervision is fulfilling its function.
+
+Dom Std 12 / Reg 19 — Training and development
+Map whenever training is discussed, a training need is identified, NISCC induction completion is mentioned, mandatory training is referenced (safeguarding, manual handling, medicines, infection control), or a worker describes any form of professional development or skills development. "I need more training on that" is evidence. "I completed my induction modules" is evidence. Any CPD discussion maps here.
+
+Dom Std 11 / Reg 24 — Recruitment
+Map when recruitment processes, AccessNI checks, NISCC registration, pre-employment vetting, references, or the fitness of a colleague to work with service users is mentioned.
+
+Dom Std 16 / Reg 29 — Safe working practices
+Map when health and safety is discussed from the worker's perspective — risk assessments, lone working arrangements, PPE, manual handling, infection control, staff wellbeing, COSHH, or anything about the safety of the worker in carrying out their role.
+
+── MANAGEMENT AND GOVERNANCE ───────────────────────────────────────────────
+
+Dom Std 8 / Reg 26 — Quality assurance and governance
+Map whenever any reference is made to organisational monitoring, quality reviews, governance arrangements, service audits, or the overall management of care quality — including when a manager describes oversight processes or systems for checking that care is being delivered well.
+
+Dom Std 15 / Reg 22 — Complaints and concerns
+Map whenever a complaint, a concern raised by a service user or their family, or any formal feedback process is discussed. The worker does not need to use the word "complaint" — "she was unhappy and I escalated it", "I passed it to my manager because I thought it needed to go further", or "the family raised a concern" are all evidence.
+
+── NISCC CODE OF PRACTICE ──────────────────────────────────────────────────
+
+The NISCC Code describes the expected conduct and professional values of the worker themselves. Map alongside RQIA standards when the worker reflects on their own approach, behaviour, honesty, accountability or development.
+
+NISCC Conduct 1 — Rights and interests
+Map when a worker describes treating a service user with respect and compassion, supporting their right to make informed choices, maintaining dignity and privacy, or adapting to their individual needs and identity. This is frequently missed because workers describe these behaviours as just doing their job rather than recognising their professional significance. "I always ask her first" is NISCC Conduct 1. "I make sure I knock and wait" is NISCC Conduct 1.
+
+NISCC Conduct 2 — Trust and honesty
+Map when a worker describes maintaining confidentiality, being honest about something that happened, keeping professional boundaries, or demonstrating reliability with a service user or their family.
+
+NISCC Conduct 5 — Professional conduct and public trust
+Map when professional behaviour, conduct standards, NISCC registration, social media use, or suitability to work in social care is discussed — particularly anything that could affect how the public trusts the profession.
+
+NISCC Conduct 6 — Accountability and development
+Map when a worker describes taking responsibility for the quality of their own work, maintaining records, being open about mistakes, seeking help when uncertain, co-operating with investigations, or committing to ongoing training and professional learning. The act of engaging seriously in this supervision session is itself NISCC Conduct 6 evidence.
+
+── NISCC PRACTICE STANDARDS ────────────────────────────────────────────────
+
+These standards describe the foundational practice competencies expected of workers in Northern Ireland. Map them when a worker demonstrates specific knowledge or skill areas in their account of their practice.
+
+NISCC Practice 1 — Role and responsibilities
+Map when a worker demonstrates understanding of their role, duties, policies and procedures, or duty of care — including how they manage competing priorities, use agreed ways of working, or escalate concerns through the right channels.
+
+NISCC Practice 2 — Communication
+Map when a worker describes adapting how they communicate with a service user or family member, overcoming a communication barrier, or sharing relevant information with colleagues in a timely and appropriate way.
+
+NISCC Practice 3 — Person-centred and safe care
+Map when a worker describes delivering care that is specifically tailored to this individual person's needs and preferences — involving them in decisions, supporting their independence, or reflecting their stated wishes in how care is provided.
+
+NISCC Practice 4 — Safeguarding
+Map when a worker demonstrates their personal safeguarding awareness and applied knowledge — describing what they did when they had a concern, how they recognised a risk, or how they followed safeguarding procedures in practice.
+
+NISCC Practice 5 / NISCC Practice 6 — Professional growth
+Map when a worker reflects on their own learning, describes seeking to improve their skills, engages with supervision as a development tool, or demonstrates awareness of their own competence and development needs."""
 
     user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
 

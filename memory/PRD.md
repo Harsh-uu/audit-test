@@ -241,7 +241,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - ~~Jurisdiction-aware frontend labels~~ — DONE (Aug 2026, Session 3)
 
 ### P1 (Remaining)
-- Wales, Scotland, Northern Ireland AI prompt rewrites: Apply "Intent-first" conceptual framework (deployed for England) to the other jurisdictions
+- ~~Wales, Scotland, Northern Ireland AI prompt rewrites~~ — DONE (Aug 2026, Session 4): Full intent-first domain guides written for Wales (105 lines), Scotland (85 lines), NI (92 lines), matching England depth.
 
 ### P1.5 (Upcoming)
 - **Achievements section — DONE** (Aug 2026, Session 4): AI extracts 1–5 specific achievement moments from meeting transcripts; rendered between Summary and Actions in the Evidence tab with emerald green/star visual styling. DB migration applied.
