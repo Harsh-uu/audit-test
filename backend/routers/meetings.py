@@ -80,7 +80,7 @@ def _parse_meeting_row(m: dict) -> dict:
 
 def _parse_analysis_row(a: dict) -> dict:
     """Normalize JSONB fields on an analysis row."""
-    for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions"):
+    for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions", "achievements"):
         a[field] = _ensure_list(a.get(field))
     for field in ("speaker_colors",):
         a[field] = _ensure_dict(a.get(field))
