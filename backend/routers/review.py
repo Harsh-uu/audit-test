@@ -1610,6 +1610,28 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
             full_text = " ".join(l.strip() for l in lines if l.strip())
             story.append(Paragraph(e(full_text), body_style))
 
+    achievements = analysis.get("achievements") or []
+    if achievements:
+        EMERALD_HDR = colors.HexColor("#065F46")
+        EMERALD_BG  = colors.HexColor("#F0FDF4")
+        story.append(Spacer(1, 4*mm))
+        story.append(section_header("Achievements", bg=EMERALD_HDR))
+        story.append(Spacer(1, 2*mm))
+        ach_style = ParagraphStyle("Ach", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=3, leading=13, leftIndent=12, bulletIndent=0)
+        for ach in achievements:
+            desc = ach.get("description", "")
+            if desc:
+                row = [[Paragraph(f"\u2605  {e(desc)}", ach_style)]]
+                ach_t = Table(row, colWidths=[170*mm])
+                ach_t.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, -1), EMERALD_BG),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#A7F3D0")),
+                ]))
+                story.append(ach_t)
+                story.append(Spacer(1, 1.5*mm))
+
     actions = analysis.get("actions") or []
     if actions:
         story.append(Spacer(1, 4*mm))
