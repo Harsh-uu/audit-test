@@ -1229,9 +1229,12 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
     org_id = current_user.get("org_id", "")
     try:
         async with database.with_org(org_id) as conn:
+            # Deliberately omit JSONB columns (recording_events, attendees, sign_off_record)
+            # from this query — asyncpg loses the JSONB codec in RLS context and on some
+            # Postgres versions throws rather than returning a string. Fetch them separately.
             m_row = await conn.fetchrow(
-                "SELECT id, org_id, title, created_at, created_by_name, recording_events, "
-                "attendees, sign_off_record, transcript_id, analysis_id "
+                "SELECT id, org_id, title, created_at, created_by_name, "
+                "transcript_id, analysis_id "
                 "FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
             )
     except Exception as e:
@@ -1240,6 +1243,23 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(m_row)
+
+    # Fetch JSONB columns separately so any codec issue doesn't kill the whole trail
+    try:
+        async with database.with_org(org_id) as conn:
+            jrow = await conn.fetchrow(
+                "SELECT recording_events, attendees, sign_off_record "
+                "FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+            )
+        if jrow:
+            meeting["recording_events"] = jrow["recording_events"]
+            meeting["attendees"]        = jrow["attendees"]
+            meeting["sign_off_record"]  = jrow["sign_off_record"]
+    except Exception as e:
+        _logger.warning(f"audit-trail JSONB column fetch failed for {meeting_id}: {e}")
+        meeting["recording_events"] = None
+        meeting["attendees"]        = None
+        meeting["sign_off_record"]  = None
     events = []
 
     if meeting.get("created_at"):

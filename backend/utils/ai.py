@@ -193,12 +193,24 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 Rules:
 - Map evidence that is described, demonstrated, or shown through practice narration, explained reasoning, or confirmed observation. Do NOT require speakers to name the regulation or standard — map what they describe doing or understanding.
 - For CQC mappings, use `regulation_ref` for BOTH Regulations (e.g. "Regulation 18") AND Quality Statements (e.g. "QS Caring 1", "QS Safe 3", "QS Well-led 2"). Quality Statements are first-class evidence items — map to them whenever the described behaviour matches, even if no Regulation is also applicable. Do not restrict mappings to Regulations only.
-- CONFIDENCE GATE — apply this exact three-question test before assigning any confidence value. The ONLY valid output values are: needs_review, likely_evidence, not_enough_evidence.
-  Step 1: Did the worker or manager describe a specific, real situation that actually occurred (not a hypothetical, not a policy statement, not an agreement)? → If NO → use "not_enough_evidence" if the topic was barely mentioned, otherwise "needs_review".
-  Step 2: Did they explicitly state what THEY did or decided in response to that situation? → If NO → use "needs_review".
-  Step 3: Is their described action clearly consistent with best practice (not passive, not incomplete, not ambiguous)? → If NO → use "needs_review".
-  Only if the answer to ALL THREE is YES → use "likely_evidence".
-  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass Step 1. These must be "needs_review".
+- EVIDENCE CONFIDENCE — the default for every mapping is "needs_review". Assign "likely_evidence" only when the evidence is rich, specific and could stand alone in front of a regulator without further context. Assign "not_enough_evidence" only when the topic was barely mentioned, hypothetical, or theoretical. Everything else is "needs_review". The ONLY valid output values are: needs_review, likely_evidence, not_enough_evidence.
+  ALWAYS use "needs_review" when ANY of the following are true (this covers the majority of mappings):
+  - The worker agrees with or confirms something the manager says, rather than describing their own action
+  - The worker describes general awareness of a policy, procedure, or value without showing specific application
+  - The worker says what they "usually" or "normally" do — not what they actually did in a named situation
+  - The worker describes a situation but is vague, incomplete, or passive about what action they personally took
+  - The manager gives general praise without describing specific observed behaviour
+  - Any minimising, hedging, or uncertain language is present: "probably", "I think", "I suppose", "I'm not sure if", "I thought about it", "maybe I should have"
+  - One key piece of detail is missing that would confirm full competency
+  - The evidence is relevant and interesting but requires a follow-up question to confirm
+  Use "likely_evidence" ONLY when ALL FIVE of these are simultaneously true — and be strict:
+  (a) The worker narrates a specific, real situation that already occurred — named, concrete, not hypothetical
+  (b) The worker explicitly states what THEY personally did or decided in that situation
+  (c) Their described action is clearly consistent with best practice — specific, purposeful, complete, not passive
+  (d) The excerpt could be presented to a CQC inspector as standalone evidence with no further questioning
+  (e) There is no minimising, hedging, or qualifying language anywhere in the relevant passage
+  When in doubt: needs_review. Err heavily toward needs_review. It is far better to flag something for human review than to overclaim compliance evidence.
+  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass condition (a). These must always be "needs_review".
   IMPORTANT: If the worker uses minimising or dismissive language when describing the situation or their response (e.g. "it was probably nothing", "I didn't think I needed to", "I suppose I should have"), the evidence CANNOT be "likely_evidence" — use "needs_review" regardless of other content.
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h", "13.9c"). Use the exact sub-outcome ref and its description as provided in the standards context below. One evidence item = one sub-outcome ref. Create separate mapping entries if evidence covers multiple sub-outcomes.
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
@@ -847,12 +859,24 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 
 Rules:
 - Map evidence that is described, demonstrated, or recorded in the document — including described practice, noted observations, identified learning needs, or explained reasoning. Do not require the standard or regulation to be named.
-- CONFIDENCE GATE — apply this exact three-question test before assigning any confidence value. The ONLY valid output values are: needs_review, likely_evidence, not_enough_evidence.
-  Step 1: Did the worker or manager describe a specific, real situation that actually occurred (not a hypothetical, not a policy statement, not an agreement)? → If NO → use "not_enough_evidence" if the topic was barely mentioned, otherwise "needs_review".
-  Step 2: Did they explicitly state what THEY did or decided in response to that situation? → If NO → use "needs_review".
-  Step 3: Is their described action clearly consistent with best practice (not passive, not incomplete, not ambiguous)? → If NO → use "needs_review".
-  Only if the answer to ALL THREE is YES → use "likely_evidence".
-  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass Step 1. These must be "needs_review".
+- EVIDENCE CONFIDENCE — the default for every mapping is "needs_review". Assign "likely_evidence" only when the evidence is rich, specific and could stand alone in front of a regulator without further context. Assign "not_enough_evidence" only when the topic was barely mentioned, hypothetical, or theoretical. Everything else is "needs_review". The ONLY valid output values are: needs_review, likely_evidence, not_enough_evidence.
+  ALWAYS use "needs_review" when ANY of the following are true (this covers the majority of mappings):
+  - The worker agrees with or confirms something the manager says, rather than describing their own action
+  - The worker describes general awareness of a policy, procedure, or value without showing specific application
+  - The worker says what they "usually" or "normally" do — not what they actually did in a named situation
+  - The worker describes a situation but is vague, incomplete, or passive about what action they personally took
+  - The manager gives general praise without describing specific observed behaviour
+  - Any minimising, hedging, or uncertain language is present: "probably", "I think", "I suppose", "I'm not sure if", "I thought about it", "maybe I should have"
+  - One key piece of detail is missing that would confirm full competency
+  - The evidence is relevant and interesting but requires a follow-up question to confirm
+  Use "likely_evidence" ONLY when ALL FIVE of these are simultaneously true — and be strict:
+  (a) The worker narrates a specific, real situation that already occurred — named, concrete, not hypothetical
+  (b) The worker explicitly states what THEY personally did or decided in that situation
+  (c) Their described action is clearly consistent with best practice — specific, purposeful, complete, not passive
+  (d) The excerpt could be presented to a CQC inspector as standalone evidence with no further questioning
+  (e) There is no minimising, hedging, or qualifying language anywhere in the relevant passage
+  When in doubt: needs_review. Err heavily toward needs_review. It is far better to flag something for human review than to overclaim compliance evidence.
+  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass condition (a). These must always be "needs_review".
   IMPORTANT: If the worker uses minimising or dismissive language when describing the situation or their response (e.g. "it was probably nothing", "I didn't think I needed to", "I suppose I should have"), the evidence CANNOT be "likely_evidence" — use "needs_review" regardless of other content.
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h")
 - For custom_mappings, only include entries if custom standards are provided AND there is actual evidence
