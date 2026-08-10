@@ -3,7 +3,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
-  ChevronDown, ChevronUp, Loader, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock,
+  ChevronDown, ChevronUp, Loader, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star,
 } from "lucide-react";
 
 // ── Severity config ──────────────────────────────────────────────────────────
@@ -223,6 +223,38 @@ function SummaryBody({ text }) {
   );
 }
 
+// ── Achievements section ──────────────────────────────────────────────────────
+function AchievementsSection({ achievements }) {
+  if (!achievements?.length) return null;
+
+  return (
+    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5 shadow-sm" data-testid="achievements-section">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+          <Star className="w-3.5 h-3.5 text-white" fill="currentColor" />
+        </div>
+        <h3 className="font-semibold text-emerald-900 text-sm font-display">Achievements</h3>
+        <span className="text-xs text-emerald-600 ml-auto">{achievements.length} noted</span>
+      </div>
+      <ul className="space-y-2.5" data-testid="achievements-list">
+        {achievements.map((ach, i) => (
+          <li
+            key={ach.id || i}
+            className="flex items-start gap-3 bg-white rounded-md px-3.5 py-3 border border-emerald-100"
+            data-testid={`achievement-${i}`}
+          >
+            <span className="mt-0.5 w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <Star className="w-2.5 h-2.5 text-emerald-600" fill="currentColor" />
+            </span>
+            <p className="text-sm text-gray-800 leading-relaxed">{ach.description}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+
 export function EvidenceTab({
   meeting,
   analysis,
@@ -335,6 +367,9 @@ export function EvidenceTab({
         )}
       </div>
 
+      {/* Achievements */}
+      <AchievementsSection achievements={analysis.achievements} />
+
       {/* Pauses */}
       {meeting.paused_periods?.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -351,8 +386,7 @@ export function EvidenceTab({
         </div>
       )}
 
-      {/* Actions */}
-      {(analysis.actions?.length > 0 || canReview) && (
+      {/* Actions */}      {(analysis.actions?.length > 0 || canReview) && (
         <div id="actions-section" className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-900 text-sm font-display">

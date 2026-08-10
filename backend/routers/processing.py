@@ -312,6 +312,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 )
             except Exception as _col_err:
                 logger.warning(f"custom_mappings update skipped (column may not exist yet): {_col_err}")
+            try:
+                await conn.execute(
+                    "UPDATE analyses SET achievements=$1::jsonb WHERE id=$2",
+                    json.dumps(analysis_result.get("achievements", [])), analysis_id,
+                )
+            except Exception as _col_err:
+                logger.warning(f"achievements update skipped (column may not exist yet): {_col_err}")
             await conn.execute(
                 "UPDATE meetings SET analysis_id=$1, status='in_review', processing_error=NULL, updated_at=$2 WHERE id=$3",
                 analysis_id, datetime.now(timezone.utc).isoformat(), meeting_id,

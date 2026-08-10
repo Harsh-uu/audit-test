@@ -49,7 +49,7 @@ def _parse_meeting_row(m: dict) -> dict:
 
 
 def _parse_analysis_row(a: dict) -> dict:
-    for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions"):
+    for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions", "achievements"):
         a[field] = _ensure_list(a.get(field))
     return a
 
@@ -1024,6 +1024,14 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
                 json.dumps(merged_cu),
                 now, user_id, user_name, analysis_id,
             )
+            # Also update achievements from the fresh analysis (safe — falls through gracefully if column absent)
+            try:
+                await conn.execute(
+                    "UPDATE analyses SET achievements=$1::jsonb WHERE id=$2",
+                    json.dumps(analysis_result.get("achievements", [])), analysis_id,
+                )
+            except Exception as _ach_err:
+                logger.warning(f"achievements rescan update skipped: {_ach_err}")
             await conn.execute("UPDATE meetings SET rescan_status='done' WHERE id=$1", meeting_id)
             await _log_edit(conn, meeting_id, org_id, "evidence_rescan", user_id, user_name,
                             f"Compliance evidence re-scanned{' with guidance: ' + custom_prompt if custom_prompt else ' from corrected transcript'}")

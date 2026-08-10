@@ -128,6 +128,9 @@ Care Certificate standards describe competencies workers should DEMONSTRATE in p
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
 {
   "summary": "Two opening sentences that set context and introduce the session (who, when, what type of meeting).\\n\\n- Key topic or discussion point one\\n- Key topic or discussion point two\\n- Key topic or discussion point three\\n- Key topic or discussion point four\\n- Key topic or discussion point five\\n\\nTwo closing sentences that frame the essential outcomes, any overall themes or next steps from the session.",
+  "achievements": [
+    {"id": "ach_1", "description": "Brief description of a specific thing done well, demonstrated, or grown in (max 25 words)"}
+  ],
   "actions": [
     {"id": "unique_id", "text": "action description", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
   ],
@@ -201,6 +204,7 @@ Rules:
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
 - If no custom standards are provided, return custom_mappings as an empty array []
 - If the meeting had paused sections, note this in the summary
+- For ACHIEVEMENTS: Extract 1–5 specific moments of genuinely good practice, personal or professional growth, positive skill demonstration, or care quality from the transcript. These surface what went well — not general praise. Include: manager compliments on a specific skill or action, worker self-reflection on something they handled well, described best practice narrated by the worker, or improvement since a previous session explicitly noted. Do NOT fabricate or infer achievements not grounded in specific statements. Use "id" values like "ach_1", "ach_2". If nothing specific and genuine is present, return an empty array [].
 - If the transcript contains [MM:SS] timestamps, include the timestamp at the start of transcript_excerpt values (e.g. "[14:32] I always check the care plan before..."). This helps locate evidence within the session.
 - Include transcript excerpts as exact quotes from the provided text
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")

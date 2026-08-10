@@ -241,8 +241,10 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - ~~Jurisdiction-aware frontend labels~~ — DONE (Aug 2026, Session 3)
 
 ### P1 (Remaining)
+- Wales, Scotland, Northern Ireland AI prompt rewrites: Apply "Intent-first" conceptual framework (deployed for England) to the other jurisdictions
 
-### P2 (Upcoming)
+### P1.5 (Upcoming)
+- **Achievements section — DONE** (Aug 2026, Session 4): AI extracts 1–5 specific achievement moments from meeting transcripts; rendered between Summary and Actions in the Evidence tab with emerald green/star visual styling. DB migration applied.
 - **AWIF granularity review** (Wales consultation pending): Current AWIF sub-outcomes are section headings (topic level). Decision pending from Welsh users on whether to drill down to the specific "I can/I understand" practice learning outcome statements. All 7 workbook .docx files available in job assets for re-extraction when ready.
 - **Scotland NIF** — parked indefinitely. Content entirely behind Turas login wall (launched May 2025, no public docs). Add as `type='nif'`, `jurisdiction='scotland'` when source material surfaces.
 - Role-specific competency framework upload (admin uploads per-role competency doc; AI maps evidence against it)
