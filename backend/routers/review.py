@@ -1246,7 +1246,7 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
             )
     except Exception as e:
         _logger.error(f"[AUDIT] meeting fetch FAILED meeting={meeting_id}: {e}")
-        return {"events": [], "error": str(e)}
+        return {"events": [], "_error": str(e)}
     if not m_row:
         _logger.warning(f"[AUDIT] meeting NOT FOUND id={meeting_id} org={org_id!r}")
         raise HTTPException(status_code=404, detail="Meeting not found")
