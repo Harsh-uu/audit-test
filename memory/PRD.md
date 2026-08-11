@@ -240,6 +240,13 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - ~~Super Admin "Edit Org" form needs Jurisdiction + Service Type fields~~ — DONE (was already implemented)
 - ~~Jurisdiction-aware frontend labels~~ — DONE (Aug 2026, Session 3)
 
+### P0 (Done — Session 5)
+- **Achievements PDF export**: Achievements section added to signed-off meeting PDF (`review.py` `_generate_pdf`).
+- **Audit Trail split-query fix**: `review.py` meeting fetch split into two separate queries — safe text columns first, JSONB columns second — to bypass asyncpg RLS double-stringification that caused blank Audit Trail.
+- **`_normalize_rec_events` flattener**: Robust helper added to flatten `recording_events` JSONB arrays of strings (double/triple encoded by asyncpg + RLS) into proper dicts for Audit Trail rendering.
+- **ALTER TABLE guards**: Added `ALTER TABLE meetings ADD COLUMN IF NOT EXISTS` for `created_by_name`, `transcript_id`, `analysis_id` — prevents silent 500 errors on production schema drift.
+- **`_parse_analysis_row` in meetings.py**: Added defensive JSONB row parser + `Array.isArray` guards in `EvidenceTab.js` to fix blank-screen React crash when analysis columns return as strings.
+
 ### P1 (Remaining)
 - ~~Wales, Scotland, Northern Ireland AI prompt rewrites~~ — DONE (Aug 2026, Session 4): Full intent-first domain guides written for Wales (105 lines), Scotland (85 lines), NI (92 lines), matching England depth.
 

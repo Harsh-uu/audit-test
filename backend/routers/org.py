@@ -14,6 +14,18 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _jdict(raw) -> dict:
+    """Safely parse a JSONB column that asyncpg may return as a string."""
+    if not raw:
+        return {}
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
+    return dict(raw)
+
+
 class SettingCreate(BaseModel):
     name: str
     description: Optional[str] = ""
@@ -329,7 +341,7 @@ async def get_branding(current_user=Depends(get_current_user)):
         org = await conn.fetchrow("SELECT branding FROM organisations WHERE id=$1", org_id)
     if not org:
         return {"has_logo": False, "primary_color": None}
-    b = org["branding"] or {}
+    b = _jdict(org["branding"])
     return {"has_logo": bool(b.get("logo_path")), "primary_color": b.get("primary_color")}
 
 
@@ -342,7 +354,7 @@ async def update_branding(data: BrandingUpdate, current_user=Depends(get_current
         raise HTTPException(400, "No organisation assigned")
     async with database.with_admin() as conn:
         org = await conn.fetchrow("SELECT branding FROM organisations WHERE id=$1", org_id)
-        branding = dict(org["branding"] or {}) if org else {}
+        branding = _jdict(org["branding"]) if org else {}
         if data.primary_color is not None:
             branding["primary_color"] = data.primary_color
         if data.logo_url == "":
@@ -376,7 +388,7 @@ async def upload_logo(file: UploadFile = File(...), current_user=Depends(get_cur
         raise HTTPException(500, "Storage upload failed")
     async with database.with_admin() as conn:
         org_row = await conn.fetchrow("SELECT branding FROM organisations WHERE id=$1", org_id)
-        branding = dict(org_row["branding"] or {}) if org_row else {}
+        branding = _jdict(org_row["branding"]) if org_row else {}
         branding["logo_path"] = path
         await conn.execute(
             "UPDATE organisations SET branding=$1::jsonb, updated_at=$2 WHERE id=$3",
@@ -392,7 +404,7 @@ async def get_org_logo(org_id: str):
             org = await conn.fetchrow("SELECT branding FROM organisations WHERE id=$1", org_id)
         if not org:
             raise HTTPException(404, "Not found")
-        path = (org["branding"] or {}).get("logo_path")
+        path = _jdict(org["branding"]).get("logo_path")
         if not path:
             raise HTTPException(404, "No logo")
         content, content_type = get_object(path)
