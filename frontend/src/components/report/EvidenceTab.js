@@ -3,7 +3,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
-  ChevronDown, ChevronUp, Loader, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star,
+  ChevronDown, ChevronUp, Loader, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen,
 } from "lucide-react";
 
 // ── Severity config ──────────────────────────────────────────────────────────
@@ -285,6 +285,42 @@ export function EvidenceTab({
   const [reopenReason, setReopenReason] = useState("");
   const [reopenSubmitting, setReopenSubmitting] = useState(false);
 
+  // ── Learning Needs local state ───────────────────────────────────────────────
+  const [learningNeeds, setLearningNeeds] = useState(() => Array.isArray(analysis?.learning_needs) ? analysis.learning_needs : []);
+  const [addingLN, setAddingLN] = useState(false);
+  const [newLN, setNewLN] = useState({ text: "", assigned_to: "", due_date: "" });
+  const [lnMessage, setLnMessage] = useState("");
+  const [lnSaving, setLnSaving] = useState(false);
+
+  const saveLearningNeeds = async (updated) => {
+    setLnSaving(true);
+    try {
+      await axios.put(`${API}/review/${meeting.id}/learning_needs`, { learning_needs: updated }, getAuthConfig());
+      setLearningNeeds(updated);
+      onAnalysisChange?.({ ...analysis, learning_needs: updated });
+      setLnMessage("Saved");
+      setTimeout(() => setLnMessage(""), 2000);
+    } catch { setLnMessage("Error saving"); setTimeout(() => setLnMessage(""), 3000); }
+    finally { setLnSaving(false); }
+  };
+
+  const addLN = async () => {
+    if (!newLN.text.trim()) return;
+    const updated = [...learningNeeds, { id: `ln_${Date.now()}`, text: newLN.text.trim(), assigned_to: newLN.assigned_to.trim() || null, due_date: newLN.due_date.trim() || null, completed: false }];
+    setAddingLN(false);
+    setNewLN({ text: "", assigned_to: "", due_date: "" });
+    await saveLearningNeeds(updated);
+  };
+
+  const removeLN = async (idx) => {
+    await saveLearningNeeds(learningNeeds.filter((_, i) => i !== idx));
+  };
+
+  const toggleLNComplete = async (idx, completed) => {
+    const updated = learningNeeds.map((ln, i) => i === idx ? { ...ln, completed } : ln);
+    await saveLearningNeeds(updated);
+  };
+
   // Who can approve a reopen request? Listed attendees who are not the requester
   const isReopenRequester = meeting?.reopen_requested_by === user?.id;
   const isAttendee = meeting?.attendees?.some(a => a.user_id === user?.id);
@@ -466,6 +502,90 @@ export function EvidenceTab({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Learning Needs */}
+      {(learningNeeds.length > 0 || canEdit) && (
+        <div className="bg-white border border-teal-100 rounded-lg p-5 shadow-sm" id="learning-needs-section" data-testid="learning-needs-section">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 font-display" data-testid="learning-needs-heading">
+              <BookOpen className="w-4 h-4 text-teal-600" />
+              Learning Needs
+              {learningNeeds.length > 0 && (
+                <span className="ml-1 text-xs font-normal text-gray-400">({learningNeeds.length})</span>
+              )}
+            </h3>
+            {canEdit && !addingLN && !isLocked && (
+              <button onClick={() => setAddingLN(true)} className="flex items-center gap-1 text-xs text-teal-700 hover:underline font-medium" data-testid="add-learning-need-btn">
+                <Plus className="w-3 h-3" /> Add
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2" data-testid="learning-needs-list">
+            {learningNeeds.map((ln, i) => (
+              <div key={ln.id || i} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-colors ${ln.completed ? "bg-gray-50 border-gray-100 opacity-70" : "bg-teal-50 border-teal-100"}`}>
+                <button
+                  onClick={() => !isLocked && toggleLNComplete(i, !ln.completed)}
+                  disabled={isLocked}
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${ln.completed ? "bg-teal-600 border-teal-600 text-white" : "border-teal-300 hover:border-teal-500"}`}
+                  title={ln.completed ? "Mark as outstanding" : "Mark as addressed"}
+                  data-testid={`complete-ln-${i}`}
+                >
+                  {ln.completed && <Check className="w-3 h-3" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm ${ln.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{ln.text}</p>
+                  {(ln.assigned_to || ln.due_date) && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {ln.assigned_to && `Assigned: ${ln.assigned_to}`}
+                      {ln.assigned_to && ln.due_date && " · "}
+                      {ln.due_date && `Due: ${ln.due_date}`}
+                    </p>
+                  )}
+                </div>
+                {canEdit && !isLocked && (
+                  <button onClick={() => removeLN(i)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded flex-shrink-0" data-testid={`remove-ln-${i}`} title="Remove">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+            {learningNeeds.length === 0 && !addingLN && (
+              <p className="text-sm text-gray-400 py-2 text-center">No learning needs identified — add one or they will appear after re-analysis</p>
+            )}
+          </div>
+
+          {addingLN && (
+            <div className="mt-3 border border-dashed border-teal-400 rounded-md p-3 bg-teal-50" data-testid="add-ln-form">
+              <p className="text-xs font-semibold text-teal-800 mb-2">New Learning Need</p>
+              <input
+                type="text"
+                value={newLN.text}
+                onChange={e => setNewLN(n => ({ ...n, text: e.target.value }))}
+                placeholder="Describe the knowledge or skill gap..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white mb-2"
+                data-testid="new-ln-text"
+                autoFocus
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addLN(); } }}
+              />
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <input type="text" value={newLN.assigned_to} onChange={e => setNewLN(n => ({ ...n, assigned_to: e.target.value }))} placeholder="Assigned to (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid="new-ln-assigned" />
+                <input type="text" value={newLN.due_date} onChange={e => setNewLN(n => ({ ...n, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid="new-ln-due" />
+              </div>
+              <div className="flex gap-2 items-center">
+                <button onClick={addLN} disabled={!newLN.text.trim() || lnSaving} className="flex items-center gap-1.5 bg-teal-700 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-teal-800 disabled:opacity-50 transition-colors" data-testid="save-new-ln-btn">
+                  <Plus className="w-3 h-3" /> Add Learning Need
+                </button>
+                <button onClick={() => { setAddingLN(false); setNewLN({ text: "", assigned_to: "", due_date: "" }); }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-ln-btn">
+                  Cancel
+                </button>
+                {lnMessage && <span className={`text-xs ml-1 ${lnMessage === "Saved" ? "text-teal-600" : "text-red-500"}`}>{lnMessage}</span>}
+              </div>
+            </div>
+          )}
+          {lnMessage && !addingLN && <p className={`text-xs mt-2 ${lnMessage === "Saved" ? "text-teal-600" : "text-red-500"}`}>{lnMessage}</p>}
         </div>
       )}
 

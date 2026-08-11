@@ -132,7 +132,10 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
     {"id": "ach_1", "description": "Brief description of a specific thing done well, demonstrated, or grown in (max 25 words)"}
   ],
   "actions": [
-    {"id": "unique_id", "text": "action description", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
+    {"id": "unique_id", "text": "action description — a concrete task or follow-up to be completed before the next session (do NOT include identified learning needs here)", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
+  ],
+  "learning_needs": [
+    {"id": "ln_1", "text": "specific knowledge or skill gap identified in this session that needs to be addressed through learning, training or development", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
   ],
   "risks": [
     {
@@ -217,6 +220,8 @@ Rules:
 - If no custom standards are provided, return custom_mappings as an empty array []
 - If the meeting had paused sections, note this in the summary
 - For ACHIEVEMENTS: Extract 1–5 specific moments of genuinely good practice, personal or professional growth, positive skill demonstration, or care quality from the transcript. These surface what went well — not general praise. Include: manager compliments on a specific skill or action, worker self-reflection on something they handled well, described best practice narrated by the worker, or improvement since a previous session explicitly noted. Do NOT fabricate or infer achievements not grounded in specific statements. Use "id" values like "ach_1", "ach_2". If nothing specific and genuine is present, return an empty array [].
+- For LEARNING NEEDS: Extract specific knowledge or skill gaps that were explicitly identified in this session as needing to be addressed through learning, development or training. Include: areas where the worker expressed uncertainty or lack of confidence about a topic or procedure; gaps in understanding identified by the manager; development areas the worker acknowledged they need to work on; topics or procedures the worker hasn't yet learned or needs to refresh. Do NOT include: training already completed or confirmed as done, general tasks or follow-ups (those go in actions), risks or safeguarding concerns. Do NOT place learning needs in the actions array — they belong here only. Use "id" values like "ln_1", "ln_2". If nothing specific is identified, return an empty array [].
+- For ACTIONS: list only concrete tasks, follow-ups, or agreed next steps to be completed before the next session. Do NOT include identified learning needs here — those belong in learning_needs only.
 - If the transcript contains [MM:SS] timestamps, include the timestamp at the start of transcript_excerpt values (e.g. "[14:32] I always check the care plan before..."). This helps locate evidence within the session.
 - Include transcript excerpts as exact quotes from the provided text
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
@@ -228,7 +233,7 @@ Rules:
   (c) Rationalised inaction — describing a decision not to report, escalate, or record something, accompanied by language that minimises or explains away the significance of that decision
   (d) Dismissing their own welfare when context suggests otherwise: "I'm fine really", "I can manage", "it's not that bad" — especially if repeated or contradicted by other signals in the session
   Generate a risk at medium severity with label "Minimising language — further investigation needed". The risk text should name what was being minimised or dismissed (e.g. "Supervisee used minimising language when describing [the incident / their decision not to report / their wellbeing] — it is not yet clear whether the full significance of this was recognised. The manager should probe further before closing this point."). Suggested resolutions: follow-up questions at next supervision or sooner, consider whether a formal record or incident report is required, flag pattern to safeguarding lead if a safeguarding matter was involved. Flag these as risks regardless of whether an action was already agreed in the meeting. Specific patterns to watch for: expressing tiredness, exhaustion, or fatigue (especially if mentioned more than once — repetition is itself a signal of severity); describing feeling overwhelmed, stressed, or unable to cope; expressing general emotional distress or low mood about their work. IMPORTANT DISTINCTION: a worker saying "I felt bad for not doing X" or "I should have reported that" is NOT a wellbeing signal — that is guilt about a specific action gap and belongs in the action gap risks category. A wellbeing signal is about the person's general personal state (e.g. "I'm really tired", "I've been struggling lately", "I don't feel myself"), NOT about remorse over a specific professional incident. When multiple genuine wellbeing signals appear across the same meeting, generate a single consolidated risk describing the overall pattern rather than individual entries per mention. Use severity "high" if the worker appears distressed or repeats the concern three or more times; "medium" for one or two mentions. Risk text example: "Worker expressed repeated tiredness across the session — potential welfare concern requiring pastoral follow-up." Suggested resolutions should include: pastoral follow-up before next supervision, EAP signposting if not already offered, workload review, and a manager note to monitor.
-- For ACTIONS: when a risk arises from a worker's insufficient response (missed escalation, not recording a concern, not following a protocol), always generate a paired training action item assigned to the supervisor — not just an action on the concern itself. This ensures supervision gaps are captured, not just clinical risks."""
+- For ACTIONS: additionally, when a risk arises from a worker's insufficient response (missed escalation, not recording a concern, not following a protocol), always generate a paired training action item assigned to the supervisor — not just an action on the concern itself. This ensures supervision gaps are captured, not just clinical risks."""
 
 
 CRITERIA_EXTRACTION_PROMPT = """You are reviewing a standards/policy document from a UK adult social care provider. Extract a structured list of criteria, standards, or competencies from this document.
@@ -1505,6 +1510,7 @@ Provide your analysis as JSON. Only map regulations/standards where there is act
         return {
             "summary": "Analysis could not be parsed. Please review the transcript manually.",
             "actions": [],
+            "learning_needs": [],
             "risks": [],
             "cqc_mappings": [],
             "care_cert_mappings": [],

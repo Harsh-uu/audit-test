@@ -61,7 +61,7 @@ def _parse_meeting_row(m: dict) -> dict:
 
 
 def _parse_analysis_row(a: dict) -> dict:
-    for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions", "achievements"):
+    for field in ("actions", "risks", "cqc_mappings", "care_cert_mappings", "custom_mappings", "pii_redactions", "achievements", "learning_needs"):
         a[field] = _ensure_list(a.get(field))
     return a
 
@@ -298,7 +298,31 @@ async def update_actions(meeting_id: str, data: UpdateActionsRequest, current_us
     return {"message": "Actions updated"}
 
 
-@router.put("/{meeting_id}/evidence/{evidence_id}")
+@router.put("/{meeting_id}/learning_needs")
+async def update_learning_needs(meeting_id: str, data: dict, current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can edit learning needs")
+    org_id = current_user.get("org_id", "")
+    learning_needs = data.get("learning_needs", [])
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if m_row["status"] not in ["in_review", "reviewed"]:
+        raise HTTPException(status_code=400, detail="Meeting not in review state")
+    analysis_id = m_row["analysis_id"]
+    if not analysis_id:
+        raise HTTPException(status_code=400, detail="No analysis found")
+    now = datetime.now(timezone.utc).isoformat()
+    async with database.with_org(org_id) as conn:
+        await conn.execute(
+            "UPDATE analyses SET learning_needs=$1::jsonb, last_edited_at=$2, last_edited_by=$3 WHERE id=$4",
+            json.dumps(learning_needs), now, current_user["id"], analysis_id,
+        )
+        n = len(learning_needs)
+        await _log_edit(conn, meeting_id, org_id, "learning_needs", current_user["id"], current_user.get("name", ""),
+                        f"{n} learning need{'s' if n != 1 else ''} saved")
+    return {"message": "Learning needs updated"}
 async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenceRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can edit evidence items")
@@ -1730,6 +1754,31 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ]))
         story.append(at)
+
+    learning_needs = analysis.get("learning_needs") or []
+    if learning_needs:
+        story.append(Spacer(1, 4*mm))
+        story.append(section_header("Learning Needs", bg=colors.HexColor("#0F766E")))
+        story.append(Spacer(1, 2*mm))
+        cell_style = ParagraphStyle("Cell", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), leading=12)
+        done_style = ParagraphStyle("Done", fontName="Helvetica", fontSize=9, textColor=MID_GRAY, leading=12)
+        hdr_style = ParagraphStyle("Hdr", fontName="Helvetica-Bold", fontSize=9, textColor=colors.white, leading=12)
+        ln_rows = [[Paragraph("#", hdr_style), Paragraph("Learning Need", hdr_style), Paragraph("Assigned To", hdr_style), Paragraph("Due Date", hdr_style), Paragraph("Done", hdr_style)]]
+        for i, ln in enumerate(learning_needs, 1):
+            completed = ln.get("completed", False)
+            st = done_style if completed else cell_style
+            tick = "\u2713" if completed else ""
+            ln_rows.append([Paragraph(str(i), st), Paragraph(e(ln.get("text", "")), st), Paragraph(e(ln.get("assigned_to") or "\u2014"), st), Paragraph(e(ln.get("due_date") or "\u2014"), st), Paragraph(tick, st)])
+        lnt = Table(ln_rows, colWidths=[8*mm, 93*mm, 38*mm, 24*mm, 7*mm])
+        lnt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F766E")), ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY]),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(lnt)
 
     risks = analysis.get("risks") or []
     if risks:

@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS analyses (
     edited_summary TEXT,
     achievements JSONB NOT NULL DEFAULT '[]',
     actions JSONB NOT NULL DEFAULT '[]',
+    learning_needs JSONB NOT NULL DEFAULT '[]',
     risks JSONB NOT NULL DEFAULT '[]',
     cqc_mappings JSONB NOT NULL DEFAULT '[]',
     care_cert_mappings JSONB NOT NULL DEFAULT '[]',
@@ -564,6 +565,7 @@ ALTER TABLE analyses ADD COLUMN IF NOT EXISTS last_edited_at TEXT;
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS custom_mappings JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS pii_redactions JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS achievements JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS learning_needs JSONB NOT NULL DEFAULT '[]';
 
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_at TEXT;
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by TEXT;
