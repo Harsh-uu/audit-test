@@ -327,7 +327,7 @@ export default function Layout({ children }) {
         </div>
 
         {/* ── Org name banner (all pages) ─────────────────────────────────── */}
-        <div className="bg-[#1E3A8A] px-6 py-2.5 flex items-center gap-3 flex-shrink-0" data-testid="org-name-bar">
+        <div className="px-6 py-2.5 flex items-center gap-3 flex-shrink-0" style={{ backgroundColor: orgPrimary }} data-testid="org-name-bar">
           <Building2 className="w-4 h-4 text-white/60 flex-shrink-0" />
           {editingOrgName ? (
             <>
