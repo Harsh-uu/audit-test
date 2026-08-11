@@ -401,7 +401,7 @@ async def get_template(current_user=Depends(get_current_user)):
             row = await conn.fetchrow("SELECT data FROM settings WHERE id=$1", "supervision_template")
     if not row:
         return {"steps": [], "name": "Supervision Template", "description": ""}
-    d = row["data"] or {}
+    d = _jdict(row["data"])
     return {"steps": d.get("steps", []), "name": d.get("name", "Supervision Template"), "description": d.get("description", "")}
 
 
