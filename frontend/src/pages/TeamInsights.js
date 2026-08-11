@@ -579,7 +579,7 @@ export default function TeamInsights() {
             </h1>
             {data && (
               <p className="text-xs text-gray-500 mt-0.5">
-                {data.staff_count} staff · {data.meeting_count} signed-off sessions
+                {data.staff_count} staff · {data.meeting_count} {data.meeting_count === 1 ? "meeting" : "meetings"}
               </p>
             )}
           </div>
