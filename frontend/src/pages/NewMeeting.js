@@ -95,11 +95,12 @@ export default function NewMeeting() {
   return (
     <Layout>
       <div className="p-6 md:p-8 max-w-2xl mx-auto fade-in">
-        <button onClick={() => navigate("/dashboard")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm mb-6">
-          <ArrowLeft className="w-4 h-4" />Back to Dashboard
-        </button>
-
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1 font-display">New Meeting</h1>
+        <div className="flex items-start justify-between mb-1">
+          <h1 className="text-2xl font-semibold text-gray-900 font-display">New Meeting</h1>
+          <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-xs mt-1.5 flex-shrink-0">
+            <ArrowLeft className="w-3.5 h-3.5" />Back to Dashboard
+          </button>
+        </div>
         <p className="text-sm text-gray-500 mb-6">Set up your supervision meeting before recording</p>
 
         {/* Step indicator — now 2 steps */}
