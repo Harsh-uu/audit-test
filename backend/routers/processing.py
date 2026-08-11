@@ -24,6 +24,14 @@ def _jlist(val):
     return val or []
 
 
+def _parse_std_row(r) -> dict:
+    """Normalize standards_entries JSONB columns (sub_outcomes, key_questions, keywords)."""
+    s = dict(r)
+    for f in ("sub_outcomes", "key_questions", "keywords"):
+        s[f] = _jlist(s.get(f))
+    return s
+
+
 def _jdict(val):
     """Parse a JSONB value that asyncpg may return as a raw string; returns a dict."""
     if isinstance(val, dict): return val
@@ -191,8 +199,8 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                     "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
                     meeting_org_id,
                 )
-        cqc_standards = [dict(r) for r in cqc_rows]
-        care_cert_standards = [dict(r) for r in care_cert_rows]
+        cqc_standards = [_parse_std_row(r) for r in cqc_rows]
+        care_cert_standards = [_parse_std_row(r) for r in care_cert_rows]
 
         if meeting_org_id:
             async with database.with_org(meeting_org_id) as conn:

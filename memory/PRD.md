@@ -246,6 +246,8 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - **`_normalize_rec_events` flattener**: Robust helper added to flatten `recording_events` JSONB arrays of strings (double/triple encoded by asyncpg + RLS) into proper dicts for Audit Trail rendering.
 - **ALTER TABLE guards**: Added `ALTER TABLE meetings ADD COLUMN IF NOT EXISTS` for `created_by_name`, `transcript_id`, `analysis_id` — prevents silent 500 errors on production schema drift.
 - **`_parse_analysis_row` in meetings.py**: Added defensive JSONB row parser + `Array.isArray` guards in `EvidenceTab.js` to fix blank-screen React crash when analysis columns return as strings.
+- **Branding 500 fix**: Added `_jdict()` helper to `org.py`; applied to all 4 branding endpoint reads (`GET /branding`, `PUT /branding`, `POST /branding/logo`, `GET /branding/logo/{org_id}`). Root cause: asyncpg returning `organisations.branding` JSONB as a string even via `with_admin()`.
+- **`standards_entries` JSONB sweep**: Added `_parse_std_row()` helper to `processing.py`, `review.py`, `doc_uploads.py`. Fixed inline parse in `admin.py` team-insights. Guards `sub_outcomes`, `key_questions`, `keywords` JSONB columns which come from `with_org()` RLS and were previously iterated raw — would crash AI analysis and team-insights for any Care Certificate org.
 
 ### P1 (Remaining)
 - ~~Wales, Scotland, Northern Ireland AI prompt rewrites~~ — DONE (Aug 2026, Session 4): Full intent-first domain guides written for Wales (105 lines), Scotland (85 lines), NI (92 lines), matching England depth.

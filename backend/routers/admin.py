@@ -524,7 +524,8 @@ async def get_team_insights(
                 cqc_stds.append({"ref": s["reference"], "name": s["name"]})
             else:
                 cc_stds.append({"ref": s["reference"], "name": s["name"]})
-                subs = s.get("sub_outcomes") or []
+                _raw_subs = s.get("sub_outcomes")
+                subs = (json.loads(_raw_subs) if isinstance(_raw_subs, str) else _raw_subs) or []
                 if subs:
                     cc_sub_outcomes[s["reference"]] = [so["ref"] for so in subs]
 

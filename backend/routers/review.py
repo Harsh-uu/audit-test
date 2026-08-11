@@ -30,6 +30,18 @@ def _ensure_list(val):
     return val or []
 
 
+def _parse_std_row(r) -> dict:
+    """Normalize standards_entries JSONB columns (sub_outcomes, key_questions, keywords)."""
+    s = dict(r)
+    for f in ("sub_outcomes", "key_questions", "keywords"):
+        if isinstance(s.get(f), str):
+            try: s[f] = json.loads(s[f])
+            except Exception: s[f] = []
+        elif s.get(f) is None:
+            s[f] = []
+    return s
+
+
 def _ensure_dict(val):
     if isinstance(val, str):
         try:
@@ -945,8 +957,8 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
                     "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
                     org_id,
                 )
-        cqc_standards = [dict(r) for r in cqc_rows]
-        care_cert_standards = [dict(r) for r in care_cert_rows]
+        cqc_standards = [_parse_std_row(r) for r in cqc_rows]
+        care_cert_standards = [_parse_std_row(r) for r in care_cert_rows]
 
         async with database.with_org(org_id) as conn:
             custom_rows = await conn.fetch(

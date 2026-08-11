@@ -22,6 +22,19 @@ UPLOAD_MAX_CHARS = 20_000
 _JSONB_FIELDS = ("cqc_mappings", "care_cert_mappings", "custom_mappings")
 
 
+def _parse_std(r) -> dict:
+    """Normalize standards_entries JSONB columns before passing to ai.py."""
+    s = dict(r) if not isinstance(r, dict) else r
+    for f in ("sub_outcomes", "key_questions", "keywords"):
+        v = s.get(f)
+        if isinstance(v, str):
+            try: s[f] = json.loads(v)
+            except Exception: s[f] = []
+        elif v is None:
+            s[f] = []
+    return s
+
+
 class UpdateUploadEvidenceRequest(BaseModel):
     status: Optional[str] = None                    # accepted | rejected | needs_followup | pending
     edited_evidence_summary: Optional[str] = None
@@ -291,8 +304,8 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
                 org_id,
             )
 
-        cqc_stds = [dict(r) for r in cqc_rows]
-        care_cert_stds = [dict(r) for r in care_cert_rows]
+        cqc_stds = [_parse_std(dict(r)) for r in cqc_rows]
+        care_cert_stds = [_parse_std(dict(r)) for r in care_cert_rows]
         custom_stds = [dict(r) for r in custom_rows]
 
         # Build effective jurisdiction for NI prompt routing
