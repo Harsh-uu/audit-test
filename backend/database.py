@@ -56,6 +56,14 @@ async def with_org(org_id: str):
     are actually enforced (superusers bypass RLS; limited roles do not).
     Raises RuntimeError (→ HTTP 500) if the role switch fails — silent
     degradation to superuser would bypass RLS entirely.
+
+    !! JSONB WARNING !!
+    The SET LOCAL ROLE switch causes asyncpg's prepared-statement cache to
+    reset. After the reset the driver returns JSONB columns as raw JSON
+    *strings* instead of decoded dicts/lists. Every JSONB column read from
+    this context MUST be passed through _ensure_list / _ensure_dict / _jlist
+    / _jdict (or an equivalent inline json.loads guard) before use.
+    See /app/CONTRIBUTING.md for the full rule.
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -80,6 +88,10 @@ async def with_admin():
     """
     Acquire a connection as postgres (superuser) with RLS explicitly off.
     Use for: seeding, super-admin operations, auth, job worker.
+
+    Note: JSONB columns can still be returned as strings in some connection-
+    pooler configurations. Apply the same _ensure_list/_jdict guards as
+    with_org() when reading JSONB fields. See /app/CONTRIBUTING.md.
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
