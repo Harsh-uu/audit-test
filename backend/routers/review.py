@@ -1224,8 +1224,16 @@ async def get_comments(meeting_id: str, current_user=Depends(get_current_user)):
 
 @router.get("/{meeting_id}/audit-trail")
 async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user)):
-    import logging as _log
+    import logging as _log, traceback as _tb
     _logger = _log.getLogger(__name__)
+    try:
+        return await _audit_trail_inner(meeting_id, current_user, _logger)
+    except Exception as _top_err:
+        _logger.error(f"[AUDIT] UNHANDLED 500 meeting={meeting_id}: {_top_err}\n{_tb.format_exc()}")
+        return {"events": [], "_error": str(_top_err), "_trace": _tb.format_exc()[-800:]}
+
+
+async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
     org_id = current_user.get("org_id", "")
     _logger.info(f"[AUDIT] start meeting={meeting_id} org={org_id!r}")
 
