@@ -1290,16 +1290,27 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
             except Exception: return {}
         return val if isinstance(val, dict) else {}
 
-    # Deep-parse recording_events: in asyncpg RLS context the JSONB items can come back
-    # as strings instead of dicts (double-encoding). Normalise each element defensively.
-    def _parse_ev(ev):
-        if isinstance(ev, dict): return ev
-        if isinstance(ev, str):
-            try: return json.loads(ev)
-            except Exception: return {}
-        return {}
+    # Flatten recording_events from any nesting produced by asyncpg/RLS:
+    # production can return [dict], [str-of-dict], [str-of-array], [[dict]], etc.
+    def _normalize_rec_events(raw):
+        result = []
+        for item in _jlist(raw):
+            if isinstance(item, dict):
+                result.append(item)
+            elif isinstance(item, str):
+                try:
+                    parsed = json.loads(item)
+                    if isinstance(parsed, dict):
+                        result.append(parsed)
+                    elif isinstance(parsed, list):
+                        result.extend(e for e in parsed if isinstance(e, dict))
+                except Exception:
+                    pass
+            elif isinstance(item, list):
+                result.extend(e for e in item if isinstance(e, dict))
+        return result
 
-    rec_events = [_parse_ev(ev) for ev in _jlist(meeting.get("recording_events"))]
+    rec_events = _normalize_rec_events(meeting.get("recording_events"))
     rec_user_ids = list({ev.get("user_id") for ev in rec_events if ev.get("user_id")})
     rec_users = {}
     for uid in rec_user_ids:
