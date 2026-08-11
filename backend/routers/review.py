@@ -1290,7 +1290,17 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
             except Exception: return {}
         return val if isinstance(val, dict) else {}
 
-    rec_user_ids = list({ev.get("user_id") for ev in _jlist(meeting.get("recording_events")) if ev.get("user_id")})
+    # Deep-parse recording_events: in asyncpg RLS context the JSONB items can come back
+    # as strings instead of dicts (double-encoding). Normalise each element defensively.
+    def _parse_ev(ev):
+        if isinstance(ev, dict): return ev
+        if isinstance(ev, str):
+            try: return json.loads(ev)
+            except Exception: return {}
+        return {}
+
+    rec_events = [_parse_ev(ev) for ev in _jlist(meeting.get("recording_events"))]
+    rec_user_ids = list({ev.get("user_id") for ev in rec_events if ev.get("user_id")})
     rec_users = {}
     for uid in rec_user_ids:
         try:
@@ -1303,7 +1313,7 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
 
     label_map_rec = {"notice_acknowledged": "Recording notice acknowledged", "started": "Recording started",
                      "paused": "Recording paused", "resumed": "Recording resumed", "stopped": "Recording stopped"}
-    for ev in _jlist(meeting.get("recording_events")):
+    for ev in rec_events:
         ev_type = ev.get("type") or ev.get("event_type", "unknown")
         actor = rec_users.get(ev.get("user_id", ""), ev.get("user_name", "System"))
         events.append({"type": f"recording_{ev_type}", "label": label_map_rec.get(ev_type, f"Recording {ev_type}"),
