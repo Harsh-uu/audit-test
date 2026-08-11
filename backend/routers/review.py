@@ -1227,22 +1227,23 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
     import logging as _log
     _logger = _log.getLogger(__name__)
     org_id = current_user.get("org_id", "")
+    _logger.info(f"[AUDIT] start meeting={meeting_id} org={org_id!r}")
+
     try:
         async with database.with_org(org_id) as conn:
-            # Deliberately omit JSONB columns (recording_events, attendees, sign_off_record)
-            # from this query — asyncpg loses the JSONB codec in RLS context and on some
-            # Postgres versions throws rather than returning a string. Fetch them separately.
             m_row = await conn.fetchrow(
                 "SELECT id, org_id, title, created_at, created_by_name, "
                 "transcript_id, analysis_id "
                 "FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
             )
     except Exception as e:
-        _logger.error(f"audit-trail meeting fetch failed for {meeting_id}: {e}")
+        _logger.error(f"[AUDIT] meeting fetch FAILED meeting={meeting_id}: {e}")
         return {"events": [], "error": str(e)}
     if not m_row:
+        _logger.warning(f"[AUDIT] meeting NOT FOUND id={meeting_id} org={org_id!r}")
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(m_row)
+    _logger.info(f"[AUDIT] meeting ok created_at={meeting.get('created_at')!r} tid={meeting.get('transcript_id')!r} aid={meeting.get('analysis_id')!r}")
 
     # Fetch JSONB columns separately so any codec issue doesn't kill the whole trail
     try:
@@ -1256,7 +1257,7 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
             meeting["attendees"]        = jrow["attendees"]
             meeting["sign_off_record"]  = jrow["sign_off_record"]
     except Exception as e:
-        _logger.warning(f"audit-trail JSONB column fetch failed for {meeting_id}: {e}")
+        _logger.warning(f"[AUDIT] JSONB column fetch failed meeting={meeting_id}: {e}")
         meeting["recording_events"] = None
         meeting["attendees"]        = None
         meeting["sign_off_record"]  = None
@@ -1379,21 +1380,33 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
     try:
         async with database.with_org(org_id) as conn:
             log_rows = await conn.fetch("SELECT * FROM audit_logs WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id)
+        _logger.info(f"[AUDIT] audit_logs rows={len(log_rows)} meeting={meeting_id}")
         for log in log_rows:
             log = dict(log)
             action = log.get("action", "unknown")
             events.append({"type": action, "label": label_map_audit.get(action, action.replace("_", " ").title()),
                            "actor": log.get("user_name", "System"), "timestamp": log.get("timestamp", ""),
                            "detail": log.get("detail")})
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.warning(f"[AUDIT] audit_logs fetch FAILED meeting={meeting_id}: {e}")
 
     if (meeting.get("audio_deletion_status") == "deleted") and meeting.get("audio_deleted_at"):
         events.append({"type": "audio_deleted", "label": "Raw audio deleted (GDPR)", "actor": "System",
                        "timestamp": meeting["audio_deleted_at"], "detail": "Audio file removed after sign-off grace period"})
 
     events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
-    return {"events": events}
+    _logger.info(f"[AUDIT] returning {len(events)} events for meeting={meeting_id}")
+    return {
+        "events": events,
+        "_debug": {
+            "meeting_found": True,
+            "created_at": meeting.get("created_at"),
+            "transcript_id": meeting.get("transcript_id"),
+            "analysis_id": meeting.get("analysis_id"),
+            "event_count": len(events),
+            "org_id_used": org_id,
+        }
+    }
 
 
 # ── Email ─────────────────────────────────────────────────────────────────────

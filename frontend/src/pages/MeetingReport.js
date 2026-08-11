@@ -125,6 +125,7 @@ export default function MeetingReport() {
     setAuditLoading(true);
     try {
       const { data } = await axios.get(`${API}/review/${meetingId}/audit-trail`, getAuthConfig());
+      if (data._debug) console.log("[AuditTrail debug]", JSON.stringify(data._debug, null, 2));
       setAuditTrail(data.events || []);
     } catch (err) {
       console.error("Failed to load audit trail", err);
