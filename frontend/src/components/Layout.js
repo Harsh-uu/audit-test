@@ -199,36 +199,43 @@ export default function Layout({ children }) {
 
         {(user?.role === "admin" || user?.role === "manager") && (
           <>
+            {/* ── Top half: Insight & Analysis tools ───────────────────────── */}
             {!collapsed && (
-              <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Admin</div>
+              <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Insights</div>
             )}
             {[
-              ...(user?.role === "admin" || user?.role === "manager"
-                ? [
-                    { path: "/organisation", icon: Building2, label: "Organisation", testId: "nav-organisation" },
-                    { path: "/admin/schedules", icon: Calendar, label: "Schedules", testId: "nav-schedules" },
-                  ]
-                : []),
-              ...(user?.role === "admin" || user?.role === "manager"
-                ? [{ path: "/admin", icon: BookOpen, label: "Standards Library", testId: "nav-standards-library", exact: true },
-                   { path: "/upload-supervision", icon: FileUp, label: "Import Supervision", testId: "nav-import-supervision", exact: true },
-                   { path: "/supervision-matrix", icon: LayoutGrid, label: "Supervision Matrix", testId: "nav-supervision-matrix", exact: true },
-                   { path: "/admin/team", icon: BarChart2, label: "Team Intelligence", testId: "nav-team-intelligence", exact: true },
-                   { path: "/inspection-prep", icon: ClipboardCheck, label: "Inspection Prep", testId: "nav-inspection-prep", exact: true },
-                   { path: "/care-cert", icon: Award, label: "Care Certificate", testId: "nav-care-cert", exact: true },
-                   { path: "/settings", icon: Settings, label: "Settings", testId: "nav-settings", exact: true }]
-                : []),
+              { path: "/supervision-matrix", icon: LayoutGrid,    label: "Supervision Matrix",  testId: "nav-supervision-matrix",  exact: true },
+              { path: "/admin/team",         icon: BarChart2,      label: "Team Intelligence",   testId: "nav-team-intelligence",   exact: true },
+              { path: "/inspection-prep",    icon: ClipboardCheck, label: "Inspection Prep",     testId: "nav-inspection-prep",     exact: true },
+              { path: "/care-cert",          icon: Award,          label: "Care Certificate",    testId: "nav-care-cert",           exact: true },
             ].map(({ path, icon: Icon, label, testId, exact }) => {
               const active = exact ? location.pathname === path : isActive(path);
               return (
-                <Link
-                  key={path}
-                  to={path}
-                  onClick={onNavClick}
-                  data-testid={testId}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                    active ? "text-white" : "text-gray-600 hover:bg-gray-100"
-                  }`}
+                <Link key={path} to={path} onClick={onNavClick} data-testid={testId}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${active ? "text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                  style={active ? { backgroundColor: orgPrimary } : {}}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  {!collapsed && <span>{label}</span>}
+                </Link>
+              );
+            })}
+
+            {/* ── Bottom half: Management & Config ─────────────────────────── */}
+            {!collapsed && (
+              <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Manage</div>
+            )}
+            {[
+              { path: "/organisation",      icon: Building2, label: "Organisation",      testId: "nav-organisation",      exact: true },
+              { path: "/admin/schedules",   icon: Calendar,  label: "Schedules",         testId: "nav-schedules",         exact: true },
+              { path: "/admin",             icon: BookOpen,  label: "Standards Library", testId: "nav-standards-library", exact: true },
+              { path: "/upload-supervision",icon: FileUp,    label: "Import Supervision",testId: "nav-import-supervision",exact: true },
+              { path: "/settings",          icon: Settings,  label: "Settings",          testId: "nav-settings",          exact: true },
+            ].map(({ path, icon: Icon, label, testId, exact }) => {
+              const active = exact ? location.pathname === path : isActive(path);
+              return (
+                <Link key={path} to={path} onClick={onNavClick} data-testid={testId}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${active ? "text-white" : "text-gray-600 hover:bg-gray-100"}`}
                   style={active ? { backgroundColor: orgPrimary } : {}}
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
