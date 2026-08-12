@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
   TrendingUp, BarChart2, X, Building2, Calendar, FileUp, LayoutGrid, ClipboardCheck,
-  Pencil, Check, Loader, KeyRound, Settings, Award
+  Pencil, Check, Loader, KeyRound, Settings, Award, UserCircle, ChevronDown,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 
@@ -16,6 +16,14 @@ export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setShowUserMenu(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   // ── Org name banner state ─────────────────────────────────────────────────
   const [editingOrgName, setEditingOrgName] = useState(false);
@@ -231,32 +239,6 @@ export default function Layout({ children }) {
           </>
         )}
       </nav>
-
-      {/* User */}
-      <div className="p-3 border-t border-gray-200 flex-shrink-0">
-        {!collapsed && (
-          <div className="mb-2 px-3 py-2 bg-gray-50 rounded-md">
-            <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
-            <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
-          </div>
-        )}
-        <button
-          onClick={() => setShowChangePassword(true)}
-          data-testid="change-password-btn"
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-        >
-          <KeyRound className="w-4 h-4 flex-shrink-0" />
-          {!collapsed && <span>Change password</span>}
-        </button>
-        <button
-          onClick={handleLogout}
-          data-testid="logout-btn"
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors"
-        >
-          <LogOut className="w-4 h-4 flex-shrink-0" />
-          {!collapsed && <span>Sign out</span>}
-        </button>
-      </div>
     </div>
   );
 
@@ -339,19 +321,10 @@ export default function Layout({ children }) {
                 className="bg-white/10 border border-white/40 rounded px-2.5 py-0.5 text-white text-sm font-semibold focus:outline-none focus:bg-white/20 min-w-0 w-48"
                 data-testid="org-name-input"
               />
-              <button
-                onClick={saveOrgName}
-                disabled={savingOrgName}
-                className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-50"
-                data-testid="org-name-save"
-              >
+              <button onClick={saveOrgName} disabled={savingOrgName} className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-50" data-testid="org-name-save">
                 {savingOrgName ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
               </button>
-              <button
-                onClick={() => setEditingOrgName(false)}
-                className="p-1 rounded hover:bg-white/10 text-white/70 hover:text-white"
-                data-testid="org-name-cancel"
-              >
+              <button onClick={() => setEditingOrgName(false)} className="p-1 rounded hover:bg-white/10 text-white/70 hover:text-white" data-testid="org-name-cancel">
                 <X className="w-3.5 h-3.5" />
               </button>
             </>
@@ -359,17 +332,66 @@ export default function Layout({ children }) {
             <>
               <span className="text-sm font-semibold text-white">{user?.org_name || "Organisation"}</span>
               {canManage && (
-                <button
-                  onClick={() => { setEditingOrgName(true); setOrgNameDraft(user?.org_name || ""); }}
-                  className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors"
-                  data-testid="org-name-edit"
-                  title="Rename organisation"
-                >
+                <button onClick={() => { setEditingOrgName(true); setOrgNameDraft(user?.org_name || ""); }} className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors" data-testid="org-name-edit" title="Rename organisation">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
               )}
             </>
           )}
+
+          {/* ── User menu (top right) ──────────────────────────────────────── */}
+          <div className="ml-auto relative" ref={userMenuRef}>
+            <button
+              onClick={() => setShowUserMenu(v => !v)}
+              className="flex items-center gap-2 px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors group"
+              data-testid="user-menu-btn"
+            >
+              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                {user?.name?.[0]?.toUpperCase() || "?"}
+              </div>
+              <span className="text-white text-sm font-medium hidden sm:block">{user?.name}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-white/60 group-hover:text-white transition-colors" />
+            </button>
+
+            {showUserMenu && (
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden" data-testid="user-menu-dropdown">
+                {/* Header */}
+                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
+                  <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                </div>
+                {/* Actions */}
+                <div className="py-1">
+                  <button
+                    onClick={() => { setShowUserMenu(false); navigate("/settings"); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    data-testid="user-menu-settings"
+                  >
+                    <Settings className="w-4 h-4 text-gray-400" />
+                    Account Settings
+                  </button>
+                  <button
+                    onClick={() => { setShowUserMenu(false); setShowChangePassword(true); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    data-testid="user-menu-change-password"
+                  >
+                    <KeyRound className="w-4 h-4 text-gray-400" />
+                    Change Password
+                  </button>
+                </div>
+                <div className="border-t border-gray-100 py-1">
+                  <button
+                    onClick={() => { setShowUserMenu(false); handleLogout(); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    data-testid="logout-btn"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <main className="flex-1 overflow-y-auto">
