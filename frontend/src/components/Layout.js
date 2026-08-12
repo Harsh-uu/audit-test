@@ -113,7 +113,7 @@ export default function Layout({ children }) {
             {children}
             <footer className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
               <span>© {new Date().getFullYear()} Supervision2</span>
-              <a href="https://supervision2.co.uk/guide" target="_blank" rel="noopener noreferrer" className="text-[#1E3A8A] hover:underline font-medium">Free supervision guide</a>
+              <span>Supervision2 Ltd &middot; Company no. 16789096 &middot; ICO reg. ZC215901</span>
             </footer>
           </main>
         </div>
@@ -376,7 +376,7 @@ export default function Layout({ children }) {
           {children}
           <footer className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
             <span>© {new Date().getFullYear()} Supervision2</span>
-            <a href="https://supervision2.co.uk/guide" target="_blank" rel="noopener noreferrer" className="text-[#1E3A8A] hover:underline font-medium">Free supervision guide</a>
+            <span>Supervision2 Ltd &middot; Company no. 16789096 &middot; ICO reg. ZC215901</span>
           </footer>
         </main>
       </div>

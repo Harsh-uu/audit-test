@@ -318,9 +318,7 @@ export default function Login() {
         </div>
       </div>
       <footer className="absolute bottom-0 left-0 right-0 py-3 px-6 flex items-center justify-between text-xs text-gray-400">
-        <span>Supervision2 Ltd &middot; Company no. 16789096 &middot; ICO registration: ZC215901</span>
-        <a href="https://supervision2.co.uk/guide" target="_blank" rel="noopener noreferrer" className="text-[#1E3A8A] hover:underline font-medium">Free supervision guide</a>
-      </footer>
-    </div>
+        <span>Supervision2 Ltd &middot; Company no. 16789096 &middot; ICO reg. ZC215901</span>
+      </footer>    </div>
   );
 }
