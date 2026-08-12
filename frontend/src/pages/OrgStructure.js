@@ -111,7 +111,7 @@ const selectCls = `${inputCls} bg-white`;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function OrgStructure() {
+export default function OrgStructure({ embedded = false }) {
   const { getAuthConfig, API, user: currentUser, updateOrgName } = useAuth();
   const isAdmin = currentUser?.role === "admin";
   const canManage = ["admin", "manager"].includes(currentUser?.role);
@@ -338,8 +338,9 @@ export default function OrgStructure() {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  const Wrapper = embedded ? React.Fragment : Layout;
   return (
-    <Layout>
+    <Wrapper>
       <div>
 
         {/* ── Main content ── */}
@@ -830,6 +831,6 @@ export default function OrgStructure() {
 
       </div>{/* end main content */}
       </div>{/* end outer wrapper */}
-    </Layout>
+    </Wrapper>
   );
 }

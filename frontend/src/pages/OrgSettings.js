@@ -310,7 +310,7 @@ function TabBtn({ active, onClick, children }) {
   );
 }
 
-export default function OrgSettings() {
+export default function OrgSettings({ embedded = false }) {
   const { getAuthConfig, API, user, updateMfaStatus } = useAuth();
   const canBrand = user?.role === "admin" || user?.role === "manager";
   const [tab, setTab] = useState(user?.role === "manager" ? "security" : "template");
@@ -454,8 +454,9 @@ export default function OrgSettings() {
 
   if (loading) return <Layout><div className="p-8 text-center text-gray-400 text-sm">Loading…</div></Layout>;
 
+  const Wrapper = embedded ? React.Fragment : Layout;
   return (
-    <Layout>
+    <Wrapper>
       <div className="p-6 md:p-8 fade-in">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-gray-900 font-display">Settings</h1>
@@ -562,6 +563,6 @@ export default function OrgSettings() {
           <SecurityTab API={API} getAuthConfig={getAuthConfig} user={user} updateMfaStatus={updateMfaStatus} />
         )}
       </div>
-    </Layout>
+    </Wrapper>
   );
 }

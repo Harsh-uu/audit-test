@@ -3,7 +3,7 @@ import uuid
 import re as _re
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Form, Request
 from pydantic import BaseModel, EmailStr
@@ -820,6 +820,85 @@ async def get_team_insights(
         },
         "themes": {"coverage_gaps": gaps, "common_risks": agg(all_risks), "outstanding_actions": agg(all_outstanding)},
     }
+
+
+# ── People Stats (usage dashboard) ──────────────────────────────────────────
+
+@router.get("/people-stats")
+async def get_people_stats(current_user=Depends(get_current_user)):
+    """Per-user meeting count, last active date, 8-week activity sparkline, and pending-invite flag."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+
+    async with database.with_org(org_id) as conn:
+        user_rows = await conn.fetch(
+            """SELECT id, name, email, role, team_id, setting_id,
+                      is_active, must_change_password, created_at
+               FROM users WHERE org_id=$1 ORDER BY name""",
+            org_id,
+        )
+        # Meetings with attendees and dates for the org
+        mtg_rows = await conn.fetch(
+            """SELECT id, date, attendees
+               FROM meetings
+               WHERE status IN ('in_review','reviewed','signed_off','shared')
+               ORDER BY date DESC"""
+        )
+        # Team/setting name lookup
+        team_rows   = await conn.fetch("SELECT id, name FROM teams WHERE org_id=$1", org_id)
+        setting_rows = await conn.fetch("SELECT id, name FROM org_settings WHERE org_id=$1", org_id)
+
+    team_map    = {str(r["id"]): r["name"] for r in team_rows}
+    setting_map = {str(r["id"]): r["name"] for r in setting_rows}
+
+    # Build per-user meeting date list
+    from collections import defaultdict
+    user_meetings: dict = defaultdict(list)
+    for mtg in mtg_rows:
+        m = dict(mtg)
+        raw_date = str(m.get("date", "") or "")[:10]
+        for att in _jlist(m.get("attendees")):
+            if isinstance(att, dict):
+                uid = str(att.get("user_id", ""))
+                if uid and raw_date:
+                    user_meetings[uid].append(raw_date)
+
+    # 8-week buckets (Mon of each week, newest = index 7)
+    today = datetime.now(timezone.utc).date()
+    week_starts = [(today - timedelta(days=today.weekday() + 7 * (7 - i))).isoformat() for i in range(8)]
+    week_ends   = [(today - timedelta(days=today.weekday() + 7 * (7 - i) - 6)).isoformat() for i in range(8)]
+
+    result = []
+    for u in user_rows:
+        uid = str(u["id"])
+        dates = sorted(user_meetings.get(uid, []), reverse=True)
+        meeting_count = len(dates)
+        last_meeting_date = dates[0] if dates else None
+
+        # 8-week sparkline
+        weekly = []
+        for ws, we in zip(week_starts, week_ends):
+            weekly.append(sum(1 for d in dates if ws <= d <= we))
+
+        result.append({
+            "user_id": uid,
+            "name": u["name"],
+            "email": u["email"],
+            "role": u["role"],
+            "team_id": str(u["team_id"]) if u["team_id"] else None,
+            "team_name": team_map.get(str(u["team_id"] or ""), ""),
+            "setting_id": str(u["setting_id"]) if u["setting_id"] else None,
+            "setting_name": setting_map.get(str(u["setting_id"] or ""), ""),
+            "is_active": u["is_active"],
+            "pending_invite": bool(u["must_change_password"]),
+            "created_at": str(u["created_at"] or "")[:10],
+            "meeting_count": meeting_count,
+            "last_meeting_date": last_meeting_date,
+            "weekly_activity": weekly,
+        })
+
+    return result
 
 
 # ── Team Insights Registers ───────────────────────────────────────────────────

@@ -20,6 +20,7 @@ import InspectionPrep from "@/pages/InspectionPrep";
 import StaffPortfolio from "@/pages/StaffPortfolio";
 import TeamInsights from "@/pages/TeamInsights";
 import OrgStructure from "@/pages/OrgStructure";
+import PeopleHub from "@/pages/PeopleHub";
 import Schedules from "@/pages/Schedules";
 import CareCertPrep from "@/pages/CareCertPrep";
 import OrgSettings from "@/pages/OrgSettings";
@@ -57,7 +58,7 @@ function App() {
           <Route path="/care-cert" element={<ProtectedRoute roles={["admin", "manager"]}><CareCertPrep /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute roles={["admin", "manager"]}><OrgSettings /></ProtectedRoute>} />
           <Route path="/admin/team" element={<ProtectedRoute roles={["admin", "manager"]}><TeamInsights /></ProtectedRoute>} />
-          <Route path="/organisation" element={<ProtectedRoute roles={["admin", "manager"]}><OrgStructure /></ProtectedRoute>} />
+          <Route path="/organisation" element={<ProtectedRoute roles={["admin", "manager"]}><PeopleHub /></ProtectedRoute>} />
           <Route path="/admin/schedules" element={<ProtectedRoute roles={["admin", "manager"]}><Schedules /></ProtectedRoute>} />
           <Route path="/portfolio" element={<ProtectedRoute><StaffPortfolio /></ProtectedRoute>} />
           <Route path="/portfolio/:userId" element={<ProtectedRoute><StaffPortfolio /></ProtectedRoute>} />

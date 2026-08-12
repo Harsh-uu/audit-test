@@ -262,6 +262,13 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - Role-specific competency framework upload (admin uploads per-role competency doc; AI maps evidence against it)
 - Skills for Care Effective Supervision Guide — per-org upload option
 
+### P0 (Done — Aug 2026, Session 7)
+- **NewMeeting.js mobile responsiveness**: Two-panel layout now stacks vertically on mobile (`flex-col md:flex-row`, `w-full md:w-80`, `border-b md:border-b-0 md:border-r`).
+- **Backend `people-stats` 500 fix**: SQL query was referencing non-existent `name` column in `settings` table. Fixed to query `org_settings` (which does have a `name` column). `GET /api/admin/people-stats` now returns successfully.
+
+### P1 (In Progress — Aug 2026, Session 7)
+- **People Hub**: `PeopleHub.js` wired into App.js, `OrgStructure.js` + `OrgSettings.js` accept `embedded` prop. Unblocked now that `people-stats` 500 is fixed. Full integration testing pending.
+
 ### P2 (Future)
 - Pending invites dashboard
 - Usage dashboard (meeting counts, last activity, storage per org)
@@ -269,3 +276,5 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - Impersonate org feature for Super Admins
 - Meeting duplicate / template feature
 - Bulk export of evidence reports
+- Role-specific competency framework upload
+- Skills for Care Effective Supervision Guide integration

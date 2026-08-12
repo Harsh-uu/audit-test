@@ -132,10 +132,10 @@ export default function NewMeeting() {
         </div>
 
         {/* ── Two-panel body ─────────────────────────────────────────────────── */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row flex-1 overflow-auto md:overflow-hidden">
 
-          {/* LEFT PANEL — config fields + action button (never scrolls) */}
-          <div className="w-80 flex-shrink-0 border-r border-gray-100 bg-gray-50 flex flex-col p-5 gap-5 overflow-y-auto">
+          {/* LEFT PANEL — config fields + action button */}
+          <div className="w-full md:w-80 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 bg-gray-50 flex flex-col p-5 gap-5 md:overflow-y-auto">
 
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Meeting Type</label>
