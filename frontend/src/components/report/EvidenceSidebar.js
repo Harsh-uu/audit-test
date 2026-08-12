@@ -158,13 +158,13 @@ function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence,
           )}
           {isReviewMode && (
             <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-              <button onClick={() => handleAction("accepted")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "accepted" ? "bg-emerald-100 border-emerald-300 text-emerald-700" : "border-gray-200 text-gray-600 hover:bg-emerald-50"}`} data-testid={`accept-evidence-${mapping.id}`}>
+              <button onClick={() => handleAction("accepted")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "accepted" ? "bg-emerald-200 border-emerald-400 text-emerald-800 font-semibold" : "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"}`} data-testid={`accept-evidence-${mapping.id}`}>
                 <Check className="w-3 h-3" /> Accept
               </button>
-              <button onClick={() => handleAction("rejected")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "rejected" ? "bg-red-100 border-red-300 text-red-600" : "border-gray-200 text-gray-600 hover:bg-red-50"}`} data-testid={`reject-evidence-${mapping.id}`}>
+              <button onClick={() => handleAction("rejected")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "rejected" ? "bg-red-200 border-red-400 text-red-800 font-semibold" : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"}`} data-testid={`reject-evidence-${mapping.id}`}>
                 <X className="w-3 h-3" /> Reject
               </button>
-              <button onClick={() => handleAction("needs_followup")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "needs_followup" ? "bg-amber-100 border-amber-300 text-amber-700" : "border-gray-200 text-gray-600 hover:bg-amber-50"}`} data-testid={`flag-evidence-${mapping.id}`}>
+              <button onClick={() => handleAction("needs_followup")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "needs_followup" ? "bg-amber-200 border-amber-400 text-amber-800 font-semibold" : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"}`} data-testid={`flag-evidence-${mapping.id}`}>
                 <Flag className="w-3 h-3" /> Flag
               </button>
               {canEditWording !== false && !editing && (

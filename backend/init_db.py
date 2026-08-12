@@ -642,6 +642,10 @@ async def create_schema():
         await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
         await conn.set_type_codec("json", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
         await conn.execute(SCHEMA_SQL)
+        # ── Data migrations ───────────────────────────────────────────────────────
+        await conn.execute(
+            "UPDATE meeting_types SET name = 'Supervision' WHERE name = 'Monthly Supervision'"
+        )
         logger.info("Schema created/verified successfully")
     finally:
         await conn.close()

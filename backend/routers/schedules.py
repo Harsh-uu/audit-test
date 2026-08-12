@@ -11,10 +11,10 @@ import database
 router = APIRouter()
 
 DEFAULT_MEETING_TYPES = [
-    {"name": "Monthly Supervision",       "default_frequency": "monthly",   "color": "#3B82F6"},
-    {"name": "Quarterly Team Meeting",    "default_frequency": "quarterly", "color": "#10B981"},
-    {"name": "Quarterly Appraisal",       "default_frequency": "quarterly", "color": "#F59E0B"},
-    {"name": "Annual Performance Review", "default_frequency": "annual",    "color": "#8B5CF6"},
+    {"name": "Supervision",                "default_frequency": "monthly",   "color": "#3B82F6"},
+    {"name": "Quarterly Team Meeting",     "default_frequency": "quarterly", "color": "#10B981"},
+    {"name": "Quarterly Appraisal",        "default_frequency": "quarterly", "color": "#F59E0B"},
+    {"name": "Annual Performance Review",  "default_frequency": "annual",    "color": "#8B5CF6"},
 ]
 
 FREQ_MONTHS = {"monthly": 1, "quarterly": 3, "annual": 12}
