@@ -673,6 +673,11 @@ function RegisterView({ type, items = [], loading, onToggle }) {
 
     // learning_needs
     return (
+      <div
+        key={item.id || idx}
+        className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm transition-shadow ${item.completed ? "opacity-65" : ""}`}
+        data-testid={`register-ln-${item.id}`}
+      >
         <div style={{ width: 3, background: item.completed ? "#D1FAE5" : accent, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
         <button
           onClick={() => onToggle("learning_needs", item.meeting_id, item.id, !item.completed)}
