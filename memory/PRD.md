@@ -266,8 +266,13 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - **NewMeeting.js mobile responsiveness**: Two-panel layout now stacks vertically on mobile (`flex-col md:flex-row`, `w-full md:w-80`, `border-b md:border-b-0 md:border-r`).
 - **Backend `people-stats` 500 fix**: SQL query was referencing non-existent `name` column in `settings` table. Fixed to query `org_settings` (which does have a `name` column). `GET /api/admin/people-stats` now returns successfully.
 
-### P1 (In Progress — Aug 2026, Session 7)
-- **People Hub**: `PeopleHub.js` wired into App.js, `OrgStructure.js` + `OrgSettings.js` accept `embedded` prop. Unblocked now that `people-stats` 500 is fixed. Full integration testing pending.
+### P1 (Done — Aug 2026, Session 7)
+- **People Hub complete**: Unified `/organisation` page with 4 tabs:
+  - **People & Usage**: Staff table with stat strip (total/active/inactive/avg), 8-week sparkline activity per person, filters (role/team/status), pending-invite badges, right sidebar with pending invite cards + Resend/Revoke actions, inactive staff warning.
+  - **Structure**: Embedded `OrgStructure` drag-and-drop tree (loading state bug fixed for `embedded` prop).
+  - **Invites**: Pending invite table with Resend/Revoke wired to `DELETE /api/admin/users/{user_id}` endpoint.
+  - **Settings**: Embedded `OrgSettings` with all sub-tabs (loading state bug fixed for `embedded` prop).
+- **`DELETE /api/admin/users/{user_id}`**: New endpoint — deletes pending (must_change_password) users entirely; deactivates active users.
 
 ### P2 (Future)
 - Pending invites dashboard

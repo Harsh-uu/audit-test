@@ -112,7 +112,7 @@ const selectCls = `${inputCls} bg-white`;
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function OrgStructure({ embedded = false }) {
-  const { getAuthConfig, API, user: currentUser, updateOrgName } = useAuth();
+  const { getAuthConfig, API, user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === "admin";
   const canManage = ["admin", "manager"].includes(currentUser?.role);
 
@@ -328,13 +328,12 @@ export default function OrgStructure({ embedded = false }) {
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center py-24 text-gray-400">
-          <Loader className="w-5 h-5 animate-spin mr-2" /><span className="text-sm">Loading…</span>
-        </div>
-      </Layout>
+    const loadEl = (
+      <div className="flex items-center justify-center py-24 text-gray-400">
+        <Loader className="w-5 h-5 animate-spin mr-2" /><span className="text-sm">Loading…</span>
+      </div>
     );
+    return embedded ? loadEl : <Layout>{loadEl}</Layout>;
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────

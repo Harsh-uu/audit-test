@@ -452,7 +452,10 @@ export default function OrgSettings({ embedded = false }) {
     setTxExportLoading(false);
   };
 
-  if (loading) return <Layout><div className="p-8 text-center text-gray-400 text-sm">Loading…</div></Layout>;
+  if (loading) {
+    const loadEl = <div className="p-8 text-center text-gray-400 text-sm">Loading…</div>;
+    return embedded ? loadEl : <Layout>{loadEl}</Layout>;
+  }
 
   const Wrapper = embedded ? React.Fragment : Layout;
   return (

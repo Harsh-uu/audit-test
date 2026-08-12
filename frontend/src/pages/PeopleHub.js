@@ -6,8 +6,8 @@ import OrgStructure from "@/pages/OrgStructure";
 import OrgSettings  from "@/pages/OrgSettings";
 import {
   Users, UserPlus, Settings, Building2,
-  RefreshCw, Search, ChevronRight, AlertTriangle, Check,
-  Mail, Clock, MoreHorizontal,
+  RefreshCw, Search, AlertTriangle, Check,
+  Mail, MoreHorizontal,
 } from "lucide-react";
 
 // ── Avatar helper ────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ function Sparkbar({ data = [] }) {
 }
 
 // ── People & Usage tab ───────────────────────────────────────────────────────
-function PeopleTab({ people, loading, onRefresh }) {
+function PeopleTab({ people, loading, onRefresh, onRevoke }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
@@ -248,8 +248,16 @@ function PeopleTab({ people, loading, onRefresh }) {
                 </div>
                 <p className="text-[11px] text-gray-400 mt-1.5">Invited {p.created_at} · {(p.role === "manager" ? "Manager" : "Care Worker")}</p>
                 <div className="flex gap-1.5 mt-2">
-                  <button className="flex-1 text-xs font-medium border border-gray-200 bg-white rounded px-2 py-1 hover:bg-gray-50 transition-colors" data-testid={`invite-resend-${p.user_id}`}>Resend</button>
-                  <button className="flex-1 text-xs font-medium border border-red-200 bg-red-50 text-red-600 rounded px-2 py-1 hover:bg-red-100 transition-colors" data-testid={`invite-revoke-${p.user_id}`}>Revoke</button>
+                  <button
+                    className="flex-1 text-xs font-medium border border-gray-200 bg-white rounded px-2 py-1 hover:bg-gray-50 transition-colors"
+                    onClick={() => alert(`Send ${p.name} their login link:\n${window.location.origin}/login\n\nEmail: ${p.email}`)}
+                    data-testid={`invite-resend-${p.user_id}`}
+                  >Resend</button>
+                  <button
+                    className="flex-1 text-xs font-medium border border-red-200 bg-red-50 text-red-600 rounded px-2 py-1 hover:bg-red-100 transition-colors"
+                    onClick={() => onRevoke(p)}
+                    data-testid={`invite-revoke-${p.user_id}`}
+                  >Revoke</button>
                 </div>
               </div>
             ))
@@ -278,7 +286,7 @@ function PeopleTab({ people, loading, onRefresh }) {
 }
 
 // ── Invites tab ───────────────────────────────────────────────────────────────
-function InvitesTab({ people }) {
+function InvitesTab({ people, onRevoke }) {
   const pending = people.filter(p => p.pending_invite);
   return (
     <div className="p-6">
@@ -327,8 +335,16 @@ function InvitesTab({ people }) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1.5 justify-end">
-                        <button className="text-xs font-medium border border-gray-200 bg-white rounded px-2.5 py-1 hover:bg-gray-50">Resend</button>
-                        <button className="text-xs font-medium border border-red-200 bg-red-50 text-red-600 rounded px-2.5 py-1 hover:bg-red-100">Revoke</button>
+                        <button
+                          className="text-xs font-medium border border-gray-200 bg-white rounded px-2.5 py-1 hover:bg-gray-50"
+                          onClick={() => alert(`Send ${p.name} their login link:\n${window.location.origin}/login\n\nEmail: ${p.email}`)}
+                          data-testid={`invites-resend-${p.user_id}`}
+                        >Resend</button>
+                        <button
+                          className="text-xs font-medium border border-red-200 bg-red-50 text-red-600 rounded px-2.5 py-1 hover:bg-red-100"
+                          onClick={() => onRevoke(p)}
+                          data-testid={`invites-revoke-${p.user_id}`}
+                        >Revoke</button>
                       </div>
                     </td>
                   </tr>
@@ -363,6 +379,17 @@ export default function PeopleHub() {
   }, [API]);
 
   useEffect(() => { load(); }, [load]);
+
+  const revokeInvite = useCallback(async (person) => {
+    if (!window.confirm(`Revoke invite for ${person.name}? This will remove their account.`)) return;
+    try {
+      await axios.delete(`${API}/admin/users/${person.user_id}`, getAuthConfig());
+      setPeople(prev => prev.filter(p => p.user_id !== person.user_id));
+    } catch (err) {
+      alert(err.response?.data?.detail || "Failed to revoke invite");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API]);
 
   const pendingCount = people.filter(p => p.pending_invite).length;
 
@@ -424,7 +451,7 @@ export default function PeopleHub() {
         {/* Tab content */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {tab === "people" && (
-            <PeopleTab people={people} loading={loading} onRefresh={load} />
+            <PeopleTab people={people} loading={loading} onRefresh={load} onRevoke={revokeInvite} />
           )}
           {tab === "structure" && (
             <div className="overflow-y-auto flex-1">
@@ -433,7 +460,7 @@ export default function PeopleHub() {
           )}
           {tab === "invites" && (
             <div className="overflow-y-auto flex-1">
-              <InvitesTab people={people} />
+              <InvitesTab people={people} onRevoke={revokeInvite} />
             </div>
           )}
           {tab === "settings" && (

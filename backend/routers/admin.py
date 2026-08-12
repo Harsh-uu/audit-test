@@ -131,7 +131,26 @@ async def update_user(user_id: str, data: UpdateUserRequest, current_user=Depend
     return {"message": "User updated"}
 
 
-@router.post("/users/{user_id}/reset-password")
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str, current_user=Depends(get_current_user)):
+    """Revoke a pending invite (must_change_password=true) or deactivate user. Admin only."""
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    org_id = current_user.get("org_id", "")
+    async with database.with_admin() as conn:
+        u = await conn.fetchrow("SELECT id, must_change_password FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
+        if not u:
+            raise HTTPException(404, "User not found")
+        if u["must_change_password"]:
+            # Pending invite — safe to delete entirely
+            await conn.execute("DELETE FROM users WHERE id=$1", user_id)
+        else:
+            # Active user — just deactivate
+            await conn.execute("UPDATE users SET is_active=FALSE WHERE id=$1", user_id)
+    return {"message": "User removed"}
+
+
+
 async def reset_user_password(user_id: str, data: ResetPasswordRequest, current_user=Depends(get_current_user)):
     if current_user["role"] != "admin":
         raise HTTPException(403, "Admin only")
