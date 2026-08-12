@@ -252,6 +252,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ### P1 (Remaining)
 - ~~Wales, Scotland, Northern Ireland AI prompt rewrites~~ — DONE (Aug 2026, Session 4): Full intent-first domain guides written for Wales (105 lines), Scotland (85 lines), NI (92 lines), matching England depth.
 
+### P0 (Done — Aug 2026, Session 6)
+- **Team Intelligence Register Tabs**: Added 3 new tabs to Team Intelligence page — Learning Needs (teal), Risks (red), Actions (amber). Each tab shows a filterable register with: stat strip (4 colour-accented stat cards), search + staff + status filter bar, and per-item rows with tick/resolve toggles. Actions and Learning Needs show checkboxes to mark complete/addressed; Risks use CheckSquare to mark resolved (matching meeting report UX). New backend endpoints: `GET /admin/team-insights/registers`, `PATCH /admin/team-insights/actions/{meeting_id}/{action_id}`, `PATCH /admin/team-insights/learning_needs/{meeting_id}/{ln_id}`. Optimistic UI updates with revert-on-failure.
+
 ### P1.5 (Upcoming)
 - **Achievements section — DONE** (Aug 2026, Session 4): AI extracts 1–5 specific achievement moments from meeting transcripts; rendered between Summary and Actions in the Evidence tab with emerald green/star visual styling. DB migration applied.
 - **AWIF granularity review** (Wales consultation pending): Current AWIF sub-outcomes are section headings (topic level). Decision pending from Welsh users on whether to drill down to the specific "I can/I understand" practice learning outcome statements. All 7 workbook .docx files available in job assets for re-extraction when ready.

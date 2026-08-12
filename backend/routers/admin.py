@@ -822,6 +822,259 @@ async def get_team_insights(
     }
 
 
+# ── Team Insights Registers ───────────────────────────────────────────────────
+
+@router.get("/team-insights/registers")
+async def get_registers(
+    team_id: Optional[str] = None,
+    setting_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user=Depends(get_current_user),
+):
+    """Return per-item detail lists for Actions, Risks and Learning Needs across the org."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+
+    async with database.with_org(org_id) as conn:
+        # Scoped staff list (mirrors team-insights scoping logic)
+        if team_id:
+            staff_rows = await conn.fetch(
+                "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
+                org_id, team_id,
+            )
+        elif setting_id:
+            staff_rows = await conn.fetch(
+                "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
+                org_id, setting_id,
+            )
+        elif current_user["role"] == "manager":
+            mgr_scope = get_manager_scope(current_user)
+            if mgr_scope["level"] == "team":
+                staff_rows = await conn.fetch(
+                    "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
+                    org_id, mgr_scope["team_id"],
+                )
+            elif mgr_scope["level"] == "setting":
+                staff_rows = await conn.fetch(
+                    "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
+                    org_id, mgr_scope["setting_id"],
+                )
+            else:
+                staff_rows = await conn.fetch(
+                    "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
+                    org_id,
+                )
+        else:
+            staff_rows = await conn.fetch(
+                "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
+                org_id,
+            )
+
+        staff = [dict(r) for r in staff_rows]
+        if not staff:
+            return {"actions": [], "risks": [], "learning_needs": []}
+
+        staff_id_to_name = {str(s["id"]): s["name"] for s in staff}
+        staff_id_set = set(staff_id_to_name.keys())
+
+        # Fetch meetings + analyses in one JOIN
+        date_conds = [
+            "m.status IN ('in_review','reviewed','signed_off','shared')",
+            "m.analysis_id IS NOT NULL",
+        ]
+        date_params: list = []
+        if date_from:
+            date_params.append(date_from)
+            date_conds.append(f"m.date >= ${len(date_params)}")
+        if date_to:
+            date_params.append(date_to + "T23:59:59")
+            date_conds.append(f"m.date <= ${len(date_params)}")
+
+        rows = await conn.fetch(
+            f"""SELECT m.id, m.title, m.date, m.attendees, m.sign_off_manager_id,
+                       a.actions, a.risks, a.learning_needs
+                FROM meetings m
+                JOIN analyses a ON a.id = m.analysis_id
+                WHERE {' AND '.join(date_conds)}
+                ORDER BY m.date DESC""",
+            *date_params,
+        )
+
+    actions_out, risks_out, lns_out = [], [], []
+
+    for row in rows:
+        r = dict(row)
+        mtg_id = str(r["id"])
+        mtg_title = r.get("title", "")
+        mtg_date = str(r.get("date", ""))[:10]
+        sign_off_mgr_id = str(r.get("sign_off_manager_id") or "")
+
+        # Identify non-manager staff in this meeting
+        staff_in_meeting = []
+        for att in _jlist(r.get("attendees")):
+            if not isinstance(att, dict):
+                continue
+            uid = str(att.get("user_id", ""))
+            if uid in staff_id_set and uid != sign_off_mgr_id:
+                staff_in_meeting.append({
+                    "id": uid,
+                    "name": staff_id_to_name.get(uid, att.get("name", "Unknown")),
+                })
+
+        if not staff_in_meeting:
+            continue
+
+        staff_names = ", ".join(s["name"] for s in staff_in_meeting)
+        staff_ids_list = [s["id"] for s in staff_in_meeting]
+
+        for action in _jlist(r.get("actions")):
+            if not isinstance(action, dict):
+                continue
+            actions_out.append({
+                "id": action.get("id", ""),
+                "text": action.get("text", ""),
+                "completed": action.get("completed", False),
+                "due_date": action.get("due_date") or "",
+                "is_rolled_over": action.get("is_rolled_over", False),
+                "staff_names": staff_names,
+                "staff_ids": staff_ids_list,
+                "meeting_title": mtg_title,
+                "meeting_date": mtg_date,
+                "meeting_id": mtg_id,
+            })
+
+        for risk in _jlist(r.get("risks")):
+            if not isinstance(risk, dict):
+                continue
+            text = risk.get("text") or risk.get("risk") or risk.get("description") or ""
+            if not text:
+                continue
+            risks_out.append({
+                "id": risk.get("id", ""),
+                "text": text,
+                "severity": (risk.get("severity") or "low").lower(),
+                "is_resolved": risk.get("is_resolved", False),
+                "resolved_by": risk.get("resolved_by") or "",
+                "staff_names": staff_names,
+                "staff_ids": staff_ids_list,
+                "meeting_title": mtg_title,
+                "meeting_date": mtg_date,
+                "meeting_id": mtg_id,
+            })
+
+        for ln in _jlist(r.get("learning_needs")):
+            if not isinstance(ln, dict):
+                continue
+            text = ln.get("text", "")
+            if not text:
+                continue
+            lns_out.append({
+                "id": ln.get("id", ""),
+                "text": text,
+                "completed": ln.get("completed", False),
+                "due_date": ln.get("due_date") or "",
+                "assigned_to": ln.get("assigned_to") or "",
+                "staff_names": staff_names,
+                "staff_ids": staff_ids_list,
+                "meeting_title": mtg_title,
+                "meeting_date": mtg_date,
+                "meeting_id": mtg_id,
+            })
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    sev_order = {"high": 0, "medium": 1, "low": 2}
+
+    # Actions: overdue first, then outstanding, then completed
+    overdue_a  = [a for a in actions_out if not a["completed"] and a["due_date"] and a["due_date"] < today]
+    open_a     = [a for a in actions_out if not a["completed"] and not (a["due_date"] and a["due_date"] < today)]
+    done_a     = [a for a in actions_out if a["completed"]]
+    actions_out = overdue_a + open_a + done_a
+
+    # Risks: high→medium→low unresolved, then resolved
+    open_r     = sorted([r for r in risks_out if not r["is_resolved"]], key=lambda x: sev_order.get(x["severity"], 2))
+    resolved_r = [r for r in risks_out if r["is_resolved"]]
+    risks_out  = open_r + resolved_r
+
+    # LNs: outstanding first, then addressed
+    open_l  = [l for l in lns_out if not l["completed"]]
+    done_l  = [l for l in lns_out if l["completed"]]
+    lns_out = open_l + done_l
+
+    return {"actions": actions_out, "risks": risks_out, "learning_needs": lns_out}
+
+
+@router.patch("/team-insights/actions/{meeting_id}/{action_id}")
+async def toggle_register_action(meeting_id: str, action_id: str, data: dict, current_user=Depends(get_current_user)):
+    """Toggle action.completed from the Team Insights register (bypasses meeting-status lock)."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+    completed = data.get("completed")
+    if completed is None:
+        raise HTTPException(400, "completed field required")
+
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow(
+            "SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+        )
+        if not m_row or not m_row["analysis_id"]:
+            raise HTTPException(404, "Meeting not found")
+        a_row = await conn.fetchrow("SELECT id, actions FROM analyses WHERE id=$1", m_row["analysis_id"])
+        if not a_row:
+            raise HTTPException(404, "Analysis not found")
+        actions = _jlist(a_row["actions"])
+        updated = False
+        for i, a in enumerate(actions):
+            if isinstance(a, dict) and a.get("id") == action_id:
+                actions[i]["completed"] = completed
+                updated = True
+                break
+        if not updated:
+            raise HTTPException(404, "Action not found")
+        await conn.execute(
+            "UPDATE analyses SET actions=$1::jsonb WHERE id=$2", json.dumps(actions), a_row["id"]
+        )
+    return {"message": "Action updated", "completed": completed}
+
+
+@router.patch("/team-insights/learning_needs/{meeting_id}/{ln_id}")
+async def toggle_register_ln(meeting_id: str, ln_id: str, data: dict, current_user=Depends(get_current_user)):
+    """Toggle learning_need.completed from the Team Insights register."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+    completed = data.get("completed")
+    if completed is None:
+        raise HTTPException(400, "completed field required")
+
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow(
+            "SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+        )
+        if not m_row or not m_row["analysis_id"]:
+            raise HTTPException(404, "Meeting not found")
+        a_row = await conn.fetchrow(
+            "SELECT id, learning_needs FROM analyses WHERE id=$1", m_row["analysis_id"]
+        )
+        if not a_row:
+            raise HTTPException(404, "Analysis not found")
+        lns = _jlist(a_row["learning_needs"])
+        updated = False
+        for i, ln in enumerate(lns):
+            if isinstance(ln, dict) and ln.get("id") == ln_id:
+                lns[i]["completed"] = completed
+                updated = True
+                break
+        if not updated:
+            raise HTTPException(404, "Learning need not found")
+        await conn.execute(
+            "UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2", json.dumps(lns), a_row["id"]
+        )
+    return {"message": "Learning need updated", "completed": completed}
+
+
 # ── Export endpoints ──────────────────────────────────────────────────────────
 
 @router.get("/meetings-brief")
