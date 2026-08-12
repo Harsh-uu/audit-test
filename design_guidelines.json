@@ -1,112 +1,123 @@
 {
-  "theme": "LIGHT",
-  "archetype": "1 (Organic & Earthy - Healthcare/Compliance Variant)",
-  "reasoning": "Healthcare and compliance interfaces demand trust, calm, and absolute clarity. A light theme with deep navy and soft gray bases prevents clinical coldness while ensuring accessibility. Avoided forbidden teal colors and opted for authoritative navy and emerald.",
-  "colors": {
-    "background": "#F8F9FA",
-    "surface": "#FFFFFF",
-    "border": "#E5E7EB",
-    "primary": "#1E3A8A",
-    "primary_hover": "#1E40AF",
-    "secondary": "#F1F5F9",
-    "secondary_text": "#475569",
-    "accent_recording": "#DC2626",
-    "accent_compliance": "#059669",
-    "accent_warning": "#D97706",
-    "text_main": "#0F172A",
-    "text_muted": "#64748B",
-    "glass_bg": "rgba(255, 255, 255, 0.8)",
-    "glass_border": "rgba(0, 0, 0, 0.05)"
-  },
+  "theme": "light",
+  "design_context": "SaaS / Internal Tool (Professional Care Management)",
+  "emotional_tone": "Professional, efficient, accessible, and trustworthy",
   "typography": {
-    "headings": {
-      "family": "Work Sans, sans-serif",
-      "weight_default": "600",
-      "weight_emphasis": "700"
-    },
-    "body": {
-      "family": "IBM Plex Sans, sans-serif",
-      "weight_default": "400",
-      "weight_medium": "500"
-    },
-    "sizes": {
-      "h1": "text-4xl tracking-tight leading-tight",
-      "h2": "text-2xl tracking-tight leading-snug",
-      "h3": "text-xl tracking-tight",
-      "h4": "text-lg font-medium",
-      "body": "text-base leading-relaxed",
-      "small": "text-sm",
-      "micro": "text-xs uppercase tracking-[0.1em]"
+    "headings": "Work Sans",
+    "body": "IBM Plex Sans",
+    "rules": {
+      "hierarchy": "Clear text size hierarchy. H1 max text-3xl for internal tools. Tight tracking on headings.",
+      "readability": "High contrast text. No text smaller than text-sm for critical data.",
+      "banned": "Do not use Inter, Roboto, Open Sans, or Lato for headings."
     }
   },
-  "spacing_and_layout": {
-    "container_padding": "p-6 md:p-8",
-    "section_gap": "gap-8",
-    "element_gap": "gap-4",
-    "border_radius": {
-      "card": "rounded-lg",
-      "button": "rounded-md",
-      "badge": "rounded-full"
+  "colors": {
+    "primary": "#1E3A8A",
+    "primary_hover": "#172B66",
+    "background": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "border": "#E2E8F0",
+    "text_primary": "#0F172A",
+    "text_secondary": "#64748B",
+    "success": "#16A34A",
+    "error": "#DC2626"
+  },
+  "visual_enhancers": {
+    "surfaces": "Flat Solid surfaces only. NO glassmorphism. Health/care apps require solid, opaque backgrounds for optimal data legibility.",
+    "borders": "1px solid #E2E8F0 (slate-200) for structural elements.",
+    "radius": "Subtle roundness, maximum 8px (rounded-lg).",
+    "shadows": "Minimal. Use shadow-sm for cards to distinguish from the background."
+  },
+  "layouts": {
+    "global_wrapper": "Assuming the app lives in a layout with a left sidebar (~220px fixed). The content area is ~1200px max-width, center aligned with generous horizontal padding.",
+    "header": "Clean top area with breadcrumbs or 'Back to Dashboard' link top right."
+  },
+  "concepts": {
+    "Concept_A_Two_Panel_Split": {
+      "strategy": "High-context dual pane. Reduces scrolling by decoupling the attendee list from the form inputs.",
+      "structure": {
+        "container": "h-[calc(100vh-8rem)] flex gap-8",
+        "left_panel": "w-[40%] flex flex-col gap-6 sticky top-0 h-full",
+        "right_panel": "w-[60%] overflow-y-auto pr-2 flex flex-col gap-3",
+        "title_preview": "Spans full width above the split panes."
+      },
+      "left_panel_elements": [
+        "Meeting Type (Select/Dropdown)",
+        "Date & Time (Date picker)",
+        "Location (Input)",
+        "Sign-off Manager (Select/Dropdown)",
+        "Create & Prepare (Primary Button - sticky at bottom or inline after inputs)"
+      ],
+      "right_panel_elements": [
+        "Attendees List: Custom row components with Checkbox, Avatar, Name, Role, Email. 100% width rows."
+      ]
     },
-    "dashboard_grid": "grid grid-cols-1 lg:grid-cols-12 gap-6",
-    "split_view_strategy": {
-      "transcript_column": "lg:col-span-7",
-      "evidence_column": "lg:col-span-5 h-[calc(100vh-120px)] sticky top-24 overflow-y-auto"
+    "Concept_B_Compact_Single_Screen": {
+      "strategy": "Density and efficiency. Power-user mode where everything fits without scrolling.",
+      "structure": {
+        "container": "flex flex-col gap-8 max-w-5xl mx-auto",
+        "top_row": "grid grid-cols-3 gap-6",
+        "middle_section": "grid grid-cols-2 gap-4 mt-2",
+        "bottom_row": "flex justify-between items-end mt-6 pt-6 border-t border-slate-200"
+      },
+      "top_row_elements": [
+        "Meeting Type",
+        "Date & Time",
+        "Location"
+      ],
+      "middle_section_elements": [
+        "Attendees represented as compact pill/chip components (Checkbox, Avatar Initial, Name). 2-column layout to fit 8-15 items cleanly in small vertical space."
+      ],
+      "bottom_row_elements": [
+        "Left side: Sign-off Manager dropdown (width ~300px)",
+        "Right side: Create & Prepare primary button"
+      ]
     }
   },
-  "surfaces": {
-    "dashboard_cards": "bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200",
-    "header": "bg-white border-b border-gray-200 sticky top-0 z-50",
-    "evidence_card": "bg-slate-50 border border-slate-200 p-4 rounded-lg flex flex-col gap-3",
-    "recording_banner": "bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center justify-between"
-  },
-  "components": {
-    "buttons": {
-      "primary": "bg-[#1E3A8A] text-white hover:bg-[#1E40AF] px-6 py-2 rounded-md font-medium transition-colors",
-      "secondary": "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-2 rounded-md font-medium transition-colors",
-      "danger": "bg-[#DC2626] text-white hover:bg-red-700 px-6 py-2 rounded-md font-medium transition-colors"
-    },
-    "badges": {
-      "compliance_met": "bg-emerald-100 text-emerald-800 border border-emerald-200",
-      "compliance_pending": "bg-amber-100 text-amber-800 border border-amber-200",
-      "status_recording": "bg-red-100 text-red-800 border border-red-200 animate-pulse"
-    },
-    "icons_library": "lucide-react"
-  },
-  "accessibility": {
-    "contrast_strategy": "Ensure all text meets 4.5:1 ratio. No pure gray-on-gray for vital data.",
-    "focus_states": "focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:ring-offset-2",
-    "testing": "All interactive elements MUST have data-testid attributes (e.g., data-testid='start-recording-btn')."
-  },
-  "motion_and_interactions": {
-    "hover": "Subtle transform translate-y-[-2px] for interactive cards.",
-    "transitions": "transition-all duration-200 ease-in-out",
-    "recording_state": "Soft pulsing red indicator for active recording."
-  },
-  "media_urls": [
+  "components_needed": [
     {
-      "category": "logo",
-      "url": "https://images.pexels.com/photos/19825346/pexels-photo-19825346.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "description": "Compliance theme visual used for login background or empty states."
+      "name": "Button",
+      "style": "Primary: bg-[#1E3A8A] text-white hover:bg-[#172B66] rounded-md px-6 py-2 transition-colors. Secondary: bg-white border border-slate-300 text-slate-700."
     },
     {
-      "category": "avatar_1",
-      "url": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDV8MHwxfHNlYXJjaHwyfHxudXJzZSUyMGNhcmUlMjB3b3JrZXIlMjBwb3J0cmFpdHxlbnwwfHx8fDE3ODI0Njk3MzF8MA&ixlib=rb-4.1.0&q=85",
-      "description": "Nurse care worker portrait for user profile or meeting attendee avatar."
+      "name": "Select / Dropdown",
+      "style": "White background, solid border-slate-200. Fully opaque dropdown menu."
     },
     {
-      "category": "avatar_2",
-      "url": "https://images.pexels.com/photos/5430213/pexels-photo-5430213.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "description": "African nurse portrait for user profile or reviewer avatar."
+      "name": "Input",
+      "style": "Standard clinical input. h-10, border-slate-200, focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A]."
+    },
+    {
+      "name": "Checkbox",
+      "style": "Square, borders, checked state uses #1E3A8A."
+    },
+    {
+      "name": "AttendeeRow (Concept A)",
+      "style": "Flex row, items-center gap-4, p-3 border border-slate-200 rounded-lg bg-white hover:border-[#1E3A8A] transition-colors. Includes avatar, name, role, email."
+    },
+    {
+      "name": "AttendeePill (Concept B)",
+      "style": "Flex row, items-center gap-3, p-2 border border-slate-200 rounded-md bg-white hover:border-[#1E3A8A] transition-colors. Compact size."
     }
   ],
-  "instructions_to_main_agent": [
-    "Use pure HTML/Tailwind for the main structural layout to ensure high customizability.",
-    "Implement the meeting view using a split layout: transcript on the left (lg:col-span-7) and evidence cards mapped to regulations on the right (lg:col-span-5).",
-    "Use Shadcn UI for complex interactive components like Dialogs, Dropdowns, and Tables, but style them to match the flat, 1px bordered, minimal-radius (8px) aesthetic.",
-    "The recording interface must feature prominent, unambiguous start/pause/stop controls using the red accent color, with a clear pulsing indicator when active.",
-    "Ensure all interactive components and vital information displays include a descriptive 'data-testid' attribute.",
-    "Apply 'Work Sans' for headings and 'IBM Plex Sans' for body text. Enforce strict typographical hierarchy.",
-    "Do not use card components excessively. Use pure divs with flat backgrounds and subtle borders to prevent visual clutter in dense data views."
+  "accessibility": {
+    "contrast": "Ensure text meets APCA/WCAG AA standards. Dark navy on white is accessible. Grey text must be dark enough (e.g., text-slate-600).",
+    "testing": "All interactive elements MUST include data-testid. E.g., data-testid='create-meeting-button', data-testid='attendee-checkbox-X'.",
+    "focus": "Clear focus rings on inputs and buttons using focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1E3A8A]."
+  },
+  "instructions_to_main_agent": {
+    "action": "Implement the two design concepts in the React frontend.",
+    "routing_strategy": "Since the user wants to see BOTH concepts, implement a toggle or tab at the very top of the page (e.g., 'View Concept A' | 'View Concept B') that switches between the two layout components, OR create two distinct routes. A tabbed toggle is preferred for easy comparison.",
+    "tech_stack": "React, Tailwind CSS, raw HTML elements, and shadcn-inspired components.",
+    "visual_rules": "Strict adherence to the #1E3A8A navy color. DO NOT add emojis, gradients, or decorative illustrations. Keep it clinical and highly professional.",
+    "mock_data": "Hardcode an array of 8-12 realistic attendee objects (name, role, email, avatar initals) to populate both layouts."
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic outputs. Avoid this. Build distinct, polished UI with precise spacing.",
+    "Do NOT apply universal transition (e.g. transition: all). Add transitions to specific properties (colors, opacity, transform).",
+    "Never center-align the main app container in standard text apps; respect left-aligned natural reading flow.",
+    "Ensure standard HTML semantics. Use pure functional shadcn components or custom HTML+Tailwind for complex grids.",
+    "DO NOT use transparent backgrounds for dropdowns or modals.",
+    "Always apply focus, hover, and active states. Interactive elements must react visually."
   ]
 }
