@@ -205,7 +205,7 @@ export default function Layout({ children }) {
             )}
             {[
               { path: "/supervision-matrix", icon: LayoutGrid,    label: "Supervision Matrix",  testId: "nav-supervision-matrix",  exact: true },
-              { path: "/admin/team",         icon: BarChart2,      label: "Team Intelligence",   testId: "nav-team-intelligence",   exact: true },
+              { path: "/admin/team",         icon: BarChart2,      label: "Team Themes",   testId: "nav-team-intelligence",   exact: true },
               { path: "/inspection-prep",    icon: ClipboardCheck, label: "Inspection Prep",     testId: "nav-inspection-prep",     exact: true },
               { path: "/care-cert",          icon: Award,          label: "Care Certificate",    testId: "nav-care-cert",           exact: true },
             ].map(({ path, icon: Icon, label, testId, exact }) => {

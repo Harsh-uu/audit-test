@@ -921,7 +921,7 @@ export default function TeamInsights() {
 
   const MAIN_TABS = [
     { key: "matrix",         label: "Evidence Matrix", icon: Grid3x3,     accent: null },
-    { key: "themes",         label: "Team Themes",     icon: TrendingUp,  accent: null },
+    { key: "themes",         label: "Standards Coverage", icon: TrendingUp,  accent: null },
     { key: "learning_needs", label: "Learning Needs",  icon: BookOpen,    accent: "#0D9488" },
     { key: "risks",          label: "Risks",           icon: AlertTriangle, accent: "#DC2626" },
     { key: "actions",        label: "Actions",         icon: ClipboardList, accent: "#D97706" },
@@ -934,7 +934,7 @@ export default function TeamInsights() {
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
           <div>
             <h1 className="text-base font-semibold text-gray-900 font-display">
-              Team Intelligence
+              Team Themes
             </h1>
             {data && (
               <p className="text-xs text-gray-500 mt-0.5">
