@@ -428,52 +428,6 @@ function ThemesView({ themes }) {
         </div>
       </div>
 
-      {/* Risks + Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Common Risks */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4" data-testid="common-risks-panel">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            <h3 className="text-sm font-semibold text-gray-900">Recurring Risks Across Team</h3>
-          </div>
-          {common_risks.length === 0 ? (
-            <p className="text-sm text-gray-400 italic py-4 text-center">No risks recorded yet</p>
-          ) : (
-            <ul className="space-y-2.5">
-              {common_risks.map((r, i) => (
-                <li key={r.text.slice(0, 40)} className="flex items-start gap-3" data-testid={`risk-item-${i}`}>
-                  <div className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center mt-0.5">
-                    <span className="text-xs font-bold text-amber-700">{r.count}</span>
-                  </div>
-                  <p className="text-sm text-gray-700 leading-snug">{r.text}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Outstanding Actions */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4" data-testid="outstanding-actions-panel">
-          <div className="flex items-center gap-2 mb-4">
-            <ClipboardList className="w-4 h-4 text-rose-500" />
-            <h3 className="text-sm font-semibold text-gray-900">Outstanding Actions Across Team</h3>
-          </div>
-          {outstanding_actions.length === 0 ? (
-            <p className="text-sm text-gray-400 italic py-4 text-center">No outstanding actions — great!</p>
-          ) : (
-            <ul className="space-y-2.5">
-              {outstanding_actions.map((a, i) => (
-                <li key={a.text.slice(0, 40)} className="flex items-start gap-3" data-testid={`action-item-${i}`}>
-                  <div className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-100 flex items-center justify-center mt-0.5">
-                    <span className="text-xs font-bold text-rose-700">{a.count}</span>
-                  </div>
-                  <p className="text-sm text-gray-700 leading-snug">{a.text}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
