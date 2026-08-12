@@ -902,7 +902,7 @@ async def get_registers(
             *date_params,
         )
 
-    actions_out, risks_out, lns_out = [], [], []
+    actions_out, risks_out, lns_out, achs_out = [], [], [], []
 
     for row in rows:
         r = dict(row)
@@ -983,6 +983,23 @@ async def get_registers(
                 "meeting_id": mtg_id,
             })
 
+        for ach in _jlist(r.get("achievements")):
+            if not isinstance(ach, dict):
+                continue
+            text = ach.get("text") or ach.get("description") or ""
+            if not text:
+                continue
+            achs_out.append({
+                "id": ach.get("id", ""),
+                "text": text,
+                "acknowledged": ach.get("acknowledged", False),
+                "staff_names": staff_names,
+                "staff_ids": staff_ids_list,
+                "meeting_title": mtg_title,
+                "meeting_date": mtg_date,
+                "meeting_id": mtg_id,
+            })
+
     today = datetime.now(timezone.utc).date().isoformat()
     sev_order = {"high": 0, "medium": 1, "low": 2}
 
@@ -1002,7 +1019,12 @@ async def get_registers(
     done_l  = [l for l in lns_out if l["completed"]]
     lns_out = open_l + done_l
 
-    return {"actions": actions_out, "risks": risks_out, "learning_needs": lns_out}
+    # Achievements: unacknowledged first, then acknowledged
+    open_ac  = [a for a in achs_out if not a["acknowledged"]]
+    done_ac  = [a for a in achs_out if a["acknowledged"]]
+    achs_out = open_ac + done_ac
+
+    return {"actions": actions_out, "risks": risks_out, "learning_needs": lns_out, "achievements": achs_out}
 
 
 @router.patch("/team-insights/actions/{meeting_id}/{action_id}")
@@ -1073,6 +1095,42 @@ async def toggle_register_ln(meeting_id: str, ln_id: str, data: dict, current_us
             "UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2", json.dumps(lns), a_row["id"]
         )
     return {"message": "Learning need updated", "completed": completed}
+
+
+@router.patch("/team-insights/achievements/{meeting_id}/{ach_id}")
+async def toggle_register_achievement(meeting_id: str, ach_id: str, data: dict, current_user=Depends(get_current_user)):
+    """Toggle achievement.acknowledged from the Team Themes register."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+    acknowledged = data.get("acknowledged")
+    if acknowledged is None:
+        raise HTTPException(400, "acknowledged field required")
+
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow(
+            "SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+        )
+        if not m_row or not m_row["analysis_id"]:
+            raise HTTPException(404, "Meeting not found")
+        a_row = await conn.fetchrow(
+            "SELECT id, achievements FROM analyses WHERE id=$1", m_row["analysis_id"]
+        )
+        if not a_row:
+            raise HTTPException(404, "Analysis not found")
+        achs = _jlist(a_row["achievements"])
+        updated = False
+        for i, ach in enumerate(achs):
+            if isinstance(ach, dict) and ach.get("id") == ach_id:
+                achs[i]["acknowledged"] = acknowledged
+                updated = True
+                break
+        if not updated:
+            raise HTTPException(404, "Achievement not found")
+        await conn.execute(
+            "UPDATE analyses SET achievements=$1::jsonb WHERE id=$2", json.dumps(achs), a_row["id"]
+        )
+    return {"message": "Achievement updated", "acknowledged": acknowledged}
 
 
 # ── Export endpoints ──────────────────────────────────────────────────────────

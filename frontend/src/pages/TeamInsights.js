@@ -452,7 +452,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
   const [staffFilter, setStaffFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const ACCENT = { actions: "#D97706", risks: "#DC2626", learning_needs: "#0D9488" };
+  const ACCENT = { actions: "#D97706", risks: "#DC2626", learning_needs: "#0D9488", achievements: "#059669" };
   const accent = ACCENT[type];
 
   // Unique staff names for filter dropdown
@@ -481,6 +481,9 @@ function RegisterView({ type, items = [], loading, onToggle }) {
       } else if (type === "learning_needs") {
         if (statusFilter === "outstanding" && item.completed) return false;
         if (statusFilter === "addressed" && !item.completed) return false;
+      } else if (type === "achievements") {
+        if (statusFilter === "unacknowledged" && item.acknowledged) return false;
+        if (statusFilter === "acknowledged" && !item.acknowledged) return false;
       }
       return true;
     });
@@ -511,6 +514,18 @@ function RegisterView({ type, items = [], loading, onToggle }) {
         { value: open,         label: "Open",             accentColor: null },
       ];
     }
+    // achievements
+    if (type === "achievements") {
+      const unacked        = items.filter(i => !i.acknowledged).length;
+      const acked          = items.filter(i => i.acknowledged).length;
+      const staffCelebrated = new Set(items.flatMap(i => i.staff_ids || [])).size;
+      return [
+        { value: items.length,    label: "Total recorded",   accentColor: accent },
+        { value: unacked,         label: "Unacknowledged",   accentColor: null },
+        { value: acked,           label: "Acknowledged",     accentColor: "#059669" },
+        { value: staffCelebrated, label: "Staff celebrated", accentColor: null },
+      ];
+    }
     // learning_needs
     const outstanding   = items.filter(i => !i.completed).length;
     const addressed     = items.filter(i => i.completed).length;
@@ -522,8 +537,6 @@ function RegisterView({ type, items = [], loading, onToggle }) {
       { value: staffAffected, label: "Staff affected",   accentColor: null },
     ];
   }, [items, type, accent]);
-
-  const today = new Date().toISOString().slice(0, 10);
 
   const renderItem = (item, idx) => {
     if (type === "actions") {
@@ -620,13 +633,46 @@ function RegisterView({ type, items = [], loading, onToggle }) {
       );
     }
 
+    // achievements
+    if (type === "achievements") {
+      return (
+        <div
+          key={item.id || idx}
+          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm transition-shadow ${item.acknowledged ? "opacity-65" : ""}`}
+          data-testid={`register-ach-${item.id}`}
+        >
+          <div style={{ width: 3, background: item.acknowledged ? "#D1FAE5" : accent, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
+          <button
+            onClick={() => onToggle("achievements", item.meeting_id, item.id, !item.acknowledged)}
+            className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${item.acknowledged ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"}`}
+            title={item.acknowledged ? "Mark unacknowledged" : "Acknowledge"}
+            data-testid={`register-ach-toggle-${item.id}`}
+          >
+            {item.acknowledged && <Check className="w-3 h-3 text-white" />}
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-medium leading-snug ${item.acknowledged ? "line-through text-gray-400" : "text-gray-800"}`}>{item.text}</p>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: avatarColor(item.staff_names) }}>
+                {(item.staff_names || "?")[0].toUpperCase()}
+              </div>
+              <span className="text-xs font-semibold text-gray-600">{item.staff_names}</span>
+              <span className="text-xs text-gray-300">·</span>
+              <span className="text-xs text-gray-400">{item.meeting_title} · {item.meeting_date}</span>
+            </div>
+          </div>
+          <div className="flex-shrink-0 ml-2">
+            {item.acknowledged
+              ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">Acknowledged</span>
+              : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">New</span>
+            }
+          </div>
+        </div>
+      );
+    }
+
     // learning_needs
     return (
-      <div
-        key={item.id || idx}
-        className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm transition-shadow ${item.completed ? "opacity-65" : ""}`}
-        data-testid={`register-ln-${item.id}`}
-      >
         <div style={{ width: 3, background: item.completed ? "#D1FAE5" : accent, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
         <button
           onClick={() => onToggle("learning_needs", item.meeting_id, item.id, !item.completed)}
@@ -678,13 +724,15 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     actions:        "No outstanding actions — great!",
     risks:          "No risks recorded yet",
     learning_needs: "No learning needs identified yet",
+    achievements:   "No achievements recorded yet",
   };
   const STATUS_OPTS = {
     actions:        [{ v: "all", l: "All statuses" }, { v: "outstanding", l: "Outstanding" }, { v: "completed", l: "Completed" }],
     risks:          [{ v: "all", l: "All statuses" }, { v: "open", l: "Open" }, { v: "resolved", l: "Resolved" }, { v: "high", l: "High severity" }, { v: "medium", l: "Medium severity" }],
     learning_needs: [{ v: "all", l: "All statuses" }, { v: "outstanding", l: "Outstanding" }, { v: "addressed", l: "Addressed" }],
+    achievements:   [{ v: "all", l: "All statuses" }, { v: "unacknowledged", l: "Unacknowledged" }, { v: "acknowledged", l: "Acknowledged" }],
   };
-  const SEARCH_PH = { actions: "Search actions…", risks: "Search risks…", learning_needs: "Search learning needs…" };
+  const SEARCH_PH = { actions: "Search actions…", risks: "Search risks…", learning_needs: "Search learning needs…", achievements: "Search achievements…" };
 
   return (
     <div>
@@ -808,6 +856,8 @@ export default function TeamInsights() {
           if (item.id === itemId && item.meeting_id === meetingId) {
             return type === "risks"
               ? { ...item, is_resolved: newValue }
+              : type === "achievements"
+              ? { ...item, acknowledged: newValue }
               : { ...item, completed: newValue };
           }
           return item;
@@ -819,6 +869,8 @@ export default function TeamInsights() {
         await axios.patch(`${API}/review/${meetingId}/risks/${itemId}`, { is_resolved: newValue }, getAuthConfig());
       } else if (type === "actions") {
         await axios.patch(`${API}/admin/team-insights/actions/${meetingId}/${itemId}`, { completed: newValue }, getAuthConfig());
+      } else if (type === "achievements") {
+        await axios.patch(`${API}/admin/team-insights/achievements/${meetingId}/${itemId}`, { acknowledged: newValue }, getAuthConfig());
       } else {
         await axios.patch(`${API}/admin/team-insights/learning_needs/${meetingId}/${itemId}`, { completed: newValue }, getAuthConfig());
       }
@@ -833,6 +885,8 @@ export default function TeamInsights() {
             if (item.id === itemId && item.meeting_id === meetingId) {
               return type === "risks"
                 ? { ...item, is_resolved: !newValue }
+                : type === "achievements"
+                ? { ...item, acknowledged: !newValue }
                 : { ...item, completed: !newValue };
             }
             return item;
@@ -850,7 +904,7 @@ export default function TeamInsights() {
   }, [orgFilter, dateFrom, dateTo]);
 
   // Load registers when user first visits a register tab; refresh when filters change
-  const REGISTER_TABS = ["learning_needs", "risks", "actions"];
+  const REGISTER_TABS = ["achievements", "learning_needs", "risks", "actions"];
   useEffect(() => {
     if (REGISTER_TABS.includes(tab)) {
       loadRegisters({ ...orgFilter, date_from: dateFrom, date_to: dateTo });
@@ -914,17 +968,19 @@ export default function TeamInsights() {
 
   // Count badges for register tabs
   const regCounts = {
+    achievements:   registers?.achievements?.filter(i => !i.acknowledged).length ?? null,
     learning_needs: registers?.learning_needs?.filter(i => !i.completed).length ?? null,
     risks:          registers?.risks?.filter(i => !i.is_resolved).length ?? null,
     actions:        registers?.actions?.filter(i => !i.completed).length ?? null,
   };
 
   const MAIN_TABS = [
-    { key: "matrix",         label: "Evidence Matrix", icon: Grid3x3,     accent: null },
-    { key: "themes",         label: "Standards Coverage", icon: TrendingUp,  accent: null },
-    { key: "learning_needs", label: "Learning Needs",  icon: BookOpen,    accent: "#0D9488" },
-    { key: "risks",          label: "Risks",           icon: AlertTriangle, accent: "#DC2626" },
-    { key: "actions",        label: "Actions",         icon: ClipboardList, accent: "#D97706" },
+    { key: "matrix",         label: "Evidence Matrix",    icon: Grid3x3,       accent: null },
+    { key: "themes",         label: "Standards Coverage", icon: TrendingUp,    accent: null },
+    { key: "achievements",   label: "Achievements",       icon: Award,         accent: "#059669" },
+    { key: "learning_needs", label: "Learning Needs",     icon: BookOpen,      accent: "#0D9488" },
+    { key: "risks",          label: "Risks",              icon: AlertTriangle, accent: "#DC2626" },
+    { key: "actions",        label: "Actions",            icon: ClipboardList, accent: "#D97706" },
   ];
 
   return (
