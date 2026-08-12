@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, ChevronDown, Loader, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles, Archive } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, ChevronDown, Loader, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles, Archive, ClipboardList } from "lucide-react";
 
 const STATUS_CONFIG = {
   draft:             { label: "Draft",        color: "bg-gray-100 text-gray-700 border-gray-200",       icon: FileText },
@@ -116,6 +116,7 @@ export default function Dashboard() {
   const [dueMeetings, setDueMeetings] = useState([]);
   const [dueLoading, setDueLoading] = useState(false);
   const [showHistorical, setShowHistorical] = useState(false);
+  const [actionStats, setActionStats] = useState(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -127,6 +128,9 @@ export default function Dashboard() {
         .then(r => setDueMeetings(r.data))
         .catch(() => {})
         .finally(() => setDueLoading(false));
+      axios.get(`${API}/admin/team-insights/action-stats`, getAuthConfig())
+        .then(r => setActionStats(r.data))
+        .catch(() => {});
     }
     const interval = setInterval(fetchMeetings, 15000);
     return () => clearInterval(interval);
@@ -250,6 +254,35 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
+        {/* Overdue Actions Banner — admin/manager only */}
+        {(user?.role === "admin" || user?.role === "manager") && actionStats?.overdue > 0 && (
+          <div
+            className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between gap-4"
+            data-testid="overdue-actions-banner"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <ClipboardList className="w-4 h-4 text-red-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-red-900">
+                  {actionStats.overdue} action{actionStats.overdue !== 1 ? "s" : ""} overdue across your team
+                </p>
+                <p className="text-xs text-red-500 mt-0.5">
+                  {actionStats.outstanding} outstanding in total
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/admin/team?tab=actions"
+              className="flex-shrink-0 text-sm font-medium text-red-700 hover:text-red-900 flex items-center gap-1 border border-red-200 bg-white rounded-md px-3 py-1.5 transition-colors hover:bg-red-50"
+              data-testid="overdue-banner-link"
+            >
+              View Actions <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
 
         {/* Due This Month Widget — admin/manager only */}
         {(user?.role === "admin" || user?.role === "manager") && (dueMeetings.length > 0 || dueLoading) && (

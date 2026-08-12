@@ -824,6 +824,35 @@ async def get_team_insights(
 
 # ── Team Insights Registers ───────────────────────────────────────────────────
 
+@router.get("/team-insights/action-stats")
+async def get_action_stats(current_user=Depends(get_current_user)):
+    """Lightweight overdue/outstanding action counts for the dashboard banner."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+    today = datetime.now(timezone.utc).date().isoformat()
+
+    async with database.with_org(org_id) as conn:
+        rows = await conn.fetch(
+            """SELECT a.actions
+               FROM meetings m
+               JOIN analyses a ON a.id = m.analysis_id
+               WHERE m.status IN ('in_review','reviewed','signed_off','shared')
+               AND m.analysis_id IS NOT NULL"""
+        )
+
+    outstanding = 0
+    overdue = 0
+    for row in rows:
+        for action in _jlist(dict(row).get("actions")):
+            if isinstance(action, dict) and not action.get("completed", False):
+                outstanding += 1
+                if action.get("due_date") and str(action["due_date"]) < today:
+                    overdue += 1
+
+    return {"outstanding": outstanding, "overdue": overdue}
+
+
 @router.get("/team-insights/registers")
 async def get_registers(
     team_id: Optional[str] = None,

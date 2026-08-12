@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
@@ -448,6 +448,7 @@ function avatarColor(name) {
 
 // ── RegisterView ─────────────────────────────────────────────────────────────
 function RegisterView({ type, items = [], loading, onToggle }) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [staffFilter, setStaffFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -539,6 +540,32 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     ];
   }, [items, type, accent, today]);
 
+  const exportCSV = () => {
+    const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    let headers, rows;
+    if (type === "actions") {
+      headers = ["Staff","Meeting","Date","Action","Due Date","Status"];
+      rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.due_date || "", i.completed ? "Completed" : (i.due_date && i.due_date < today ? "Overdue" : "Outstanding")]);
+    } else if (type === "risks") {
+      headers = ["Staff","Meeting","Date","Risk","Severity","Status"];
+      rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.severity, i.is_resolved ? "Resolved" : "Open"]);
+    } else if (type === "learning_needs") {
+      headers = ["Staff","Meeting","Date","Learning Need","Assigned To","Due Date","Status"];
+      rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.assigned_to || "", i.due_date || "", i.completed ? "Addressed" : "Outstanding"]);
+    } else {
+      headers = ["Staff","Meeting","Date","Achievement","Status"];
+      rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.acknowledged ? "Acknowledged" : "New"]);
+    }
+    const csv = [headers.map(esc).join(","), ...rows.map(r => r.map(esc).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${type.replace("_", "-")}-register.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const renderItem = (item, idx) => {
     if (type === "actions") {
       const overdue  = !item.completed && item.due_date && item.due_date < today;
@@ -546,12 +573,13 @@ function RegisterView({ type, items = [], loading, onToggle }) {
       return (
         <div
           key={item.id || idx}
-          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm transition-shadow ${item.completed ? "opacity-65" : ""}`}
+          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer ${item.completed ? "opacity-65" : ""}`}
+          onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
           data-testid={`register-action-${item.id}`}
         >
           <div style={{ width: 3, background: barColor, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
           <button
-            onClick={() => onToggle("actions", item.meeting_id, item.id, !item.completed)}
+            onClick={e => { e.stopPropagation(); onToggle("actions", item.meeting_id, item.id, !item.completed); }}
             className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${item.completed ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"}`}
             title={item.completed ? "Mark as outstanding" : "Mark as complete"}
             data-testid={`register-action-toggle-${item.id}`}
@@ -585,6 +613,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
               : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Outstanding</span>
             }
           </div>
+          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
         </div>
       );
     }
@@ -595,12 +624,13 @@ function RegisterView({ type, items = [], loading, onToggle }) {
       return (
         <div
           key={item.id || idx}
-          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm transition-shadow ${item.is_resolved ? "opacity-65" : ""}`}
+          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer ${item.is_resolved ? "opacity-65" : ""}`}
+          onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
           data-testid={`register-risk-${item.id}`}
         >
           <div style={{ width: 3, background: sc.bar, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
           <button
-            onClick={() => onToggle("risks", item.meeting_id, item.id, !item.is_resolved)}
+            onClick={e => { e.stopPropagation(); onToggle("risks", item.meeting_id, item.id, !item.is_resolved); }}
             className="flex-shrink-0 mt-0.5"
             title={item.is_resolved ? "Mark unresolved" : "Mark resolved"}
             data-testid={`register-risk-toggle-${item.id}`}
@@ -630,6 +660,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
           <span className={`flex-shrink-0 ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sc.badge}`}>
             {sev.charAt(0).toUpperCase() + sev.slice(1)}
           </span>
+          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
         </div>
       );
     }
@@ -639,12 +670,13 @@ function RegisterView({ type, items = [], loading, onToggle }) {
       return (
         <div
           key={item.id || idx}
-          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm transition-shadow ${item.acknowledged ? "opacity-65" : ""}`}
+          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer ${item.acknowledged ? "opacity-65" : ""}`}
+          onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
           data-testid={`register-ach-${item.id}`}
         >
           <div style={{ width: 3, background: item.acknowledged ? "#D1FAE5" : accent, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
           <button
-            onClick={() => onToggle("achievements", item.meeting_id, item.id, !item.acknowledged)}
+            onClick={e => { e.stopPropagation(); onToggle("achievements", item.meeting_id, item.id, !item.acknowledged); }}
             className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${item.acknowledged ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"}`}
             title={item.acknowledged ? "Mark unacknowledged" : "Acknowledge"}
             data-testid={`register-ach-toggle-${item.id}`}
@@ -668,6 +700,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
               : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">New</span>
             }
           </div>
+          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
         </div>
       );
     }
@@ -676,12 +709,13 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     return (
       <div
         key={item.id || idx}
-        className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm transition-shadow ${item.completed ? "opacity-65" : ""}`}
+        className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer ${item.completed ? "opacity-65" : ""}`}
+        onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
         data-testid={`register-ln-${item.id}`}
       >
         <div style={{ width: 3, background: item.completed ? "#D1FAE5" : accent, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
         <button
-          onClick={() => onToggle("learning_needs", item.meeting_id, item.id, !item.completed)}
+          onClick={e => { e.stopPropagation(); onToggle("learning_needs", item.meeting_id, item.id, !item.completed); }}
           className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${item.completed ? "bg-teal-500 border-teal-500" : "border-gray-300 hover:border-teal-400"}`}
           title={item.completed ? "Mark as outstanding" : "Mark as addressed"}
           data-testid={`register-ln-toggle-${item.id}`}
@@ -711,6 +745,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
             : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Outstanding</span>
           }
         </div>
+        <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
       </div>
     );
   };
@@ -783,6 +818,16 @@ function RegisterView({ type, items = [], loading, onToggle }) {
         >
           {STATUS_OPTS[type].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
         </select>
+        <button
+          onClick={exportCSV}
+          disabled={filtered.length === 0}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap"
+          data-testid={`register-export-${type}`}
+          title="Export filtered list as CSV"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Export CSV
+        </button>
       </div>
 
       {/* Item list */}
@@ -804,9 +849,14 @@ function RegisterView({ type, items = [], loading, onToggle }) {
 export default function TeamInsights() {
   const { getAuthConfig, API, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("matrix");
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get("tab");
+    const valid = ["matrix","themes","achievements","learning_needs","risks","actions"];
+    return valid.includes(t) ? t : "matrix";
+  });
   const [orgStructure, setOrgStructure] = useState({ settings: [] });
   const [orgFilter, setOrgFilter] = useState({ setting_id: "", team_id: "" });
   const [dateFrom, setDateFrom] = useState("");
