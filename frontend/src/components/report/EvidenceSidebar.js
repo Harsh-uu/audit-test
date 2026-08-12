@@ -20,9 +20,11 @@ function getJurisdictionLabels(jurisdiction) {
 }
 
 const CONFIDENCE_CONFIG = {
-  likely_evidence: { label: "Likely Evidence", color: "bg-emerald-100 text-emerald-800 border-emerald-200", dot: "bg-emerald-500" },
-  needs_review: { label: "Needs Review", color: "bg-amber-100 text-amber-800 border-amber-200", dot: "bg-amber-500" },
-  not_enough_evidence: { label: "Not Enough Evidence", color: "bg-gray-100 text-gray-600 border-gray-200", dot: "bg-gray-400" },
+  likely_evidence:   { label: "Likely Evidence",   color: "bg-emerald-100 text-emerald-800 border-emerald-200", dot: "bg-emerald-500" },
+  possible_evidence: { label: "Possible Evidence", color: "bg-amber-100 text-amber-800 border-amber-200",   dot: "bg-amber-500"   },
+  // legacy values — map gracefully so old data still renders
+  needs_review:      { label: "Possible Evidence", color: "bg-amber-100 text-amber-800 border-amber-200",   dot: "bg-amber-500"   },
+  not_enough_evidence: { label: "Possible Evidence", color: "bg-amber-100 text-amber-800 border-amber-200", dot: "bg-amber-500"   },
 };
 
 const EVIDENCE_STATUS_CONFIG = {
@@ -41,7 +43,7 @@ const CQC_KEY_QUESTION_STYLES = {
 };
 
 function ConfidenceBadge({ confidence }) {
-  const cfg = CONFIDENCE_CONFIG[confidence] || CONFIDENCE_CONFIG.needs_review;
+  const cfg = CONFIDENCE_CONFIG[confidence] || CONFIDENCE_CONFIG.possible_evidence;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium border rounded-full ${cfg.color}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`}></span>

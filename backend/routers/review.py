@@ -386,6 +386,34 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
             edit_type = "post_signoff_evidence_edit" if is_finalised else "evidence"
             detail = "; ".join(changed_fields) if changed_fields else "evidence updated"
             await _log_edit(conn, meeting_id, org_id, edit_type, current_user["id"], current_user.get("name", ""), detail)
+            # ── Training data: record every manager interaction with evidence ──────
+            for mapping_type, mappings in update_cols.items():
+                type_label = {"cqc_mappings": "cqc", "care_cert_mappings": "care_cert", "custom_mappings": "custom"}.get(mapping_type, mapping_type)
+                for item in mappings:
+                    if item.get("id") != evidence_id:
+                        continue
+                    action = data.status if data.status and data.status != item.get("status") else ("edited_summary" if data.edited_evidence_summary is not None else "viewed")
+                    ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
+                    name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
+                    try:
+                        await conn.execute(
+                            """INSERT INTO evidence_feedback
+                               (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
+                                evidence_type, standard_ref, standard_name, ai_confidence,
+                                manager_action, evidence_summary, edited_summary,
+                                transcript_excerpt, timestamp)
+                               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
+                            str(uuid.uuid4()), meeting_id, org_id,
+                            current_user["id"], current_user.get("name", ""),
+                            evidence_id, type_label, ref, name,
+                            item.get("confidence", ""), action,
+                            item.get("evidence_summary", ""),
+                            data.edited_evidence_summary,
+                            item.get("transcript_excerpt", ""),
+                            datetime.now(timezone.utc).isoformat(),
+                        )
+                    except Exception as _fb_err:
+                        logger.warning(f"evidence_feedback insert skipped: {_fb_err}")
 
     return {"message": "Evidence updated"}
 
@@ -1632,8 +1660,9 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     MID_GRAY = colors.HexColor("#6B7280")
     CONFIDENCE_COLORS = {
         "likely_evidence": colors.HexColor("#059669"),
-        "needs_review": colors.HexColor("#D97706"),
-        "not_enough_evidence": colors.HexColor("#9CA3AF"),
+        "possible_evidence": colors.HexColor("#D97706"),
+        "needs_review": colors.HexColor("#D97706"),       # legacy
+        "not_enough_evidence": colors.HexColor("#D97706"), # legacy
     }
 
     title_style = ParagraphStyle("Title", fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=4)
@@ -1650,7 +1679,12 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         return t
 
     def evidence_card(ref, name, badge_text, evidence_summary, excerpt, confidence, bg):
-        conf_label = {"likely_evidence": "Likely Evidence", "needs_review": "Needs Review", "not_enough_evidence": "Not Enough Evidence"}.get(confidence, confidence)
+        conf_label = {
+            "likely_evidence": "Likely Evidence",
+            "possible_evidence": "Possible Evidence",
+            "needs_review": "Possible Evidence",          # legacy
+            "not_enough_evidence": "Possible Evidence",   # legacy
+        }.get(confidence, confidence)
         conf_color = CONFIDENCE_COLORS.get(confidence, MID_GRAY)
         rows = [[Paragraph(f'<b>{e(ref)}</b> — {e(name)}', body_style), Paragraph(f'<font color="{conf_color.hexval()}"><b>{e(conf_label)}</b></font>', small_style)]]
         if badge_text:

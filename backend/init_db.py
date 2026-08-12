@@ -567,6 +567,26 @@ ALTER TABLE analyses ADD COLUMN IF NOT EXISTS pii_redactions JSONB NOT NULL DEFA
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS achievements JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS learning_needs JSONB NOT NULL DEFAULT '[]';
 
+-- Evidence feedback — training data log (no RLS; super-admin readable, append-only)
+CREATE TABLE IF NOT EXISTS evidence_feedback (
+    id TEXT PRIMARY KEY,
+    meeting_id TEXT,
+    org_id TEXT,
+    user_id TEXT,
+    user_name TEXT,
+    evidence_item_id TEXT,
+    evidence_type TEXT,
+    standard_ref TEXT,
+    standard_name TEXT,
+    ai_confidence TEXT,
+    manager_action TEXT,
+    evidence_summary TEXT,
+    edited_summary TEXT,
+    transcript_excerpt TEXT,
+    meeting_jurisdiction TEXT,
+    timestamp TEXT
+);
+
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_at TEXT;
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by TEXT;
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by_name TEXT;

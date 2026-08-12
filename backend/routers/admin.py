@@ -613,7 +613,7 @@ async def get_team_insights(
                 c = cqc_ev[uid][ref]
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
-                elif m.get("confidence") == "needs_review": c["review"] += 1
+                elif m.get("confidence") in ("needs_review", "possible_evidence", "not_enough_evidence"): c["review"] += 1
                 if date > c["last_date"]:
                     c["last_date"] = date
                     if m.get("transcript_excerpt"):
@@ -628,7 +628,7 @@ async def get_team_insights(
                 c = cc_ev[uid][std_ref]
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
-                elif m.get("confidence") == "needs_review": c["review"] += 1
+                elif m.get("confidence") in ("needs_review", "possible_evidence", "not_enough_evidence"): c["review"] += 1
                 if date > c["last_date"]:
                     c["last_date"] = date
                     if m.get("transcript_excerpt"):
@@ -646,7 +646,7 @@ async def get_team_insights(
                 c = cust_ev[uid][ref]
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
-                elif m.get("confidence") == "needs_review": c["review"] += 1
+                elif m.get("confidence") in ("needs_review", "possible_evidence", "not_enough_evidence"): c["review"] += 1
                 if date > c["last_date"]:
                     c["last_date"] = date
                     if m.get("transcript_excerpt"):

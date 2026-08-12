@@ -120,7 +120,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
             e["evidence_count"] += 1
             if m.get("confidence") == "likely_evidence":
                 e["likely_count"] += 1
-            elif m.get("confidence") == "needs_review":
+            elif m.get("confidence") in ("needs_review", "possible_evidence", "not_enough_evidence"):
                 e["needs_review_count"] += 1
             ref_entry = {"date": mdate, "id": mid, "title": mtg.get("title", "")}
             if ref_entry not in e["meeting_refs"]:
@@ -144,7 +144,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
             e["evidence_count"] += 1
             if m.get("confidence") == "likely_evidence":
                 e["likely_count"] += 1
-            elif m.get("confidence") == "needs_review":
+            elif m.get("confidence") in ("needs_review", "possible_evidence", "not_enough_evidence"):
                 e["needs_review_count"] += 1
             ref_entry = {"date": mdate, "id": mid, "title": mtg.get("title", "")}
             if ref_entry not in e["meeting_refs"]:
@@ -168,7 +168,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
             e["evidence_count"] += 1
             if m.get("confidence") == "likely_evidence":
                 e["likely_count"] += 1
-            elif m.get("confidence") == "needs_review":
+            elif m.get("confidence") in ("needs_review", "possible_evidence", "not_enough_evidence"):
                 e["needs_review_count"] += 1
             ref_entry = {"date": mdate, "id": mid, "title": mtg.get("title", "")}
             if ref_entry not in e["meeting_refs"]:

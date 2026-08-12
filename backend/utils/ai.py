@@ -156,7 +156,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Staffing",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "needs_review|likely_evidence|not_enough_evidence"
+      "confidence": "likely_evidence|possible_evidence"
     },
     {
       "id": "cqc_2",
@@ -164,7 +164,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Kindness, compassion and dignity",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "needs_review|likely_evidence|not_enough_evidence"
+      "confidence": "likely_evidence|possible_evidence"
     }
   ],
   "care_cert_mappings": [
@@ -176,7 +176,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "outcome_name": "Describe the processes for identifying own learning needs",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "needs_review|likely_evidence|not_enough_evidence"
+      "confidence": "likely_evidence|possible_evidence"
     }
   ],
   "custom_mappings": [
@@ -188,7 +188,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "criterion_name": "Compassion",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "needs_review|likely_evidence|not_enough_evidence"
+      "confidence": "likely_evidence|possible_evidence"
     }
   ]
 }
@@ -196,8 +196,8 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 Rules:
 - Map evidence that is described, demonstrated, or shown through practice narration, explained reasoning, or confirmed observation. Do NOT require speakers to name the regulation or standard — map what they describe doing or understanding.
 - For CQC mappings, use `regulation_ref` for BOTH Regulations (e.g. "Regulation 18") AND Quality Statements (e.g. "QS Caring 1", "QS Safe 3", "QS Well-led 2"). Quality Statements are first-class evidence items — map to them whenever the described behaviour matches, even if no Regulation is also applicable. Do not restrict mappings to Regulations only.
-- EVIDENCE CONFIDENCE — the default for every mapping is "needs_review". Assign "likely_evidence" only when the evidence is rich, specific and could stand alone in front of a regulator without further context. Assign "not_enough_evidence" only when the topic was barely mentioned, hypothetical, or theoretical. Everything else is "needs_review". The ONLY valid output values are: needs_review, likely_evidence, not_enough_evidence.
-  ALWAYS use "needs_review" when ANY of the following are true (this covers the majority of mappings):
+- EVIDENCE CONFIDENCE — the MANDATORY DEFAULT for every mapping is "possible_evidence". Use "likely_evidence" ONLY when the evidence is rich, specific, and could stand alone in front of a regulator without further context. Do NOT use "possible_evidence" — it no longer exists. The ONLY valid output values are: likely_evidence, possible_evidence. YOUR ROLE IS TO SURFACE, NOT TO DECIDE: if there is any plausible connection to a standard, create the mapping as "possible_evidence" and let the manager decide. A missed piece of compliance evidence is worse than one a manager clicks reject on.
+  ALWAYS use "possible_evidence" when ANY of the following are true (this covers the majority of mappings):
   - The worker agrees with or confirms something the manager says, rather than describing their own action
   - The worker describes general awareness of a policy, procedure, or value without showing specific application
   - The worker says what they "usually" or "normally" do — not what they actually did in a named situation
@@ -212,9 +212,9 @@ Rules:
   (c) Their described action is clearly consistent with best practice — specific, purposeful, complete, not passive
   (d) The excerpt could be presented to a CQC inspector as standalone evidence with no further questioning
   (e) There is no minimising, hedging, or qualifying language anywhere in the relevant passage
-  When in doubt: needs_review. Err heavily toward needs_review. It is far better to flag something for human review than to overclaim compliance evidence.
-  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass condition (a). These must always be "needs_review".
-  IMPORTANT: If the worker uses minimising or dismissive language when describing the situation or their response (e.g. "it was probably nothing", "I didn't think I needed to", "I suppose I should have"), the evidence CANNOT be "likely_evidence" — use "needs_review" regardless of other content.
+  When in doubt: possible_evidence. Err heavily toward possible_evidence. It is far better to surface something for the manager to review than to silently discard it.
+  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass condition (a). These must always be "possible_evidence".
+  IMPORTANT: If the worker uses minimising or dismissive language when describing the situation or their response (e.g. "it was probably nothing", "I didn't think I needed to", "I suppose I should have"), the evidence CANNOT be "likely_evidence" — use "possible_evidence" regardless of other content.
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h", "13.9c"). Use the exact sub-outcome ref and its description as provided in the standards context below. One evidence item = one sub-outcome ref. Create separate mapping entries if evidence covers multiple sub-outcomes.
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
 - If no custom standards are provided, return custom_mappings as an empty array []
@@ -660,7 +660,7 @@ async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
     system = """Map evidence from a meeting transcript against provided criteria.
 Evidence includes described practice ("I always do X"), explained reasoning ("I did it because..."), manager-confirmed observations, and identified learning needs. You do NOT require the criterion to be named explicitly — map based on what participants describe doing or understanding.
 Return valid JSON only:
-{"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "needs_review|likely_evidence|not_enough_evidence"}]}
+{"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "likely_evidence|possible_evidence"}]}
 Only include criteria with actual evidence. Return empty mappings array if nothing found."""
 
     chat = await _openai_chat("o4-mini", system, f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\nTranscript:\n{transcript_text[:5000]}", reasoning_effort="high")
@@ -843,7 +843,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Staffing",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
-      "confidence": "needs_review|likely_evidence|not_enough_evidence"
+      "confidence": "likely_evidence|possible_evidence"
     },
     {
       "id": "cqc_2",
@@ -851,7 +851,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Safeguarding",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
-      "confidence": "needs_review|likely_evidence|not_enough_evidence"
+      "confidence": "likely_evidence|possible_evidence"
     }
   ],
   "care_cert_mappings": [
@@ -863,7 +863,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "outcome_name": "Describe the processes for identifying own learning needs",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
-      "confidence": "needs_review|likely_evidence|not_enough_evidence"
+      "confidence": "likely_evidence|possible_evidence"
     }
   ],
   "custom_mappings": [
@@ -875,15 +875,15 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "criterion_name": "Compassion",
       "evidence_summary": "Brief description of evidence found",
       "transcript_excerpt": "Exact quote from the document",
-      "confidence": "needs_review|likely_evidence|not_enough_evidence"
+      "confidence": "likely_evidence|possible_evidence"
     }
   ]
 }
 
 Rules:
 - Map evidence that is described, demonstrated, or recorded in the document — including described practice, noted observations, identified learning needs, or explained reasoning. Do not require the standard or regulation to be named.
-- EVIDENCE CONFIDENCE — the default for every mapping is "needs_review". Assign "likely_evidence" only when the evidence is rich, specific and could stand alone in front of a regulator without further context. Assign "not_enough_evidence" only when the topic was barely mentioned, hypothetical, or theoretical. Everything else is "needs_review". The ONLY valid output values are: needs_review, likely_evidence, not_enough_evidence.
-  ALWAYS use "needs_review" when ANY of the following are true (this covers the majority of mappings):
+- EVIDENCE CONFIDENCE — the MANDATORY DEFAULT for every mapping is "possible_evidence". Use "likely_evidence" ONLY when the evidence is rich, specific, and could stand alone in front of a regulator without further context. Do NOT use "possible_evidence" — it no longer exists. The ONLY valid output values are: likely_evidence, possible_evidence. YOUR ROLE IS TO SURFACE, NOT TO DECIDE: if there is any plausible connection to a standard, create the mapping as "possible_evidence" and let the manager decide. A missed piece of compliance evidence is worse than one a manager clicks reject on.
+  ALWAYS use "possible_evidence" when ANY of the following are true (this covers the majority of mappings):
   - The worker agrees with or confirms something the manager says, rather than describing their own action
   - The worker describes general awareness of a policy, procedure, or value without showing specific application
   - The worker says what they "usually" or "normally" do — not what they actually did in a named situation
@@ -898,9 +898,9 @@ Rules:
   (c) Their described action is clearly consistent with best practice — specific, purposeful, complete, not passive
   (d) The excerpt could be presented to a CQC inspector as standalone evidence with no further questioning
   (e) There is no minimising, hedging, or qualifying language anywhere in the relevant passage
-  When in doubt: needs_review. Err heavily toward needs_review. It is far better to flag something for human review than to overclaim compliance evidence.
-  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass condition (a). These must always be "needs_review".
-  IMPORTANT: If the worker uses minimising or dismissive language when describing the situation or their response (e.g. "it was probably nothing", "I didn't think I needed to", "I suppose I should have"), the evidence CANNOT be "likely_evidence" — use "needs_review" regardless of other content.
+  When in doubt: possible_evidence. Err heavily toward possible_evidence. It is far better to surface something for the manager to review than to silently discard it.
+  IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass condition (a). These must always be "possible_evidence".
+  IMPORTANT: If the worker uses minimising or dismissive language when describing the situation or their response (e.g. "it was probably nothing", "I didn't think I needed to", "I suppose I should have"), the evidence CANNOT be "likely_evidence" — use "possible_evidence" regardless of other content.
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h")
 - For custom_mappings, only include entries if custom standards are provided AND there is actual evidence
 - If no custom standards provided, return custom_mappings as an empty array []
