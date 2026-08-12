@@ -489,9 +489,10 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     });
   }, [items, search, staffFilter, statusFilter, type]);
 
+  const today = new Date().toISOString().slice(0, 10);
+
   // Stat strip data
   const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
     if (type === "actions") {
       const outstanding = items.filter(i => !i.completed).length;
       const completed   = items.filter(i => i.completed).length;
@@ -536,7 +537,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
       { value: addressed,     label: "Addressed",        accentColor: "#059669" },
       { value: staffAffected, label: "Staff affected",   accentColor: null },
     ];
-  }, [items, type, accent]);
+  }, [items, type, accent, today]);
 
   const renderItem = (item, idx) => {
     if (type === "actions") {

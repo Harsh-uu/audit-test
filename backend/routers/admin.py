@@ -894,7 +894,7 @@ async def get_registers(
 
         rows = await conn.fetch(
             f"""SELECT m.id, m.title, m.date, m.attendees, m.sign_off_manager_id,
-                       a.actions, a.risks, a.learning_needs
+                       a.actions, a.risks, a.learning_needs, a.achievements
                 FROM meetings m
                 JOIN analyses a ON a.id = m.analysis_id
                 WHERE {' AND '.join(date_conds)}
