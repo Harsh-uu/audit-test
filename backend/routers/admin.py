@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 import re as _re
 import logging
@@ -1742,3 +1743,58 @@ def _generate_bulk_transcripts_pdf(meetings_data: list) -> bytes:
     story.append(Paragraph("1two.one — Transcripts Export — Confidential", small_s))
     doc.build(story)
     return buf.getvalue()
+
+
+
+# ── Integration health check ──────────────────────────────────────────────────
+
+@router.get("/integrations/health")
+async def integration_health(current_user=Depends(get_current_user)):
+    """
+    Returns live connectivity status for OpenAI and AssemblyAI.
+    Admin-only. Safe to call from production to diagnose missing API keys.
+    """
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+
+    import requests as _req
+
+    results = {}
+
+    # ── OpenAI ───────────────────────────────────────────────────────────────
+    openai_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY")
+    if openai_key:
+        try:
+            r = _req.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {openai_key}"},
+                timeout=8,
+            )
+            results["openai"] = {"configured": True, "status": r.status_code, "ok": r.status_code == 200}
+        except Exception as e:
+            results["openai"] = {"configured": True, "status": "error", "ok": False, "detail": str(e)}
+    else:
+        results["openai"] = {"configured": False, "ok": False}
+
+    # ── AssemblyAI (EU) ───────────────────────────────────────────────────────
+    aai_key = os.environ.get("ASSEMBLYAI_API_KEY")
+    if aai_key:
+        try:
+            r = _req.get(
+                "https://api.eu.assemblyai.com/v2/transcript?limit=1",
+                headers={"authorization": aai_key},
+                timeout=8,
+            )
+            results["assemblyai"] = {
+                "configured": True,
+                "endpoint": "api.eu.assemblyai.com",
+                "status": r.status_code,
+                "ok": r.status_code == 200,
+                "transcript_count": r.json().get("page_details", {}).get("result_count") if r.status_code == 200 else None,
+            }
+        except Exception as e:
+            results["assemblyai"] = {"configured": True, "status": "error", "ok": False, "detail": str(e)}
+    else:
+        results["assemblyai"] = {"configured": False, "ok": False}
+
+    return results
