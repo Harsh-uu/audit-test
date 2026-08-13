@@ -305,10 +305,9 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user=D
     if not org_id:
         raise HTTPException(400, "User has no organisation assigned")
     scope = get_manager_scope(current_user)
-    # Convert start_date string → date object so asyncpg handles it cleanly on all DB versions
+    # Validate start_date is a valid ISO date string (keep as str — DB column is text)
     try:
-        from datetime import date as _date
-        start_date_val = _date.fromisoformat(data.start_date) if isinstance(data.start_date, str) else data.start_date
+        date.fromisoformat(data.start_date)
     except (ValueError, TypeError):
         raise HTTPException(422, f"Invalid start_date format: {data.start_date!r}")
     async with database.with_org(org_id) as conn:
@@ -321,12 +320,12 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user=D
         if data.meeting_type_id:
             await conn.execute(
                 "UPDATE schedules SET frequency=$1, start_date=$2, meeting_type_id=$3 WHERE id=$4",
-                data.frequency, start_date_val, data.meeting_type_id, schedule_id,
+                data.frequency, data.start_date, data.meeting_type_id, schedule_id,
             )
         else:
             await conn.execute(
                 "UPDATE schedules SET frequency=$1, start_date=$2 WHERE id=$3",
-                data.frequency, start_date_val, schedule_id,
+                data.frequency, data.start_date, schedule_id,
             )
     return {"ok": True}
 
