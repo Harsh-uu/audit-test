@@ -233,11 +233,6 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit }) {
           </table>
         </div>
       </div>
-
-      {/* Right sidebar */}
-      <div className="w-72 flex-shrink-0 border-l border-gray-100 bg-gray-50/60 p-5 overflow-y-auto">
-
-      </div>
     </div>
   );
 }
