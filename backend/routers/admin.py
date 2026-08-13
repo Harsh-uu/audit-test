@@ -1752,17 +1752,35 @@ def _generate_bulk_transcripts_pdf(meetings_data: list) -> bytes:
             for line in speaker_text.split("\n"):
                 line = line.strip()
                 if not line: continue
-                m = _re.match(r'^([^:]{1,50}):\s*(.+)', line)
-                if m: turns.append([m.group(1).strip(), m.group(2).strip()])
-                elif turns: turns[-1][1] += " " + line
-                else: turns.append(["Speaker", line])
+                # Handle timestamped lines: "[MM:SS] Speaker Name: text..."
+                m = _re.match(r'^(\[\d+:\d+\])\s+([^:]{1,60}):\s*(.+)', line)
+                if m:
+                    timestamp, speaker, text = m.group(1), m.group(2).strip(), m.group(3).strip()
+                    turns.append([speaker, f"{timestamp}  {text}"])
+                    continue
+                # Plain "Speaker Name: text..." (no timestamp)
+                m = _re.match(r'^([^:\[\]]{1,60}):\s*(.+)', line)
+                if m:
+                    turns.append([m.group(1).strip(), m.group(2).strip()])
+                elif turns:
+                    turns[-1][1] += " " + line
+                else:
+                    turns.append(["Speaker", line])
             for speaker, text in turns:
                 sl = speaker.lower()
                 is_mgr = sl in ("manager", "supervisor") or any(w in sl for w in manager_words)
                 color = MGMT_NAVY if is_mgr else WORKER_GREEN
-                row = [[Paragraph(e(speaker.upper()), label_s), Paragraph(e(text), turn_s)]]
-                t = Table(row, colWidths=[22*mm, 148*mm])
-                t.setStyle(TableStyle([("BACKGROUND", (0,0), (0,0), color), ("BACKGROUND", (1,0), (1,0), colors.HexColor("#F9FAFB")), ("VALIGN", (0,0), (-1,-1), "TOP"), ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4), ("LEFTPADDING", (0,0), (0,0), 4), ("RIGHTPADDING", (0,0), (0,0), 4), ("LEFTPADDING", (1,0), (1,0), 6), ("RIGHTPADDING", (1,0), (1,0), 6), ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#E5E7EB"))]))
+                # Split timestamp prefix from body for styled display
+                ts_match = _re.match(r'^(\[\d+:\d+\])\s+(.*)', text, _re.DOTALL)
+                if ts_match:
+                    ts_str = ts_match.group(1)
+                    body_str = ts_match.group(2)
+                    text_para = Paragraph(f'<font color="#9CA3AF">{e(ts_str)}</font>  {e(body_str)}', turn_s)
+                else:
+                    text_para = Paragraph(e(text), turn_s)
+                row = [[Paragraph(e(speaker.upper()), label_s), text_para]]
+                t = Table(row, colWidths=[32*mm, 138*mm])
+                t.setStyle(TableStyle([("BACKGROUND", (0,0), (0,0), color), ("BACKGROUND", (1,0), (1,0), colors.HexColor("#F9FAFB")), ("VALIGN", (0,0), (-1,-1), "TOP"), ("TOPPADDING", (0,0), (-1,-1), 5), ("BOTTOMPADDING", (0,0), (-1,-1), 5), ("LEFTPADDING", (0,0), (0,0), 5), ("RIGHTPADDING", (0,0), (0,0), 5), ("LEFTPADDING", (1,0), (1,0), 7), ("RIGHTPADDING", (1,0), (1,0), 6), ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#E5E7EB"))]))
                 story.append(t); story.append(Spacer(1, 1*mm))
         elif transcript_text:
             for chunk in transcript_text.split("\n"):
