@@ -283,3 +283,11 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - Bulk export of evidence reports
 - Role-specific competency framework upload
 - Skills for Care Effective Supervision Guide integration
+
+### P0 (Done — Aug 2026, Session 8)
+- **Debug endpoint 500 fix**: `GET /api/admin/users/debug-by-email` no longer crashes when user has null org_id. Root cause was passing empty string `""` to a UUID column. Fixed: now queries by user_id only (no org_id filter). Both debug endpoints improved with structured `issues` array.
+- **Meeting visibility for invited users (null org_id)**: `list_meetings` now handles attendees/shared_reviewers with null org_id by using `with_admin()` context (bypassing RLS) and filtering by user_id directly. Previously they saw no meetings at all.
+- **accept_invite sets org_id**: `POST /api/auth/accept-invite` now writes `org_id` from the invitation record into the user row, ensuring future invited users always have org_id set.
+- **New repair endpoint**: `POST /api/admin/users/fix-org-by-email?email=<email>` + body `{org_id}` lets admins/super_admins fix existing users with null org_id (e.g., Connor in production).
+- **BrandingTab re-fetches on mount**: `BrandingTab.js` now calls `GET /api/org/branding` on mount so saved brand color is always shown — even immediately after a fresh login (not just after a hard browser refresh).
+- **AuthContext fetches full profile after login**: `login()` and `completeLogin()` in `AuthContext.js` now call `GET /api/auth/me` after setting the initial user state, ensuring `org_branding`, `org_name`, `org_jurisdiction` are populated in the context from the first page load after login.

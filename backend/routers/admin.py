@@ -1843,14 +1843,15 @@ async def debug_user_by_email(email: str, current_user=Depends(get_current_user)
             raise HTTPException(404, "User not found")
         u = dict(u)
 
+        # Query across all orgs (admin context bypasses RLS).
+        # Do NOT pass empty string for UUID org_id — query by user_id only.
         meeting_count = await conn.fetchrow(
             """SELECT COUNT(*) as cnt FROM meetings
-               WHERE org_id=$1
-                 AND EXISTS (
-                     SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
-                     WHERE a->>'user_id' = $2
-                 )""",
-            u["org_id"] or "", u["id"],
+               WHERE EXISTS (
+                   SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                   WHERE a->>'user_id' = $1
+               )""",
+            str(u["id"]),
         )
 
         org = None
@@ -1858,11 +1859,19 @@ async def debug_user_by_email(email: str, current_user=Depends(get_current_user)
             org_row = await conn.fetchrow("SELECT name FROM organisations WHERE id=$1", u["org_id"])
             org = org_row["name"] if org_row else "NOT FOUND IN organisations TABLE"
 
+    issues = []
+    if not u["org_id"]:
+        issues.append("org_id is NULL — user cannot see meetings unless fixed")
+    if not u["is_active"]:
+        issues.append("User is inactive (is_active=FALSE)")
+    if u.get("must_change_password"):
+        issues.append("must_change_password=TRUE — user has not accepted invite yet")
+
     return {
         "user": u,
         "org_name": org,
         "meetings_as_attendee": meeting_count["cnt"] if meeting_count else 0,
-        "issue": "org_id is NULL — user cannot see any meetings" if not u["org_id"] else None,
+        "issues": issues or None,
     }
 
 
@@ -1883,12 +1892,11 @@ async def debug_user(user_id: str, current_user=Depends(get_current_user)):
         # Count meetings where this user is an attendee (raw SQL, bypasses RLS)
         meeting_count = await conn.fetchrow(
             """SELECT COUNT(*) as cnt FROM meetings
-               WHERE org_id=$1
-                 AND EXISTS (
-                     SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
-                     WHERE a->>'user_id' = $2
-                 )""",
-            u["org_id"] or "", user_id,
+               WHERE EXISTS (
+                   SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                   WHERE a->>'user_id' = $1
+               )""",
+            str(u["id"]),
         )
 
         org = None
@@ -1896,9 +1904,52 @@ async def debug_user(user_id: str, current_user=Depends(get_current_user)):
             org_row = await conn.fetchrow("SELECT name FROM organisations WHERE id=$1", u["org_id"])
             org = org_row["name"] if org_row else "NOT FOUND"
 
+    issues = []
+    if not u["org_id"]:
+        issues.append("org_id is NULL — user cannot see meetings unless fixed")
+    if not u["is_active"]:
+        issues.append("User is inactive (is_active=FALSE)")
+    if u.get("must_change_password"):
+        issues.append("must_change_password=TRUE — user has not accepted invite yet")
+
     return {
         "user":  u,
         "org_name": org,
         "meetings_as_attendee": meeting_count["cnt"] if meeting_count else 0,
-        "issue": "org_id is NULL — user cannot see any meetings" if not u["org_id"] else None,
+        "issues": issues or None,
     }
+
+
+class FixOrgRequest(BaseModel):
+    org_id: str
+
+
+@router.post("/users/fix-org-by-email")
+async def fix_user_org_by_email(data: FixOrgRequest, email: str, current_user=Depends(get_current_user)):
+    """Super Admin / Admin: assign an org_id to a user whose org_id is NULL.
+    Used to repair invited users who somehow ended up without an org assignment.
+    """
+    if current_user["role"] not in ("admin", "super_admin"):
+        raise HTTPException(403, "Admin only")
+    caller_org = current_user.get("org_id", "")
+
+    async with database.with_admin() as conn:
+        u = await conn.fetchrow(
+            "SELECT id, org_id FROM users WHERE LOWER(email)=LOWER($1)", email
+        )
+        if not u:
+            raise HTTPException(404, "User not found")
+
+        # Non-super_admins can only assign their own org
+        target_org = data.org_id
+        if current_user["role"] != "super_admin" and target_org != caller_org:
+            raise HTTPException(403, "You can only assign users to your own organisation")
+
+        # Validate org exists
+        org_row = await conn.fetchrow("SELECT name FROM organisations WHERE id=$1", target_org)
+        if not org_row:
+            raise HTTPException(404, "Organisation not found")
+
+        await conn.execute("UPDATE users SET org_id=$1 WHERE id=$2", target_org, u["id"])
+
+    return {"message": f"User org_id set to {target_org} ({org_row['name']})", "user_id": str(u["id"])}

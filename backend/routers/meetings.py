@@ -137,11 +137,32 @@ async def list_meetings(current_user=Depends(get_current_user)):
     if role == "super_admin":
         return []
     org_id = current_user.get("org_id", "")
-    if not org_id:
-        return []
-
     user_id = current_user["id"]
     scope = get_manager_scope(current_user)
+
+    # Attendees / shared_reviewers with no org_id (e.g. some invited users whose
+    # org_id was not written during invite acceptance) — bypass RLS and query
+    # directly by user_id so they can still see their meetings.
+    if role not in ("admin", "manager") and not org_id:
+        async with database.with_admin() as conn:
+            rows = await conn.fetch(
+                """SELECT * FROM meetings
+                   WHERE created_by=$1
+                      OR EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                          WHERE a->>'user_id' = $1::text
+                      )
+                      OR EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with,'[]'::jsonb)) s
+                          WHERE s->>'user_id' = $1::text
+                      )
+                   ORDER BY created_at DESC LIMIT 500""",
+                user_id,
+            )
+        return [_parse_meeting_row(dict(r)) for r in rows]
+
+    if not org_id:
+        return []
 
     async with database.with_org(org_id) as conn:
         if role == "admin":
@@ -193,11 +214,11 @@ async def list_meetings(current_user=Depends(get_current_user)):
                    WHERE created_by=$1
                       OR EXISTS (
                           SELECT 1 FROM jsonb_array_elements(attendees) a
-                          WHERE a->>'user_id' = $1
+                          WHERE a->>'user_id' = $1::text
                       )
                       OR EXISTS (
                           SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with, '[]'::jsonb)) s
-                          WHERE s->>'user_id' = $1
+                          WHERE s->>'user_id' = $1::text
                       )
                    ORDER BY created_at DESC LIMIT 500""",
                 user_id,

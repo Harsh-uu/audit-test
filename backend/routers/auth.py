@@ -520,9 +520,9 @@ async def accept_invite(data: AcceptInviteRequest, response: Response):
 
         name = data.name.strip() or user["name"]
         await conn.execute(
-            """UPDATE users SET password_hash=$1, name=$2, is_active=TRUE,
-               must_change_password=FALSE WHERE id=$3""",
-            hash_password(data.password), name, invite["user_id"],
+            """UPDATE users SET password_hash=$1, name=$2, org_id=$3, is_active=TRUE,
+               must_change_password=FALSE WHERE id=$4""",
+            hash_password(data.password), name, invite["org_id"], invite["user_id"],
         )
         await conn.execute("UPDATE invitations SET used_at=$1 WHERE token=$2", now, data.token)
 

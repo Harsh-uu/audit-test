@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { Upload, Check, AlertCircle, Image, X } from "lucide-react";
@@ -18,6 +18,25 @@ export function BrandingTab() {
   const [error, setError] = useState("");
   const fileRef = useRef(null);
 
+  // Re-fetch branding on mount so we always show the persisted values,
+  // even when the login response did not include org_branding.
+  useEffect(() => {
+    axios.get(`${API}/org/branding`, getAuthConfig())
+      .then(res => {
+        if (res.data) {
+          setPrimaryColor(res.data.primary_color || "#1E3A8A");
+          setHasLogo(res.data.has_logo || false);
+          if (res.data.has_logo) {
+            setLogoPreview(`${API}/org/branding/logo/${user?.org_id}?t=${Date.now()}`);
+          } else {
+            setLogoPreview("");
+          }
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -32,6 +51,8 @@ export function BrandingTab() {
       });
       setHasLogo(true);
       setLogoPreview(`${API}/org/branding/logo/${user?.org_id}?t=${Date.now()}`);
+      // Keep context in sync so other components see updated branding
+      updateOrgBranding({ ...(user?.org_branding || {}), has_logo: true });
     } catch (err) {
       setError(err.response?.data?.detail || "Logo upload failed");
     }

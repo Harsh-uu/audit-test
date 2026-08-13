@@ -93,14 +93,32 @@ export function AuthProvider({ children }) {
     if (data.requires_mfa) return data; // MFA pending — caller handles OTP flow
     if (data.token) localStorage.setItem("supervision_token", data.token);
     if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
-    setUser(data);
-    return data;
+    setUser(data); // Set immediately so routes and navigation work right away
+    // Fetch full profile (includes org_branding, org_name) in the background
+    try {
+      const { data: profile } = await axios.get(`${API}/auth/me`, {
+        headers: { Authorization: `Bearer ${data.token}` },
+      });
+      setUser(profile);
+      return profile;
+    } catch {
+      return data;
+    }
   };
 
-  const completeLogin = (data) => {
+  const completeLogin = async (data) => {
     if (data.token) localStorage.setItem("supervision_token", data.token);
     if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
-    setUser(data);
+    setUser(data); // Set immediately so navigation in the caller works without await
+    // Fetch full profile so org_branding is populated
+    try {
+      const { data: profile } = await axios.get(`${API}/auth/me`, {
+        headers: { Authorization: `Bearer ${data.token}` },
+      });
+      setUser(profile);
+    } catch {
+      // Keep login data as fallback
+    }
   };
 
   const updateMfaStatus = (mfa_enabled) => {
