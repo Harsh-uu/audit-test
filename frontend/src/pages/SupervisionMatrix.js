@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { CheckCircle, Loader, AlertCircle, LayoutGrid } from "lucide-react";
+import { CheckCircle, Loader2, AlertCircle, LayoutGrid } from "lucide-react";
 
 function fmt(dateStr) {
   if (!dateStr) return "—";
@@ -127,7 +127,7 @@ export default function SupervisionMatrix() {
     return (
       <Layout>
         <div className="flex items-center justify-center py-24 text-gray-400">
-          <Loader className="w-5 h-5 animate-spin mr-2" />
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
           <span className="text-sm">Loading matrix…</span>
         </div>
       </Layout>

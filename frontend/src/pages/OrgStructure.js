@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   Building2, Users, ChevronRight, ChevronDown, Plus, Edit2, Trash2, X, Check,
-  MapPin, UserCog, Loader, AlertCircle, CheckCircle, Pencil, KeyRound,
+  MapPin, UserCog, Loader2, AlertCircle, CheckCircle, Pencil, KeyRound,
   GripVertical, UserPlus, Search, UserCheck, Layers,
 } from "lucide-react";
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -338,7 +338,7 @@ export default function OrgStructure({ embedded = false }) {
   if (loading) {
     const loadEl = (
       <div className="flex items-center justify-center py-24 text-gray-400">
-        <Loader className="w-5 h-5 animate-spin mr-2" /><span className="text-sm">Loading…</span>
+        <Loader2 className="w-5 h-5 animate-spin mr-2" /><span className="text-sm">Loading…</span>
       </div>
     );
     return embedded ? loadEl : <Layout>{loadEl}</Layout>;

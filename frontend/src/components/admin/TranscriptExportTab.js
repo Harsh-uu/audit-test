@@ -1,5 +1,5 @@
 import React from "react";
-import { Download, Calendar, Users, Loader, X } from "lucide-react";
+import { Download, Calendar, Users, Loader2, X } from "lucide-react";
 
 export function TranscriptExportTab({
   users,
@@ -76,7 +76,7 @@ export function TranscriptExportTab({
             Or pick specific meetings
           </label>
           {exportMeetingsLoading ? (
-            <div className="flex items-center gap-2 text-xs text-gray-400"><Loader className="w-3.5 h-3.5 animate-spin" />Loading meetings…</div>
+            <div className="flex items-center gap-2 text-xs text-gray-400"><Loader2 className="w-3.5 h-3.5 animate-spin" />Loading meetings…</div>
           ) : exportMeetings.length === 0 ? (
             <p className="text-xs text-gray-400">No signed-off meetings found.</p>
           ) : (
@@ -101,7 +101,7 @@ export function TranscriptExportTab({
           className="flex items-center gap-2 bg-[#1E3A8A] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
           data-testid="tx-export-btn"
         >
-          {exportLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {exportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
           {exportLoading ? "Generating…" : "Download Transcripts PDF"}
         </button>
       </div>

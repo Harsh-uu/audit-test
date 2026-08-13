@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { FileText, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Trash2, BookOpen, Upload, Loader, CheckCircle, AlertCircle } from "lucide-react";
+import { FileText, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Trash2, BookOpen, Upload, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 
 function ParseStatusBadge({ status }) {
   const cfg = {
-    parsing:  { cls: "bg-amber-100 text-amber-700", label: "Parsing…", icon: <Loader className="w-3 h-3 animate-spin" /> },
+    parsing:  { cls: "bg-amber-100 text-amber-700", label: "Parsing…", icon: <Loader2 className="w-3 h-3 animate-spin" /> },
     parsed:   { cls: "bg-emerald-100 text-emerald-700", label: "Ready", icon: <CheckCircle className="w-3 h-3" /> },
     failed:   { cls: "bg-red-100 text-red-700", label: "Failed", icon: <AlertCircle className="w-3 h-3" /> },
-    uploaded: { cls: "bg-gray-100 text-gray-500", label: "Uploading…", icon: <Loader className="w-3 h-3 animate-spin" /> },
+    uploaded: { cls: "bg-gray-100 text-gray-500", label: "Uploading…", icon: <Loader2 className="w-3 h-3 animate-spin" /> },
   };
   const c = cfg[status] || cfg.uploaded;
   return (
@@ -102,7 +102,7 @@ export function DocumentsTab({ docs, uploading, uploadLabel, setUploadLabel, han
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors ${uploading ? "bg-gray-200 text-gray-400" : "bg-teal-600 text-white hover:bg-teal-700"}`}
               data-testid="upload-doc-btn"
             >
-              {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               {uploading ? "Uploading…" : "Choose File"}
               <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md,.csv" onChange={handleUploadDoc} className="hidden" disabled={uploading} />
             </label>

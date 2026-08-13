@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { FileText, Users, Loader, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check, RotateCcw, Search, X } from "lucide-react";
+import { FileText, Users, Loader2, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check, RotateCcw, Search, X } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { anonymiseTranscript } from "@/utils/anonymise";
@@ -309,7 +309,7 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
                     className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded bg-[#1E3A8A] text-white hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
                     data-testid="save-speaker-map-btn"
                   >
-                    {saving && <Loader className="w-3 h-3 animate-spin" />}
+                    {saving && <Loader2 className="w-3 h-3 animate-spin" />}
                     Save
                   </button>
                   <button
@@ -1001,7 +1001,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
             className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-md border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors disabled:opacity-60"
             data-testid="generate-speaker-btn"
           >
-            {generating ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+            {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
             {generating ? "Identifying…" : "Identify Speakers"}
           </button>
         ) : null}

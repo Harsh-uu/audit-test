@@ -1,5 +1,5 @@
 import React from "react";
-import { History, Loader, AlertTriangle } from "lucide-react";
+import { History, Loader2, AlertTriangle } from "lucide-react";
 
 const AUDIT_EVENT_CONFIG = {
   meeting_created:   { color: "bg-blue-100 text-blue-700", dot: "bg-blue-400" },
@@ -59,7 +59,7 @@ export function AuditTrailTab({ auditLoading, auditTrail, fetchAuditTrail }) {
       </div>
       {auditLoading && (
         <div className="flex items-center justify-center py-10 text-gray-400">
-          <Loader className="w-5 h-5 animate-spin mr-2" />
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
           <span className="text-sm">Loading audit trail…</span>
         </div>
       )}

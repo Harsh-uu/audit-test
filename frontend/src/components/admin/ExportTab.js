@@ -1,5 +1,5 @@
 import React from "react";
-import { Download, Calendar, Users, Filter, Loader, X } from "lucide-react";
+import { Download, Calendar, Users, Filter, Loader2, X } from "lucide-react";
 
 export function ExportTab({
   users,
@@ -89,7 +89,7 @@ export function ExportTab({
             Specific Meetings (optional — overrides above filters if selected)
           </label>
           {exportMeetingsLoading ? (
-            <div className="flex items-center gap-2 text-sm text-gray-400 py-2"><Loader className="w-4 h-4 animate-spin" /> Loading meetings…</div>
+            <div className="flex items-center gap-2 text-sm text-gray-400 py-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading meetings…</div>
           ) : (
             <div className="border border-gray-200 rounded-md bg-gray-50 max-h-48 overflow-y-auto">
               {exportMeetings.length === 0 ? (

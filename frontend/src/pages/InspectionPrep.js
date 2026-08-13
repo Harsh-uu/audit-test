@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
   ClipboardCheck, ChevronDown, ChevronRight,
-  Loader, AlertCircle, CheckCircle, TrendingUp, Download, ExternalLink,
+  Loader2, AlertCircle, CheckCircle, TrendingUp, Download, ExternalLink,
 } from "lucide-react";
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
@@ -216,7 +216,7 @@ export default function InspectionPrep() {
     return (
       <Layout>
         <div className="flex items-center justify-center py-24 text-gray-400">
-          <Loader className="w-5 h-5 animate-spin mr-2" /> Loading…
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…
         </div>
       </Layout>
     );

@@ -4,7 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  Upload, FileText, CheckCircle, AlertCircle, Loader, User,
+  Upload, FileText, CheckCircle, AlertCircle, Loader2, User,
   Calendar, Tag, X, ChevronRight, FileUp, Clock
 } from "lucide-react";
 
@@ -21,8 +21,8 @@ const DOC_TYPE_OPTIONS = [
 ];
 
 const STATUS_CONFIG = {
-  processing:  { icon: Loader, color: "text-amber-600", bg: "bg-amber-50 border-amber-200", label: "Analysing…", spin: true },
-  text_ready:  { icon: Loader, color: "text-amber-600", bg: "bg-amber-50 border-amber-200", label: "Mapping evidence…", spin: true },
+  processing:  { icon: Loader2, color: "text-amber-600", bg: "bg-amber-50 border-amber-200", label: "Analysing…", spin: true },
+  text_ready:  { icon: Loader2, color: "text-amber-600", bg: "bg-amber-50 border-amber-200", label: "Mapping evidence…", spin: true },
   done:        { icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", label: "Analysis complete" },
   failed:      { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50 border-red-200", label: "Failed" },
 };
@@ -254,7 +254,7 @@ export default function UploadSupervision() {
                 </label>
                 {loadingStaff ? (
                   <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                    <Loader className="w-4 h-4 animate-spin" /> Loading…
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading…
                   </div>
                 ) : (
                   <select
@@ -391,7 +391,7 @@ export default function UploadSupervision() {
                 data-testid="submit-upload-btn"
               >
                 {uploading ? (
-                  <><Loader className="w-4 h-4 animate-spin" /> Uploading…</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
                 ) : (
                   <><FileUp className="w-4 h-4" /> Import &amp; Scan for Evidence</>
                 )}

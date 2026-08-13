@@ -3,15 +3,15 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, ChevronDown, Loader, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles, Archive, ClipboardList } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, ChevronDown, Loader2, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles, Archive, ClipboardList } from "lucide-react";
 
 const STATUS_CONFIG = {
   draft:             { label: "Draft",        color: "bg-gray-100 text-gray-700 border-gray-200",       icon: FileText },
   recording:         { label: "Recording",    color: "bg-red-100 text-red-700 border-red-200",           icon: Mic },
   stopped:           { label: "Stopped",      color: "bg-orange-100 text-orange-700 border-orange-200",  icon: Mic },
-  processing:        { label: "Processing",   color: "bg-blue-100 text-blue-700 border-blue-200",        icon: Loader },
-  transcribing:      { label: "Transcribing", color: "bg-blue-100 text-blue-700 border-blue-200",        icon: Loader },
-  analyzing:         { label: "Analysing",    color: "bg-purple-100 text-purple-700 border-purple-200",  icon: Loader },
+  processing:        { label: "Processing",   color: "bg-blue-100 text-blue-700 border-blue-200",        icon: Loader2 },
+  transcribing:      { label: "Transcribing", color: "bg-blue-100 text-blue-700 border-blue-200",        icon: Loader2 },
+  analyzing:         { label: "Analysing",    color: "bg-purple-100 text-purple-700 border-purple-200",  icon: Loader2 },
   in_review:         { label: "In Review",    color: "bg-amber-100 text-amber-700 border-amber-200",     icon: Clock },
   reviewed:          { label: "Reviewed",     color: "bg-teal-100 text-teal-700 border-teal-200",        icon: CheckCircle },
   signed_off:        { label: "Signed Off",   color: "bg-emerald-100 text-emerald-800 border-emerald-200", icon: CheckCircle },

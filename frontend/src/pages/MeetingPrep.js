@@ -7,7 +7,7 @@ import Layout from "@/components/Layout";
 import {
   Sparkles, ChevronDown, ChevronUp, Plus, Trash2, Edit2,
   Check, X, Share2, ArrowLeft, RefreshCw, BookOpen,
-  FileText, Users, Building2, Target, Loader, Eye, EyeOff, ChevronRight, Mic, Upload,
+  FileText, Users, Building2, Target, Loader2, Eye, EyeOff, ChevronRight, Mic, Upload,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -217,7 +217,7 @@ function SourceCard({ source, included, onToggle }) {
         </p>
         {isProcessing && (
           <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
-            <Loader className="w-3 h-3 animate-spin" /> Indexing… will be ready shortly
+            <Loader2 className="w-3 h-3 animate-spin" /> Indexing… will be ready shortly
           </p>
         )}
       </div>
@@ -493,7 +493,7 @@ export default function MeetingPrep() {
   if (loading) return (
     <Layout>
       <div className="min-h-screen flex items-center justify-center">
-        <Loader className="w-8 h-8 text-indigo-600 animate-spin" />
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
       </div>
     </Layout>
   );
@@ -639,7 +639,7 @@ export default function MeetingPrep() {
                     className="flex items-center gap-1.5 text-sm px-4 py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 font-medium"
                     data-testid="upload-context-submit"
                   >
-                    {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                     {uploading ? "Uploading…" : "Upload"}
                   </button>
                   <button
@@ -700,7 +700,7 @@ export default function MeetingPrep() {
       {/* ── Generating spinner ───────────────────────────────────────────────── */}
       {generating && sections.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-4 py-24 bg-white rounded-xl border border-dashed border-indigo-200">
-          <Loader className="w-10 h-10 text-indigo-400 animate-spin" />
+          <Loader2 className="w-10 h-10 text-indigo-400 animate-spin" />
           <p className="text-sm text-gray-500 font-medium">1two.one is crafting personalised questions…</p>
         </div>
       )}
@@ -779,7 +779,7 @@ export default function MeetingPrep() {
                       <input type="text" value={uploadLabel} onChange={e => setUploadLabel(e.target.value)} placeholder="Label (optional)" className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5" />
                       <div className="flex gap-2">
                         <button onClick={handleUploadContext} disabled={!uploadFile || uploading} className="flex items-center gap-1 text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg disabled:opacity-50" data-testid="upload-context-submit">
-                          {uploading ? <Loader className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} {uploading ? "Uploading…" : "Upload"}
+                          {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} {uploading ? "Uploading…" : "Upload"}
                         </button>
                         <button onClick={() => { setUploadOpen(false); setUploadFile(null); setUploadLabel(""); }} className="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg">Cancel</button>
                       </div>
@@ -799,7 +799,7 @@ export default function MeetingPrep() {
               data-testid="generate-questions-btn"
             >
               {generating ? (
-                <><Loader className="w-4 h-4 animate-spin" /> Generating personalised questions…</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Generating personalised questions…</>
               ) : (
                 <><RefreshCw className="w-4 h-4" /> Regenerate Questions</>
               )}
@@ -852,7 +852,7 @@ export default function MeetingPrep() {
                     className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
                     data-testid="save-and-record-btn"
                   >
-                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
                     Save Prep & Start Recording
                   </button>
                   <button
@@ -872,7 +872,7 @@ export default function MeetingPrep() {
                     className="flex items-center gap-2 px-5 py-2.5 bg-[#1E3A8A] text-white rounded-xl font-medium text-sm hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
                     data-testid="save-and-record-btn"
                   >
-                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
                     Save & Return to Recording
                   </button>
                   <button
@@ -895,7 +895,7 @@ export default function MeetingPrep() {
                     className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#1E3A8A] text-[#1E3A8A] rounded-xl font-medium text-sm hover:bg-indigo-50 transition-colors"
                     data-testid="save-prep-btn"
                   >
-                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                     Save for myself
                   </button>
                   <button

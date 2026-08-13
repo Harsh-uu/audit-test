@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
-  FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award, RefreshCw, Loader, AlignLeft,
+  FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award, RefreshCw, Loader2, AlignLeft,
 } from "lucide-react";
 
 // ── Jurisdiction-aware label helper ──────────────────────────────────────────
@@ -330,7 +330,7 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
                 className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors disabled:opacity-60"
               >
                 {rescanning
-                  ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   : <RefreshCw className="w-3.5 h-3.5" />}
                 {rescanning ? "Re-scanning…" : "Re-scan"}
               </button>

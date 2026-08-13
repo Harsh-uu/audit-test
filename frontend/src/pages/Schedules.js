@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  Calendar, Plus, Trash2, Edit2, Check, X, Loader, AlertCircle,
+  Calendar, Plus, Trash2, Edit2, Check, X, Loader2, AlertCircle,
   CheckCircle, Users, ChevronDown, ChevronRight, Zap, Clock,
 } from "lucide-react";
 
@@ -317,7 +317,7 @@ export default function Schedules() {
     return (
       <Layout>
         <div className="flex items-center justify-center py-24 text-gray-400">
-          <Loader className="w-5 h-5 animate-spin mr-2" /><span className="text-sm">Loading…</span>
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /><span className="text-sm">Loading…</span>
         </div>
       </Layout>
     );

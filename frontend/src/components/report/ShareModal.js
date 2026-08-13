@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Share2, Check, Users, Loader } from "lucide-react";
+import { X, Share2, Check, Users, Loader2 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
 
@@ -95,7 +95,7 @@ export function ShareModal({ show, onClose, meeting, onShared }) {
 
           {loading ? (
             <div className="flex items-center justify-center py-6">
-              <Loader className="w-5 h-5 text-gray-400 animate-spin" />
+              <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
             </div>
           ) : candidates.length === 0 ? (
             <p className="text-sm text-gray-400 italic py-4 text-center">No eligible managers or reviewers to share with.</p>
@@ -146,7 +146,7 @@ export function ShareModal({ show, onClose, meeting, onShared }) {
             className="flex items-center gap-2 px-4 py-2 text-sm bg-[#1E3A8A] text-white rounded-lg font-medium hover:bg-[#1E40AF] disabled:opacity-40 transition-colors"
             data-testid="confirm-share-btn"
           >
-            {sharing ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+            {sharing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
             {sharing ? "Sharing…" : `Share with ${newCount} person${newCount !== 1 ? "s" : ""}`}
           </button>
         </div>

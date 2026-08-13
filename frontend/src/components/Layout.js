@@ -5,7 +5,7 @@ import axios from "axios";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
   TrendingUp, BarChart2, X, Building2, Calendar, FileUp, LayoutGrid, ClipboardCheck,
-  Pencil, Check, Loader, KeyRound, Settings, Award, UserCircle, ChevronDown,
+  Pencil, Check, Loader2, KeyRound, Settings, Award, UserCircle, ChevronDown,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 
@@ -329,7 +329,7 @@ export default function Layout({ children }) {
                 data-testid="org-name-input"
               />
               <button onClick={saveOrgName} disabled={savingOrgName} className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-50" data-testid="org-name-save">
-                {savingOrgName ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                {savingOrgName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
               </button>
               <button onClick={() => setEditingOrgName(false)} className="p-1 rounded hover:bg-white/10 text-white/70 hover:text-white" data-testid="org-name-cancel">
                 <X className="w-3.5 h-3.5" />

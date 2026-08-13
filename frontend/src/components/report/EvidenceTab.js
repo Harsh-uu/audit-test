@@ -3,7 +3,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
-  ChevronDown, ChevronUp, Loader, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen,
+  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen,
 } from "lucide-react";
 
 // ── Severity config ──────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ function RiskCard({ risk, meetingId, canEdit, canToggle, onToggleResolved, onCre
         <div className="p-4 space-y-4 border-t border-gray-200 bg-white rounded-b-lg">
           {loadingSugg ? (
             <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Loader className="w-4 h-4 animate-spin text-indigo-400" />
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
               Analysing transcript for context…
             </div>
           ) : (

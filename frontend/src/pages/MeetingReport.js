@@ -4,7 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader, Shield, Send, RefreshCw, Lock, Info, Share2,
+  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader2, Shield, Send, RefreshCw, Lock, Info, Share2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EvidenceTab } from "@/components/report/EvidenceTab";
@@ -664,7 +664,7 @@ export default function MeetingReport() {
           <div className="flex-1 flex items-center justify-center p-12">
             <div className="text-center max-w-sm">
               <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Loader className="w-7 h-7 text-gray-400" />
+                <Loader2 className="w-7 h-7 text-gray-400" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">
                 {meeting?.status === "recording" ? "Recording in progress" : "No report yet"}

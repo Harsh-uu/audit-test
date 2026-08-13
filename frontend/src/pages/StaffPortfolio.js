@@ -4,7 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
-  ArrowLeft, Shield, Award, FileText, Download, Loader,
+  ArrowLeft, Shield, Award, FileText, Download, Loader2,
   CheckCircle, Clock, ChevronRight, ChevronDown, TrendingUp, User, Check, FileUp, ExternalLink
 } from "lucide-react";
 

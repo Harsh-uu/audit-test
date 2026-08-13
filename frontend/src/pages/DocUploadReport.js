@@ -5,13 +5,13 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { EvidenceSidebar } from "@/components/report/EvidenceSidebar";
 import {
-  ArrowLeft, FileText, User, Calendar, Upload, Loader, AlertCircle,
+  ArrowLeft, FileText, User, Calendar, Upload, Loader2, AlertCircle,
   CheckCircle, Clock
 } from "lucide-react";
 
 const STATUS_CONFIG = {
   processing: {
-    icon: Loader,
+    icon: Loader2,
     color: "text-amber-700",
     bg: "bg-amber-50 border-amber-200",
     label: "Scanning document for evidence…",
