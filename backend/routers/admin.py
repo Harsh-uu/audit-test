@@ -41,9 +41,11 @@ def _jdict(val):
     """Parse a JSONB value (dict-typed) that asyncpg may stringify under RLS."""
     if isinstance(val, dict): return val
     if isinstance(val, str):
-        try: return json.loads(val)
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else {}
         except Exception: return {}
-    return val or {}
+    return val if isinstance(val, dict) else {}
 
 
 def _ref_nums(ref: str):

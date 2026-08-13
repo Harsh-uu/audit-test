@@ -284,7 +284,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - Role-specific competency framework upload
 - Skills for Care Effective Supervision Guide integration
 
-### P0 (Done — Aug 2026, Session 8)
+### P0 (Done — Aug 2026, Session 8 — patch)
+- **`/api/auth/me` branding crash fix**: When the production `organisations.branding` column contains `"null"` or any non-dict JSON value, `json.loads("null")` returned Python `None` which then crashed `b.get("logo_path")` with `AttributeError`. This silently prevented `org_name` and `org_branding` from being set on the frontend, showing "Organisation" fallback. Fixed with `if not isinstance(b, dict): b = {}` guard.
+- **`_jdict` helper hardened**: Same `json.loads("null") → None` bug existed in `_jdict` in `admin.py`. Now returns `{}` for any non-dict parsed result.
 - **Debug endpoint 500 fix**: `GET /api/admin/users/debug-by-email` no longer crashes when user has null org_id. Root cause was passing empty string `""` to a UUID column. Fixed: now queries by user_id only (no org_id filter). Both debug endpoints improved with structured `issues` array.
 - **Meeting visibility for invited users (null org_id)**: `list_meetings` now handles attendees/shared_reviewers with null org_id by using `with_admin()` context (bypassing RLS) and filtering by user_id directly. Previously they saw no meetings at all.
 - **accept_invite sets org_id**: `POST /api/auth/accept-invite` now writes `org_id` from the invitation record into the user row, ensuring future invited users always have org_id set.

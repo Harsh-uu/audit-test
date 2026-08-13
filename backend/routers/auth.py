@@ -321,6 +321,7 @@ async def toggle_mfa(data: ToggleMfaRequest, current_user=Depends(get_current_us
 
 @router.get("/me")
 async def me(current_user=Depends(get_current_user)):
+    import json as _json
     user = dict(current_user)
     user.pop("password_hash", None)
     user.pop("mfa_code", None)
@@ -331,14 +332,22 @@ async def me(current_user=Depends(get_current_user)):
         async with database.with_admin() as conn:
             org = await conn.fetchrow("SELECT name, branding, jurisdiction, service_type FROM organisations WHERE id = $1", org_id)
         if org:
-            _b_raw = org["branding"] or {}
-            import json as _json
-            b = _json.loads(_b_raw) if isinstance(_b_raw, str) else (_b_raw or {})
+            _b_raw = org["branding"]
+            # Safely parse branding — handles None, "{}", "null", or dict
+            if isinstance(_b_raw, str):
+                try:
+                    b = _json.loads(_b_raw)
+                except Exception:
+                    b = {}
+            else:
+                b = _b_raw
+            if not isinstance(b, dict):
+                b = {}
             user["org_branding"] = {
                 "has_logo": bool(b.get("logo_path")),
                 "primary_color": b.get("primary_color"),
             }
-            user["org_name"] = org["name"]
+            user["org_name"] = org["name"] or ""
             user["org_jurisdiction"] = org["jurisdiction"] or "england"
             user["org_service_type"] = org["service_type"] or ""
     return user
