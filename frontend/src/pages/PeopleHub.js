@@ -5,9 +5,9 @@ import Layout from "@/components/Layout";
 import OrgStructure from "@/pages/OrgStructure";
 import OrgSettings  from "@/pages/OrgSettings";
 import {
-  Users, UserPlus, Settings, Building2,
+  Users, Settings, Building2,
   RefreshCw, Search, AlertTriangle, Check,
-  Mail, MoreHorizontal,
+  Mail, MoreHorizontal, X, KeyRound, ChevronDown,
 } from "lucide-react";
 
 // ── Avatar helper ────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ function Sparkbar({ data = [] }) {
 }
 
 // ── People & Usage tab ───────────────────────────────────────────────────────
-function PeopleTab({ people, loading, onRefresh, onRevoke }) {
+function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
@@ -217,7 +217,12 @@ function PeopleTab({ people, loading, onRefresh, onRevoke }) {
                       <span className="text-xs font-semibold" style={{ color: lastColor }}>{lastStr}</span>
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <button className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" data-testid={`people-menu-${p.user_id}`}>
+                      <button
+                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                        onClick={() => onEdit(p)}
+                        data-testid={`people-menu-${p.user_id}`}
+                        title="Edit user"
+                      >
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
                     </td>
@@ -358,12 +363,117 @@ function InvitesTab({ people, onRevoke }) {
   );
 }
 
+// ── Edit User Modal ───────────────────────────────────────────────────────────
+const ROLES = [
+  { value: "attendee", label: "Care Worker" },
+  { value: "manager",  label: "Manager" },
+  { value: "shared_reviewer", label: "Shared Reviewer" },
+  { value: "admin",    label: "Admin" },
+];
+
+function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, currentUserRole }) {
+  const [form, setForm]   = useState({ name: person.name, email: person.email, role: person.role, is_active: person.is_active !== false });
+  const [showPwd, setShowPwd] = useState(false);
+  const [newPwd, setNewPwd]   = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState("");
+
+  const save = async () => {
+    if (!form.name.trim()) return setError("Name is required");
+    if (!form.email.trim()) return setError("Email is required");
+    if (showPwd && newPwd && newPwd.length < 8) return setError("Password must be at least 8 characters");
+    setSaving(true); setError("");
+    try {
+      await axios.put(`${API}/admin/users/${person.user_id}`, form, getAuthConfig());
+      if (showPwd && newPwd.trim()) {
+        await axios.post(`${API}/admin/users/${person.user_id}/reset-password`, { new_password: newPwd }, getAuthConfig());
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to save");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" data-testid="edit-user-modal">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-semibold text-gray-900">Edit — {person.name}</h3>
+          <button onClick={onClose}><X className="w-4 h-4 text-gray-400" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Full name</label>
+            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+              data-testid="edit-user-name" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Email address</label>
+            <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+              data-testid="edit-user-email" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
+            <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
+              data-testid="edit-user-role">
+              {ROLES.filter(r => currentUserRole === "admin" ? true : r.value !== "admin").map(r => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <input type="checkbox" id="edit-active" checked={form.is_active}
+              onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
+              className="w-4 h-4 accent-[#1E3A8A]" data-testid="edit-user-active" />
+            <label htmlFor="edit-active" className="text-sm text-gray-700 cursor-pointer">
+              {form.is_active ? "Active" : "Inactive (blocked from login)"}
+            </label>
+          </div>
+
+          <div className="pt-2 border-t border-gray-100">
+            <button type="button" onClick={() => { setShowPwd(p => !p); setNewPwd(""); }}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors"
+              data-testid="toggle-reset-password">
+              <KeyRound className="w-3.5 h-3.5" />
+              {showPwd ? "Cancel password change" : "Reset password"}
+              <ChevronDown className={`w-3 h-3 transition-transform ${showPwd ? "rotate-180" : ""}`} />
+            </button>
+            {showPwd && (
+              <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)}
+                placeholder="New password (min. 8 chars)"
+                className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                data-testid="new-password-input" />
+            )}
+          </div>
+
+          {error && <p className="text-xs text-red-600" data-testid="edit-user-error">{error}</p>}
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={save} disabled={saving}
+              className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60"
+              data-testid="save-edit-user-btn">
+              <Check className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save"}
+            </button>
+            <button onClick={onClose} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main PeopleHub page ───────────────────────────────────────────────────────
 export default function PeopleHub() {
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, user: currentUser } = useAuth();
   const [tab, setTab]         = useState("people");
   const [people, setPeople]   = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -390,6 +500,12 @@ export default function PeopleHub() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
+
+  const handleUserSaved = useCallback(() => {
+    setEditingUser(null);
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
 
   const pendingCount = people.filter(p => p.pending_invite).length;
 
@@ -451,7 +567,7 @@ export default function PeopleHub() {
         {/* Tab content */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {tab === "people" && (
-            <PeopleTab people={people} loading={loading} onRefresh={load} onRevoke={revokeInvite} />
+            <PeopleTab people={people} loading={loading} onRefresh={load} onRevoke={revokeInvite} onEdit={setEditingUser} />
           )}
           {tab === "structure" && (
             <div className="overflow-y-auto flex-1">
@@ -470,6 +586,18 @@ export default function PeopleHub() {
           )}
         </div>
       </div>
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <EditUserModal
+          person={editingUser}
+          onClose={() => setEditingUser(null)}
+          onSaved={handleUserSaved}
+          API={API}
+          getAuthConfig={getAuthConfig}
+          currentUserRole={currentUser?.role}
+        />
+      )}
     </Layout>
   );
 }
