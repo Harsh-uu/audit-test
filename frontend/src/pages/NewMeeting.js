@@ -6,6 +6,13 @@ import Layout from "@/components/Layout";
 import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, Sparkles, ChevronRight } from "lucide-react";
 
 // Return current local time in datetime-local format (YYYY-MM-DDTHH:mm)
+function avatarColor(name = "") {
+  const palette = ["#1E3A8A","#7C3AED","#059669","#D97706","#DC2626","#0891B2","#9333EA"];
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % palette.length;
+  return palette[h];
+}
+
 function localNow() {
   const now = new Date();
   const pad = n => String(n).padStart(2, "0");
@@ -251,8 +258,8 @@ export default function NewMeeting() {
                     onChange={() => toggleAttendee(user.id)}
                     className="accent-[#1E3A8A] flex-shrink-0"
                   />
-                  <div className="w-8 h-8 rounded-full bg-[#1E3A8A] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-                    {user.name[0].toUpperCase()}
+                  <div className="w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: avatarColor(user.name) }}>
+                    {user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
