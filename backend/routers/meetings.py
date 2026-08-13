@@ -183,26 +183,31 @@ async def list_meetings(current_user=Depends(get_current_user)):
                 # Include the manager themselves so their personally-created meetings appear
                 all_scoped = list(scoped_staff_ids | {user_id})
 
+                # Convert UUIDs to strings so text = ANY(text[]) comparisons work
+                all_scoped_str = [str(uid) for uid in all_scoped]
+
                 rows = await conn.fetch(
                     """SELECT * FROM meetings
-                       WHERE created_by = ANY($1)
-                          OR sign_off_manager_id = ANY($1)
+                       WHERE created_by::text = ANY($1)
+                          OR sign_off_manager_id::text = ANY($1)
                           OR EXISTS (
-                              SELECT 1 FROM jsonb_array_elements(attendees) a
+                              SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
                               WHERE a->>'user_id' = ANY($1)
                           )
                        ORDER BY created_at DESC LIMIT 500""",
-                    all_scoped,
+                    all_scoped_str,
                 )
                 result = []
+                scoped_staff_ids_str = {str(uid) for uid in scoped_staff_ids}
+                user_id_str = str(user_id)
                 for row in rows:
                     m = _parse_meeting_row(dict(row))
-                    attendee_ids = {a.get("user_id") for a in m.get("attendees", [])}
+                    attendee_ids = {str(a.get("user_id", "")) for a in m.get("attendees", [])}
                     # Staff attendees = everyone except the manager themselves
-                    staff_attendees = attendee_ids - {user_id}
+                    staff_attendees = attendee_ids - {user_id_str}
                     if staff_attendees:
                         # Historical if NONE of the staff attendees are still in scope
-                        m["is_historical"] = len(staff_attendees & scoped_staff_ids) == 0
+                        m["is_historical"] = len(staff_attendees & scoped_staff_ids_str) == 0
                     else:
                         m["is_historical"] = False
                     result.append(m)
@@ -213,11 +218,11 @@ async def list_meetings(current_user=Depends(get_current_user)):
                 """SELECT * FROM meetings
                    WHERE created_by=$1
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(attendees) a
+                          SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
                           WHERE a->>'user_id' = $1::text
                       )
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with, '[]'::jsonb)) s
+                          SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with,'[]'::jsonb)) s
                           WHERE s->>'user_id' = $1::text
                       )
                    ORDER BY created_at DESC LIMIT 500""",
