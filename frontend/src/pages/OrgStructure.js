@@ -66,10 +66,18 @@ function moveUserInStructure(prev, movedUser, fromTeamId, toTeamId) {
 
 // ── Small UI atoms ─────────────────────────────────────────────────────────
 
-function Avatar({ name, color = "bg-gray-100 text-gray-600" }) {
+function avatarColor(name = "") {
+  const palette = ["#1E3A8A","#7C3AED","#059669","#D97706","#DC2626","#0891B2","#9333EA"];
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % palette.length;
+  return palette[h];
+}
+
+function Avatar({ name, bg }) {
   const initials = (name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const background = bg || avatarColor(name);
   return (
-    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${color}`}>
+    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background }}>
       {initials}
     </div>
   );
@@ -496,7 +504,7 @@ export default function OrgStructure({ embedded = false }) {
                                             )}
                                             <Avatar
                                               name={m.name}
-                                              color={m.id === t.supervisor_user_id ? "bg-[#1E3A8A] text-white" : "bg-gray-100 text-gray-600"}
+                                              bg={m.id === t.supervisor_user_id ? "#1E3A8A" : undefined}
                                             />
                                             <div className="flex-1 min-w-0">
                                               <p className="text-xs font-medium text-gray-900 truncate">{m.name}</p>
