@@ -236,38 +236,6 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit }) {
 
       {/* Right sidebar */}
       <div className="w-72 flex-shrink-0 border-l border-gray-100 bg-gray-50/60 p-5 overflow-y-auto">
-        {/* Pending invites */}
-        <div className="mb-6">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Pending Invites ({stats.pending})</p>
-          {stats.pending === 0 ? (
-            <p className="text-xs text-gray-400 italic">No pending invites</p>
-          ) : (
-            people.filter(p => p.pending_invite).map(p => (
-              <div key={p.user_id} className="bg-white border border-gray-200 rounded-lg p-3 mb-2" data-testid={`invite-card-${p.user_id}`}>
-                <div className="flex items-start justify-between gap-1">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
-                    <p className="text-xs text-gray-400 truncate">{p.email}</p>
-                  </div>
-                  <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
-                </div>
-                <p className="text-[11px] text-gray-400 mt-1.5">Invited {p.created_at} · {(p.role === "manager" ? "Manager" : "Care Worker")}</p>
-                <div className="flex gap-1.5 mt-2">
-                  <button
-                    className="flex-1 text-xs font-medium border border-gray-200 bg-white rounded px-2 py-1 hover:bg-gray-50 transition-colors"
-                    onClick={() => alert(`Send ${p.name} their login link:\n${window.location.origin}/login\n\nEmail: ${p.email}`)}
-                    data-testid={`invite-resend-${p.user_id}`}
-                  >Resend</button>
-                  <button
-                    className="flex-1 text-xs font-medium border border-red-200 bg-red-50 text-red-600 rounded px-2 py-1 hover:bg-red-100 transition-colors"
-                    onClick={() => onRevoke(p)}
-                    data-testid={`invite-revoke-${p.user_id}`}
-                  >Revoke</button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
 
         {/* Inactive warning */}
         {stats.inactive > 0 && (
