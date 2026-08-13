@@ -63,6 +63,13 @@ function FreqSelector({ value, onChange, className, testId }) {
 
 const FREQ_LABELS = { monthly: "Monthly", quarterly: "Quarterly", annual: "Annual" };
 
+function avatarColor(name = "") {
+  const palette = ["#1E3A8A","#7C3AED","#059669","#D97706","#DC2626","#0891B2","#9333EA"];
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % palette.length;
+  return palette[h];
+}
+
 const COLOR_OPTIONS = [
   "#3B82F6","#10B981","#F59E0B","#8B5CF6","#EF4444","#EC4899","#06B6D4","#84CC16",
 ];
@@ -434,7 +441,7 @@ export default function Schedules() {
                       {isExpanded
                         ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
-                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-600 flex-shrink-0">{initials}</div>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: avatarColor(u.name) }}>{initials}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
