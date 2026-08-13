@@ -195,6 +195,10 @@ async def list_meetings(current_user=Depends(get_current_user)):
                           SELECT 1 FROM jsonb_array_elements(attendees) a
                           WHERE a->>'user_id' = $1
                       )
+                      OR EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with, '[]'::jsonb)) s
+                          WHERE s->>'user_id' = $1
+                      )
                    ORDER BY created_at DESC LIMIT 500""",
                 user_id,
             )
