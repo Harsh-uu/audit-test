@@ -237,22 +237,6 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit }) {
       {/* Right sidebar */}
       <div className="w-72 flex-shrink-0 border-l border-gray-100 bg-gray-50/60 p-5 overflow-y-auto">
 
-        {/* Inactive warning */}
-        {stats.inactive > 0 && (
-          <div className="bg-white border border-amber-200 rounded-lg p-3" data-testid="inactive-warning">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-amber-900">
-                  {stats.inactive} staff member{stats.inactive !== 1 ? "s" : ""} inactive
-                </p>
-                <p className="text-[11px] text-amber-700 mt-0.5 leading-relaxed">
-                  No supervision in 30+ days. Check their schedules to ensure they're being supported.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
