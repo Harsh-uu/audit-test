@@ -1826,3 +1826,42 @@ async def integration_health(current_user=Depends(get_current_user)):
         results["assemblyai"] = {"configured": False, "ok": False}
 
     return results
+
+
+
+@router.get("/users/{user_id}/debug")
+async def debug_user(user_id: str, current_user=Depends(get_current_user)):
+    """Admin: check a user's org membership and meeting visibility."""
+    if current_user["role"] not in ("admin", "super_admin"):
+        raise HTTPException(403, "Admin only")
+    async with database.with_admin() as conn:
+        u = await conn.fetchrow(
+            "SELECT id, name, email, role, org_id, is_active, must_change_password FROM users WHERE id=$1",
+            user_id,
+        )
+        if not u:
+            raise HTTPException(404, "User not found")
+        u = dict(u)
+
+        # Count meetings where this user is an attendee (raw SQL, bypasses RLS)
+        meeting_count = await conn.fetchrow(
+            """SELECT COUNT(*) as cnt FROM meetings
+               WHERE org_id=$1
+                 AND EXISTS (
+                     SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                     WHERE a->>'user_id' = $2
+                 )""",
+            u["org_id"] or "", user_id,
+        )
+
+        org = None
+        if u["org_id"]:
+            org_row = await conn.fetchrow("SELECT name FROM organisations WHERE id=$1", u["org_id"])
+            org = org_row["name"] if org_row else "NOT FOUND"
+
+    return {
+        "user":  u,
+        "org_name": org,
+        "meetings_as_attendee": meeting_count["cnt"] if meeting_count else 0,
+        "issue": "org_id is NULL — user cannot see any meetings" if not u["org_id"] else None,
+    }
