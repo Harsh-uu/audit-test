@@ -323,6 +323,9 @@ async def update_learning_needs(meeting_id: str, data: dict, current_user=Depend
         await _log_edit(conn, meeting_id, org_id, "learning_needs", current_user["id"], current_user.get("name", ""),
                         f"{n} learning need{'s' if n != 1 else ''} saved")
     return {"message": "Learning needs updated"}
+
+
+@router.put("/{meeting_id}/evidence/{evidence_id}")
 async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenceRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can edit evidence items")

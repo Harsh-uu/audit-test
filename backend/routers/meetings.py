@@ -217,7 +217,8 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
         if current_user["role"] not in ["admin", "manager", "super_admin"]:
             attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
             shared_with = meeting["shared_with"]
-            if user_id not in attendee_ids and user_id not in shared_with and user_id != meeting.get("created_by", ""):
+            is_shared_with_user = any(isinstance(s, dict) and s.get("user_id") == user_id for s in shared_with)
+            if user_id not in attendee_ids and not is_shared_with_user and user_id != meeting.get("created_by", ""):
                 raise HTTPException(status_code=404, detail="Meeting not found")
 
         # Attach transcript
