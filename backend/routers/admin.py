@@ -14,6 +14,16 @@ from utils.supabase_storage import put_document
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 import database
 
+async def _audit(conn, meeting_id: str, org_id: str, action: str, user_id: str, user_name: str, detail: str = ""):
+    """Write one audit log entry (works with both org and admin connections)."""
+    await conn.execute(
+        "INSERT INTO audit_logs (id, meeting_id, org_id, action, user_id, user_name, detail, timestamp) "
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        str(uuid.uuid4()), meeting_id, org_id, action, user_id, user_name, detail,
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -1186,6 +1196,11 @@ async def toggle_register_action(meeting_id: str, action_id: str, data: dict, cu
         await conn.execute(
             "UPDATE analyses SET actions=$1::jsonb WHERE id=$2", json.dumps(actions), a_row["id"]
         )
+        action_text = next((a.get("text","") for a in actions if a.get("id") == action_id), action_id)
+        status_label = "completed" if completed else "re-opened"
+        await _audit(conn, meeting_id, org_id, "action_status_changed",
+                     current_user["id"], current_user["name"],
+                     f'Action {status_label}: "{action_text[:120]}"')
     return {"message": "Action updated", "completed": completed}
 
 
@@ -1222,6 +1237,11 @@ async def toggle_register_ln(meeting_id: str, ln_id: str, data: dict, current_us
         await conn.execute(
             "UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2", json.dumps(lns), a_row["id"]
         )
+        ln_text = next((ln.get("text","") for ln in lns if ln.get("id") == ln_id), ln_id)
+        status_label = "completed" if completed else "re-opened"
+        await _audit(conn, meeting_id, org_id, "learning_need_status_changed",
+                     current_user["id"], current_user["name"],
+                     f'Learning need {status_label}: "{ln_text[:120]}"')
     return {"message": "Learning need updated", "completed": completed}
 
 
@@ -1258,6 +1278,11 @@ async def toggle_register_achievement(meeting_id: str, ach_id: str, data: dict, 
         await conn.execute(
             "UPDATE analyses SET achievements=$1::jsonb WHERE id=$2", json.dumps(achs), a_row["id"]
         )
+        ach_text = next((a.get("text","") for a in achs if a.get("id") == ach_id), ach_id)
+        status_label = "acknowledged" if acknowledged else "un-acknowledged"
+        await _audit(conn, meeting_id, org_id, "achievement_acknowledged",
+                     current_user["id"], current_user["name"],
+                     f'Achievement {status_label}: "{ach_text[:120]}"')
     return {"message": "Achievement updated", "acknowledged": acknowledged}
 
 
