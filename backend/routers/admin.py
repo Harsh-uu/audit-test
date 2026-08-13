@@ -1369,11 +1369,11 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
                 if sign_off_mgr_id and attendee.get("user_id") == sign_off_mgr_id:
                     continue
                 staff_name = attendee.get("name", "Unknown")
-                for m in (adoc.get("cqc_mappings") or []):
+                for m in _jlist(adoc.get("cqc_mappings")):
                     rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "CQC", m.get("regulation_ref", ""), m.get("regulation_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
-                for m in (adoc.get("care_cert_mappings") or []):
+                for m in _jlist(adoc.get("care_cert_mappings")):
                     rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "Care Cert", m.get("standard_ref", ""), m.get("standard_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
-                for m in (adoc.get("custom_mappings") or []):
+                for m in _jlist(adoc.get("custom_mappings")):
                     rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "Organisational", m.get("criterion_ref", ""), m.get("criterion_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
 
     if fmt == "csv":
@@ -1410,7 +1410,7 @@ async def export_cqc_excerpts(current_user=Depends(get_current_user)):
                 adoc = _apply_redactions_deep(adoc, redactions)
             attendees = ", ".join(a.get("name", "") for a in _jlist(mtg.get("attendees")))
             ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees, "manager": mtg.get("sign_off_manager_name", "")}
-            for m in (adoc.get("cqc_mappings") or []):
+            for m in _jlist(adoc.get("cqc_mappings")):
                 if m.get("status") == "rejected": continue
                 ref = m.get("regulation_ref", "")
                 if not ref: continue
@@ -1453,7 +1453,7 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
             if not include: continue
             attendees_str = ", ".join(a.get("name", "") for a in include)
             ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees_str, "manager": mtg.get("sign_off_manager_name", "")}
-            for m in (adoc.get("care_cert_mappings") or []):
+            for m in _jlist(adoc.get("care_cert_mappings")):
                 if m.get("status") == "rejected": continue
                 ref = m.get("standard_ref", "")
                 if not ref: continue
@@ -1517,7 +1517,7 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
             if not t_row: continue
             speaker_text = t_row["speaker_text"] or ""
             transcript_text = t_row["text"] or ""
-            redactions = mtg.get("pii_redactions") or []
+            redactions = _jlist(mtg.get("pii_redactions"))
             if redactions:
                 from utils.redaction import apply_redactions_to_text as _art
                 if speaker_text: speaker_text = _art(speaker_text, redactions)
@@ -1687,9 +1687,9 @@ def _generate_export_pdf(mtg_analyses: list) -> bytes:
         story.append(Paragraph(f'Date: {e(mtg.get("date", "—"))} | Attendees: {e(attendees)} | Manager: {e(mtg.get("sign_off_manager_name", "—"))}', small_s))
         story.append(Spacer(1, 3*mm))
         for maps, label, bg, ref_key, name_key in [
-            (ana.get("cqc_mappings", []), "CQC Regulatory Evidence", PURPLE_BG, "regulation_ref", "regulation_name"),
-            (ana.get("care_cert_mappings", []), "Care Certificate Evidence", BLUE_BG, "standard_ref", "standard_name"),
-            (ana.get("custom_mappings", []), "Organisational Standards Evidence", TEAL_BG, "criterion_ref", "criterion_name"),
+            (_jlist(ana.get("cqc_mappings")), "CQC Regulatory Evidence", PURPLE_BG, "regulation_ref", "regulation_name"),
+            (_jlist(ana.get("care_cert_mappings")), "Care Certificate Evidence", BLUE_BG, "standard_ref", "standard_name"),
+            (_jlist(ana.get("custom_mappings")), "Organisational Standards Evidence", TEAL_BG, "criterion_ref", "criterion_name"),
         ]:
             if not maps: continue
             story.append(Paragraph(label, h2_s))

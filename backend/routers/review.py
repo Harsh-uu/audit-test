@@ -399,22 +399,23 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
                     ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
                     name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
                     try:
-                        await conn.execute(
-                            """INSERT INTO evidence_feedback
-                               (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
-                                evidence_type, standard_ref, standard_name, ai_confidence,
-                                manager_action, evidence_summary, edited_summary,
-                                transcript_excerpt, timestamp)
-                               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
-                            str(uuid.uuid4()), meeting_id, org_id,
-                            current_user["id"], current_user.get("name", ""),
-                            evidence_id, type_label, ref, name,
-                            item.get("confidence", ""), action,
-                            item.get("evidence_summary", ""),
-                            data.edited_evidence_summary,
-                            item.get("transcript_excerpt", ""),
-                            datetime.now(timezone.utc).isoformat(),
-                        )
+                        async with database.with_admin() as fb_conn:
+                            await fb_conn.execute(
+                                """INSERT INTO evidence_feedback
+                                   (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
+                                    evidence_type, standard_ref, standard_name, ai_confidence,
+                                    manager_action, evidence_summary, edited_summary,
+                                    transcript_excerpt, timestamp)
+                                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
+                                str(uuid.uuid4()), meeting_id, org_id,
+                                current_user["id"], current_user.get("name", ""),
+                                evidence_id, type_label, ref, name,
+                                item.get("confidence", ""), action,
+                                item.get("evidence_summary", ""),
+                                data.edited_evidence_summary,
+                                item.get("transcript_excerpt", ""),
+                                datetime.now(timezone.utc).isoformat(),
+                            )
                     except Exception as _fb_err:
                         logger.warning(f"evidence_feedback insert skipped: {_fb_err}")
 
