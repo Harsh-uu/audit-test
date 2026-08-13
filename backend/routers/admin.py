@@ -1752,9 +1752,9 @@ def _generate_bulk_transcripts_pdf(meetings_data: list) -> bytes:
 async def integration_health(current_user=Depends(get_current_user)):
     """
     Returns live connectivity status for OpenAI and AssemblyAI.
-    Admin-only. Safe to call from production to diagnose missing API keys.
+    Admin/super_admin only. Safe to call from production to diagnose missing API keys.
     """
-    if current_user["role"] != "admin":
+    if current_user["role"] not in ("admin", "super_admin"):
         raise HTTPException(403, "Admin only")
 
     import requests as _req
