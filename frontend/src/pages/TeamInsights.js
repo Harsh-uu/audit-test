@@ -959,14 +959,13 @@ export default function TeamInsights() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgFilter, dateFrom, dateTo]);
 
-  // Load registers when user first visits a register tab; refresh when filters change
+  // Load registers on mount AND whenever filters change — not just when a register tab is active,
+  // so the badge counts are always visible even when starting on the matrix tab.
   const REGISTER_TABS = ["achievements", "learning_needs", "risks", "actions"];
   useEffect(() => {
-    if (REGISTER_TABS.includes(tab)) {
-      loadRegisters({ ...orgFilter, date_from: dateFrom, date_to: dateTo });
-    }
+    loadRegisters({ ...orgFilter, date_from: dateFrom, date_to: dateTo });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, orgFilter, dateFrom, dateTo]);
+  }, [orgFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     if (user?.role === "admin" || user?.role === "manager") {
