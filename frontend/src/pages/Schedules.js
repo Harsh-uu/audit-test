@@ -197,6 +197,27 @@ export default function Schedules() {
     } catch (err) { flash("Failed to delete", true); }
   };
 
+  // ── Edit schedule inline ─────────────────────────────────────────────────
+  const [editingSchedule, setEditingSchedule] = useState(null); // {id, frequency, start_date, meeting_type_id}
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  const saveEdit = async () => {
+    if (!editingSchedule.start_date) return setEditError("Start date is required");
+    setSavingEdit(true); setEditError("");
+    try {
+      await axios.put(`${API}/schedules/${editingSchedule.id}`, {
+        frequency: editingSchedule.frequency,
+        start_date: editingSchedule.start_date,
+        meeting_type_id: editingSchedule.meeting_type_id,
+      }, getAuthConfig());
+      flash("Schedule updated");
+      setEditingSchedule(null);
+      fetchAll();
+    } catch (err) { setEditError(err.response?.data?.detail || "Failed to save"); }
+    setSavingEdit(false);
+  };
+
   // ── Per-staff schedule ────────────────────────────────────────────────────
   const saveSchedule = async (staffUserId) => {
     if (!scheduleForm.meeting_type_id) return setScheduleError("Please select a meeting type");
@@ -441,21 +462,70 @@ export default function Schedules() {
                     {isExpanded && (
                       <div className="bg-gray-50 px-5 pb-4 pt-2 space-y-2">
                         {userSchedules.map(s => (
-                          <div key={s.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2.5 border border-gray-100" data-testid={`schedule-${s.id}`}>
-                            <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: s.meeting_type_color }} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900">{s.meeting_type_name}</p>
-                              <p className="text-xs text-gray-400">{freqLabel(s.frequency)} · Started {fmt(s.start_date)} · {s.completed_count} completed</p>
-                            </div>
-                            <DueBadge nextDue={s.next_due} isOverdue={s.is_overdue} daysUntil={s.days_until_due} />
-                            {s.is_overdue || s.days_until_due <= 31 ? (
-                              <button
-                                onClick={() => navigate(`/meetings/new?schedule_id=${s.id}&title=${encodeURIComponent(s.meeting_type_name + " — " + s.staff_name)}&attendee_id=${s.staff_user_id}`)}
-                                className="text-xs font-medium text-white bg-[#1E3A8A] px-2.5 py-1 rounded hover:bg-[#1E40AF] transition-colors flex-shrink-0"
-                                data-testid={`start-meeting-${s.id}`}
-                              >Start</button>
-                            ) : null}
-                            <button onClick={() => deleteSchedule(s.id)} className="p-1 text-gray-300 hover:text-red-500 flex-shrink-0" data-testid={`delete-schedule-${s.id}`}><Trash2 className="w-3.5 h-3.5" /></button>
+                          <div key={s.id} className="bg-white rounded-lg border border-gray-100 overflow-hidden" data-testid={`schedule-${s.id}`}>
+                            {/* ── Normal view row ── */}
+                            {editingSchedule?.id !== s.id && (
+                              <div className="flex items-center gap-3 px-3 py-2.5">
+                                <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: s.meeting_type_color }} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900">{s.meeting_type_name}</p>
+                                  <p className="text-xs text-gray-400">{freqLabel(s.frequency)} · Started {fmt(s.start_date)} · {s.completed_count} completed</p>
+                                </div>
+                                <DueBadge nextDue={s.next_due} isOverdue={s.is_overdue} daysUntil={s.days_until_due} />
+                                {s.is_overdue || s.days_until_due <= 31 ? (
+                                  <button
+                                    onClick={() => navigate(`/meetings/new?schedule_id=${s.id}&title=${encodeURIComponent(s.meeting_type_name + " — " + s.staff_name)}&attendee_id=${s.staff_user_id}`)}
+                                    className="text-xs font-medium text-white bg-[#1E3A8A] px-2.5 py-1 rounded hover:bg-[#1E40AF] transition-colors flex-shrink-0"
+                                    data-testid={`start-meeting-${s.id}`}
+                                  >Start</button>
+                                ) : null}
+                                <button
+                                  onClick={() => { setEditingSchedule({ id: s.id, frequency: s.frequency, start_date: s.start_date, meeting_type_id: s.meeting_type_id }); setEditError(""); }}
+                                  className="p-1 text-gray-300 hover:text-[#1E3A8A] flex-shrink-0 transition-colors"
+                                  title="Edit schedule"
+                                  data-testid={`edit-schedule-${s.id}`}
+                                ><Edit2 className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => deleteSchedule(s.id)} className="p-1 text-gray-300 hover:text-red-500 flex-shrink-0" data-testid={`delete-schedule-${s.id}`}><Trash2 className="w-3.5 h-3.5" /></button>
+                              </div>
+                            )}
+
+                            {/* ── Inline edit form ── */}
+                            {editingSchedule?.id === s.id && (
+                              <div className="px-3 py-3 bg-blue-50 border-t border-blue-100 space-y-2" data-testid={`edit-schedule-form-${s.id}`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.meeting_type_color }} />
+                                  <p className="text-xs font-semibold text-[#1E3A8A]">Edit — {s.meeting_type_name}</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-[10px] text-gray-500 block mb-1">Frequency</label>
+                                    <FreqSelector
+                                      value={editingSchedule.frequency}
+                                      onChange={v => setEditingSchedule(e => ({ ...e, frequency: v }))}
+                                      className={selectCls}
+                                      testId={`edit-freq-${s.id}`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-gray-500 block mb-1">Start date</label>
+                                    <input
+                                      type="date"
+                                      value={editingSchedule.start_date}
+                                      onChange={e => setEditingSchedule(es => ({ ...es, start_date: e.target.value }))}
+                                      className={inputCls}
+                                      data-testid={`edit-start-date-${s.id}`}
+                                    />
+                                  </div>
+                                </div>
+                                {editError && <p className="text-xs text-red-600">{editError}</p>}
+                                <div className="flex gap-2 pt-1">
+                                  <button onClick={saveEdit} disabled={savingEdit} className="flex items-center gap-1 bg-[#1E3A8A] text-white text-xs px-3 py-1.5 rounded hover:bg-[#1E40AF] disabled:opacity-60" data-testid={`save-edit-schedule-${s.id}`}>
+                                    <Check className="w-3 h-3" />{savingEdit ? "Saving…" : "Save"}
+                                  </button>
+                                  <button onClick={() => setEditingSchedule(null)} className="text-xs px-3 py-1.5 border border-gray-300 rounded hover:bg-white">Cancel</button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
 
