@@ -1198,9 +1198,12 @@ async def toggle_register_action(meeting_id: str, action_id: str, data: dict, cu
         )
         action_text = next((a.get("text","") for a in actions if a.get("id") == action_id), action_id)
         status_label = "completed" if completed else "re-opened"
-        await _audit(conn, meeting_id, org_id, "action_status_changed",
-                     current_user["id"], current_user["name"],
-                     f'Action {status_label}: "{action_text[:120]}"')
+        try:
+            await _audit(conn, meeting_id, org_id, "action_status_changed",
+                         current_user["id"], current_user.get("name", ""),
+                         f'Action {status_label}: "{action_text[:120]}"')
+        except Exception as _e:
+            logger.error(f"[AUDIT] _audit failed for action_status_changed meeting={meeting_id}: {_e}")
     return {"message": "Action updated", "completed": completed}
 
 

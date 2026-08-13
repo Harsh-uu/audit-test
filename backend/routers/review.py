@@ -611,9 +611,19 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
         action_label = (matched_action.get("text") or matched_action.get("action") or "")[:80]
         status = "Completed" if completed else "Re-opened"
         rolled_note = " (carried-over action)" if matched_action.get("is_rolled_over") else ""
-        await _log_edit(conn, meeting_id, org_id, "action_completion",
-                        current_user["id"], current_user.get("name", ""),
-                        f"{status}: \"{action_label}\"{rolled_note}")
+        detail_str = f"{status}: \"{action_label}\"{rolled_note}"
+        try:
+            await _log_edit(conn, meeting_id, org_id, "action_completion",
+                            current_user["id"], current_user.get("name", ""),
+                            detail_str)
+        except Exception as _e:
+            logger.error(f"[AUDIT] _log_edit failed for action_completion meeting={meeting_id}: {_e}")
+        try:
+            await _audit(conn, meeting_id, org_id, "action_status_changed",
+                         current_user["id"], current_user.get("name", ""),
+                         detail_str)
+        except Exception as _e:
+            logger.error(f"[AUDIT] _audit failed for action_status_changed meeting={meeting_id}: {_e}")
 
     # Propagate completion back to the original meeting so the action stops rolling forward
     if completed and matched_action and matched_action.get("is_rolled_over"):
@@ -1469,7 +1479,10 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
                        "recording_started": "Recording started",
                        "recording_stopped": "Recording stopped",
                        "recording_paused": "Recording paused",
-                       "recording_resumed": "Recording resumed"}
+                       "recording_resumed": "Recording resumed",
+                       "action_status_changed": "Action item updated",
+                       "learning_need_status_changed": "Learning need updated",
+                       "achievement_acknowledged": "Achievement acknowledged"}
     try:
         async with database.with_org(org_id) as conn:
             log_rows = await conn.fetch("SELECT * FROM audit_logs WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id)
