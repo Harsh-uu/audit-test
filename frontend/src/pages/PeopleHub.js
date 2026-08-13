@@ -377,6 +377,26 @@ function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, currentUs
   const [newPwd, setNewPwd]   = useState("");
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
+  const [selectedTeam, setSelectedTeam] = useState(person.team_id || "");
+  const [teamOptions, setTeamOptions]   = useState([]);  // [{ id, label }]
+
+  // Fetch available teams from the org structure
+  useEffect(() => {
+    axios.get(`${API}/org/structure`, getAuthConfig())
+      .then(res => {
+        const opts = [];
+        (res.data.settings || []).forEach(s => {
+          (s.teams || []).forEach(t => {
+            opts.push({ id: t.id, label: s.teams.length > 0 && res.data.settings.length > 1
+              ? `${s.name} — ${t.name}`
+              : t.name });
+          });
+        });
+        setTeamOptions(opts);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const save = async () => {
     if (!form.name.trim()) return setError("Name is required");
@@ -387,6 +407,11 @@ function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, currentUs
       await axios.put(`${API}/admin/users/${person.user_id}`, form, getAuthConfig());
       if (showPwd && newPwd.trim()) {
         await axios.post(`${API}/admin/users/${person.user_id}/reset-password`, { new_password: newPwd }, getAuthConfig());
+      }
+      // Assign / unassign team if it changed
+      if (selectedTeam !== (person.team_id || "")) {
+        await axios.patch(`${API}/org/users/${person.user_id}/assign-team`,
+          { team_id: selectedTeam || null }, getAuthConfig());
       }
       onSaved();
     } catch (err) {
@@ -426,6 +451,22 @@ function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, currentUs
               ))}
             </select>
           </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Team</label>
+            <select value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
+              data-testid="edit-user-team">
+              <option value="">— No team (unassigned)</option>
+              {teamOptions.map(t => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+            {teamOptions.length === 0 && (
+              <p className="text-xs text-gray-400 mt-1">No teams created yet. Add teams in the Structure tab.</p>
+            )}
+          </div>
+
           <div className="flex items-center gap-2 pt-1">
             <input type="checkbox" id="edit-active" checked={form.is_active}
               onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
