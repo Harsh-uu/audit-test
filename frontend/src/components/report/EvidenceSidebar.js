@@ -83,12 +83,12 @@ function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence,
 
   return (
     <div className={`border rounded-lg overflow-hidden mb-3 ${mapping.status === "rejected" ? "opacity-60" : ""}`} data-testid={`evidence-card-${mapping.id}`}>
-      <div className={`flex items-center justify-between p-3 cursor-pointer ${cardBg}`} onClick={() => setExpanded(!expanded)}>
+      <div className={`flex items-start justify-between p-3 cursor-pointer ${cardBg}`} onClick={() => setExpanded(!expanded)}>
         <div className="flex flex-col min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             {typeIcon}
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex-shrink-0">{typeLabel}</span>
-            <span className="text-xs font-medium text-gray-900 truncate">{refLabel} — {refName}</span>
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex-shrink-0 mt-px">{typeLabel}</span>
+            <span className="text-xs font-medium text-gray-900 leading-snug">{refLabel} — {refName}</span>
           </div>
           {type === "care_cert" && mapping.outcome_ref && (
             <div className="ml-9 mt-0.5">
@@ -110,8 +110,7 @@ function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence,
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-          <ConfidenceBadge confidence={mapping.confidence} />
+        <div className="flex items-center gap-2 flex-shrink-0 ml-2 mt-0.5">
           {mapping.status !== "pending" && (
             <span className={`text-xs font-medium ${statusCfg.color}`}>{statusCfg.label}</span>
           )}
@@ -156,22 +155,29 @@ function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence,
               <strong>Note:</strong> {mapping.notes}
             </div>
           )}
-          {isReviewMode && (
+          {isReviewMode ? (
             <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-              <button onClick={() => handleAction("accepted")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "accepted" ? "bg-emerald-200 border-emerald-400 text-emerald-800 font-semibold" : "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"}`} data-testid={`accept-evidence-${mapping.id}`}>
-                <Check className="w-3 h-3" /> Accept
-              </button>
-              <button onClick={() => handleAction("rejected")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "rejected" ? "bg-red-200 border-red-400 text-red-800 font-semibold" : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"}`} data-testid={`reject-evidence-${mapping.id}`}>
-                <X className="w-3 h-3" /> Reject
-              </button>
-              <button onClick={() => handleAction("needs_followup")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "needs_followup" ? "bg-amber-200 border-amber-400 text-amber-800 font-semibold" : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"}`} data-testid={`flag-evidence-${mapping.id}`}>
-                <Flag className="w-3 h-3" /> Flag
-              </button>
-              {canEditWording !== false && !editing && (
-                <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 ml-auto" data-testid={`edit-evidence-${mapping.id}`}>
-                  <Edit3 className="w-3 h-3" /> Edit
+              <ConfidenceBadge confidence={mapping.confidence} />
+              <div className="flex items-center gap-2 ml-auto">
+                <button onClick={() => handleAction("accepted")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "accepted" ? "bg-emerald-200 border-emerald-400 text-emerald-800 font-semibold" : "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"}`} data-testid={`accept-evidence-${mapping.id}`}>
+                  <Check className="w-3 h-3" /> Accept
                 </button>
-              )}
+                <button onClick={() => handleAction("rejected")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "rejected" ? "bg-red-200 border-red-400 text-red-800 font-semibold" : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"}`} data-testid={`reject-evidence-${mapping.id}`}>
+                  <X className="w-3 h-3" /> Reject
+                </button>
+                <button onClick={() => handleAction("needs_followup")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "needs_followup" ? "bg-amber-200 border-amber-400 text-amber-800 font-semibold" : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"}`} data-testid={`flag-evidence-${mapping.id}`}>
+                  <Flag className="w-3 h-3" /> Flag
+                </button>
+                {canEditWording !== false && !editing && (
+                  <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50" data-testid={`edit-evidence-${mapping.id}`}>
+                    <Edit3 className="w-3 h-3" /> Edit
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-gray-100">
+              <ConfidenceBadge confidence={mapping.confidence} />
             </div>
           )}
         </div>
