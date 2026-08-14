@@ -1,8 +1,28 @@
 import re
 
+TITLE_PREFIXES = ('Mr', 'Mrs', 'Ms', 'Miss', 'Dr', 'Prof', 'Rev', 'Sir', 'Dame')
+
+
+def _build_redaction_pattern(original: str) -> str:
+    """
+    Build a regex pattern for the original phrase.
+    Makes title abbreviations like 'Mr'/'Mr.' interchangeable,
+    so 'Mr Hutchinson' matches 'Mr. Hutchinson' and vice versa.
+    """
+    for title in TITLE_PREFIXES:
+        # Check if original starts with the title (with or without period)
+        for sep in (' ', '. ', '.'):
+            prefix = title + sep
+            if original.lower().startswith(prefix.lower()):
+                rest = original[len(prefix):]
+                # title with optional period, then one or more whitespace chars
+                return re.escape(title) + r'\.?\s+' + re.escape(rest)
+    return re.escape(original)
+
 
 def apply_redactions_to_text(text: str, redactions: list) -> str:
-    """Apply saved redaction pairs to a text string (case-insensitive)."""
+    """Apply saved redaction pairs to a text string (case-insensitive).
+    Handles title abbreviation variations e.g. Mr / Mr."""
     if not text or not redactions:
         return text
     result = text
@@ -10,7 +30,8 @@ def apply_redactions_to_text(text: str, redactions: list) -> str:
         original = r.get("original", "")
         replacement = r.get("replacement", "[Redacted]")
         if original:
-            result = re.sub(re.escape(original), replacement, result, flags=re.IGNORECASE)
+            pattern = _build_redaction_pattern(original)
+            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
     return result
 
 

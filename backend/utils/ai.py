@@ -698,7 +698,7 @@ Identify references to THIRD PARTIES — people NOT present in this meeting — 
 In UK adult social care settings, flag:
 - Named service users, residents, or clients (people being cared for)
 - Named family members, next-of-kin, carers or friends of service users
-- Named colleagues referenced in sensitive context (incidents, complaints, disciplinary matters)
+- Named colleagues not present in this meeting who are mentioned by name (other staff members, co-workers, team members — regardless of context)
 - Any full name combined with sensitive health, financial, or personal details
 
 DO NOT flag:
