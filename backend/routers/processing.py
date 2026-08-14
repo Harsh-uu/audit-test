@@ -59,7 +59,10 @@ async def _get_rolled_actions(conn, supervisee_ids: list, current_meeting_id: st
            WHERE analysis_id IS NOT NULL
              AND id != $1
              AND EXISTS (
-                 SELECT 1 FROM jsonb_array_elements(attendees) elem
+                 SELECT 1 FROM jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
+                          THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END
+                 ) elem
                  WHERE elem->>'user_id' = ANY($2::text[])
              )
            LIMIT 50""",

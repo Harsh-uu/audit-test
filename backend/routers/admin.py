@@ -1308,7 +1308,9 @@ async def list_meetings_brief(current_user=Depends(get_current_user)):
                    WHERE status IN ('signed_off','shared')
                      AND (created_by = ANY($1)
                           OR sign_off_manager_id = ANY($1)
-                          OR EXISTS (SELECT 1 FROM jsonb_array_elements(attendees) a
+                          OR EXISTS (SELECT 1 FROM jsonb_array_elements(
+                                         CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
+                                              THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a
                                      WHERE a->>'user_id' = ANY($1)))
                    ORDER BY date DESC""",
                 scoped_ids,
@@ -1343,7 +1345,7 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
     else:
         if staff_ids:
             params.append(staff_ids)
-            conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(attendees) a WHERE a->>'user_id' = ANY(${len(params)}))")
+            conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}))")
         if date_from:
             params.append(date_from)
             conditions.append(f"date >= ${len(params)}")
@@ -1500,7 +1502,7 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
     else:
         if staff_ids:
             params.append(staff_ids)
-            conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(attendees) a WHERE a->>'user_id' = ANY(${len(params)}))")
+            conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}))")
         if date_from:
             params.append(date_from)
             conditions.append(f"date >= ${len(params)}")

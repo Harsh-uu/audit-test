@@ -214,7 +214,10 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
                          AND analysis_id IS NOT NULL
                          AND id != $2
                          AND EXISTS (
-                             SELECT 1 FROM jsonb_array_elements(attendees) elem
+                             SELECT 1 FROM jsonb_array_elements(
+                                 CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
+                                      THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END
+                             ) elem
                              WHERE elem->>'user_id' = ANY($3::text[])
                          )
                        ORDER BY date DESC LIMIT 5""",
@@ -368,7 +371,10 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
                        WHERE org_id=$1 AND status IN ('signed_off','shared')
                          AND analysis_id IS NOT NULL AND id != $2
                          AND EXISTS (
-                             SELECT 1 FROM jsonb_array_elements(attendees) elem
+                             SELECT 1 FROM jsonb_array_elements(
+                                 CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
+                                      THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END
+                             ) elem
                              WHERE elem->>'user_id' = ANY($3::text[])
                          )
                        ORDER BY date DESC LIMIT 3""",

@@ -46,6 +46,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ---
 
 ## Changelog (Recent)
+- **Aug 2026 (2)**: Fixed `cannot extract elements from a scalar` error crashing the processing pipeline. Root cause: `jsonb_array_elements(attendees)` in `processing.py`, `prep.py`, `portfolio.py`, and `admin.py` had no guard for JSONB scalar values (production data sometimes stores `attendees` as JSON null or scalar). Applied defensive `CASE WHEN jsonb_typeof(...) = 'array' THEN ... ELSE '[]'::jsonb END` pattern to all 6 affected query sites.
 - **Aug 2026**: Fixed `PUT /api/schedules/{id}` crashing with `asyncpg DataError: expected str, got date`. Root cause: previous fix converted `start_date` string → `datetime.date` object, but the `start_date` DB column is TEXT type, so asyncpg expected a plain string. Fix: validate format with `date.fromisoformat()` but pass raw string to SQL query.
 
 ---

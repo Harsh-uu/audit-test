@@ -63,7 +63,10 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                  AND analysis_id IS NOT NULL
                  AND (sign_off_manager_id IS NULL OR sign_off_manager_id != $2)
                  AND EXISTS (
-                     SELECT 1 FROM jsonb_array_elements(attendees) elem
+                     SELECT 1 FROM jsonb_array_elements(
+                         CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
+                              THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END
+                     ) elem
                      WHERE elem->>'user_id' = $2
                  )
                ORDER BY date DESC
