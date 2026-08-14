@@ -1,0 +1,33 @@
+{
+  "summary": "Full regression sweep for iteration 63. All login flows, schedule edit, PeopleHub, Team Insights, Settings tested. Evidence tab/Show-in-transcript/PDF export could not be tested as only 1 draft meeting exists (no processed meetings in test env).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_regression_iter63.py",
+    "/app/test_reports/pytest/iter63_results.xml"
+  ],
+  "action_items": [
+    "Evidence tab / Show-in-transcript / PDF export: need a processed meeting in test environment to verify these flows. Only one draft meeting exists (91357f81). E1 should either seed a processed meeting or verify code-path directly."
+  ],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_regression_iter63.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/14 tests passed, 1 skipped — no processed meetings)",
+    "frontend": "85% — all navigable flows passed; transcript/evidence features untestable without processed meeting data"
+  },
+  "test_credentials": "admin@supervision.com / Admin123!, manager@supervision.com / Manager123!, user@supervision.com / Staff123!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Tested: (1) All 3 logins pass. (2) Schedule edit PUT fix verified - 'Schedule updated' banner shown. (3) PeopleHub loads cleanly - pending invite labels are inline user badges (not sidebar widget). (4) Edit User modal has Team dropdown. (5) Team Themes/Insights loads with tabs visible. (6) Settings Branding tab is accessible. (7) Smooth circular arc spinner confirmed in meeting report. (8) Avatar colors consistent across pages. UNTESTED: Evidence tab, Show-in-transcript, Transcript tab, PDF export - all need a processed meeting. Only 1 draft meeting exists in test env.",
+  "rca_of_issues": "No critical bugs found. The schedule edit 500 fix (datetime.date vs text) is confirmed working. JSONB guard confirmed (processing status endpoint returns 200/404, no 500). Spinner style is Loader2 circular arc."
+}

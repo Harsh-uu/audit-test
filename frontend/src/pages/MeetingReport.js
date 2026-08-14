@@ -68,6 +68,7 @@ export default function MeetingReport() {
   const [newComment, setNewComment] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [highlightExcerpt, setHighlightExcerpt] = useState("");
+  const [highlightKey, setHighlightKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [addingAction, setAddingAction] = useState(false);
   const [newAction, setNewAction] = useState({ text: "", assigned_to: "", due_date: "" });
@@ -738,6 +739,7 @@ export default function MeetingReport() {
                     canAnonymise={canAnonymise}
                     canEditSpeakers={canEditSpeakers}
                     highlightExcerpt={highlightExcerpt}
+                    highlightKey={highlightKey}
                     onDirtyChange={(dirty) => setSpeakersDirty(dirty)}
                     onFindReplace={handleFindReplace}
                     onSpeakerTextGenerated={(spText, editedByName, editedAt, speakerColors) => setMeeting(m => ({
@@ -777,7 +779,7 @@ export default function MeetingReport() {
                       isLocked={isLocked}
                       canRescan={canEditSpeakers && !!meeting?.transcript_id && !isLocked}
                       onRescanEvidence={rescanEvidence}
-                      onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setActiveTab("transcript"); }}
+                      onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setHighlightKey(k => k + 1); setActiveTab("transcript"); }}
                       className="bg-[#F8F9FA]"
                       noMaxHeight
                     />
@@ -796,7 +798,7 @@ export default function MeetingReport() {
               isLocked={isLocked}
               canRescan={canEditSpeakers && !!meeting?.transcript_id && !isLocked}
               onRescanEvidence={rescanEvidence}
-              onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setActiveTab("transcript"); }}
+              onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setHighlightKey(k => k + 1); setActiveTab("transcript"); }}
               className="hidden lg:block lg:col-span-5 bg-[#F8F9FA] overflow-y-auto"
             />
           </div>

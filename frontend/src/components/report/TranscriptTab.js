@@ -352,7 +352,7 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "", onFindReplace }) {
+export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "", highlightKey = 0, onFindReplace }) {
   const [viewMode, setViewMode] = useState("full");
 
   // ── Speaker editing state ─────────────────────────────────────────────────
@@ -513,7 +513,7 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
         highlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 200);
     }
-  }, [matchTurnIdx, matchParaIdx, highlightExcerpt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [matchTurnIdx, matchParaIdx, highlightExcerpt, highlightKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // ─────────────────────────────────────────────────────────────────────────
 
   // Close turn menu when clicking outside

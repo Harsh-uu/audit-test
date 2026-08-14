@@ -46,9 +46,10 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ---
 
 ## Changelog (Recent)
-- **Aug 2026 (3)**: Fixed confidentiality checker — (1) `apply_redactions_to_text` now handles title abbreviation variations (Mr/Mr., Mrs/Mrs., Dr/Dr.) so "Mr Hutchinson" correctly redacts "Mr. Hutchinson's care plan"; (2) PII scan AI prompt broadened to flag all named colleagues not present in the meeting, so names like "Lisa" are now flagged alongside "Pete".
-- **Aug 2026 (2)**: Fixed `cannot extract elements from a scalar` error crashing the processing pipeline.
-- **Aug 2026**: Fixed `PUT /api/schedules/{id}` crashing with `asyncpg DataError: expected str, got date`. Root cause: previous fix converted `start_date` string → `datetime.date` object, but the `start_date` DB column is TEXT type, so asyncpg expected a plain string. Fix: validate format with `date.fromisoformat()` but pass raw string to SQL query.
+- **Aug 2026 (4)**: Fixed "Show in transcript" only working on first click — `highlightKey` counter increments on every click, forcing scroll to re-fire.
+- **Aug 2026 (3)**: Fixed confidentiality checker — title abbreviation matching (Mr/Mr.) + all named colleagues flagged + better AI excerpt selection.
+- **Aug 2026 (2)**: Fixed `cannot extract elements from a scalar` error crashing the processing pipeline — JSONB scalar guard on all `jsonb_array_elements(attendees)` call sites.
+- **Aug 2026**: Fixed `PUT /api/schedules/{id}` crashing with `asyncpg DataError: expected str, got date`.
 
 ---
 
