@@ -691,7 +691,7 @@ export default function MeetingReport() {
             {/* Left: tabs */}
             <div className="lg:col-span-7 border-r border-gray-200 flex flex-col overflow-hidden">
               <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-4 overflow-x-auto scrollbar-hide">
-                <button onClick={() => setActiveTab("evidence")} className={tabBtnCls("evidence")}>Evidence</button>
+                <button onClick={() => setActiveTab("evidence")} className={tabBtnCls("evidence")} data-testid="overview-tab">Overview</button>
                 <button onClick={() => setActiveTab("transcript")} className={tabBtnCls("transcript")}>Transcript</button>
                 <button onClick={() => setActiveTab("comments")} className={tabBtnCls("comments")} data-testid="comments-tab">
                   Comments {meeting.comments?.length > 0 && `(${meeting.comments.length})`}

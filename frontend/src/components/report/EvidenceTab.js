@@ -3,7 +3,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
-  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen,
+  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText,
 } from "lucide-react";
 
 // ── Severity config ──────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit
   const resolved = risks.filter(r => r.is_resolved);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+    <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm" id="section-risks">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900 text-sm font-display flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-500" /> Risks &amp; Concerns
@@ -229,7 +229,7 @@ function AchievementsSection({ achievements }) {
   if (!list.length) return null;
 
   return (
-    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5 shadow-sm" data-testid="achievements-section">
+    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5 shadow-sm" id="section-achievements" data-testid="achievements-section">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
           <Star className="w-3.5 h-3.5 text-white" fill="currentColor" />
@@ -344,7 +344,7 @@ export function EvidenceTab({
     setNewAction(`[Risk] ${risk.text}`);
     setAddingAction(true);
     // Scroll to actions section
-    setTimeout(() => document.getElementById("actions-section")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+    setTimeout(() => document.getElementById("section-actions")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
   };  const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState("");
 
@@ -364,10 +364,47 @@ export function EvidenceTab({
     setRegenerating(false);
   };
 
+  const scrollToSection = (id) =>
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+
+  const hasAchievements = Array.isArray(analysis?.achievements) && analysis.achievements.length > 0;
+  const hasActions = (analysis?.actions?.length > 0) || canReview;
+  const hasLearning = (learningNeeds.length > 0) || canEdit;
+  const hasRisks = analysis?.risks?.length > 0;
+
+  const jumpLinks = [
+    { id: "section-summary",      label: "Summary",      Icon: FileText,     show: true,            cls: "text-gray-600 hover:bg-gray-100 border-gray-200" },
+    { id: "section-achievements", label: "Achievements", Icon: Star,         show: hasAchievements, cls: "text-emerald-700 hover:bg-emerald-50 border-emerald-200", count: analysis?.achievements?.length },
+    { id: "section-actions",      label: "Actions",      Icon: CheckSquare,  show: hasActions,      cls: "text-[#1E3A8A] hover:bg-blue-50 border-blue-200",    count: analysis?.actions?.length || null },
+    { id: "section-learning",     label: "Learning",     Icon: BookOpen,     show: hasLearning,     cls: "text-teal-700 hover:bg-teal-50 border-teal-200",      count: learningNeeds.length || null },
+    { id: "section-risks",        label: "Risks",        Icon: AlertTriangle,show: hasRisks,        cls: "text-amber-700 hover:bg-amber-50 border-amber-200",   count: analysis?.risks?.length },
+  ].filter(l => l.show);
+
   return (
     <div className="space-y-6">
+      {/* Quick-jump strip */}
+      {jumpLinks.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap" data-testid="overview-jump-strip">
+          {jumpLinks.map(({ id, label, Icon, cls, count }) => (
+            <button
+              key={id}
+              onClick={() => scrollToSection(id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${cls}`}
+              data-testid={`jump-${id}`}
+            >
+              <Icon className="w-3 h-3" />
+              {label}
+              {count != null && count > 0 && (
+                <span className="ml-0.5 bg-current/10 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none opacity-80">
+                  {count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
       {/* Summary */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm" id="section-summary">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-900 text-sm font-display">Meeting Summary</h3>
           {canReview && !editingSummary && (
@@ -424,7 +461,7 @@ export function EvidenceTab({
       )}
 
       {/* Actions */}      {(analysis.actions?.length > 0 || canReview) && (
-        <div id="actions-section" className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+        <div id="section-actions" className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-900 text-sm font-display">
               Action Items
@@ -507,7 +544,7 @@ export function EvidenceTab({
 
       {/* Learning Needs */}
       {(learningNeeds.length > 0 || canEdit) && (
-        <div className="bg-white border border-teal-100 rounded-lg p-5 shadow-sm" id="learning-needs-section" data-testid="learning-needs-section">
+        <div className="bg-white border border-teal-100 rounded-lg p-5 shadow-sm" id="section-learning" data-testid="learning-needs-section">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 font-display" data-testid="learning-needs-heading">
               <BookOpen className="w-4 h-4 text-teal-600" />
