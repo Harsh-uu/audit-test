@@ -6,7 +6,7 @@ import asyncio
 import subprocess
 import tempfile
 from openai import AsyncOpenAI
-from deepgram import DeepgramClient
+
 
 logger = logging.getLogger(__name__)
 
@@ -477,115 +477,7 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
     return plain_text, None, plain_text, warnings
 
 
-async def transcribe_with_deepgram(audio_data: bytes) -> tuple:
-    """
-    Transcribe with Deepgram nova-3-medical + diarization attempt.
-    Returns (plain_text, numbered_speaker_text_or_none).
 
-    Hybrid strategy:
-    - Deepgram acoustic diarization is requested for every call.
-    - If Deepgram finds > 1 unique speaker, numbered_speaker_text is returned
-      (e.g. "Speaker 0: ...\nSpeaker 1: ...") and GPT-4o only maps names.
-    - If Deepgram collapses to 1 speaker (common on mono/browser MediaRecorder
-      audio), numbered_speaker_text is None and GPT-4o does full text diarization.
-    """
-    api_key = os.environ.get("DEEPGRAM_API_KEY")
-    if not api_key:
-        raise ValueError("DEEPGRAM_API_KEY not configured")
-
-    client = DeepgramClient(api_key=api_key)
-    loop = asyncio.get_event_loop()
-
-    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to Deepgram nova-3-medical (diarize=True)")
-
-    response = await loop.run_in_executor(
-        None,
-        lambda: client.listen.v1.media.transcribe_file(
-            request=audio_data,
-            model="nova-3-medical",
-            smart_format=True,
-            punctuate=True,
-            diarize=True,
-            utterances=True,
-            keyterm=CARE_KEYTERMS,
-        ),
-    )
-
-    if not response or not response.results:
-        raise ValueError("Deepgram returned empty results")
-
-    plain_text = (
-        response.results.channels[0].alternatives[0].transcript
-        if response.results.channels else ""
-    )
-
-    # Check whether Deepgram acoustically found multiple speakers
-    utterances = getattr(response.results, "utterances", None) or []
-    if utterances:
-        unique_speakers = {u.speaker for u in utterances}
-        speaker_count = len(unique_speakers)
-        logger.info(f"Deepgram found {speaker_count} speaker(s) across {len(utterances)} utterances")
-
-        if speaker_count > 1:
-            lines = [f"Speaker {u.speaker}: {u.transcript}" for u in utterances]
-            numbered_speaker_text = "\n".join(lines)
-            logger.info("Deepgram diarization usable — GPT-4o will map names only")
-        else:
-            numbered_speaker_text = None
-            logger.info("Deepgram found only 1 speaker (likely mono audio) — GPT-4o will diarise from text")
-    else:
-        numbered_speaker_text = None
-        logger.info("Deepgram returned no utterances — GPT-4o will diarise from text")
-
-    return plain_text, numbered_speaker_text
-
-
-# Keep the old combined function for potential future use (e.g. multi-channel audio)
-async def transcribe_and_diarize_deepgram(audio_data: bytes) -> tuple:
-    """
-    Transcribe audio with Deepgram Nova-3 + built-in speaker diarisation.
-    Returns (plain_transcript_text, numbered_speaker_text) or raises on failure.
-    numbered_speaker_text uses "Speaker 0:", "Speaker 1:" labels.
-    """
-    api_key = os.environ.get("DEEPGRAM_API_KEY")
-    if not api_key:
-        raise ValueError("DEEPGRAM_API_KEY not configured")
-
-    client = DeepgramClient(api_key=api_key)
-    loop = asyncio.get_event_loop()
-
-    logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to Deepgram Nova-3 with diarization")
-
-    response = await loop.run_in_executor(
-        None,
-        lambda: client.listen.v1.media.transcribe_file(
-            request=audio_data,
-            model="nova-3",
-            diarize=True,
-            utterances=True,
-            smart_format=True,
-            punctuate=True,
-        ),
-    )
-
-    if not response or not response.results:
-        raise ValueError("Deepgram returned empty results")
-
-    # Plain transcript (for analysis)
-    plain_text = response.results.channels[0].alternatives[0].transcript if response.results.channels else ""
-
-    # Numbered speaker text (from utterances)
-    if response.results.utterances:
-        lines = [f"Speaker {u.speaker}: {u.transcript}" for u in response.results.utterances]
-        numbered_speaker_text = "\n".join(lines)
-        speaker_count = len({u.speaker for u in response.results.utterances})
-        logger.info(f"Deepgram identified {speaker_count} speaker(s), {len(response.results.utterances)} utterances")
-    else:
-        # No utterances — return None so the caller falls back to GPT-4o text diarization
-        logger.warning("Deepgram returned no utterances; will fall back to GPT-4o diarization")
-        numbered_speaker_text = None
-
-    return plain_text, numbered_speaker_text
 
 
 async def map_speaker_numbers_to_names(
