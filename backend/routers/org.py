@@ -375,14 +375,21 @@ async def upload_logo(file: UploadFile = File(...), current_user=Depends(get_cur
         raise HTTPException(400, "Empty file")
     if len(data) > 2 * 1024 * 1024:
         raise HTTPException(400, "File too large (max 2 MB)")
-    allowed_ext = {"png", "jpg", "jpeg", "svg", "webp"}
+    # SVG excluded — SVG files can embed JavaScript and execute in the browser
+    allowed_ext = {"png", "jpg", "jpeg", "webp"}
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "png"
     if ext not in allowed_ext:
         raise HTTPException(400, f"Unsupported type. Allowed: {', '.join(sorted(allowed_ext))}")
+    # Validate magic bytes — reject extension-spoofed files
+    from utils.file_security import validate_upload
+    try:
+        canonical_mime = validate_upload(data, ext)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     org_id = current_user.get("org_id") or "shared"
     path = f"branding/{org_id}/{uuid.uuid4()}.{ext}"
     try:
-        put_object(path, data, file.content_type or "image/png")
+        put_object(path, data, canonical_mime)
     except Exception as e:
         logger.error(f"Logo upload failed: {e}")
         raise HTTPException(500, "Storage upload failed")

@@ -300,14 +300,22 @@ async def upload_document(
     file_data = await file.read()
     if len(file_data) == 0:
         raise HTTPException(400, "Empty file")
+    if len(file_data) > 25 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 25 MB)")
     allowed_ext = {"pdf", "docx", "txt", "md", "csv"}
     file_ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "txt"
     if file_ext not in allowed_ext:
         raise HTTPException(400, f"Unsupported file type: .{file_ext}")
+    # Validate actual file content — reject extension-spoofed executables/scripts
+    from utils.file_security import validate_upload
+    try:
+        canonical_mime = validate_upload(file_data, file_ext)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
     storage_path = f"standards/docs/{uuid.uuid4()}.{file_ext}"
     try:
-        result = await put_document(storage_path, file_data, file.content_type or "application/octet-stream")
+        result = await put_document(storage_path, file_data, canonical_mime)
         actual_path = result.get("path", storage_path)
     except Exception as e:
         logger.error(f"Document storage failed: {e}")
@@ -322,7 +330,7 @@ async def upload_document(
                parse_status, is_active, org_id, uploaded_by, uploaded_by_name, created_at)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)""",
             doc_id, file.filename, label or file.filename, actual_path,
-            file.content_type or "application/octet-stream", len(file_data),
+            canonical_mime, len(file_data),
             "parsing", True, org_id, current_user["id"], current_user.get("name", ""), now,
         )
     background_tasks.add_task(parse_document_background, doc_id, file_data, file.filename, label or file.filename, org_id)

@@ -394,6 +394,8 @@ async def upload_audio(
     audio_data = await request.body()
     if not audio_data:
         raise HTTPException(status_code=400, detail="Empty audio body")
+    if len(audio_data) > 500 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Recording too large (max 500 MB)")
 
     content_type = request.headers.get("content-type", "audio/webm").split(";")[0].strip()
     file_ext = "webm"
