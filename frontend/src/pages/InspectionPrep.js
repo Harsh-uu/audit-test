@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
@@ -177,7 +178,7 @@ export default function InspectionPrep() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    axios.get(`${API}/admin/team-insights`, getAuthConfig())
+    cachedGet(`${API}/admin/team-insights`, getAuthConfig())
       .then(r => setInsights(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));

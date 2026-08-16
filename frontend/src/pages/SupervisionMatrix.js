@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { CheckCircle, Loader2, AlertCircle, LayoutGrid } from "lucide-react";
@@ -100,7 +101,7 @@ export default function SupervisionMatrix() {
 
   const fetchSchedules = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API}/schedules/`, getAuthConfig());
+      const { data } = await cachedGet(`${API}/schedules/`, getAuthConfig());
       setSchedules(data);
     } catch {
       // silently fail — schedules may not exist yet

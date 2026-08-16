@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import axios from "axios";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
@@ -170,8 +171,8 @@ export default function OrgStructure({ embedded = false }) {
   const fetchData = useCallback(async () => {
     try {
       const [structRes, usersRes] = await Promise.all([
-        axios.get(`${API}/org/structure`, getAuthConfig()),
-        axios.get(`${API}/admin/users`, getAuthConfig()),
+        cachedGet(`${API}/org/structure`, getAuthConfig()),
+        cachedGet(`${API}/admin/users`, getAuthConfig()),
       ]);
       setStructure(structRes.data);
       setAllUsers(usersRes.data);
@@ -187,6 +188,13 @@ export default function OrgStructure({ embedded = false }) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
+
+  // Bust org caches then re-fetch — call this after any mutation.
+  const refreshData = useCallback(() => {
+    invalidateCache("/org/structure", "/admin/users");
+    fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchData]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -239,7 +247,7 @@ export default function OrgStructure({ embedded = false }) {
         setExpandedSettings(prev => new Set([...prev, res.data?.id].filter(Boolean)));
       }
       setSettingForm({ name: "", description: "", manager_user_id: "" });
-      fetchData();
+      refreshData();
     } catch (err) { flash(err.response?.data?.detail || "Failed to save", true); }
     setSaving(false);
   };
@@ -249,7 +257,7 @@ export default function OrgStructure({ embedded = false }) {
     try {
       await axios.delete(`${API}/org/settings/${s.id}`, getAuthConfig());
       flash("Setting deleted");
-      fetchData();
+      refreshData();
     } catch (err) { flash(err.response?.data?.detail || "Delete failed", true); }
   };
 
@@ -268,7 +276,7 @@ export default function OrgStructure({ embedded = false }) {
         setShowAddTeamFor(null);
       }
       setTeamForm({ name: "", description: "", supervisor_user_id: "" });
-      fetchData();
+      refreshData();
     } catch (err) { flash(err.response?.data?.detail || "Failed to save", true); }
     setSaving(false);
   };
@@ -278,7 +286,7 @@ export default function OrgStructure({ embedded = false }) {
     try {
       await axios.delete(`${API}/org/teams/${t.id}`, getAuthConfig());
       flash("Team deleted");
-      fetchData();
+      refreshData();
     } catch (err) { flash(err.response?.data?.detail || "Delete failed", true); }
   };
 
@@ -304,7 +312,7 @@ export default function OrgStructure({ embedded = false }) {
       }
       flash("User updated");
       setEditingUser(null);
-      fetchData();
+      refreshData();
     } catch (err) { setEditUserError(err.response?.data?.detail || "Failed to save"); }
     setSavingUser(false);
   };
@@ -320,7 +328,7 @@ export default function OrgStructure({ embedded = false }) {
       flash("User added successfully");
       setShowInviteUser(false);
       setInviteForm({ name: "", email: "", password: "", role: "attendee" });
-      fetchData();
+      refreshData();
     } catch (err) { setInviteError(err.response?.data?.detail || "Failed to add user"); }
     setSavingInvite(false);
   };

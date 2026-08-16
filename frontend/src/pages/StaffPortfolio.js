@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
@@ -293,7 +294,8 @@ export default function StaffPortfolio() {
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
   useEffect(() => {
-    axios.get(`${API}/admin/standards`, { ...getAuthConfig(), params: { type: "care_cert" } })
+    // Embed the param in the URL so the cache key is unique per request type
+    cachedGet(`${API}/admin/standards?type=care_cert`, getAuthConfig())
       .then(r => setCcStandards(r.data))
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps

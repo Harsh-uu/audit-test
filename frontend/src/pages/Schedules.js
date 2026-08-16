@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { cachedGet } from "@/utils/apiCache";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
@@ -191,6 +191,7 @@ export default function Schedules() {
         setShowAddType(false);
       }
       setTypeForm({ name: "", default_frequency: "monthly", color: "#3B82F6" });
+      invalidateCache("/schedules/meeting-types");
       fetchAll();
     } catch (err) { flash(err.response?.data?.detail || "Failed to save", true); }
     setSavingType(false);
@@ -201,6 +202,7 @@ export default function Schedules() {
     try {
       await axios.delete(`${API}/schedules/meeting-types/${t.id}`, getAuthConfig());
       flash("Meeting type deleted");
+      invalidateCache("/schedules/meeting-types");
       fetchAll();
     } catch (err) { flash("Failed to delete", true); }
   };

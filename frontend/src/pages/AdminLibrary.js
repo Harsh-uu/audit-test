@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Shield, Award, BookOpen, Users, CheckCircle, AlertCircle, X } from "lucide-react";
@@ -67,11 +68,11 @@ export default function AdminLibrary() {
     setLoading(true);
     try {
       const requests = [
-        axios.get(`${API}/admin/standards`, getAuthConfig()),
-        axios.get(`${API}/admin/standards/documents`, getAuthConfig()),
+        cachedGet(`${API}/admin/standards`, getAuthConfig()),
+        cachedGet(`${API}/admin/standards/documents`, getAuthConfig()),
       ];
       if (user?.role === "admin") {
-        requests.push(axios.get(`${API}/admin/users`, getAuthConfig()));
+        requests.push(cachedGet(`${API}/admin/users`, getAuthConfig()));
       }
       const results = await Promise.all(requests);
       const [stdRes, docRes] = results;
@@ -96,6 +97,7 @@ export default function AdminLibrary() {
       setMessage("Standard created");
       setShowNewStandard(false);
       setNewStandard({ type: "cqc", reference: "", name: "", description: "", keywords: [] });
+      invalidateCache("/admin/standards");
       fetchAll();
     } catch (err) { setError(err.response?.data?.detail || "Failed to create"); }
   };
@@ -105,6 +107,7 @@ export default function AdminLibrary() {
     try {
       await axios.delete(`${API}/admin/standards/${id}`, getAuthConfig());
       setMessage("Standard deactivated");
+      invalidateCache("/admin/standards");
       fetchAll();
     } catch (err) { console.error("Delete standard failed:", err.message); setError("Failed to deactivate standard."); }
   };
@@ -117,6 +120,7 @@ export default function AdminLibrary() {
       setMessage("User created");
       setShowNewUser(false);
       setNewUser({ email: "", name: "", role: "attendee", password: "" });
+      invalidateCache("/admin/users");
       fetchAll();
     } catch (err) { setError(err.response?.data?.detail || "Failed to create user"); }
   };
@@ -125,6 +129,7 @@ export default function AdminLibrary() {
     try {
       await axios.put(`${API}/admin/users/${userId}`, data, getAuthConfig());
       setMessage("User updated");
+      invalidateCache("/admin/users");
       fetchAll();
     } catch (err) {
       throw new Error(err.response?.data?.detail || "Failed to update user");
@@ -155,6 +160,7 @@ export default function AdminLibrary() {
       });
       setMessage("Document uploaded — AI is now extracting criteria (this takes ~10 seconds)");
       setUploadLabel("");
+      invalidateCache("/admin/standards/documents");
       fetchAll();
     } catch (err) { setError("Upload failed: " + (err.response?.data?.detail || err.message)); }
     setUploading(false);
@@ -165,6 +171,7 @@ export default function AdminLibrary() {
     try {
       await axios.patch(`${API}/admin/standards/documents/${id}`, { is_active }, getAuthConfig());
       setDocs(docs.map(d => d.id === id ? { ...d, is_active } : d));
+      invalidateCache("/admin/standards/documents");
     } catch (err) { console.error("Toggle document failed:", err.message); setError("Failed to update document status."); }
   };
 
@@ -174,6 +181,7 @@ export default function AdminLibrary() {
       await axios.delete(`${API}/admin/standards/documents/${id}`, getAuthConfig());
       setDocs(docs.filter(d => d.id !== id));
       setMessage("Document deleted");
+      invalidateCache("/admin/standards/documents");
     } catch (err) { console.error("Delete document failed:", err.message); setError("Failed to delete document."); }
   };
 

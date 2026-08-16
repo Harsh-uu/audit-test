@@ -6,7 +6,9 @@ import axios from "axios";
 
 const _cache = new Map();
 
-// TTL in milliseconds per URL pattern (path substring match)
+// TTL in milliseconds per URL pattern (path substring match).
+// IMPORTANT: more-specific patterns MUST appear before any shorter prefix that
+// would otherwise match first (e.g. /schedules/meeting-types before /schedules/).
 const TTL_MAP = {
   "/auth/me":                    60_000,   // 1 min
   "/org/branding":              300_000,   // 5 min
@@ -18,7 +20,9 @@ const TTL_MAP = {
   "/admin/standards/documents": 120_000,   // 2 min
   "/admin/standards":           600_000,   // 10 min (CQC/Care Cert standards never change)
   "/admin/template":            300_000,   // 5 min
-  "/schedules/meeting-types":   300_000,   // 5 min
+  "/schedules/meeting-types":   300_000,   // 5 min  — must be before /schedules/
+  "/schedules/due":              30_000,   // 30 s   — due-date calculations; must be before /schedules/
+  "/schedules/":                 30_000,   // 30 s   — full schedule list
   "/prep/focus-topics":         300_000,   // 5 min
 };
 

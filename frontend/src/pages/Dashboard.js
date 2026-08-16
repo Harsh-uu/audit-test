@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, ChevronDown, Loader2, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles, Archive, ClipboardList } from "lucide-react";
@@ -122,13 +123,13 @@ export default function Dashboard() {
   useEffect(() => {
     fetchMeetings();
     if (user?.role === "admin" || user?.role === "manager") {
-      axios.get(`${API}/org/structure`, getAuthConfig()).then(r => setOrgStructure(r.data)).catch(() => {});
+      cachedGet(`${API}/org/structure`, getAuthConfig()).then(r => setOrgStructure(r.data)).catch(() => {});
       setDueLoading(true);
-      axios.get(`${API}/schedules/due`, getAuthConfig())
+      cachedGet(`${API}/schedules/due`, getAuthConfig())
         .then(r => setDueMeetings(r.data))
         .catch(() => {})
         .finally(() => setDueLoading(false));
-      axios.get(`${API}/admin/team-insights/action-stats`, getAuthConfig())
+      cachedGet(`${API}/admin/team-insights/action-stats`, getAuthConfig())
         .then(r => setActionStats(r.data))
         .catch(() => {});
     }
