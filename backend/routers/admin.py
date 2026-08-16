@@ -4,6 +4,7 @@ import uuid
 import re as _re
 import logging
 import asyncio
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Form, Request
@@ -13,6 +14,11 @@ from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_i
 from utils.supabase_storage import put_document
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 import database
+
+# ── Admin stats cache ─────────────────────────────────────────────────────────
+# 5 COUNT(*) queries per org — cached for 60 s. Keyed by org_id.
+_stats_cache: dict[str, tuple[float, dict]] = {}
+_STATS_TTL = 60  # seconds
 
 async def _audit(conn, meeting_id: str, org_id: str, action: str, user_id: str, user_name: str, detail: str = ""):
     """Write one audit log entry (works with both org and admin connections)."""
@@ -1566,6 +1572,12 @@ async def get_stats(current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
+
+    # Return cached result if still fresh
+    cached = _stats_cache.get(org_id)
+    if cached and (time.monotonic() - cached[0]) < _STATS_TTL:
+        return cached[1]
+
     async with database.with_org(org_id) as conn:
         total_meetings = await conn.fetchval("SELECT COUNT(*) FROM meetings")
         signed_off = await conn.fetchval("SELECT COUNT(*) FROM meetings WHERE status='signed_off'")
@@ -1574,7 +1586,15 @@ async def get_stats(current_user=Depends(get_current_user)):
         total_standards = await conn.fetchval(
             "SELECT COUNT(*) FROM standards_entries WHERE is_active=TRUE AND (is_system=TRUE OR org_id=$1)", org_id
         )
-    return {"total_meetings": total_meetings, "signed_off": signed_off, "in_review": in_review, "total_users": total_users, "total_standards": total_standards}
+    result = {
+        "total_meetings": total_meetings,
+        "signed_off": signed_off,
+        "in_review": in_review,
+        "total_users": total_users,
+        "total_standards": total_standards,
+    }
+    _stats_cache[org_id] = (time.monotonic(), result)
+    return result
 
 
 # ── PDF generation helpers (unchanged logic, no db access) ───────────────────

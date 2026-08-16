@@ -1,5 +1,6 @@
 import uuid
 import json
+import time
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone, date
 import calendar
@@ -9,6 +10,11 @@ from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_i
 import database
 
 router = APIRouter()
+
+# ── Meeting types cache ───────────────────────────────────────────────────────
+# meeting_types rarely change — cache indefinitely per org_id, invalidate on
+# any create / update / delete. Each entry: list[dict].
+_meeting_types_cache: dict[str, list[dict]] = {}
 
 DEFAULT_MEETING_TYPES = [
     {"name": "Supervision",                "default_frequency": "monthly",   "color": "#3B82F6"},
@@ -154,12 +160,19 @@ class ScheduleUpdate(BaseModel):
 @router.get("/meeting-types")
 async def list_meeting_types(current_user=Depends(get_current_user)):
     org_id = current_user["org_id"]
+
+    # Return from cache if populated — invalidated explicitly on any write
+    if org_id in _meeting_types_cache:
+        return _meeting_types_cache[org_id]
+
     async with database.with_org(org_id) as conn:
         await seed_meeting_types(conn, org_id)
         rows = await conn.fetch(
             "SELECT * FROM meeting_types WHERE org_id = $1 AND is_active = TRUE ORDER BY name ASC", org_id
         )
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    _meeting_types_cache[org_id] = result
+    return result
 
 
 @router.post("/meeting-types")
@@ -175,6 +188,7 @@ async def create_meeting_type(data: MeetingTypeCreate, current_user=Depends(get_
                VALUES ($1,$2,$3,$4,$5,$6,$7)""",
             mt_id, org_id, data.name.strip(), data.default_frequency, data.color, True, now,
         )
+    _meeting_types_cache.pop(org_id, None)
     return {"id": mt_id, "org_id": org_id, "name": data.name.strip(), "default_frequency": data.default_frequency, "color": data.color, "is_active": True, "created_at": now}
 
 
@@ -188,6 +202,7 @@ async def update_meeting_type(type_id: str, data: MeetingTypeCreate, current_use
             "UPDATE meeting_types SET name=$1, default_frequency=$2, color=$3 WHERE id=$4",
             data.name.strip(), data.default_frequency, data.color, type_id,
         )
+    _meeting_types_cache.pop(org_id, None)
     return {"ok": True}
 
 
@@ -198,6 +213,7 @@ async def delete_meeting_type(type_id: str, current_user=Depends(get_current_use
     org_id = current_user["org_id"]
     async with database.with_org(org_id) as conn:
         await conn.execute("UPDATE meeting_types SET is_active=FALSE WHERE id=$1", type_id)
+    _meeting_types_cache.pop(org_id, None)
     return {"ok": True}
 
 
