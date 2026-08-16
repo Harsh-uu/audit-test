@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Response, Request
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, EmailStr
 import bcrypt
 import jwt
@@ -57,11 +57,6 @@ def create_refresh_token(user_id: str) -> str:
         "type": "refresh",
     }
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
-
-
-def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
-    response.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="lax", max_age=28800, path="/")
-    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=True, samesite="lax", max_age=604800, path="/")
 
 
 class RegisterRequest(BaseModel):
@@ -142,7 +137,7 @@ async def _generate_and_send_mfa(conn, user: dict) -> None:
 
 
 @router.post("/register")
-async def register(data: RegisterRequest, response: Response):
+async def register(data: RegisterRequest):
     email = data.email.lower()
     async with database.with_admin() as conn:
         existing = await conn.fetchrow("SELECT id FROM users WHERE email = $1", email)
@@ -157,12 +152,11 @@ async def register(data: RegisterRequest, response: Response):
         )
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
-    set_auth_cookies(response, access_token, refresh_token)
     return {"id": user_id, "email": email, "name": data.name, "role": "attendee", "token": access_token, "refresh_token": refresh_token}
 
 
 @router.post("/login")
-async def login(data: LoginRequest, response: Response, request: Request):
+async def login(data: LoginRequest, request: Request):
     email = data.email.lower()
     identifier = email.lower()  # email-only — ingress pod IPs are unreliable in k8s/proxy setups
 
@@ -226,7 +220,6 @@ async def login(data: LoginRequest, response: Response, request: Request):
 
     access_token = create_access_token(user_id, user["email"])
     refresh_token = create_refresh_token(user_id)
-    set_auth_cookies(response, access_token, refresh_token)
     return {
         "id": user_id, "email": user["email"], "name": user["name"], "role": user["role"],
         "token": access_token, "refresh_token": refresh_token,
@@ -235,14 +228,12 @@ async def login(data: LoginRequest, response: Response, request: Request):
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+async def logout():
     return {"message": "Logged out"}
 
 
 @router.post("/verify-mfa")
-async def verify_mfa(data: VerifyMfaRequest, response: Response):
+async def verify_mfa(data: VerifyMfaRequest):
     """Complete MFA login: validate OTP and issue full JWT."""
     try:
         payload = jwt.decode(data.mfa_session, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM])
@@ -280,7 +271,6 @@ async def verify_mfa(data: VerifyMfaRequest, response: Response):
 
     access_token = create_access_token(user_id, user["email"])
     refresh_token = create_refresh_token(user_id)
-    set_auth_cookies(response, access_token, refresh_token)
     return {
         "id": user_id, "email": user["email"], "name": user["name"], "role": user["role"],
         "token": access_token, "refresh_token": refresh_token,
@@ -374,7 +364,7 @@ async def me(current_user=Depends(get_current_user)):
 
 
 @router.post("/refresh")
-async def refresh_token(request: Request, response: Response):
+async def refresh_token(request: Request):
     token = request.cookies.get("refresh_token")
     if not token:
         auth_header = request.headers.get("Authorization", "")
@@ -395,8 +385,6 @@ async def refresh_token(request: Request, response: Response):
         user_id = user["id"]
         new_access = create_access_token(user_id, user["email"])
         new_refresh = create_refresh_token(user_id)
-        response.set_cookie("access_token", new_access, httponly=True, secure=True, samesite="lax", max_age=86400, path="/")
-        response.set_cookie("refresh_token", new_refresh, httponly=True, secure=True, samesite="lax", max_age=604800, path="/")
         return {"access_token": new_access, "refresh_token": new_refresh, "message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
@@ -532,7 +520,7 @@ class AcceptInviteRequest(BaseModel):
 
 
 @router.post("/accept-invite")
-async def accept_invite(data: AcceptInviteRequest, response: Response):
+async def accept_invite(data: AcceptInviteRequest):
     validate_password_strength(data.password)
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
@@ -559,7 +547,6 @@ async def accept_invite(data: AcceptInviteRequest, response: Response):
     email = user["email"]
     access_token = create_access_token(user_id, email)
     refresh_token_val = create_refresh_token(user_id)
-    set_auth_cookies(response, access_token, refresh_token_val)
     return {
         "id": user_id,
         "email": email,
