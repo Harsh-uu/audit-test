@@ -93,6 +93,17 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
     now = datetime.now(timezone.utc).isoformat()
     meeting_id = str(uuid.uuid4())
 
+    # Rate limit: 30 meetings per user / 60 min
+    from utils.rate_limit import check_rate_limit
+    async with database.with_admin() as _rl_conn:
+        await check_rate_limit(
+            _rl_conn,
+            identifier=f"create_meeting:{current_user['id']}",
+            max_attempts=30,
+            window_minutes=60,
+            error_detail="Meeting creation limit reached. A maximum of 30 meetings can be created per hour.",
+        )
+
     async with database.with_org(org_id) as conn:
         attendees = await _resolve_attendees(conn, data.attendee_ids, org_id)
         manager_name = None

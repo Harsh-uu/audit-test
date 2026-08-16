@@ -167,6 +167,23 @@ async def login(data: LoginRequest, request: Request):
     email = data.email.lower()
     identifier = email.lower()  # email-only — ingress pod IPs are unreliable in k8s/proxy setups
 
+    # ── IP-wide secondary rate limit (20 per IP / 15 min) ────────────────────
+    from utils.rate_limit import check_rate_limit
+    xff = request.headers.get("X-Forwarded-For", "")
+    _ip = (
+        request.headers.get("X-Real-IP")
+        or (xff.split(",")[-1].strip() if xff else None)
+        or (request.client.host if request.client else "unknown")
+    )
+    async with database.with_admin() as _rl_conn:
+        await check_rate_limit(
+            _rl_conn,
+            identifier=f"login_ip:{_ip}",
+            max_attempts=20,
+            window_minutes=15,
+            error_detail="Too many login attempts from this location. Please wait 15 minutes before trying again.",
+        )
+
     # ── Step 1: lockout check ─────────────────────────────────────────────────
     async with database.with_admin() as conn:
         attempts_row = await conn.fetchrow("SELECT count, locked_until FROM login_attempts WHERE identifier = $1", identifier)
@@ -249,6 +266,17 @@ async def verify_mfa(data: VerifyMfaRequest):
         user_id = payload["sub"]
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+
+    # ── Rate limit: 5 attempts per user / 30 min ─────────────────────────────
+    from utils.rate_limit import check_rate_limit
+    async with database.with_admin() as _rl_conn:
+        await check_rate_limit(
+            _rl_conn,
+            identifier=f"mfa_uid:{user_id}",
+            max_attempts=5,
+            window_minutes=30,
+            error_detail="Too many verification attempts. Please wait 30 minutes before trying again.",
+        )
 
     async with database.with_admin() as conn:
         user = await conn.fetchrow("SELECT * FROM users WHERE id=$1", user_id)

@@ -250,6 +250,18 @@ async def bulk_create_schedules(data: ScheduleBulkCreate, current_user=Depends(g
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
     org_id = current_user["org_id"]
+
+    # Rate limit: 5 bulk schedule operations per org / 60 min
+    from utils.rate_limit import check_rate_limit
+    async with database.with_admin() as _rl_conn:
+        await check_rate_limit(
+            _rl_conn,
+            identifier=f"bulk_sched:{org_id}",
+            max_attempts=5,
+            window_minutes=60,
+            error_detail="Bulk schedule limit reached. A maximum of 5 bulk operations can be run per hour.",
+        )
+
     scope = get_manager_scope(current_user)
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_org(org_id) as conn:

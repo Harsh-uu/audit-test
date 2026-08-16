@@ -1363,6 +1363,16 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
     data = await request.json()
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
+    # Rate limit: 10 evidence exports per user / 60 min
+    from utils.rate_limit import check_rate_limit
+    async with database.with_admin() as _rl_conn:
+        await check_rate_limit(
+            _rl_conn,
+            identifier=f"export:{current_user['id']}",
+            max_attempts=10,
+            window_minutes=60,
+            error_detail="Export limit reached. A maximum of 10 exports can be generated per hour.",
+        )
     org_id = current_user.get("org_id", "")
     fmt = data.get("format", "csv")
     staff_ids = data.get("staff_ids") or []
@@ -1522,6 +1532,16 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
     data = await request.json()
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
+    # Rate limit: 10 transcript exports per user / 60 min (shared bucket with evidence exports)
+    from utils.rate_limit import check_rate_limit
+    async with database.with_admin() as _rl_conn:
+        await check_rate_limit(
+            _rl_conn,
+            identifier=f"export:{current_user['id']}",
+            max_attempts=10,
+            window_minutes=60,
+            error_detail="Export limit reached. A maximum of 10 exports can be generated per hour.",
+        )
     org_id = current_user.get("org_id", "")
     staff_ids = data.get("staff_ids") or []
     date_from = data.get("date_from")

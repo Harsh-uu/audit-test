@@ -367,6 +367,7 @@ async def invite_user_to_org(data: InviteUserRequest, current_user=Depends(get_c
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     from routers.auth import hash_password
+    from utils.rate_limit import check_rate_limit
     allowed_roles = ["attendee", "manager", "shared_reviewer"]
     if current_user["role"] == "admin":
         allowed_roles.append("admin")
@@ -375,6 +376,14 @@ async def invite_user_to_org(data: InviteUserRequest, current_user=Depends(get_c
     org_id = current_user.get("org_id", "")
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
+        # Rate limit: 20 invites per org / 60 min
+        await check_rate_limit(
+            conn,
+            identifier=f"invite:{org_id}",
+            max_attempts=20,
+            window_minutes=60,
+            error_detail="Invite limit reached. A maximum of 20 invites can be sent per hour.",
+        )
         existing = await conn.fetchrow("SELECT id FROM users WHERE email=$1", data.email.lower())
         if existing:
             raise HTTPException(400, "Email already registered")
