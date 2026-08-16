@@ -14,10 +14,10 @@ function formatError(detail) {
 }
 
 export default function Login() {
-  const { user, login, register, completeLogin } = useAuth();
+  const { user, login, completeLogin } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
-  const [form, setForm] = useState({ email: "", password: "", name: "", role: "attendee" });
+  const [mode, setMode] = useState("login"); // "login" | "forgot"
+  const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -42,9 +42,6 @@ export default function Login() {
           return;
         }
         navigate(userData.role === "super_admin" ? "/super-admin" : "/dashboard");
-      } else if (mode === "register") {
-        await register(form.email, form.password, form.name, form.role);
-        navigate("/dashboard");
       } else if (mode === "forgot") {
         const res = await fetch(`${API}/api/auth/forgot-password`, {
           method: "POST",
@@ -202,10 +199,10 @@ export default function Login() {
           </div>
 
           <h2 className="text-2xl font-semibold text-gray-900 mb-1">
-            {mode === "login" ? "Sign in to your account" : mode === "register" ? "Create account" : "Reset your password"}
+            {mode === "login" ? "Sign in to your account" : "Reset your password"}
           </h2>
           <p className="text-gray-500 text-sm mb-8">
-            {mode === "register" ? "Set up your account." : mode === "forgot" ? "Enter your email and we'll send you a reset link." : ""}
+            {mode === "forgot" ? "Enter your email and we'll send you a reset link." : ""}
           </p>
 
           {error && (() => {
@@ -225,21 +222,6 @@ export default function Login() {
           )}
 
           <form onSubmit={handle} className="space-y-4">
-            {mode === "register" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm(f => ({...f, name: e.target.value}))}
-                  placeholder="Jane Smith"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
-                  data-testid="register-name-input"
-                />
-              </div>
-            )}
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
               <input
@@ -285,22 +267,6 @@ export default function Login() {
               </div>
             )}
 
-            {mode === "register" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                <select
-                  value={form.role}
-                  onChange={e => setForm(f => ({...f, role: e.target.value}))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
-                  data-testid="register-role-select"
-                >
-                  <option value="attendee">Care Worker / Attendee</option>
-                  <option value="manager">Manager / Sign-off Owner</option>
-                  <option value="shared_reviewer">Shared Reviewer</option>
-                </select>
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={loading || (mode === "forgot" && !!success)}
@@ -308,7 +274,7 @@ export default function Login() {
               data-testid="login-submit-btn"
             >
               {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></div>}
-              {mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Send reset link"}
+              {mode === "login" ? "Sign in" : "Send reset link"}
             </button>
           </form>
 

@@ -133,22 +133,12 @@ async def _generate_and_send_mfa(conn, user: dict) -> None:
 
 
 @router.post("/register")
-async def register(data: RegisterRequest):
-    email = data.email.lower()
-    async with database.with_admin() as conn:
-        existing = await conn.fetchrow("SELECT id FROM users WHERE email = $1", email)
-        if existing:
-            raise HTTPException(status_code=400, detail="Email already registered")
-        user_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
-        await conn.execute(
-            """INSERT INTO users (id, email, password_hash, name, role, is_active, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)""",
-            user_id, email, hash_password(data.password), data.name, "attendee", True, now,
-        )
-    access_token = create_access_token(user_id, email)
-    refresh_token = create_refresh_token(user_id)
-    return {"id": user_id, "email": email, "name": data.name, "role": "attendee", "token": access_token, "refresh_token": refresh_token}
+async def register(_data: dict = {}):
+    """Self-registration is disabled — users must be invited by an organisation admin."""
+    raise HTTPException(
+        status_code=403,
+        detail="Self-registration is disabled. Contact your organisation admin to receive an invitation.",
+    )
 
 
 @router.post("/login")
