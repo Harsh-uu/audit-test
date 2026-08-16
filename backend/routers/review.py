@@ -1314,7 +1314,7 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
         return await _audit_trail_inner(meeting_id, current_user, _logger)
     except Exception as _top_err:
         _logger.error(f"[AUDIT] UNHANDLED 500 meeting={meeting_id}: {_top_err}\n{_tb.format_exc()}")
-        return {"events": [], "_error": str(_top_err), "_trace": _tb.format_exc()[-800:]}
+        return {"events": []}
 
 
 async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
@@ -1330,7 +1330,7 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
             )
     except Exception as e:
         _logger.error(f"[AUDIT] meeting fetch FAILED meeting={meeting_id}: {e}")
-        return {"events": [], "_error": str(e)}
+        return {"events": []}
     if not m_row:
         _logger.warning(f"[AUDIT] meeting NOT FOUND id={meeting_id} org={org_id!r}")
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -1512,17 +1512,7 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
 
     events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
     _logger.info(f"[AUDIT] returning {len(events)} events for meeting={meeting_id}")
-    return {
-        "events": events,
-        "_debug": {
-            "meeting_found": True,
-            "created_at": meeting.get("created_at"),
-            "transcript_id": meeting.get("transcript_id"),
-            "analysis_id": meeting.get("analysis_id"),
-            "event_count": len(events),
-            "org_id_used": org_id,
-        }
-    }
+    return {"events": events}
 
 
 # ── Email ─────────────────────────────────────────────────────────────────────
