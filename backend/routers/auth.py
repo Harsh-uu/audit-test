@@ -86,12 +86,8 @@ MFA_REQUIRES_ROLES = {"super_admin", "admin", "manager"}
 
 
 def _mfa_required_for_role(role: str, mfa_enabled: bool) -> bool:
-    """super_admins always need MFA; admins/managers only if they opted in."""
-    if role == "super_admin":
-        return True
-    if role in ("admin", "manager") and mfa_enabled:
-        return True
-    return False
+    """Admins, managers and super_admins always require MFA — mandatory, not opt-in."""
+    return role in ("super_admin", "admin", "manager")
 
 
 def create_mfa_session_token(user_id: str) -> str:
@@ -475,6 +471,11 @@ async def reset_password(data: ResetPasswordRequest):
             hash_password(data.new_password), now, record["email"],
         )
         await conn.execute("UPDATE password_reset_tokens SET used=TRUE WHERE token=$1", data.token)
+        # Invalidate all existing sessions for this user
+        await conn.execute(
+            "DELETE FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE email = $1)",
+            record["email"],
+        )
     return {"message": "Password updated successfully. You can now log in."}
 
 
@@ -500,6 +501,8 @@ async def change_password(data: ChangePasswordRequest, current_user=Depends(get_
                password_changed_at=$2 WHERE id=$3""",
             hash_password(data.new_password), now, current_user["id"],
         )
+        # Invalidate all existing sessions — stolen refresh tokens no longer valid
+        await conn.execute("DELETE FROM refresh_tokens WHERE user_id = $1", current_user["id"])
     return {"message": "Password changed successfully"}
 
 
