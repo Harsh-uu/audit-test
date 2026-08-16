@@ -208,12 +208,15 @@ export default function Login() {
             {mode === "register" ? "Set up your account." : mode === "forgot" ? "Enter your email and we'll send you a reset link." : ""}
           </p>
 
-          {error && (
-            <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 rounded-md p-3 mb-6 text-sm" data-testid="login-error">
-              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+          {error && (() => {
+            const isForgotHint = error.toLowerCase().includes("forgot password");
+            return (
+              <div className={`flex items-start gap-3 rounded-md p-3 mb-6 text-sm border ${isForgotHint ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-red-50 border-red-200 text-red-700"}`} data-testid="login-error">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            );
+          })()}
           {success && (
             <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-md p-3 mb-6 text-sm" data-testid="forgot-success">
               <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />

@@ -164,30 +164,50 @@ async def register(data: RegisterRequest, response: Response):
 @router.post("/login")
 async def login(data: LoginRequest, response: Response, request: Request):
     email = data.email.lower()
-    identifier = f"{request.client.host}:{email}"
+    identifier = email.lower()  # email-only — ingress pod IPs are unreliable in k8s/proxy setups
 
+    # ── Step 1: lockout check ─────────────────────────────────────────────────
     async with database.with_admin() as conn:
         attempts_row = await conn.fetchrow("SELECT count, locked_until FROM login_attempts WHERE identifier = $1", identifier)
-        if attempts_row and attempts_row["count"] >= 5:
-            lockout_until = attempts_row.get("locked_until")
-            if lockout_until and lockout_until > datetime.now(timezone.utc).isoformat():
-                raise HTTPException(status_code=429, detail="Account temporarily locked. Try again later.")
+    if attempts_row and attempts_row["count"] >= 3:
+        lockout_until = attempts_row.get("locked_until")
+        if lockout_until and lockout_until > datetime.now(timezone.utc).isoformat():
+            raise HTTPException(status_code=429, detail="Too many failed attempts — your account is temporarily locked. Use the Forgot Password link to reset your access.")
 
+    # ── Step 2: credential check ──────────────────────────────────────────────
+    async with database.with_admin() as conn:
         user = await conn.fetchrow("SELECT * FROM users WHERE email = $1", email)
-        if not user or not verify_password(data.password, user["password_hash"] or ""):
-            now = datetime.now(timezone.utc).isoformat()
-            locked_until = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
-            await conn.execute(
+
+    password_ok = bool(user and verify_password(data.password, user["password_hash"] or ""))
+
+    # ── Step 3: record failed attempt (committed separately so rollback can't undo it)
+    if not password_ok:
+        now = datetime.now(timezone.utc).isoformat()
+        locked_until = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+        new_count = 1
+        async with database.with_admin() as conn:
+            result = await conn.fetchrow(
                 """INSERT INTO login_attempts (identifier, count, locked_until, updated_at)
                    VALUES ($1, 1, $2, $3)
                    ON CONFLICT (identifier) DO UPDATE
                    SET count = login_attempts.count + 1,
                        locked_until = $2,
-                       updated_at = $3""",
+                       updated_at = $3
+                   RETURNING count""",
                 identifier, locked_until, now,
             )
+            if result:
+                new_count = result["count"]
+        # Raise OUTSIDE the block so the INSERT is committed
+        if new_count >= 3:
+            raise HTTPException(status_code=401, detail="Invalid credentials — your account has been temporarily locked after 3 failed attempts. Use the Forgot Password link below to reset your access.")
+        elif new_count == 2:
+            raise HTTPException(status_code=401, detail="Invalid credentials — if you've forgotten your password, use the Forgot Password link below to reset your account.")
+        else:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    # ── Step 4: clear attempts on success ─────────────────────────────────────
+    async with database.with_admin() as conn:
         await conn.execute("DELETE FROM login_attempts WHERE identifier = $1", identifier)
 
     user = dict(user)
