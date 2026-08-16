@@ -158,7 +158,65 @@ CREATE POLICY standards_entries_rls ON standards_entries FOR ALL
     )
     WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
 
--- Verification: should show 17 rows all with rls_enabled=true and policy_count=1
+-- ── Phase 2: Tables flagged by Security Advisor (added Aug 2026) ─────────────
+
+-- evidence_feedback
+ALTER TABLE evidence_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE evidence_feedback FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS evidence_feedback_rls ON evidence_feedback;
+CREATE POLICY evidence_feedback_rls ON evidence_feedback FOR ALL
+    USING      (org_id = current_setting('app.current_org_id', TRUE))
+    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+
+-- invitations
+ALTER TABLE invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invitations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS invitations_rls ON invitations;
+CREATE POLICY invitations_rls ON invitations FOR ALL
+    USING      (org_id = current_setting('app.current_org_id', TRUE))
+    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+
+-- settings
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settings FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS settings_rls ON settings;
+CREATE POLICY settings_rls ON settings FOR ALL
+    USING      (org_id = current_setting('app.current_org_id', TRUE))
+    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+
+-- organisations (its own id IS the org boundary)
+ALTER TABLE organisations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organisations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS organisations_rls ON organisations;
+CREATE POLICY organisations_rls ON organisations FOR ALL
+    USING      (id = current_setting('app.current_org_id', TRUE))
+    WITH CHECK (id = current_setting('app.current_org_id', TRUE));
+
+-- jobs (no org_id — background worker only; admin-only access)
+ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE jobs FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS jobs_rls ON jobs;
+CREATE POLICY jobs_rls ON jobs FOR ALL USING (FALSE);
+
+-- login_attempts (no org_id — auth brute-force tracking only; admin-only)
+ALTER TABLE login_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE login_attempts FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS login_attempts_rls ON login_attempts;
+CREATE POLICY login_attempts_rls ON login_attempts FOR ALL USING (FALSE);
+
+-- password_reset_tokens (no org_id — auth flow only; admin-only)
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE password_reset_tokens FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS password_reset_tokens_rls ON password_reset_tokens;
+CREATE POLICY password_reset_tokens_rls ON password_reset_tokens FOR ALL USING (FALSE);
+
+-- refresh_tokens (token security — admin connection only)
+ALTER TABLE refresh_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE refresh_tokens FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS refresh_tokens_rls ON refresh_tokens;
+CREATE POLICY refresh_tokens_rls ON refresh_tokens FOR ALL USING (FALSE);
+
+-- Verification: should show 25 rows all with rls_enabled=true and policy_count=1
 SELECT
     tablename,
     rowsecurity AS rls_enabled,
