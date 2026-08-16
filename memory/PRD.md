@@ -46,6 +46,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ---
 
 ## Changelog (Recent)
+- **Aug 2026 (6)**: Security hardening — XSS audit confirmed (React auto-escape, Pydantic, `saxutils.escape`). Prompt injection hardening: `_PROMPT_INJECTION_GUARD` prepended to all 6 AI system prompts; transcript/document content wrapped in XML delimiters (`<transcript>`, `<document>`) in all user prompts; `custom_prompt` field sanitized via `_safe_custom_prompt()`; supervisee names sanitized via `_safe_name()` before embedding in system prompts. All in `ai.py`.
 - **Aug 2026 (5)**: Hardened login rate limiting — threshold reduced 5→3 failed attempts; attempt INSERT now committed in its own transaction (was rolling back inside `with_admin()` transaction on HTTPException); identifier changed from `IP:email` to `email-only` (Kubernetes ingress pod IPs are unreliable across replicas); 2nd-failure response now shows amber "Forgot Password" hint in UI; 3rd-failure response shows lock message; 4th+ returns HTTP 429. only working on first click — `highlightKey` counter increments on every click, forcing scroll to re-fire.
 - **Aug 2026 (3)**: Fixed confidentiality checker — title abbreviation matching (Mr/Mr.) + all named colleagues flagged + better AI excerpt selection.
 - **Aug 2026 (2)**: Fixed `cannot extract elements from a scalar` error crashing the processing pipeline — JSONB scalar guard on all `jsonb_array_elements(attendees)` call sites.
