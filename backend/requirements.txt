@@ -34,3 +34,5 @@ resend==2.32.2
 imageio-ffmpeg==0.6.0
 deepgram-sdk==7.4.0
 assemblyai==0.64.21
+
+httpx==0.28.1

@@ -25,12 +25,23 @@ from utils.storage import init_storage  # noqa: E402
 from utils.seed import seed_all  # noqa: E402
 from utils.job_worker import start_worker  # noqa: E402
 from init_db import create_schema  # noqa: E402
+from loki_logging import attach_loki  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Attach Loki handler if credentials are present
+_loki_url = os.environ.get("LOKI_URL", "")
+_loki_user = os.environ.get("LOKI_USER", "")
+_loki_token = os.environ.get("LOKI_TOKEN", "")
+if _loki_url and _loki_user and _loki_token:
+    attach_loki(_loki_url, _loki_user, _loki_token)
+    logger.info("Loki log shipping enabled → %s", _loki_url)
+else:
+    logger.warning("Loki credentials not set — logging to console only")
 
 app = FastAPI(title="Supervision 2.0 API")
 
