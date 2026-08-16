@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import OrgStructure from "@/pages/OrgStructure";
@@ -329,7 +330,7 @@ function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, currentUs
 
   // Fetch available teams from the org structure
   useEffect(() => {
-    axios.get(`${API}/org/structure`, getAuthConfig())
+    cachedGet(`${API}/org/structure`, getAuthConfig())
       .then(res => {
         const opts = [];
         (res.data.settings || []).forEach(s => {
@@ -352,6 +353,7 @@ function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, currentUs
     setSaving(true); setError("");
     try {
       await axios.put(`${API}/admin/users/${person.user_id}`, form, getAuthConfig());
+      invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
       if (showPwd && newPwd.trim()) {
         await axios.post(`${API}/admin/users/${person.user_id}/reset-password`, { new_password: newPwd }, getAuthConfig());
       }
@@ -466,7 +468,7 @@ export default function PeopleHub() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(`${API}/admin/people-stats`, getAuthConfig());
+      const { data } = await cachedGet(`${API}/admin/people-stats`, getAuthConfig());
       setPeople(data);
     } catch (err) {
       console.error("People stats error", err);
@@ -482,6 +484,7 @@ export default function PeopleHub() {
     if (!window.confirm(`Revoke invite for ${person.name}? This will remove their account.`)) return;
     try {
       await axios.delete(`${API}/admin/users/${person.user_id}`, getAuthConfig());
+      invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
       setPeople(prev => prev.filter(p => p.user_id !== person.user_id));
     } catch (err) {
       alert(err.response?.data?.detail || "Failed to revoke invite");

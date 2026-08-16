@@ -352,7 +352,7 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "", highlightKey = 0, onFindReplace }) {
+export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "", highlightKey = 0, onFindReplace }) {
   const [viewMode, setViewMode] = useState("full");
 
   // ── Speaker editing state ─────────────────────────────────────────────────
@@ -1373,4 +1373,4 @@ export function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeak
       )}
     </div>
   );
-}
+});

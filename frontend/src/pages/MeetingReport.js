@@ -176,12 +176,25 @@ export default function MeetingReport() {
     } catch (err) { setActionMessage(err.response?.data?.detail || "Failed to save"); }
   };
 
-  const updateEvidence = async (evidenceId, updates) => {
+  const updateEvidence = useCallback(async (evidenceId, updates) => {
     try {
       await axios.put(`${API}/review/${meetingId}/evidence/${evidenceId}`, updates, getAuthConfig());
       fetchMeeting();
     } catch (err) { console.error("Evidence update failed", err); }
-  };
+  }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onShowInTranscript = useCallback((excerpt) => {
+    setHighlightExcerpt(excerpt);
+    setHighlightKey(k => k + 1);
+    setActiveTab("transcript");
+  }, []);
+
+  const onDirtyChange = useCallback((dirty) => setSpeakersDirty(dirty), []);
+
+  const onAnalysisChange = useCallback(
+    (updatedAnalysis) => setMeeting(m => ({ ...m, analysis: updatedAnalysis })),
+    []
+  );
 
   const saveActions = async (updatedActions) => {
     try {
@@ -724,7 +737,7 @@ export default function MeetingReport() {
                       setMeeting(m => ({ ...m, analysis: { ...m.analysis, summary: newSummary } }));
                       setSummaryText(newSummary);
                     }}
-                    onAnalysisChange={updatedAnalysis => setMeeting(m => ({ ...m, analysis: updatedAnalysis }))}
+                    onAnalysisChange={onAnalysisChange}
                     isLocked={isLocked}
                     onReopenRequest={handleReopenRequest}
                     onApproveReopen={handleApproveReopen}
@@ -740,7 +753,7 @@ export default function MeetingReport() {
                     canEditSpeakers={canEditSpeakers}
                     highlightExcerpt={highlightExcerpt}
                     highlightKey={highlightKey}
-                    onDirtyChange={(dirty) => setSpeakersDirty(dirty)}
+                    onDirtyChange={onDirtyChange}
                     onFindReplace={handleFindReplace}
                     onSpeakerTextGenerated={(spText, editedByName, editedAt, speakerColors) => setMeeting(m => ({
                       ...m,
@@ -779,7 +792,7 @@ export default function MeetingReport() {
                       isLocked={isLocked}
                       canRescan={canEditSpeakers && !!meeting?.transcript_id && !isLocked}
                       onRescanEvidence={rescanEvidence}
-                      onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setHighlightKey(k => k + 1); setActiveTab("transcript"); }}
+                      onShowInTranscript={onShowInTranscript}
                       className="bg-[#F8F9FA]"
                       noMaxHeight
                     />

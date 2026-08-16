@@ -294,7 +294,7 @@ function CareCertDrillDown({ mappings }) {
   );
 }
 
-export function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence, onShowInTranscript, isLocked = false }) {
+export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence, onShowInTranscript, isLocked = false }) {
   const { user } = useAuth();
   const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction);
   const totalCount = (analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0);
@@ -432,5 +432,4 @@ export function EvidenceSidebar({ analysis, canReview, updateEvidence, className
       </div>
     </div>
   );
-}
-
+});

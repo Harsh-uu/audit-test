@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
@@ -874,7 +875,7 @@ export default function TeamInsights() {
       else if (filter.setting_id) params.setting_id = filter.setting_id;
       if (filter.date_from) params.date_from = filter.date_from;
       if (filter.date_to) params.date_to = filter.date_to;
-      const { data: d } = await axios.get(`${API}/admin/team-insights`, { ...getAuthConfig(), params });
+      const { data: d } = await cachedGet(`${API}/admin/team-insights`, { ...getAuthConfig(), params });
       setData(d);
     } catch (err) {
       console.error("Team insights error", err);
@@ -892,7 +893,7 @@ export default function TeamInsights() {
       else if (filter.setting_id) params.setting_id = filter.setting_id;
       if (filter.date_from) params.date_from = filter.date_from;
       if (filter.date_to) params.date_to = filter.date_to;
-      const { data: d } = await axios.get(`${API}/admin/team-insights/registers`, { ...getAuthConfig(), params });
+      const { data: d } = await cachedGet(`${API}/admin/team-insights/registers`, { ...getAuthConfig(), params });
       setRegisters(d);
     } catch (err) {
       console.error("Registers error", err);
@@ -969,13 +970,13 @@ export default function TeamInsights() {
 
   useEffect(() => {
     if (user?.role === "admin" || user?.role === "manager") {
-      axios.get(`${API}/org/structure`, getAuthConfig()).then(r => setOrgStructure(r.data)).catch(() => {});
+      cachedGet(`${API}/org/structure`, getAuthConfig()).then(r => setOrgStructure(r.data)).catch(() => {});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    axios.get(`${API}/admin/standards`, { ...getAuthConfig(), params: { type: "care_cert" } })
+    cachedGet(`${API}/admin/standards`, { ...getAuthConfig(), params: { type: "care_cert" } })
       .then(r => setCcStandards(r.data))
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps

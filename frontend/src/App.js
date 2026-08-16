@@ -1,32 +1,46 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/sonner";
+import { Loader2 } from "lucide-react";
+
+// Auth/public pages — loaded eagerly so login is instant
 import Login from "@/pages/Login";
 import ResetPassword from "@/pages/ResetPassword";
 import SetPassword from "@/pages/SetPassword";
-import Dashboard from "@/pages/Dashboard";
-import NewMeeting from "@/pages/NewMeeting";
-import RecordingScreen from "@/pages/RecordingScreen";
-import MeetingReport from "@/pages/MeetingReport";
-import MeetingPrep from "@/pages/MeetingPrep";
-import AdminLibrary from "@/pages/AdminLibrary";
-import UploadSupervision from "@/pages/UploadSupervision";
-import DocUploadReport from "@/pages/DocUploadReport";
-import SupervisionMatrix from "@/pages/SupervisionMatrix";
-import InspectionPrep from "@/pages/InspectionPrep";
-import StaffPortfolio from "@/pages/StaffPortfolio";
-import TeamInsights from "@/pages/TeamInsights";
-import OrgStructure from "@/pages/OrgStructure";
-import PeopleHub from "@/pages/PeopleHub";
-import Schedules from "@/pages/Schedules";
-import CareCertPrep from "@/pages/CareCertPrep";
-import OrgSettings from "@/pages/OrgSettings";
-import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
 import AcceptInvite from "@/pages/AcceptInvite";
+
+// All app pages — lazy-loaded per route (separate JS chunks)
+const Dashboard         = lazy(() => import("@/pages/Dashboard"));
+const NewMeeting        = lazy(() => import("@/pages/NewMeeting"));
+const RecordingScreen   = lazy(() => import("@/pages/RecordingScreen"));
+const MeetingReport     = lazy(() => import("@/pages/MeetingReport"));
+const MeetingPrep       = lazy(() => import("@/pages/MeetingPrep"));
+const AdminLibrary      = lazy(() => import("@/pages/AdminLibrary"));
+const UploadSupervision = lazy(() => import("@/pages/UploadSupervision"));
+const DocUploadReport   = lazy(() => import("@/pages/DocUploadReport"));
+const SupervisionMatrix = lazy(() => import("@/pages/SupervisionMatrix"));
+const InspectionPrep    = lazy(() => import("@/pages/InspectionPrep"));
+const StaffPortfolio    = lazy(() => import("@/pages/StaffPortfolio"));
+const TeamInsights      = lazy(() => import("@/pages/TeamInsights"));
+const OrgStructure      = lazy(() => import("@/pages/OrgStructure"));
+const PeopleHub         = lazy(() => import("@/pages/PeopleHub"));
+const Schedules         = lazy(() => import("@/pages/Schedules"));
+const CareCertPrep      = lazy(() => import("@/pages/CareCertPrep"));
+const OrgSettings       = lazy(() => import("@/pages/OrgSettings"));
+const SuperAdminDashboard = lazy(() => import("@/pages/SuperAdminDashboard"));
+
 import "@/App.css";
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Loader2 className="w-8 h-8 animate-spin text-[#1E3A8A]" />
+    </div>
+  );
+}
 
 function RootRedirect() {
   const { user } = useAuth();
@@ -38,6 +52,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -64,6 +79,7 @@ function App() {
           <Route path="/portfolio/:userId" element={<ProtectedRoute><StaffPortfolio /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
       <Toaster richColors position="top-right" />
     </AuthProvider>

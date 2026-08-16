@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
@@ -141,10 +142,10 @@ export default function Schedules() {
   const fetchAll = useCallback(async () => {
     try {
       const [typesRes, schedRes, usersRes, structRes] = await Promise.all([
-        axios.get(`${API}/schedules/meeting-types`, getAuthConfig()),
+        cachedGet(`${API}/schedules/meeting-types`, getAuthConfig()),
         axios.get(`${API}/schedules/`, getAuthConfig()),
-        axios.get(`${API}/admin/users`, getAuthConfig()),
-        axios.get(`${API}/org/structure`, getAuthConfig()),
+        cachedGet(`${API}/admin/users`, getAuthConfig()),
+        cachedGet(`${API}/org/structure`, getAuthConfig()),
       ]);
       setMeetingTypes(typesRes.data);
       setSchedules(schedRes.data);

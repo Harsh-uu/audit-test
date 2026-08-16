@@ -256,7 +256,7 @@ function AchievementsSection({ achievements }) {
 }
 
 
-export function EvidenceTab({
+export const EvidenceTab = React.memo(function EvidenceTab({
   meeting,
   analysis,
   canReview,
@@ -772,4 +772,4 @@ export function EvidenceTab({
       )}
     </div>
   );
-}
+});
