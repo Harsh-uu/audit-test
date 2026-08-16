@@ -168,20 +168,40 @@ export default function MeetingReport() {
   }, [activeTab, auditTrail, fetchAuditTrail]);
 
   const saveSummary = async () => {
+    const prev = meeting;
+    // Optimistic: close editing immediately with the new text
+    setMeeting(m => ({ ...m, analysis: { ...m.analysis, edited_summary: summaryText } }));
+    setEditingSummary(false);
     try {
       await axios.put(`${API}/review/${meetingId}/summary`, { summary: summaryText }, getAuthConfig());
-      setEditingSummary(false);
-      fetchMeeting();
       setActionMessage("Summary saved");
-    } catch (err) { setActionMessage(err.response?.data?.detail || "Failed to save"); }
+    } catch (err) {
+      setMeeting(prev);         // revert content
+      setEditingSummary(true);  // re-open edit mode so the user doesn't lose their work
+      setActionMessage(err.response?.data?.detail || "Failed to save");
+    }
   };
 
   const updateEvidence = useCallback(async (evidenceId, updates) => {
+    const prev = meeting;
+    // Optimistic: patch the matching evidence item immediately
+    setMeeting(m => ({
+      ...m,
+      analysis: {
+        ...m.analysis,
+        evidence_mappings: (m.analysis?.evidence_mappings || []).map(e =>
+          e.id === evidenceId ? { ...e, ...updates } : e
+        ),
+      },
+    }));
     try {
       await axios.put(`${API}/review/${meetingId}/evidence/${evidenceId}`, updates, getAuthConfig());
-      fetchMeeting();
-    } catch (err) { console.error("Evidence update failed", err.message); }
-  }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
+    } catch (err) {
+      setMeeting(prev); // revert on failure
+      console.error("Evidence update failed", err.message);
+      toast.error("Failed to update evidence — changes reverted.");
+    }
+  }, [meetingId, meeting]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onShowInTranscript = useCallback((excerpt) => {
     setHighlightExcerpt(excerpt);
@@ -242,13 +262,19 @@ export default function MeetingReport() {
       toast.error("You have unsaved speaker label changes. Please save them in the Transcript tab before marking reviewed.");
       return;
     }
+    const prev = meeting;
     setSubmitting(true);
+    // Optimistic: flip the badge immediately
+    setMeeting(m => ({ ...m, status: "reviewed" }));
     try {
       const { data } = await axios.post(`${API}/review/${meetingId}/mark-reviewed`, {}, getAuthConfig());
       toast.success(data.message || "Session marked as reviewed");
-      await fetchMeeting();
-    } catch (err) { toast.error(err.response?.data?.detail || "Failed to mark reviewed"); }
-    finally { setSubmitting(false); }
+      // Server decides between 'reviewed' and 'in_review' based on all-attendees state
+      setMeeting(m => ({ ...m, status: data.status }));
+    } catch (err) {
+      setMeeting(prev); // revert
+      toast.error(err.response?.data?.detail || "Failed to mark reviewed");
+    } finally { setSubmitting(false); }
   };
 
   const signOff = async () => {
@@ -257,23 +283,42 @@ export default function MeetingReport() {
       toast.error("You have unsaved speaker label changes. Please save them in the Transcript tab first.");
       return;
     }
+    const prev = meeting;
     setSubmitting(true);
+    // Optimistic: flip badge immediately so the UI feels instant
+    setMeeting(m => ({ ...m, status: "signed_off" }));
     try {
       await axios.post(`${API}/review/${meetingId}/signoff`, {}, getAuthConfig());
-      await fetchMeeting();
       toast.success("Meeting signed off. PDF export is now available.");
+      await fetchMeeting(); // pull sign_off_record + audio_deletion_status from server
     } catch (err) {
+      setMeeting(prev); // revert
       toast.error(err.response?.data?.detail || "Failed to sign off. Please try again.");
     } finally { setSubmitting(false); }
   };
 
   const addComment = async () => {
     if (!newComment.trim()) return;
+    const text = newComment.trim();
+    const tempId = `temp_${Date.now()}`;
+    const tempComment = {
+      id: tempId,
+      text,
+      author_name: user?.name || "You",
+      created_at: new Date().toISOString(),
+    };
+    // Optimistic: show comment immediately and clear input
+    setMeeting(m => ({ ...m, comments: [...(m.comments || []), tempComment] }));
+    setNewComment("");
     try {
-      await axios.post(`${API}/review/${meetingId}/comments`, { text: newComment }, getAuthConfig());
-      setNewComment("");
-      fetchMeeting();
-    } catch (err) { setActionMessage(err.response?.data?.detail || "Failed to add comment"); }
+      await axios.post(`${API}/review/${meetingId}/comments`, { text }, getAuthConfig());
+      fetchMeeting(); // replace temp comment with server record (gets proper id/timestamp)
+    } catch (err) {
+      // Revert: remove temp comment and restore the typed text
+      setMeeting(m => ({ ...m, comments: (m.comments || []).filter(c => c.id !== tempId) }));
+      setNewComment(text);
+      setActionMessage(err.response?.data?.detail || "Failed to add comment");
+    }
   };
 
   const handleAnonymise = async (phrase) => {
@@ -335,22 +380,27 @@ export default function MeetingReport() {
   };
 
   const handleReopenRequest = async (reason) => {
+    const prev = meeting;
+    setMeeting(m => ({ ...m, reopen_requested: true }));
     try {
       await axios.post(`${API}/review/${meetingId}/request-reopen`, { reason }, getAuthConfig());
       toast.success("Re-open requested — the other party will see an approval prompt.");
-      fetchMeeting();
     } catch (err) {
+      setMeeting(prev);
       toast.error(err?.response?.data?.detail || "Failed to request re-open.");
     }
   };
 
   const handleApproveReopen = async () => {
+    const prev = meeting;
+    setMeeting(m => ({ ...m, status: "reviewed", reopen_requested: false }));
     try {
       await axios.post(`${API}/review/${meetingId}/approve-reopen`, {}, getAuthConfig());
       toast.success("Re-open approved — report is now unlocked for editing.");
-      fetchMeeting();
     } catch (err) {
+      setMeeting(prev);
       toast.error(err?.response?.data?.detail || "Failed to approve re-open.");
+      await fetchMeeting();
     }
   };
 

@@ -244,11 +244,16 @@ export default function Schedules() {
   };
 
   const deleteSchedule = async (sid) => {
+    const prev = schedules;
+    // Optimistic: remove immediately so the row vanishes without waiting for the API
+    setSchedules(current => current.filter(s => s.id !== sid));
     try {
       await axios.delete(`${API}/schedules/${sid}`, getAuthConfig());
       flash("Schedule removed");
-      fetchAll();
-    } catch (err) { flash("Failed to remove", true); }
+    } catch (err) {
+      setSchedules(prev); // restore on failure
+      flash("Failed to remove", true);
+    }
   };
 
   // ── Bulk add ──────────────────────────────────────────────────────────────
