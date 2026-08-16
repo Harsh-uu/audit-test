@@ -423,7 +423,15 @@ class ResetPasswordRequest(BaseModel):
 @router.post("/forgot-password")
 async def forgot_password(data: ForgotPasswordRequest, request: Request):
     email = data.email.lower()
-    ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown").split(",")[0].strip()
+    # H2: Prefer X-Real-IP (set by nginx/k8s ingress to the verified client IP).
+    # Fall back to the rightmost X-Forwarded-For hop (added by the last trusted proxy,
+    # not client-controlled) rather than the leftmost (which the client can forge).
+    xff = request.headers.get("X-Forwarded-For", "")
+    ip = (
+        request.headers.get("X-Real-IP")
+        or (xff.split(",")[-1].strip() if xff else None)
+        or (request.client.host if request.client else "unknown")
+    )
 
     async with database.with_admin() as conn:
         # Rate limit: 5 attempts per IP per 15 minutes

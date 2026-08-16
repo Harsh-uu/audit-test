@@ -69,12 +69,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+
+# H3: Restrict CORS to the specific methods and headers the API actually uses.
+# Wildcards increase the attack surface unnecessarily. Guard against accidental
+# misconfiguration that sets CORS_ORIGINS to "*" (would allow any origin with credentials).
+if "*" in cors_origins:
+    logger.critical(
+        "SECURITY: CORS_ORIGINS contains '*' — this is unsafe with allow_credentials=True. "
+        "Set an explicit allowlist of trusted origins."
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 api_router = APIRouter(prefix="/api")
