@@ -54,7 +54,7 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 - **Care Certificate Evidence PDF** — staff-picker export of evidenced outcomes across all signed-off meetings
 
 ### Admin & Organisation
-- Multi-tenant: each organisation is fully isolated by `org_id`
+- Multi-tenant: each organisation is fully isolated by `org_id` with PostgreSQL Row Level Security (RLS)
 - Org-level custom branding (logo + brand colour applied to the sidebar)
 - Organisation Structure page with drag-and-drop team management
 - Supervision template — admin configures meeting steps shown as a checklist during recording
@@ -71,14 +71,15 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 
 | Layer | Technology |
 |---|---|
-| Frontend | React (JavaScript), Tailwind CSS, Shadcn UI, Lucide React |
-| Backend | FastAPI (Python 3.11), Motor (async MongoDB driver) |
-| Database | MongoDB |
+| Frontend | React (JavaScript), Vite 5, Tailwind CSS, Shadcn UI, Lucide React |
+| Backend | FastAPI (Python 3.11), asyncpg |
+| Database | PostgreSQL via **Supabase** (with Row Level Security on all tables) |
 | Transcription | AssemblyAI (speaker diarisation) |
 | AI Analysis | OpenAI o4-mini (compliance mapping) / GPT-4o (speaker ID, diarisation) |
 | Email | Resend |
-| Storage | Object storage (audio files, uploaded documents) |
-| Auth | JWT (Bearer token + httpOnly refresh cookie) |
+| Storage | Supabase Storage (audio files, uploaded documents) |
+| Auth | JWT Bearer tokens (access + refresh), Email OTP 2FA |
+| Logging | Grafana Cloud Loki (GB South — EU data residency) |
 
 ---
 
@@ -87,10 +88,13 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 ```
 /
 ├── backend/
-│   ├── server.py              # FastAPI app entry point, CORS, startup
-│   ├── deps.py                # get_db(), get_current_user(), require_roles()
+│   ├── server.py              # FastAPI app entry point, CORS, security headers, startup
+│   ├── deps.py                # get_current_user(), role guards (access token type enforced)
+│   ├── database.py            # asyncpg pool, with_admin() / with_org() context managers
+│   ├── init_db.py             # Schema creation and idempotent migrations
+│   ├── loki_logging.py        # Non-blocking Grafana Loki log handler
 │   ├── routers/
-│   │   ├── auth.py            # Login, register, logout, invite flow, password change
+│   │   ├── auth.py            # Login, register, logout, invite flow, 2FA, password change
 │   │   ├── meetings.py        # Meeting CRUD, attendees
 │   │   ├── recording.py       # Start/pause/resume/stop recording events
 │   │   ├── processing.py      # Audio upload, transcription, AI analysis (background)
@@ -102,10 +106,14 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 │   │   ├── doc_uploads.py     # Supervision document import
 │   │   └── super_admin.py     # Super admin org/user management
 │   └── utils/
-│       ├── ai.py              # AssemblyAI + OpenAI integration
-│       ├── seed.py            # CQC + Care Certificate standards seed data
+│       ├── ai.py              # AssemblyAI + OpenAI integration, prompt injection guards
+│       ├── seed.py            # CQC + Care Certificate + SSSC + CIW standards seed data
 │       ├── anonymise.py       # Transcript anonymisation
-│       └── redaction.py       # PII redaction helpers
+│       ├── redaction.py       # PII redaction helpers
+│       ├── file_security.py   # Upload validation and sanitisation
+│       └── storage.py         # Supabase Storage integration
+│
+├── supabase_rls_policy.sql    # Row Level Security policies for all 25 tables
 │
 └── frontend/src/
     ├── App.js                 # Routes with ProtectedRoute
@@ -140,7 +148,7 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 |---|---|
 | `super_admin` | Manage all organisations and users (separate dashboard) |
 | `admin` | Full access within their org — users, standards, branding, exports |
-| `manager` | Create meetings, sign off, view all meetings, upload standards docs |
+| `manager` | Create meetings, sign off, view all meetings, upload standards docs, manage risks |
 | `attendee` | Record meetings, review assigned meetings |
 | `shared_reviewer` | View signed-off meetings, add comments |
 
@@ -151,24 +159,33 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 ### Backend (`backend/.env`)
 
 ```env
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=supervision2
+# Database (Supabase PostgreSQL)
+MONGO_URL=postgresql://postgres:[password]@[host]:5432/postgres
+DB_NAME=postgres
 
-JWT_SECRET=your-secret-key
-CORS_ORIGINS=http://localhost:3000
+# Auth
+JWT_SECRET=your-32-char-minimum-random-secret
+CORS_ORIGINS=https://yourdomain.com
 
+# Seed accounts
 ADMIN_EMAIL=admin@yourorg.com
 ADMIN_PASSWORD=YourAdminPassword1!
-
 SUPER_ADMIN_EMAIL=superadmin@yourdomain.com
-SUPER_ADMIN_PASSWORD=SuperAdminPassword1!
+SUPER_ADMIN_PASSWORD=YourSuperAdminPassword1!
 
+# AI & Transcription
 EMERGENT_LLM_KEY=your-emergent-key        # OpenAI GPT-4o + o4-mini
 ASSEMBLYAI_API_KEY=your-assemblyai-key    # Transcription + diarisation
 
-RESEND_API_KEY=your-resend-key            # Email (invites, report sharing)
+# Email
+RESEND_API_KEY=your-resend-key
 SENDER_EMAIL=noreply@yourdomain.com
 FRONTEND_URL=https://yourdomain.com
+
+# Logging (Grafana Cloud Loki — EU region)
+LOKI_URL=https://logs-prod-035.grafana.net
+LOKI_USER=your-loki-tenant-id
+LOKI_TOKEN=your-loki-write-token
 ```
 
 ### Frontend (`frontend/.env`)
@@ -184,7 +201,7 @@ REACT_APP_BACKEND_URL=https://yourdomain.com
 ### Prerequisites
 - Node.js 18+
 - Python 3.11+
-- MongoDB (local or Atlas)
+- Supabase project (PostgreSQL) — [supabase.com](https://supabase.com)
 - API keys for: AssemblyAI, OpenAI (or Emergent LLM Key), Resend
 
 ### Backend
@@ -195,14 +212,20 @@ pip install -r requirements.txt
 uvicorn server:app --reload --port 8001
 ```
 
-The admin account and all CQC/Care Certificate standards are seeded automatically on first startup.
+The schema, admin account, and all CQC/Care Certificate standards are created and seeded automatically on first startup.
+
+After first run, apply Row Level Security policies in Supabase SQL Editor:
+
+```bash
+# Copy contents of supabase_rls_policy.sql into Supabase Dashboard → SQL Editor
+```
 
 ### Frontend
 
 ```bash
 cd frontend
 yarn install
-yarn start
+yarn dev
 ```
 
 ---
@@ -211,9 +234,11 @@ yarn start
 
 | Service | Purpose | Get Key |
 |---|---|---|
+| Supabase | PostgreSQL database + file storage | [supabase.com](https://supabase.com) |
 | AssemblyAI | Audio transcription + speaker diarisation | [assemblyai.com](https://www.assemblyai.com) |
 | OpenAI (GPT-4o / o4-mini) | Compliance mapping, PII scan, speaker ID | [platform.openai.com](https://platform.openai.com) |
 | Resend | Email invites and report sharing | [resend.com](https://resend.com) |
+| Grafana Cloud | Log management (EU — GB South region) | [grafana.com](https://grafana.com/products/cloud/) |
 
 ---
 
@@ -228,20 +253,29 @@ All user passwords must meet:
 
 ---
 
-## Security Notes
+## Security
 
-- All meeting and user queries are scoped by `org_id` — cross-tenant access returns 404
-- `POST /api/auth/register` always assigns `role=attendee`; elevated roles require admin action
-- Deactivated users are rejected on every authenticated request (not just at login)
-- Audio files are automatically deleted after a 5-minute grace period post sign-off (GDPR)
-- PII Review Gate runs before any report is viewable; original and redacted transcripts stored separately
-- Auth cookies set to `Secure` + `HttpOnly`
+- **Row Level Security** — all 25 PostgreSQL tables have RLS enabled; org-scoped tables enforce `org_id` isolation at the database layer
+- **JWT token types** — `type=access` strictly enforced on all guarded endpoints; `mfa_pending` and `refresh` tokens rejected
+- **Role hierarchy** — managers cannot modify admin accounts; admins cannot modify super_admin accounts
+- **Security headers** — `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Strict-Transport-Security` (2yr + preload via Cloudflare)
+- **No cookies** — JWT stored in `localStorage`, sent as `Authorization: Bearer` header; CSRF not applicable
+- **Parameterised queries** — all SQL uses asyncpg `$N` bound parameters; no string interpolation of user input
+- **Prompt injection guards** — XML delimiters around all untrusted input passed to LLMs
+- **PII redaction** — AI + regex scan gates every report before any user can view it
+- **Audit trail** — every recording event, edit, sign-off, and comment logged with timestamp and user
+- **Audio deletion** — files automatically deleted after sign-off grace period (GDPR)
+- **Startup validation** — weak `JWT_SECRET` and default `SUPER_ADMIN_PASSWORD` both cause CRITICAL log warnings at boot
 
 ---
 
 ## Deployment
 
-The app is deployed at **[1two.one](https://1two.one)** via Cloudflare with a FastAPI backend on port 8001 and a React frontend on port 3000.
+The app is deployed at **[1two.one](https://1two.one)** via Cloudflare (GB South data residency) with:
+- FastAPI backend on port 8001
+- React (Vite 5) frontend on port 3000
+- PostgreSQL database on Supabase (EU region)
+- Logs shipped to Grafana Cloud Loki (GB South)
 
 All heavy AI operations (compliance mapping, document extraction) use FastAPI `BackgroundTasks` to avoid Cloudflare's 100-second gateway timeout.
 
