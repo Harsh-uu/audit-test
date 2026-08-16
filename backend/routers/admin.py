@@ -122,24 +122,40 @@ async def create_user(data: CreateUserRequest, current_user=Depends(get_current_
 async def update_user(user_id: str, data: UpdateUserRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ("admin", "manager"):
         raise HTTPException(403, "Admin/Manager only")
+    org_id = current_user.get("org_id", "")
+
+    # SEC-003: Fetch target user's role before applying any changes
+    async with database.with_admin() as conn:
+        target = await conn.fetchrow("SELECT id, role FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+
+    target_role = target["role"] or ""
+
+    # Managers cannot edit admin or super_admin users at all
+    if current_user["role"] == "manager" and target_role in ("admin", "super_admin"):
+        raise HTTPException(403, "Managers cannot modify admin accounts")
+
+    # Admins cannot modify super_admin accounts
+    if current_user["role"] == "admin" and target_role == "super_admin":
+        raise HTTPException(403, "Cannot modify a super admin account")
+
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if not update_data:
         raise HTTPException(400, "No update data provided")
     if "email" in update_data:
         update_data["email"] = update_data["email"].lower().strip()
-    # Managers cannot promote users to admin or change mfa_enabled for admins
+    # Managers cannot promote/demote roles or change email
     if current_user["role"] == "manager":
         update_data.pop("role", None)
+        update_data.pop("email", None)   # SEC-003: prevent email hijack via manager
+
     set_parts = [f"{k}=${i+2}" for i, k in enumerate(update_data.keys())]
-    org_id = current_user.get("org_id", "")
     async with database.with_admin() as conn:
         if "email" in update_data:
             clash = await conn.fetchrow("SELECT id FROM users WHERE email = $1 AND id <> $2", update_data["email"], user_id)
             if clash:
                 raise HTTPException(400, "Email address already in use")
-        u = await conn.fetchrow("SELECT id FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
-        if not u:
-            raise HTTPException(404, "User not found")
         await conn.execute(f"UPDATE users SET {', '.join(set_parts)} WHERE id=$1", user_id, *list(update_data.values()))
     return {"message": "User updated"}
 

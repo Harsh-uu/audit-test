@@ -63,8 +63,33 @@ async def health():
     return {"status": "ok", "service": "Supervision 2.0"}
 
 
+_KNOWN_WEAK_SECRETS = {
+    "secret", "your-secret", "changeme", "jwt_secret", "mysecret",
+    "dev_secret", "supersecret", "jwttoken", "example", "test",
+}
+
+
+def _validate_startup_secrets():
+    """SEC-005: Fail fast or warn loudly on weak/missing secrets."""
+    jwt_secret = os.environ.get("JWT_SECRET", "")
+    if not jwt_secret:
+        raise RuntimeError(
+            "CRITICAL SECURITY: JWT_SECRET is not set. "
+            "Generate a strong secret (e.g. openssl rand -hex 32) and set it "
+            "in the JWT_SECRET environment variable before starting."
+        )
+    if len(jwt_secret) < 32 or jwt_secret.lower() in _KNOWN_WEAK_SECRETS:
+        logger.critical(
+            "SECURITY WARNING: JWT_SECRET is weak (less than 32 characters or a known default). "
+            "Rotate it immediately: generate a new value with `openssl rand -hex 32` "
+            "and update JWT_SECRET in your production .env file."
+        )
+
+
 @app.on_event("startup")
 async def startup():
+    _validate_startup_secrets()
+
     pool = await database.create_pool()
     app.state.pool = pool
     logger.info("PostgreSQL pool ready")

@@ -2705,11 +2705,26 @@ async def seed_northern_ireland_standards():
         )
 
 
+_KNOWN_WEAK_PASSWORDS = {
+    "SuperAdmin123!", "admin", "password", "admin123", "changeme",
+    "password123", "letmein", "welcome1", "supervisor", "supervisor1",
+}
+
 async def seed_super_admin():
-    """Create the super admin account (idempotent)."""
+    """Create the super admin account (idempotent).
+    SEC-002: Warns loudly if the default/weak password is detected.
+    """
     from routers.auth import hash_password
     email = os.environ.get("SUPER_ADMIN_EMAIL", "superadmin@1two.one")
     password = os.environ.get("SUPER_ADMIN_PASSWORD", "SuperAdmin123!")
+
+    # SEC-002: Reject weak/default passwords at startup
+    if password in _KNOWN_WEAK_PASSWORDS or len(password) < 12:
+        logger.critical(
+            "SECURITY WARNING: SUPER_ADMIN_PASSWORD is a known-weak or default value. "
+            "Set a strong password (≥12 characters, mixed case, numbers and symbols) "
+            "in the SUPER_ADMIN_PASSWORD environment variable and restart the service."
+        )
 
     async with database.with_admin() as conn:
         existing = await conn.fetchrow("SELECT id, role FROM users WHERE email = $1", email)

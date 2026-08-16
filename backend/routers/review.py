@@ -426,6 +426,9 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
 
 @router.patch("/{meeting_id}/risks/{risk_id}")
 async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, current_user=Depends(get_current_user)):
+    # SEC-004: Attendees must not resolve risks or add notes
+    if current_user.get("role") not in ("manager", "admin"):
+        raise HTTPException(status_code=403, detail="Only managers can update risks")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         m_row = await conn.fetchrow("SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
@@ -474,6 +477,9 @@ async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, cu
 
 @router.post("/{meeting_id}/risks/{risk_id}/suggestions")
 async def get_risk_suggestions(meeting_id: str, risk_id: str, current_user=Depends(get_current_user)):
+    # SEC-004: Prevent attendees from triggering paid AI calls
+    if current_user.get("role") not in ("manager", "admin"):
+        raise HTTPException(status_code=403, detail="Only managers can request risk suggestions")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         m_row = await conn.fetchrow("SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)

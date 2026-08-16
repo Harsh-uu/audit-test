@@ -27,6 +27,10 @@ async def get_current_user(
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # SEC-001: Reject non-access tokens (mfa_pending, refresh) on guarded endpoints
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Invalid token type")
+
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
