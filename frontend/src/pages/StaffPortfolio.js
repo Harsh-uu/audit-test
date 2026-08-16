@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
 import Layout from "@/components/Layout";
 import {
   ArrowLeft, Shield, Award, FileText, Download, Loader2,
@@ -334,10 +335,49 @@ export default function StaffPortfolio() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-full py-24">
-          <div className="flex items-center gap-3 text-gray-500">
-            <div className="w-5 h-5 border-2 border-[#1E3A8A] border-t-transparent rounded-full spin"></div>
-            <span className="text-sm">Loading portfolio…</span>
+        <div className="flex flex-col h-full">
+          {/* Top bar skeleton — avatar + name/role + export button */}
+          <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-4 w-4 rounded" />
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-9 h-9 rounded-full flex-shrink-0" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </div>
+            </div>
+            <Skeleton className="h-9 w-44 rounded-md" />
+          </div>
+          {/* Stats bar skeleton — 5 number+label pairs */}
+          <div className="bg-white border-b border-gray-100 px-6 py-3">
+            <div className="flex items-center gap-6">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex flex-col gap-1">
+                  <Skeleton className="h-6 w-8" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Two-column skeleton — tab sidebar + evidence rows */}
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
+            <div className="lg:col-span-3 border-r border-gray-100 p-4 space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-9 w-full rounded-lg" />
+              ))}
+            </div>
+            <div className="lg:col-span-9 p-6 space-y-3">
+              <Skeleton className="h-5 w-40" />
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="border border-gray-100 rounded-lg p-3 flex items-center gap-4">
+                  <Skeleton className="h-4 w-16 rounded-full" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-4 w-12" />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </Layout>

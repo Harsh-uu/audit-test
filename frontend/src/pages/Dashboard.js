@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
 import Layout from "@/components/Layout";
 import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, ChevronDown, Loader2, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles, Archive, ClipboardList } from "lucide-react";
 
@@ -474,11 +475,22 @@ export default function Dashboard() {
 
         {/* Meetings list */}
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-gray-400">
-            <div className="flex items-center gap-3">
-              <div className="w-5 h-5 border-2 border-[#1E3A8A] border-t-transparent rounded-full spin"></div>
-              <span className="text-sm">Loading meetings...</span>
-            </div>
+          <div className="space-y-2" aria-busy="true" aria-label="Loading meetings">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-5 w-20 rounded-full flex-shrink-0" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filteredMeetings.length === 0 ? (
           <div className="text-center py-16 bg-white border border-gray-200 rounded-lg shadow-sm" data-testid="empty-meetings">

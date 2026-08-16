@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
 import Layout from "@/components/Layout";
 import { Shield, Award, BookOpen, Users, CheckCircle, AlertCircle, X } from "lucide-react";
 import { StandardsTab } from "@/components/admin/StandardsTab";
@@ -185,7 +186,34 @@ export default function AdminLibrary() {
     } catch (err) { console.error("Delete document failed:", err.message); setError("Failed to delete document."); }
   };
 
-  if (loading) return <Layout><div className="p-8 text-center text-gray-400 text-sm">Loading…</div></Layout>;
+  if (loading) return (
+    <Layout>
+      <div className="p-6 md:p-8">
+        {/* Page header skeleton */}
+        <div className="mb-6 space-y-2">
+          <Skeleton className="h-7 w-36" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        {/* Tab bar skeleton */}
+        <div className="border-b border-gray-200 mb-6 flex gap-6 pb-0">
+          {[80, 104, 128, 56].map((w, i) => (
+            <Skeleton key={i} className="h-4 mb-3 rounded" style={{ width: w }} />
+          ))}
+        </div>
+        {/* Table rows skeleton */}
+        <div className="space-y-2">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 py-3 border-b border-gray-100">
+              <Skeleton className="h-4 w-20 flex-shrink-0" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-5 w-16 rounded-full flex-shrink-0" />
+              <Skeleton className="h-6 w-6 rounded flex-shrink-0" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </Layout>
+  );
 
   return (
     <Layout>
