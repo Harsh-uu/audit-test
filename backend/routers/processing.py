@@ -509,6 +509,17 @@ async def diarize_meeting_transcript(
     background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
 ):
+    # Rate limit: 10 diarize calls per org per hour
+    from utils.rate_limit import check_rate_limit
+    import database
+    async with database.with_admin() as rl_conn:
+        await check_rate_limit(
+            rl_conn,
+            identifier=f"ai_diarize:{current_user.get('org_id','')}",
+            max_attempts=10,
+            window_minutes=60,
+            error_detail="Too many re-diarize requests. Please wait before trying again.",
+        )
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
@@ -575,6 +586,17 @@ async def retranscribe_meeting(
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Manager or admin required")
 
+    # Rate limit: 10 retranscribe calls per org per hour
+    from utils.rate_limit import check_rate_limit
+    import database
+    async with database.with_admin() as rl_conn:
+        await check_rate_limit(
+            rl_conn,
+            identifier=f"ai_retranscribe:{current_user.get('org_id','')}",
+            max_attempts=10,
+            window_minutes=60,
+            error_detail="Too many retranscription requests. Please wait before trying again.",
+        )
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)

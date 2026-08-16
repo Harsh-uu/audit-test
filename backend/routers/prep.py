@@ -478,6 +478,17 @@ async def generate_prep(
     if current_user["role"] not in ("admin", "manager"):
         raise HTTPException(status_code=403, detail="Admin/Manager only")
 
+    # Rate limit: 20 prep-generate calls per user per hour
+    from utils.rate_limit import check_rate_limit
+    async with database.with_admin() as rl_conn:
+        await check_rate_limit(
+            rl_conn,
+            identifier=f"ai_prep:{current_user['id']}",
+            max_attempts=20,
+            window_minutes=60,
+            error_detail="Too many prep generation requests. Please wait before trying again.",
+        )
+
     meeting = await _get_meeting_guarded(meeting_id, current_user)
     org_id = meeting.get("org_id", "")
 

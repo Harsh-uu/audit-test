@@ -46,10 +46,24 @@ else:
 app = FastAPI(title="Supervision 2.0 API")
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    # CSP built once at class level — same value for every response
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https://orsxhtlpybxoexdjrbnx.supabase.co; "
+        "connect-src 'self' https:; "
+        "font-src 'self' data:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
+    )
+
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = self._CSP
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
