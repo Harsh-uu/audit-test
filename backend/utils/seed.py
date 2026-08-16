@@ -180,12 +180,20 @@ async def _insert_standards_entries(conn, entries: list, jurisdiction: str):
 
 
 async def seed_standards():
-    """Insert CQC regulations, quality statements, and Care Certificate standards (idempotent, jurisdiction=england)."""
+    """Insert CQC regulations, quality statements, and Care Certificate standards (idempotent, jurisdiction=england).
+
+    Checks each type independently so a partial previous seed (e.g. care_cert seeded but
+    CQC missing) is repaired automatically on the next startup without duplicating existing rows.
+    """
     async with database.with_admin() as conn:
-        count = await conn.fetchval(
-            "SELECT COUNT(*) FROM standards_entries WHERE is_system=TRUE AND jurisdiction='england'"
+        cqc_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries WHERE type='cqc' AND is_system=TRUE"
         )
-        if count and count > 0:
+        care_cert_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries WHERE type='care_cert' AND is_system=TRUE"
+        )
+
+        if cqc_count and cqc_count > 0:
             # One-time fix: check if JSONB fields were double-encoded (sub_outcomes stored as string)
             sample = await conn.fetchrow(
                 "SELECT sub_outcomes FROM standards_entries WHERE is_system=TRUE AND jurisdiction='england' LIMIT 1"
@@ -205,6 +213,7 @@ async def seed_standards():
                     )
                 logger.info("JSONB repair complete for standards_entries")
 
+        if care_cert_count and care_cert_count > 0:
             # One-time fix: backfill sub_outcomes for care_cert standards that have an empty list
             cc_empty = await conn.fetchval(
                 "SELECT COUNT(*) FROM standards_entries WHERE type='care_cert' AND is_system=TRUE AND sub_outcomes='[]'::jsonb"
@@ -218,57 +227,67 @@ async def seed_standards():
                         sub_outcomes, ref,
                     )
                 logger.info("Care Certificate sub_outcomes backfill complete")
-            else:
-                logger.info(f"England standards already seeded ({count} entries) — skipping")
+
+        # If both types are present, nothing more to do
+        if (cqc_count and cqc_count > 0) and (care_cert_count and care_cert_count > 0):
+            logger.info(f"England standards already seeded (cqc={cqc_count}, care_cert={care_cert_count}) — skipping")
             return
 
+        # Insert whichever types are missing
         now = datetime.now(timezone.utc).isoformat()
         entries = []
-        for reg in CQC_REGULATIONS:
-            entries.append({
-                "id": str(uuid.uuid4()),
-                "type": "cqc",
-                "reference": reg["reference"],
-                "name": reg["name"],
-                "description": reg["description"],
-                "keywords": reg["keywords"],
-                "sub_outcomes": [],
-                "key_questions": reg.get("key_questions", []),
-                "quality_statement": False,
-                "source": "CQC Guidance - Regulations for service providers and managers",
-                "created_at": now,
-            })
-        for qs in CQC_QUALITY_STATEMENTS:
-            entries.append({
-                "id": str(uuid.uuid4()),
-                "type": "cqc",
-                "reference": qs["reference"],
-                "name": qs["name"],
-                "description": qs["description"],
-                "keywords": qs["keywords"],
-                "sub_outcomes": [],
-                "key_questions": qs.get("key_questions", []),
-                "quality_statement": True,
-                "source": "CQC Single Assessment Framework - Quality Statements",
-                "created_at": now,
-            })
-        for std in CARE_CERT_STANDARDS:
-            entries.append({
-                "id": str(uuid.uuid4()),
-                "type": "care_cert",
-                "reference": std["reference"],
-                "name": std["name"],
-                "description": std["description"],
-                "keywords": std["keywords"],
-                "sub_outcomes": std.get("sub_outcomes", []),
-                "key_questions": [],
-                "quality_statement": False,
-                "source": "Care Certificate Standards 2025 - Skills for Care",
-                "created_at": now,
-            })
 
-        await _insert_standards_entries(conn, entries, "england")
-        logger.info(f"Seeded {len(entries)} England standards entries")
+        if not cqc_count or cqc_count == 0:
+            logger.info("CQC standards missing — seeding now…")
+            for reg in CQC_REGULATIONS:
+                entries.append({
+                    "id": str(uuid.uuid4()),
+                    "type": "cqc",
+                    "reference": reg["reference"],
+                    "name": reg["name"],
+                    "description": reg["description"],
+                    "keywords": reg["keywords"],
+                    "sub_outcomes": [],
+                    "key_questions": reg.get("key_questions", []),
+                    "quality_statement": False,
+                    "source": "CQC Guidance - Regulations for service providers and managers",
+                    "created_at": now,
+                })
+            for qs in CQC_QUALITY_STATEMENTS:
+                entries.append({
+                    "id": str(uuid.uuid4()),
+                    "type": "cqc",
+                    "reference": qs["reference"],
+                    "name": qs["name"],
+                    "description": qs["description"],
+                    "keywords": qs["keywords"],
+                    "sub_outcomes": [],
+                    "key_questions": qs.get("key_questions", []),
+                    "quality_statement": True,
+                    "source": "CQC Single Assessment Framework - Quality Statements",
+                    "created_at": now,
+                })
+
+        if not care_cert_count or care_cert_count == 0:
+            logger.info("Care Certificate standards missing — seeding now…")
+            for std in CARE_CERT_STANDARDS:
+                entries.append({
+                    "id": str(uuid.uuid4()),
+                    "type": "care_cert",
+                    "reference": std["reference"],
+                    "name": std["name"],
+                    "description": std["description"],
+                    "keywords": std["keywords"],
+                    "sub_outcomes": std.get("sub_outcomes", []),
+                    "key_questions": [],
+                    "quality_statement": False,
+                    "source": "Care Certificate Standards 2025 - Skills for Care",
+                    "created_at": now,
+                })
+
+        if entries:
+            await _insert_standards_entries(conn, entries, "england")
+            logger.info(f"Seeded {len(entries)} England standards entries (cqc={cqc_count or 0}, care_cert={care_cert_count or 0} were present before)")
 
 
 # ── CIW (Care Inspectorate Wales) — RSI(SPRI)(W)R 2017 Numbered Regulations ──
