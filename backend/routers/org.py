@@ -14,6 +14,26 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+# ── Manager scope enforcement helpers ─────────────────────────────────────────
+
+def _assert_setting_scope(scope: dict, setting_id: str) -> None:
+    """Raise 403 if the manager's scope does not cover this setting."""
+    if scope["level"] == "org":
+        return
+    if scope.get("setting_id") != setting_id:
+        raise HTTPException(403, "Outside your management scope")
+
+
+def _assert_team_scope(scope: dict, team_setting_id: str, team_id: str) -> None:
+    """Raise 403 if the manager's scope does not cover this team."""
+    if scope["level"] == "org":
+        return
+    if scope.get("setting_id") != team_setting_id:
+        raise HTTPException(403, "Outside your management scope")
+    if scope["level"] == "team" and scope.get("team_id") != team_id:
+        raise HTTPException(403, "Outside your management scope")
+
+
 def _jdict(raw) -> dict:
     """Safely parse a JSONB column that asyncpg may return as a string."""
     if not raw:
@@ -160,6 +180,9 @@ async def list_settings(current_user=Depends(get_current_user)):
 async def create_setting(data: SettingCreate, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
+    scope = get_manager_scope(current_user)
+    if scope["level"] != "org":
+        raise HTTPException(403, "Only org-level managers can create new branches")
     org_id = current_user.get("org_id", "")
     now = datetime.now(timezone.utc).isoformat()
     setting_id = str(uuid.uuid4())
@@ -180,6 +203,8 @@ async def create_setting(data: SettingCreate, current_user=Depends(get_current_u
 async def update_setting(setting_id: str, data: SettingCreate, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
+    scope = get_manager_scope(current_user)
+    _assert_setting_scope(scope, setting_id)
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         existing = await conn.fetchrow("SELECT * FROM org_settings WHERE id=$1", setting_id)
@@ -218,6 +243,10 @@ async def delete_setting(setting_id: str, current_user=Depends(get_current_user)
 async def create_team(setting_id: str, data: TeamCreate, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
+    scope = get_manager_scope(current_user)
+    if scope["level"] == "team":
+        raise HTTPException(403, "Team-scoped managers cannot create new teams")
+    _assert_setting_scope(scope, setting_id)
     org_id = current_user.get("org_id", "")
     team_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -239,10 +268,12 @@ async def update_team(team_id: str, data: TeamCreate, current_user=Depends(get_c
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
         existing = await conn.fetchrow("SELECT * FROM teams WHERE id=$1", team_id)
         if not existing:
             raise HTTPException(404, "Team not found")
+        _assert_team_scope(scope, dict(existing).get("setting_id"), team_id)
         old_sup = dict(existing).get("supervisor_user_id")
         if old_sup and old_sup != data.supervisor_user_id:
             await conn.execute("UPDATE users SET team_id=NULL WHERE id=$1 AND team_id=$2", old_sup, team_id)
@@ -258,7 +289,13 @@ async def delete_team(team_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
+        if scope["level"] != "org":
+            team_row = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", team_id)
+            if not team_row:
+                raise HTTPException(404, "Team not found")
+            _assert_team_scope(scope, team_row["setting_id"], team_id)
         await conn.execute("UPDATE users SET team_id=NULL WHERE team_id=$1", team_id)
         result = await conn.execute("DELETE FROM teams WHERE id=$1", team_id)
     if result == "DELETE 0":
@@ -271,10 +308,12 @@ async def add_member(team_id: str, data: MemberAssign, current_user=Depends(get_
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
         team = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", team_id)
         if not team:
             raise HTTPException(404, "Team not found")
+        _assert_team_scope(scope, team["setting_id"], team_id)
         user = await conn.fetchrow("SELECT id FROM users WHERE id=$1 AND org_id=$2", data.user_id, org_id)
         if not user:
             raise HTTPException(404, "User not found")
@@ -287,7 +326,12 @@ async def remove_member(team_id: str, user_id: str, current_user=Depends(get_cur
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
+        if scope["level"] != "org":
+            team_row = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", team_id)
+            if team_row:
+                _assert_team_scope(scope, team_row["setting_id"], team_id)
         await conn.execute("UPDATE users SET team_id=NULL, setting_id=NULL WHERE id=$1 AND team_id=$2", user_id, team_id)
     return {"message": "Member removed"}
 
@@ -297,6 +341,7 @@ async def assign_user_to_team(user_id: str, data: TeamAssignRequest, current_use
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
         user = await conn.fetchrow("SELECT id FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
         if not user:
@@ -305,8 +350,14 @@ async def assign_user_to_team(user_id: str, data: TeamAssignRequest, current_use
             team = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", data.team_id)
             if not team:
                 raise HTTPException(404, "Team not found")
+            _assert_team_scope(scope, team["setting_id"], data.team_id)
             await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", data.team_id, team["setting_id"], user_id)
         else:
+            # Unassign: verify the user being unassigned is within this manager's scope
+            if scope["level"] != "org":
+                target = await conn.fetchrow("SELECT setting_id FROM users WHERE id=$1", user_id)
+                if target and target["setting_id"] and target["setting_id"] != scope.get("setting_id"):
+                    raise HTTPException(403, "Outside your management scope")
             await conn.execute("UPDATE users SET team_id=NULL, setting_id=NULL WHERE id=$1", user_id)
     return {"ok": True}
 

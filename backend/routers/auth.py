@@ -40,6 +40,21 @@ def validate_password_strength(password: str):
         raise HTTPException(status_code=400, detail=f"Password must contain {', '.join(errors)}.")
 
 
+def _to_pwd_ts(user: dict) -> float:
+    """Convert a user's password_changed_at field to a Unix float for JWT embedding."""
+    pc = user.get("password_changed_at")
+    if not pc:
+        return 0.0
+    if isinstance(pc, str):
+        try:
+            return datetime.fromisoformat(pc.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            return 0.0
+    if hasattr(pc, "timestamp"):
+        return pc.timestamp()
+    return 0.0
+
+
 def create_access_token(user_id: str, email: str) -> str:
     payload = {
         "sub": user_id,
@@ -50,11 +65,17 @@ def create_access_token(user_id: str, email: str) -> str:
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
 
 
-def create_refresh_token(user_id: str) -> str:
+def create_refresh_token(user_id: str, pwd_ts: float = 0.0) -> str:
+    """
+    pwd_ts: Unix timestamp of the user's last password change.
+    The refresh endpoint rejects any token where pwd_ts < current password_changed_at,
+    so stolen tokens are cut off immediately after a password reset.
+    """
     payload = {
         "sub": user_id,
         "exp": datetime.now(timezone.utc) + timedelta(days=7),
         "type": "refresh",
+        "pwd_ts": pwd_ts,
     }
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
 
@@ -205,7 +226,7 @@ async def login(data: LoginRequest, request: Request):
         }
 
     access_token = create_access_token(user_id, user["email"])
-    refresh_token = create_refresh_token(user_id)
+    refresh_token = create_refresh_token(user_id, _to_pwd_ts(user))
     return {
         "id": user_id, "email": user["email"], "name": user["name"], "role": user["role"],
         "token": access_token, "refresh_token": refresh_token,
@@ -256,7 +277,7 @@ async def verify_mfa(data: VerifyMfaRequest):
         )
 
     access_token = create_access_token(user_id, user["email"])
-    refresh_token = create_refresh_token(user_id)
+    refresh_token = create_refresh_token(user_id, _to_pwd_ts(user))
     return {
         "id": user_id, "email": user["email"], "name": user["name"], "role": user["role"],
         "token": access_token, "refresh_token": refresh_token,
@@ -362,15 +383,29 @@ async def refresh_token(request: Request):
         payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Invalid token type")
+
+        # SEC-001: reject tokens issued before the last password change.
+        # Tokens without the pwd_ts claim are from before this fix — force re-login.
+        token_pwd_ts = payload.get("pwd_ts")
+        if token_pwd_ts is None:
+            raise HTTPException(status_code=401, detail="Session expired — please sign in again.")
+
         async with database.with_admin() as conn:
-            user = await conn.fetchrow("SELECT id, email, is_active FROM users WHERE id = $1", payload["sub"])
+            user = await conn.fetchrow(
+                "SELECT id, email, is_active, password_changed_at FROM users WHERE id = $1", payload["sub"]
+            )
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         if not user["is_active"]:
             raise HTTPException(status_code=401, detail="Account is deactivated")
+
+        db_pwd_ts = _to_pwd_ts(dict(user))
+        if token_pwd_ts < db_pwd_ts:
+            raise HTTPException(status_code=401, detail="Password changed — please sign in again.")
+
         user_id = user["id"]
         new_access = create_access_token(user_id, user["email"])
-        new_refresh = create_refresh_token(user_id)
+        new_refresh = create_refresh_token(user_id, db_pwd_ts)
         return {"access_token": new_access, "refresh_token": new_refresh, "message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
@@ -543,15 +578,15 @@ async def accept_invite(data: AcceptInviteRequest):
         name = data.name.strip() or user["name"]
         await conn.execute(
             """UPDATE users SET password_hash=$1, name=$2, org_id=$3, is_active=TRUE,
-               must_change_password=FALSE WHERE id=$4""",
-            hash_password(data.password), name, invite["org_id"], invite["user_id"],
+               must_change_password=FALSE, password_changed_at=$5 WHERE id=$4""",
+            hash_password(data.password), name, invite["org_id"], invite["user_id"], now,
         )
         await conn.execute("UPDATE invitations SET used_at=$1 WHERE token=$2", now, data.token)
 
     user_id = invite["user_id"]
     email = user["email"]
     access_token = create_access_token(user_id, email)
-    refresh_token_val = create_refresh_token(user_id)
+    refresh_token_val = create_refresh_token(user_id, 0.0)
     return {
         "id": user_id,
         "email": email,

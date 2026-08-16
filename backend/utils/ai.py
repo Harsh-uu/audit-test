@@ -458,7 +458,8 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
     # --- Content safety & hallucination checks ---
     warnings = _check_transcript_safety(plain_text, transcript)
     if warnings:
-        logger.warning(f"Transcript safety flags for this recording: {warnings}")
+        # Log count only — transcript content must not leave the app boundary (UK GDPR).
+        logger.warning(f"Transcript quality check raised {len(warnings)} flag(s) — user review prompted before submission")
 
     if transcript.utterances:
         unique_speakers = {u.speaker for u in transcript.utterances}
