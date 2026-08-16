@@ -1013,43 +1013,42 @@ async def rescan_evidence(meeting_id: str, data: RescanRequest, background_tasks
 async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text: str,
                                   user_id: str, user_name: str, org_id: str, custom_prompt: str = None):
     from utils.ai import analyze_meeting as _analyze_meeting
+    from utils import standards_cache as sc
     try:
-        async with database.with_admin() as conn:
-            org_row = await conn.fetchrow("SELECT jurisdiction FROM organisations WHERE id=$1", org_id)
+        # Org jurisdiction — from cache, no DB hit if already seen
+        cached_org = sc.get_org_info(org_id)
+        if cached_org:
+            org_jurisdiction = cached_org["jurisdiction"]
+        else:
+            async with database.with_admin() as conn:
+                org_row = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
             org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
+            sc.set_org_info(org_id, org_jurisdiction, (org_row["service_type"] if org_row else "") or "")
 
-            if org_jurisdiction == "wales":
-                cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='ciw' AND is_active=TRUE AND jurisdiction='wales'",
-                )
-                care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
-                )
-            elif org_jurisdiction == "scotland":
-                cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='ci' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
-                )
-                care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='sssc' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
-                )
-            else:
-                cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
+        # System standards — from in-process cache, zero DB hits
+        if org_jurisdiction == "wales":
+            cqc_rows       = sc.get_system("ciw", "wales")
+            care_cert_rows = sc.get_system("awif", "wales") + sc.get_system("scw", "wales")
+        elif org_jurisdiction == "scotland":
+            cqc_rows       = sc.get_system("ci", "scotland")
+            care_cert_rows = sc.get_system("sssc", "scotland")
+        else:
+            cqc_rows       = sc.get_system("cqc")
+            care_cert_rows = sc.get_system("care_cert")
+
+        # Custom standards — cached per org
+        custom_standards = sc.get_custom_docs(org_id)
+        if custom_standards is None:
+            async with database.with_org(org_id) as conn:
+                custom_rows = await conn.fetch(
+                    "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
                     org_id,
                 )
-                care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
-                    org_id,
-                )
+            custom_standards = [dict(r) for r in custom_rows]
+            sc.set_custom_docs(org_id, custom_standards)
+
         cqc_standards = [_parse_std_row(r) for r in cqc_rows]
         care_cert_standards = [_parse_std_row(r) for r in care_cert_rows]
-
-        async with database.with_org(org_id) as conn:
-            custom_rows = await conn.fetch(
-                "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
-                org_id,
-            )
-        custom_standards = [dict(r) for r in custom_rows]
 
         supervision_template = None
         async with database.with_admin() as conn:

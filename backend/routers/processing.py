@@ -162,56 +162,49 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 transcript_id, now, len(transcript_warnings) > 0, meeting_id,
             )
 
-        # Load standards — filtered by org's jurisdiction
-        async with database.with_admin() as conn:
-            org_row = await conn.fetchrow(
-                "SELECT jurisdiction, service_type FROM organisations WHERE id=$1", meeting_org_id
-            )
+        # Load org jurisdiction — from cache (no DB hit if already seen)
+        from utils import standards_cache as sc
+        cached_org = sc.get_org_info(meeting_org_id)
+        if cached_org:
+            org_jurisdiction = cached_org["jurisdiction"]
+            org_service_type = cached_org["service_type"]
+        else:
+            async with database.with_admin() as conn:
+                org_row = await conn.fetchrow(
+                    "SELECT jurisdiction, service_type FROM organisations WHERE id=$1", meeting_org_id
+                )
             org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
-            org_service_type = (org_row["service_type"] if org_row else None)
+            org_service_type = (org_row["service_type"] if org_row else None) or ""
+            sc.set_org_info(meeting_org_id, org_jurisdiction, org_service_type)
 
-            if org_jurisdiction == "wales":
-                cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='ciw' AND is_active=TRUE AND jurisdiction='wales'",
-                )
-                care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
-                )
-            elif org_jurisdiction == "scotland":
-                cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='ci' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
-                )
-                care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='sssc' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
-                )
-            elif org_jurisdiction == "northern_ireland":
-                rqia_type = "rqia_dom" if org_service_type == "domiciliary" else "rqia_res"
-                cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type=$1 AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY reference",
-                    rqia_type,
-                )
-                care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type IN ('niscc_code','niscc_induction') AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY type, reference",
-                )
-            else:
-                cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
-                    meeting_org_id,
-                )
-                care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE AND (is_system=TRUE OR org_id=$1)",
-                    meeting_org_id,
-                )
+        # Load standards from in-process cache — zero DB hits after first warm
+        if org_jurisdiction == "wales":
+            cqc_rows    = sc.get_system("ciw", "wales")
+            care_cert_rows = sc.get_system("awif", "wales") + sc.get_system("scw", "wales")
+        elif org_jurisdiction == "scotland":
+            cqc_rows    = sc.get_system("ci", "scotland")
+            care_cert_rows = sc.get_system("sssc", "scotland")
+        elif org_jurisdiction == "northern_ireland":
+            rqia_type = "rqia_dom" if org_service_type == "domiciliary" else "rqia_res"
+            cqc_rows    = sc.get_system(rqia_type, "northern_ireland")
+            care_cert_rows = (sc.get_system("niscc_code", "northern_ireland") +
+                              sc.get_system("niscc_induction", "northern_ireland"))
+        else:  # england
+            cqc_rows    = sc.get_system("cqc")
+            care_cert_rows = sc.get_system("care_cert")
         cqc_standards = [_parse_std_row(r) for r in cqc_rows]
         care_cert_standards = [_parse_std_row(r) for r in care_cert_rows]
 
         if meeting_org_id:
-            async with database.with_org(meeting_org_id) as conn:
-                custom_rows = await conn.fetch(
-                    "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
-                    meeting_org_id,
-                )
-            custom_standards = [dict(r) for r in custom_rows]
+            custom_standards = sc.get_custom_docs(meeting_org_id)
+            if custom_standards is None:
+                async with database.with_org(meeting_org_id) as conn:
+                    custom_rows = await conn.fetch(
+                        "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
+                        meeting_org_id,
+                    )
+                custom_standards = [dict(r) for r in custom_rows]
+                sc.set_custom_docs(meeting_org_id, custom_standards)
         else:
             custom_standards = []
 

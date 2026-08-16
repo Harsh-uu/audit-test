@@ -136,6 +136,8 @@ async def update_org(org_id: str, data: UpdateOrgRequest, current_user=Depends(g
     set_clause = ", ".join(f"{k}=${i+2}" for i, k in enumerate(updates.keys()))
     async with database.with_admin() as conn:
         await conn.execute(f"UPDATE organisations SET {set_clause} WHERE id=$1", *([org_id] + list(updates.values())))
+        from utils.standards_cache import invalidate_org
+        invalidate_org(org_id)
     return {"message": "Organisation updated"}
 
 

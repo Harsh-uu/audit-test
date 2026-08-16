@@ -75,6 +75,8 @@ async def update_org_name(data: OrgNameUpdate, current_user=Depends(get_current_
             "UPDATE organisations SET name=$1, updated_at=$2 WHERE id=$3",
             name, datetime.now(timezone.utc).isoformat(), org_id,
         )
+    from utils.standards_cache import invalidate_org
+    invalidate_org(org_id)
     return {"ok": True, "name": name}
 
 

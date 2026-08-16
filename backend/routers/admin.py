@@ -393,6 +393,8 @@ async def update_document(doc_id: str, request: Request, current_user=Depends(ge
     set_parts = [f"{k}=${i+2}" for i, k in enumerate(update.keys())]
     async with database.with_org(org_id) as conn:
         await conn.execute(f"UPDATE standards_documents SET {', '.join(set_parts)} WHERE id=$1", doc_id, *list(update.values()))
+    from utils.standards_cache import invalidate_org
+    invalidate_org(org_id)
     return {"message": "Updated"}
 
 
@@ -403,6 +405,8 @@ async def delete_document(doc_id: str, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         await conn.execute("DELETE FROM standards_documents WHERE id=$1", doc_id)
+        from utils.standards_cache import invalidate_org
+        invalidate_org(org_id)
     return {"message": "Deleted"}
 
 
