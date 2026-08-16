@@ -13,6 +13,7 @@ from deps import get_current_user
 import database
 from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
+from routers.admin import _stats_cache as _admin_stats_cache
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -562,6 +563,7 @@ async def mark_reviewed(meeting_id: str, current_user=Depends(get_current_user))
             "UPDATE meetings SET attendees=$1::jsonb, status=$2, updated_at=$3 WHERE id=$4",
             json.dumps(attendees), new_status, now, meeting_id,
         )
+    _admin_stats_cache.pop(org_id, None)
     return {"message": "Marked as reviewed", "all_reviewed": all_reviewed, "status": new_status}
 
 
@@ -2130,4 +2132,5 @@ async def approve_reopen(meeting_id: str, current_user=Depends(get_current_user)
         )
         await _audit(conn, meeting_id, org_id, "reopen_approved", user_id, current_user.get("name", ""),
                      f"Re-open approved. Report unlocked for editing. Original reason: {reopen_reason}")
+    _admin_stats_cache.pop(org_id, None)
     return {"message": "Re-open approved — report is now unlocked for editing"}

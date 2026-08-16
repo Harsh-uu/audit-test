@@ -4,6 +4,7 @@ import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Grid3x3, TrendingUp, AlertTriangle, ClipboardList, Shield, Award,
   FileText, Users, RefreshCw, ChevronRight, Building2, Check, X, Download,
@@ -1177,11 +1178,32 @@ export default function TeamInsights() {
           {/* Matrix / Themes: require main data */}
           {(tab === "matrix" || tab === "themes") && (
             loading ? (
-              <div className="flex items-center justify-center h-48">
-                <div className="flex items-center gap-3 text-gray-400">
-                  <div className="w-5 h-5 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm">Aggregating team data…</span>
+              <div className="p-6 space-y-4" aria-busy="true" aria-label="Loading team insights">
+                {/* Filter bar shimmer */}
+                <div className="flex items-center gap-3 mb-2">
+                  <Skeleton className="h-8 w-40 rounded-md" />
+                  <Skeleton className="h-8 w-32 rounded-md" />
+                  <Skeleton className="h-8 w-28 rounded-md" />
                 </div>
+                {/* Table header */}
+                <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                  <Skeleton className="h-3 w-28 flex-shrink-0" />
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-3 w-16 flex-1" />
+                  ))}
+                </div>
+                {/* Staff rows */}
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-50">
+                    <div className="flex items-center gap-2 w-28 flex-shrink-0">
+                      <Skeleton className="h-7 w-7 rounded-full flex-shrink-0" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                    {[...Array(5)].map((_, j) => (
+                      <Skeleton key={j} className="h-7 flex-1 rounded-md" />
+                    ))}
+                  </div>
+                ))}
               </div>
             ) : !data ? (
               <div className="text-center py-16 text-gray-400 text-sm">Failed to load insights</div>

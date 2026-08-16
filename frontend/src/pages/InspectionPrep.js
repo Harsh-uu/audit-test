@@ -4,6 +4,7 @@ import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ClipboardCheck, ChevronDown, ChevronRight,
   Loader2, AlertCircle, CheckCircle, TrendingUp, Download, ExternalLink,
@@ -216,8 +217,39 @@ export default function InspectionPrep() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center py-24 text-gray-400">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…
+        <div className="p-6 md:p-8" aria-busy="true" aria-label="Loading inspection prep">
+          {/* Page header skeleton */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-48" />
+              <Skeleton className="h-4 w-72" />
+            </div>
+            <Skeleton className="h-9 w-32 rounded-lg" />
+          </div>
+          {/* Filter pill row skeleton */}
+          <div className="flex items-center gap-2 mb-6">
+            {[80, 56, 72, 100].map((w, i) => (
+              <Skeleton key={i} className="h-8 rounded-full" style={{ width: w }} />
+            ))}
+          </div>
+          {/* Evidence cards skeleton */}
+          <div className="space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-5 w-20 rounded-md" />
+                    <Skeleton className="h-4 w-56" />
+                  </div>
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-6 w-32 rounded-md" />
+                  <Skeleton className="h-6 w-28 rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </Layout>
     );

@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import OrgStructure from "@/pages/OrgStructure";
 import OrgSettings  from "@/pages/OrgSettings";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, Settings, Building2,
   RefreshCw, Search, AlertTriangle, Check,
@@ -101,10 +102,36 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit }) {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center h-48">
-      <div className="flex items-center gap-3 text-gray-400">
-        <div className="w-5 h-5 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
-        <span className="text-sm">Loading staff data…</span>
+    <div className="flex-1 p-6 space-y-4" aria-busy="true" aria-label="Loading staff data">
+      {/* Stat strip skeleton */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+            <Skeleton className="h-7 w-10" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        ))}
+      </div>
+      {/* Search + filter bar skeleton */}
+      <div className="flex items-center gap-3 mb-4">
+        <Skeleton className="h-9 flex-1 rounded-lg" />
+        <Skeleton className="h-9 w-28 rounded-lg" />
+        <Skeleton className="h-9 w-28 rounded-lg" />
+      </div>
+      {/* Staff table rows skeleton */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 last:border-0">
+            <Skeleton className="h-8 w-8 rounded-full flex-shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-3.5 w-36" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            <Skeleton className="h-5 w-16 rounded-full flex-shrink-0" />
+            <Skeleton className="h-3 w-24 flex-shrink-0" />
+            <Skeleton className="h-7 w-7 rounded flex-shrink-0" />
+          </div>
+        ))}
       </div>
     </div>
   );

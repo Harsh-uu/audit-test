@@ -10,6 +10,7 @@ from utils.supabase_storage import put_audio, get_audio
 from utils.ai import analyze_meeting, diarize_transcript, transcribe_with_assemblyai, map_speaker_numbers_to_names
 from utils.job_worker import enqueue_job
 import database
+from routers.admin import _stats_cache as _admin_stats_cache
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -334,6 +335,8 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 "UPDATE meetings SET analysis_id=$1, status='in_review', processing_error=NULL, updated_at=$2 WHERE id=$3",
                 analysis_id, datetime.now(timezone.utc).isoformat(), meeting_id,
             )
+            # Bust the admin stats cache — meeting count moved to in_review
+            _admin_stats_cache.pop(meeting_org_id or "", None)
         logger.info(f"Analysis complete for meeting {meeting_id}")
 
         # Phase 4: prep coverage check
