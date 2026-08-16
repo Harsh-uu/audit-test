@@ -283,7 +283,7 @@ export default function StaffPortfolio() {
       if (!data.cqc_summary?.length && data.care_cert_summary?.length) setEvidenceTab("care_cert");
       else if (!data.cqc_summary?.length && !data.care_cert_summary?.length && data.custom_summary?.length) setEvidenceTab("custom");
     } catch (err) {
-      console.error("Portfolio load failed", err);
+      console.error("Portfolio load failed", err.message);
     } finally {
       setLoading(false);
     }

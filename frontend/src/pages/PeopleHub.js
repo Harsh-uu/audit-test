@@ -471,7 +471,7 @@ export default function PeopleHub() {
       const { data } = await cachedGet(`${API}/admin/people-stats`, getAuthConfig());
       setPeople(data);
     } catch (err) {
-      console.error("People stats error", err);
+      console.error("People stats error", err.message);
     } finally {
       setLoading(false);
     }

@@ -59,7 +59,7 @@ export default function NewMeeting() {
   useEffect(() => {
     axios.get(`${API}/admin/users?ignore_scope=true`, getAuthConfig())
       .then(r => setUsers(r.data))
-      .catch(console.error);
+      .catch(e => console.error("Failed to load members:", e.message));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

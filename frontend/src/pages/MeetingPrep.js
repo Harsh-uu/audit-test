@@ -320,7 +320,7 @@ export default function MeetingPrep() {
         setFocusTopic("");
       }
     } catch (err) {
-      console.error("loadAll error:", err);
+      console.error("loadAll error:", err.message);
       toast.error("Failed to load prep data");
     } finally { setLoading(false); }
   }, [API, meetingId, getAuthConfig]);

@@ -54,7 +54,7 @@ export default function AdminLibrary() {
           setDocs(data);
           const stillParsing = data.some(d => d.parse_status === "parsing" || d.parse_status === "uploaded");
           if (!stillParsing && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-        } catch (err) { console.error("Poll status error:", err); }
+        } catch (err) { console.error("Poll status error:", err.message); }
       }, 3000);
     } else if (!hasParsingDocs && pollRef.current) {
       clearInterval(pollRef.current);
@@ -79,7 +79,7 @@ export default function AdminLibrary() {
       setDocs(docRes.data);
       if (user?.role === "admin" && results[2]) setUsers(results[2].data);
     } catch (err) {
-      console.error("Admin fetchAll failed:", err);
+      console.error("Admin fetchAll failed:", err.message);
       setError("Failed to load admin data. Please refresh.");
     }
     setLoading(false);
@@ -106,7 +106,7 @@ export default function AdminLibrary() {
       await axios.delete(`${API}/admin/standards/${id}`, getAuthConfig());
       setMessage("Standard deactivated");
       fetchAll();
-    } catch (err) { console.error("Delete standard failed:", err); setError("Failed to deactivate standard."); }
+    } catch (err) { console.error("Delete standard failed:", err.message); setError("Failed to deactivate standard."); }
   };
 
   const handleCreateUser = async () => {
@@ -165,7 +165,7 @@ export default function AdminLibrary() {
     try {
       await axios.patch(`${API}/admin/standards/documents/${id}`, { is_active }, getAuthConfig());
       setDocs(docs.map(d => d.id === id ? { ...d, is_active } : d));
-    } catch (err) { console.error("Toggle document failed:", err); setError("Failed to update document status."); }
+    } catch (err) { console.error("Toggle document failed:", err.message); setError("Failed to update document status."); }
   };
 
   const handleDeleteDoc = async (id) => {
@@ -174,7 +174,7 @@ export default function AdminLibrary() {
       await axios.delete(`${API}/admin/standards/documents/${id}`, getAuthConfig());
       setDocs(docs.filter(d => d.id !== id));
       setMessage("Document deleted");
-    } catch (err) { console.error("Delete document failed:", err); setError("Failed to delete document."); }
+    } catch (err) { console.error("Delete document failed:", err.message); setError("Failed to delete document."); }
   };
 
   if (loading) return <Layout><div className="p-8 text-center text-gray-400 text-sm">Loading…</div></Layout>;

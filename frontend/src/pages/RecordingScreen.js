@@ -52,7 +52,7 @@ async function saveAudioBackup(meetingId, blob) {
       tx.onerror = (e) => reject(e.target.error);
     });
   } catch (e) {
-    console.warn("IndexedDB save failed:", e);
+    console.warn("IndexedDB save failed:", e.message);
   }
 }
 
@@ -80,7 +80,7 @@ async function clearAudioBackup(meetingId) {
       tx.onerror = (e) => reject(e.target.error);
     });
   } catch (e) {
-    console.warn("IndexedDB clear failed:", e);
+    console.warn("IndexedDB clear failed:", e.message);
   }
 }
 
@@ -248,7 +248,7 @@ export default function RecordingScreen() {
     try {
       await axios.post(`${API}/recording/${meetingId}/notice`, {}, getAuthConfig());
     } catch (err) {
-      console.error("Notice log failed:", err);
+      console.error("Notice log failed:", err.message);
     }
     setStage("ready");
   };

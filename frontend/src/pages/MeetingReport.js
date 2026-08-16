@@ -116,7 +116,7 @@ export default function MeetingReport() {
         setSummaryText(data.analysis?.edited_summary || data.analysis?.summary || "");
       }
     } catch (err) {
-      console.error("Failed to load meeting", err);
+      console.error("Failed to load meeting", err.message);
     } finally {
       setLoading(false);
     }
@@ -129,7 +129,7 @@ export default function MeetingReport() {
 
       setAuditTrail(data.events || []);
     } catch (err) {
-      console.error("Failed to load audit trail", err);
+      console.error("Failed to load audit trail", err.message);
       setAuditTrail([]);
     } finally {
       setAuditLoading(false);
@@ -179,7 +179,7 @@ export default function MeetingReport() {
     try {
       await axios.put(`${API}/review/${meetingId}/evidence/${evidenceId}`, updates, getAuthConfig());
       fetchMeeting();
-    } catch (err) { console.error("Evidence update failed", err); }
+    } catch (err) { console.error("Evidence update failed", err.message); }
   }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onShowInTranscript = useCallback((excerpt) => {
@@ -231,7 +231,7 @@ export default function MeetingReport() {
         },
       }));
     } catch (err) {
-      console.error("Failed to update action", err);
+      console.error("Failed to update action", err.message);
       toast.error(err.response?.data?.detail || "Failed to update action");
     }
   };

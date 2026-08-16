@@ -180,7 +180,7 @@ export default function OrgStructure({ embedded = false }) {
         isFirstLoad.current = false;
       }
     } catch (err) {
-      console.error("Org structure load failed", err);
+      console.error("Org structure load failed", err.message);
       flash("Failed to load organisation structure", true);
     } finally {
       setLoading(false);

@@ -141,7 +141,7 @@ export default function Dashboard() {
       const { data } = await axios.get(`${API}/meetings/`, getAuthConfig());
       setMeetings(data);
     } catch (err) {
-      console.error("Failed to load meetings", err);
+      console.error("Failed to load meetings", err.message);
     } finally {
       setLoading(false);
     }

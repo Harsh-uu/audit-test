@@ -878,7 +878,7 @@ export default function TeamInsights() {
       const { data: d } = await cachedGet(`${API}/admin/team-insights`, { ...getAuthConfig(), params });
       setData(d);
     } catch (err) {
-      console.error("Team insights error", err);
+      console.error("Team insights error", err.message);
     } finally {
       setLoading(false);
     }
@@ -896,7 +896,7 @@ export default function TeamInsights() {
       const { data: d } = await cachedGet(`${API}/admin/team-insights/registers`, { ...getAuthConfig(), params });
       setRegisters(d);
     } catch (err) {
-      console.error("Registers error", err);
+      console.error("Registers error", err.message);
     } finally {
       setRegistersLoading(false);
     }
@@ -932,7 +932,7 @@ export default function TeamInsights() {
         await axios.patch(`${API}/admin/team-insights/learning_needs/${meetingId}/${itemId}`, { completed: newValue }, getAuthConfig());
       }
     } catch (err) {
-      console.error("Toggle error", err);
+      console.error("Toggle error", err.message);
       // Revert on failure
       setRegisters(prev => {
         if (!prev) return prev;

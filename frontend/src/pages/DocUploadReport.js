@@ -49,7 +49,7 @@ export default function DocUploadReport() {
         pollRef.current = null;
       }
     } catch (err) {
-      console.error("Failed to load upload:", err);
+      console.error("Failed to load upload:", err.message);
     }
     setLoading(false);
   };
