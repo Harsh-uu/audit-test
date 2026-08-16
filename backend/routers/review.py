@@ -480,6 +480,18 @@ async def get_risk_suggestions(meeting_id: str, risk_id: str, current_user=Depen
     # SEC-004: Prevent attendees from triggering paid AI calls
     if current_user.get("role") not in ("manager", "admin"):
         raise HTTPException(status_code=403, detail="Only managers can request risk suggestions")
+
+    # Rate limit: 30 AI calls per user per hour
+    from utils.rate_limit import check_rate_limit
+    async with database.with_admin() as rl_conn:
+        await check_rate_limit(
+            rl_conn,
+            identifier=f"ai_sug:{current_user['id']}",
+            max_attempts=30,
+            window_minutes=60,
+            error_detail="Too many AI requests. Please wait before requesting more suggestions.",
+        )
+
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         m_row = await conn.fetchrow("SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)

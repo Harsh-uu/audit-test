@@ -400,9 +400,21 @@ class ResetPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password")
-async def forgot_password(data: ForgotPasswordRequest):
+async def forgot_password(data: ForgotPasswordRequest, request: Request):
     email = data.email.lower()
+    ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown").split(",")[0].strip()
+
     async with database.with_admin() as conn:
+        # Rate limit: 5 attempts per IP per 15 minutes
+        from utils.rate_limit import check_rate_limit
+        await check_rate_limit(
+            conn,
+            identifier=f"fp_ip:{ip}",
+            max_attempts=5,
+            window_minutes=15,
+            error_detail="Too many password reset requests. Please wait 15 minutes before trying again.",
+        )
+
         user = await conn.fetchrow("SELECT id FROM users WHERE email = $1", email)
         if not user:
             return {"message": "If that email exists, a reset link has been sent."}
