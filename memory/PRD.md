@@ -345,6 +345,10 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ### P0 Meeting Load Fix Verified (Aug 2026, Session 11)
 - **`operator does not exist: text = uuid` fix confirmed**: `meetings.py` line 314 `$1::uuid[]` cast changed to `$1::text[]` (users.id is TEXT not UUID type). End-to-end verified: `POST /api/meetings/` then `GET /api/meetings/{id}` returns 200 with correct data. Manager account password (Manager123!) confirmed and MFA bypass approach documented in test_credentials.md.
 
+### Auth Interceptor + Proactive Refresh Fix (Aug 2026, Session 11)
+- **Root cause of `/auth/me` 401 blink**: Interceptor condition was `!url.includes("/auth/")` — this excluded `/auth/me` from the refresh retry path. When the 30-min access token cookie expired, `/auth/me` got 401, interceptor skipped it, `setUser(null)` fired → ProtectedRoute redirected to `/login` → visible blink. Fixed by switching to an explicit NO_RETRY_PATHS list: `[/auth/refresh, /auth/login, /auth/register, /auth/verify-mfa, /auth/logout, /auth/forgot-password, /auth/reset-password]`. Now `/auth/me` is retried on 401 (refreshes token → replays request → user stays logged in).
+- **Proactive 20-min refresh timer**: Added `setInterval(silentRefresh, 20min)` in AuthContext so the 30-min cookie never expires mid-session during long recordings with no API activity (previously only refreshed reactively on 401).
+
 ### React StrictMode Removed (Aug 2026, Session 11)
 - **Double-mount blink + 2× DB requests**: React 18 Strict Mode mounts → unmounts → remounts every component in dev. This caused: (1) visible "blink" on RecordingScreen with page state reset, (2) every `useEffect` ran twice → 2× API requests → 2× DB queries, (3) MediaRecorder cleanup effect would stop recording on the forced unmount. Fixed by removing `<React.StrictMode>` wrapper from `index.js`. Zero effect on production builds. Verified: Vite picked up change (`page reload src/index.js`).
 

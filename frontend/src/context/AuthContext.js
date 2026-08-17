@@ -27,12 +27,14 @@ export function AuthProvider({ children }) {
       res => res,
       async err => {
         const original = err.config;
-        // Only retry once; skip auth endpoints to avoid loops
+        // Only retry once; exclude auth mutation endpoints to avoid loops or retrying bad credentials.
+        // /auth/me IS retried so an expired cookie auto-refreshes without a blink.
+        const NO_RETRY_PATHS = ["/auth/refresh", "/auth/login", "/auth/register", "/auth/verify-mfa", "/auth/logout", "/auth/forgot-password", "/auth/reset-password"];
         if (
           err.response?.status === 401 &&
           !original._retry &&
           original.url &&
-          !original.url.includes("/auth/")
+          !NO_RETRY_PATHS.some(p => original.url.includes(p))
         ) {
           if (isRefreshing.current) {
             // Queue this request until the ongoing refresh finishes
@@ -76,6 +78,16 @@ export function AuthProvider({ children }) {
     axios.get(`${API}/auth/me`)
       .then(r => setUser(r.data))
       .catch(() => setUser(null));
+  }, []);
+
+  // Proactive token refresh every 20 minutes so the 30-min access cookie never
+  // expires mid-session (e.g. during a long recording with no API activity).
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try { await silentRefresh(); } catch { /* ignore — interceptor handles expiry */ }
+    }, 20 * 60 * 1000); // 20 minutes
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = async (email, password) => {
