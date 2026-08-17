@@ -26,7 +26,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - `standards_entries.jurisdiction` column: same 4 values
 - `standards_entries.service_type` column: `'residential'` | `'domiciliary'` | `NULL` — NI RQIA standards tagged by service_type; NISCC (NULL = shared)
 - England orgs: CQC (47) + Care Certificate (16) = 63 standards
-- Wales orgs: CIW (23) + AWIF (7) + SCW (6) = 36 standards
+- Wales orgs: CIW (23) + AWIF (67) + SCW (12) = 102 Wales standards
 - Scotland orgs: CI Quality Indicators (18) + SSSC Code (6) = 24 standards
 - NI Domiciliary orgs: RQIA Dom (16) + NISCC Code (12) + NISCC Induction (7) = 35 standards
 - NI Residential orgs: RQIA Res (15) + NISCC Code (12) + NISCC Induction (7) = 34 standards
@@ -280,7 +280,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 
 ### P1.5 (Upcoming)
 - **Achievements section — DONE** (Aug 2026, Session 4): AI extracts 1–5 specific achievement moments from meeting transcripts; rendered between Summary and Actions in the Evidence tab with emerald green/star visual styling. DB migration applied.
-- **AWIF granularity review** (Wales consultation pending): Current AWIF sub-outcomes are section headings (topic level). Decision pending from Welsh users on whether to drill down to the specific "I can/I understand" practice learning outcome statements. All 7 workbook .docx files available in job assets for re-extraction when ready.
+- **AWIF granularity: DONE** (Aug 2026, Session 9): Replaced 7 AWIF workbook-level entries with 67 granular section-level entries (AWIF 1.1–7.10), each containing specific "You are able to..." practice learning outcomes and "The worker knows..." sub-outcomes extracted from all 7 official Welsh Government workbooks. Standards cache now shows `awif: 67`. Migration-aware: future deployments auto-detect and apply the upgrade.
 - **Scotland NIF** — parked indefinitely. Content entirely behind Turas login wall (launched May 2025, no public docs). Add as `type='nif'`, `jurisdiction='scotland'` when source material surfaces.
 - Role-specific competency framework upload (admin uploads per-role competency doc; AI maps evidence against it)
 - Skills for Care Effective Supervision Guide — per-org upload option

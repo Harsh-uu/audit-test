@@ -678,205 +678,1236 @@ CIW_REGULATIONS = [
 
 
 # ── AWIF (All Wales Induction Framework) ─────────────────────────────────────
-# 7 workbooks. Each workbook is one standard entry with sub_outcomes for each section.
+# Granular section-level entries (67 total, one per section across all 7 workbooks).
 # Adults use workbooks 1, 3, 5, 6, 7. Children's services use workbooks 2, 4, 5, 6, 7.
 # Both MUST be seeded as providers may work with adults AND children.
+# description = practice learning outcomes (what the worker CAN DO — "You are able to...")
+# sub_outcomes = knowledge statements (what the worker KNOWS — manager-verified)
 
 AWIF_STANDARDS = [
+    # ── Workbook 1: Principles and Values (Adults) ─────────────────────────────
     {
-        "reference": "AWIF 1",
-        "name": "Principles and values of health and social care (adults)",
+        "reference": "AWIF 1.1",
+        "name": "Legislation, national policies and codes of conduct (adults)",
         "description": (
-            "Covers the legislative and value base underpinning health and social care work with adults in Wales. "
-            "Includes the Social Services and Well-being (Wales) Act 2014, the Code of Professional Practice, "
-            "rights-based approaches, person-centred care, equality and diversity, positive risk taking, "
-            "communication, Welsh language and culture, restrictive practices, and reflection."
+            "Worker is able to: relate the principles and values of the Social Services and Well-being (Wales) "
+            "Act 2014 to their practice; uphold the Code of Conduct and Code of Professional Practice for Social Care in their work."
         ),
         "keywords": [
-            "SSWB Act 2014", "voice and control", "well-being", "co-production", "person-centred",
-            "rights-based", "Code of Professional Practice", "Social Care Wales", "equality", "diversity",
-            "inclusion", "positive risk taking", "professional boundaries", "communication",
-            "Welsh language", "restrictive practices", "reflection", "principles", "values",
+            "SSWB Act 2014", "Social Services and Well-being", "Code of Professional Practice",
+            "Code of Conduct", "Social Care Wales", "legislation", "national policy",
+            "professional standards", "values", "principles",
         ],
         "sub_outcomes": [
-            {"ref": "1.1", "desc": "Legislation, national policies and codes of conduct and practice that underpin health and social care"},
-            {"ref": "1.2", "desc": "Rights-based approaches and how they relate to health and social care"},
-            {"ref": "1.3", "desc": "Person-centred approaches and how to apply them in practice"},
-            {"ref": "1.4", "desc": "Equality, diversity and inclusion — recognising and responding to discrimination"},
-            {"ref": "1.5", "desc": "Positive risk taking — supporting individuals to take calculated risks safely"},
-            {"ref": "1.6", "desc": "Positive relationships and maintaining professional boundaries"},
-            {"ref": "1.7", "desc": "Communication — verbal, non-verbal and written; adapting to individual needs"},
-            {"ref": "1.8", "desc": "Welsh language and culture — recognising and meeting linguistic and cultural needs"},
-            {"ref": "1.9", "desc": "Positive approaches to reduce restrictive practices in social care"},
-            {"ref": "1.10", "desc": "Change and transitions in health and social care — supporting individuals through life events"},
-            {"ref": "1.11", "desc": "Reflection — how own values, beliefs and experiences influence practice"},
+            {"ref": "1.1a", "desc": "Knows the principles and values of the Social Services and Well-being (Wales) Act 2014"},
+            {"ref": "1.1b", "desc": "Knows why these principles are important for health and social care and how they underpin practice"},
+            {"ref": "1.1c", "desc": "Knows what the Codes of Conduct and Professional Practice are, who they apply to and how to use them"},
+            {"ref": "1.1d", "desc": "Understands how the Codes underpin the principles and values of health and social care"},
         ],
     },
     {
-        "reference": "AWIF 2",
-        "name": "Principles and values of health and social care (children and young people)",
+        "reference": "AWIF 1.2",
+        "name": "Rights-based approaches in health and social care (adults)",
         "description": (
-            "Covers the legislative and value base underpinning health and social care work with children and "
-            "young people in Wales. Includes the UN Convention on the Rights of the Child, child-centred "
-            "approaches, equality and diversity, positive risk taking, professional relationships, "
-            "communication, Welsh language, restrictive practices, and reflection. "
-            "Must be completed by all workers who may work with children, even if primarily with adults."
+            "Worker is able to: embed a rights-based approach in their practice with adults."
         ),
         "keywords": [
-            "children's rights", "UN CRC", "child-centred", "young people", "SSWB Act 2014",
-            "Code of Professional Practice", "equality", "diversity", "positive risk", "safeguarding",
-            "communication", "Welsh language", "professional boundaries", "reflection", "trauma-informed",
-            "residential child care", "foster care", "children's services", "transitions",
+            "rights-based", "human rights", "SSWB Act", "advocacy", "individual rights",
+            "legal rights", "voice and control", "empowerment", "complaints",
         ],
         "sub_outcomes": [
-            {"ref": "2.1", "desc": "Legislation, national policies and codes of conduct for working with children and young people"},
-            {"ref": "2.2", "desc": "Rights-based approaches for children and young people"},
-            {"ref": "2.3", "desc": "Child-centred approaches and how to apply them in practice"},
-            {"ref": "2.4", "desc": "Equality, diversity and inclusion when working with children and young people"},
-            {"ref": "2.5", "desc": "Positive risk taking — balancing safety with children's rights to experience and learn"},
-            {"ref": "2.6", "desc": "Positive relationships and professional boundaries with children and young people"},
-            {"ref": "2.7", "desc": "Communication with children and young people, including developmentally appropriate approaches"},
-            {"ref": "2.8", "desc": "Welsh language and culture — supporting identity and cultural heritage"},
-            {"ref": "2.9", "desc": "Positive approaches to reduce restrictive practices when working with children"},
-            {"ref": "2.10", "desc": "Change and transitions — supporting children and young people through significant life events"},
-            {"ref": "2.11", "desc": "Reflection — examining own values and their impact on practice with children"},
+            {"ref": "1.2a", "desc": "Knows the meaning of a rights-based approach"},
+            {"ref": "1.2b", "desc": "Knows how legislation and national policies underpin a rights-based approach"},
+            {"ref": "1.2c", "desc": "Understands what advocacy is and how it supports a rights-based approach"},
+            {"ref": "1.2d", "desc": "Knows how to support individuals and families to make a complaint or express a concern"},
         ],
     },
     {
-        "reference": "AWIF 3",
-        "name": "Health and well-being (adults)",
+        "reference": "AWIF 1.3",
+        "name": "Person-centred approaches (adults)",
         "description": (
-            "Covers knowledge and skills for supporting the health and well-being of adults in social care settings. "
-            "Includes understanding well-being, supporting personal care, pressure area care, oral and foot care, "
-            "medication administration, nutrition and hydration, falls prevention, end of life care, "
-            "assistive technology, sensory loss, dementia, mental health, and substance misuse."
+            "Worker is able to: recognise the importance of knowing an individual's preferences and background "
+            "and reflect this in practice; embed person-centred approaches; support active participation and inclusion."
         ),
         "keywords": [
-            "well-being", "personal care", "continence", "pressure area care", "oral health", "foot care",
-            "medication", "MAR", "nutrition", "hydration", "falls prevention", "end of life",
-            "palliative care", "assistive technology", "sensory loss", "dementia", "mental health",
-            "substance misuse", "health needs", "clinical care",
+            "person-centred", "co-production", "voice choice control", "individual preferences",
+            "dignity", "respect", "consent", "active participation", "personal plan",
+            "well-being", "inclusion", "meaningful activities",
         ],
         "sub_outcomes": [
-            {"ref": "3.1", "desc": "What well-being means in the context of health and social care for adults"},
-            {"ref": "3.2", "desc": "Factors that impact upon the health and well-being of individuals"},
-            {"ref": "3.3", "desc": "How to support individuals with their personal care and continence management"},
-            {"ref": "3.4", "desc": "Good practice in relation to pressure area care — prevention and management"},
-            {"ref": "3.5", "desc": "How to support good oral health care and mouth care for individuals"},
-            {"ref": "3.6", "desc": "Supporting foot care — recognising problems and accessing specialist services"},
-            {"ref": "3.7", "desc": "Roles and responsibilities related to the administration of medication in social care"},
-            {"ref": "3.8", "desc": "The importance of nutrition and hydration and how to support individuals' needs"},
-            {"ref": "3.9", "desc": "How to support falls prevention — risk factors and interventions"},
-            {"ref": "3.10", "desc": "Factors that affect end of life care and how to support individuals and families"},
-            {"ref": "3.11", "desc": "How assistive technology can be used to support the health and well-being of individuals"},
-            {"ref": "3.12", "desc": "How sensory loss can impact on health and well-being and how to support individuals"},
-            {"ref": "3.13", "desc": "How living with dementia can impact on the health and well-being of individuals"},
-            {"ref": "3.14", "desc": "How mental ill-health can impact upon the health and well-being of individuals"},
-            {"ref": "3.15", "desc": "How substance misuse can impact upon the health and well-being of individuals"},
+            {"ref": "1.3a", "desc": "Knows what 'person-centred approaches' means and why these are important"},
+            {"ref": "1.3b", "desc": "Understands co-production and 'voice, choice and control'"},
+            {"ref": "1.3c", "desc": "Knows the importance of understanding an individual's preferences, background, history and what matters to them"},
+            {"ref": "1.3d", "desc": "Knows ways of working to establish individual preferences and desired outcomes"},
+            {"ref": "1.3e", "desc": "Knows what 'dignity and respect' means and why this is central to the role"},
+            {"ref": "1.3f", "desc": "Understands consent when providing care and why it is important"},
+            {"ref": "1.3g", "desc": "Knows what 'active participation' means and why supporting meaningful activities matters"},
+            {"ref": "1.3h", "desc": "Knows the purpose of personal plans"},
         ],
     },
     {
-        "reference": "AWIF 4",
-        "name": "Health and well-being (children and young people)",
+        "reference": "AWIF 1.4",
+        "name": "Equality, diversity and inclusion (adults)",
         "description": (
-            "Covers knowledge and skills for supporting the health and well-being of children and young people "
-            "in social care settings. Includes understanding children's well-being, developmental factors, "
-            "positive environments, play, speech and language development, additional support needs, "
-            "advice and guidance, medication administration, personal care, and nutrition and hydration. "
-            "Must be completed by all workers who may work with children, even if primarily with adults."
+            "Worker is able to: respect and promote equality, diversity and inclusion in their practice with adults."
         ),
         "keywords": [
-            "children's well-being", "development", "positive environment", "play", "learning",
-            "speech and language", "additional support needs", "SEND", "personal care", "nutrition",
-            "hydration", "medication", "assessment", "child development", "holistic needs",
-            "transitions", "attachment", "trauma", "resilience",
+            "equality", "diversity", "inclusion", "discrimination", "protected characteristics",
+            "Equality Act 2010", "cultural awareness", "religious beliefs", "challenging discrimination",
         ],
         "sub_outcomes": [
-            {"ref": "4.1", "desc": "What well-being means in the context of health and social care for children and young people"},
-            {"ref": "4.2", "desc": "Factors that affect the health, well-being and development of children and young people"},
-            {"ref": "4.3", "desc": "Environments that support the health, well-being and development of children and young people"},
-            {"ref": "4.4", "desc": "Supporting the use of play for the health, well-being and development of children"},
-            {"ref": "4.5", "desc": "Speech, language and communication development — importance and how to support it"},
-            {"ref": "4.6", "desc": "Additional support needs — understanding and responding to individual requirements"},
-            {"ref": "4.7", "desc": "How to offer advice, guidance and support to children, young people and their families"},
-            {"ref": "4.8", "desc": "Administration of medication — roles, responsibilities and safe practice for children"},
-            {"ref": "4.9", "desc": "Supporting children and young people with their personal care needs"},
-            {"ref": "4.10", "desc": "The importance of nutrition and hydration for the health and well-being of children"},
+            {"ref": "1.4a", "desc": "Knows what equality, diversity, inclusion and discrimination mean"},
+            {"ref": "1.4b", "desc": "Knows what 'protected characteristics' are"},
+            {"ref": "1.4c", "desc": "Knows how person-centred approaches promote equality, diversity and inclusion"},
+            {"ref": "1.4d", "desc": "Knows how to value cultural, religious and linguistic backgrounds of individuals"},
+            {"ref": "1.4e", "desc": "Knows how to challenge discrimination and practice that does not support equality"},
         ],
     },
     {
-        "reference": "AWIF 5",
-        "name": "Professional practice as a health and social care worker",
+        "reference": "AWIF 1.5",
+        "name": "Positive risk taking (adults)",
         "description": (
-            "Covers the professional responsibilities, accountabilities and conduct of health and social care "
-            "workers in Wales. Includes understanding roles and responsibilities, partnership and team working, "
-            "information handling and GDPR, personal conduct and professional registration, and "
-            "continuing professional development (CPD) and the Code of Professional Practice."
+            "Worker is able to: follow workplace policies and procedures for risk assessments to support "
+            "individuals to take positive risks that promote their well-being and autonomy."
         ),
         "keywords": [
-            "professional responsibility", "accountability", "scope of practice", "partnership working",
-            "team working", "multi-disciplinary", "information handling", "GDPR", "data protection",
-            "confidentiality", "records", "personal conduct", "Code of Professional Practice",
-            "Social Care Wales registration", "SCW", "CPD", "continuing professional development",
-            "reflective practice", "supervision", "appraisal",
+            "positive risk taking", "risk assessment", "risk management", "autonomy",
+            "best interest", "rights to take risks", "balancing risks", "calculated risk",
         ],
         "sub_outcomes": [
-            {"ref": "5.1", "desc": "Role, responsibilities and accountabilities of the health and social care worker"},
-            {"ref": "5.2", "desc": "How to develop and maintain effective partnership working with others"},
-            {"ref": "5.3", "desc": "How effective team working supports good practice in health and social care"},
-            {"ref": "5.4", "desc": "How to handle information — GDPR, confidentiality and record-keeping"},
-            {"ref": "5.5", "desc": "The importance of personal conduct and upholding the social care profession"},
-            {"ref": "5.6", "desc": "How continuing professional development contributes to professional practice"},
+            {"ref": "1.5a", "desc": "Knows what 'positive risk taking' means and its importance for well-being"},
+            {"ref": "1.5b", "desc": "Knows individuals' rights to make choices and take risks"},
+            {"ref": "1.5c", "desc": "Understands how balancing rights, risks and responsibilities contributes to person-centred approaches"},
+            {"ref": "1.5d", "desc": "Knows what to consider when supporting individuals to take positive risks"},
+            {"ref": "1.5e", "desc": "Knows what 'best interest decisions' means"},
         ],
     },
     {
-        "reference": "AWIF 6",
-        "name": "Safeguarding individuals",
+        "reference": "AWIF 1.6",
+        "name": "Positive relationships and professional boundaries (adults)",
         "description": (
-            "Covers the knowledge and skills needed to safeguard adults and children in social care settings. "
-            "Includes understanding the legislative framework (Social Services and Well-being (Wales) Act 2014, "
-            "Wales Safeguarding Procedures 2019), working in ways that protect individuals, recognising factors "
-            "that contribute to harm and abuse, and how to respond, record and report concerns."
+            "Worker demonstrates relationship-centred working that supports individuals' sense of security, "
+            "belonging and purpose, while maintaining clear professional boundaries."
         ),
         "keywords": [
-            "safeguarding", "abuse", "neglect", "harm", "exploitation", "Wales Safeguarding Procedures",
-            "SSWB Act 2014", "disclosure", "allegation", "concern", "reporting", "recording",
-            "whistle-blowing", "DBS", "Barring List", "categories of abuse", "indicators",
-            "information sharing", "multi-agency", "adult protection", "child protection",
+            "professional boundaries", "therapeutic relationship", "relationship-centred",
+            "trust", "rapport", "appropriate relationships", "unacceptable practices",
         ],
         "sub_outcomes": [
-            {"ref": "6.1", "desc": "The purpose of legislation, national policies and codes in relation to safeguarding individuals"},
-            {"ref": "6.2", "desc": "How to work in ways that safeguard individuals from harm, abuse and neglect"},
-            {"ref": "6.3", "desc": "Factors, situations and actions that could lead to or contribute to harm, abuse or neglect"},
-            {"ref": "6.4", "desc": "How to respond, record and report concerns, disclosures or allegations related to safeguarding"},
+            {"ref": "1.6a", "desc": "Knows what 'relationship-centred working' means"},
+            {"ref": "1.6b", "desc": "Understands the importance of positive relationships with individuals, families and carers"},
+            {"ref": "1.6c", "desc": "Knows the meaning of 'professional boundaries' and how to balance these with relationship-centred working"},
+            {"ref": "1.6d", "desc": "Knows unacceptable practices in relationships with individuals, families and carers"},
         ],
     },
     {
-        "reference": "AWIF 7",
-        "name": "Health and safety in health and social care",
+        "reference": "AWIF 1.7",
+        "name": "Communication (adults)",
         "description": (
-            "Covers health and safety legislation, responsibilities and practical skills for health and social "
-            "care workers in Wales. Includes workplace health and safety legislation, risk assessment, fire safety, "
-            "moving and handling, emergency first aid, infection prevention and control, food safety, "
-            "hazardous substances (COSHH), security and managing stress."
+            "Worker is able to: identify and use a range of communication methods to meet the needs and "
+            "preferences of the individuals they support."
         ),
         "keywords": [
-            "Health and Safety at Work Act", "risk assessment", "fire safety", "moving and handling",
-            "manual handling", "first aid", "infection prevention", "IPC", "PPE", "food safety",
-            "COSHH", "hazardous substances", "security", "lone working", "stress management",
-            "HSE", "personal protective equipment", "hand hygiene", "emergency procedures",
+            "communication", "verbal communication", "non-verbal", "written communication",
+            "barriers to communication", "augmentative communication", "language needs",
+            "active listening", "communication preferences",
         ],
         "sub_outcomes": [
-            {"ref": "7.1", "desc": "Health and safety in the workplace — legislation, responsibilities and rights"},
-            {"ref": "7.2", "desc": "Risk assessments for health and safety — how to carry out and act on them"},
-            {"ref": "7.3", "desc": "Fire safety — prevention, detection, evacuation and responsibilities"},
-            {"ref": "7.4", "desc": "Moving and handling and moving and positioning — safe techniques and legislation"},
-            {"ref": "7.5", "desc": "Emergency first aid — basic life support, responding to accidents and incidents"},
-            {"ref": "7.6", "desc": "Infection prevention and control — standard precautions, PPE, hand hygiene"},
-            {"ref": "7.7", "desc": "Food safety — safe handling, storage, preparation and legal requirements"},
-            {"ref": "7.8", "desc": "Hazardous substances (COSHH) — identification, safe use and storage"},
-            {"ref": "7.9", "desc": "Security in the work setting — including lone working arrangements"},
-            {"ref": "7.10", "desc": "Managing stress — recognising signs and accessing support for well-being"},
+            {"ref": "1.7a", "desc": "Knows what 'effective communication' means and why it is important for well-being"},
+            {"ref": "1.7b", "desc": "Knows key features of effective communication and the skills needed"},
+            {"ref": "1.7c", "desc": "Knows how to find out an individual's communication and language needs"},
+            {"ref": "1.7d", "desc": "Knows barriers to effective communication and ways to address them"},
+        ],
+    },
+    {
+        "reference": "AWIF 1.8",
+        "name": "Welsh language and culture (adults)",
+        "description": (
+            "Worker is able to: implement the principles of Mwy na geiriau / More than just words in their work, "
+            "actively offering Welsh language provision to individuals."
+        ),
+        "keywords": [
+            "Welsh language", "Cymraeg", "Welsh culture", "More than just words", "Mwy na geiriau",
+            "Active Offer", "Welsh Language Standards", "linguistic needs", "bilingual",
+        ],
+        "sub_outcomes": [
+            {"ref": "1.8a", "desc": "Knows the importance of recognising and supporting Welsh language and culture"},
+            {"ref": "1.8b", "desc": "Knows legislation and national strategies for Welsh language"},
+            {"ref": "1.8c", "desc": "Knows the principles of Mwy na geiriau / More than just words"},
+            {"ref": "1.8d", "desc": "Understands the meaning of the Active Offer"},
+        ],
+    },
+    {
+        "reference": "AWIF 1.9",
+        "name": "Positive approaches to reduce restrictive practices (adults)",
+        "description": (
+            "Worker is able to: embed the use of positive approaches in their practice; follow workplace "
+            "policies and procedures for behaviour support; work to reduce restrictive practices."
+        ),
+        "keywords": [
+            "restrictive practices", "positive behaviour support", "PBS", "restraint",
+            "de-escalation", "least restrictive", "Deprivation of Liberty", "DoLS",
+            "proactive approaches", "reactive strategies",
+        ],
+        "sub_outcomes": [
+            {"ref": "1.9a", "desc": "Knows the meaning of 'positive approaches' and 'restrictive practices'"},
+            {"ref": "1.9b", "desc": "Knows underlying causes that may impact upon the behaviour of individuals"},
+            {"ref": "1.9c", "desc": "Knows how positive approaches can be used to reduce restrictive practices"},
+        ],
+    },
+    {
+        "reference": "AWIF 1.10",
+        "name": "Change and transitions in health and social care (adults)",
+        "description": (
+            "Worker supports adults through significant life changes and transitions in a positive and "
+            "person-centred way, recognising the impact these have on well-being."
+        ),
+        "keywords": [
+            "transitions", "life changes", "change management", "moving home", "bereavement",
+            "hospital discharge", "significant life events", "adaptation", "support through change",
+        ],
+        "sub_outcomes": [
+            {"ref": "1.10a", "desc": "Knows types of change that may occur in an individual's life as a result of significant life events or transitions"},
+            {"ref": "1.10b", "desc": "Knows factors that make these changes either positive or negative"},
+        ],
+    },
+    {
+        "reference": "AWIF 1.11",
+        "name": "Reflection in health and social care practice (adults)",
+        "description": (
+            "Worker reflects on how their own values, beliefs and experiences influence their practice, "
+            "recognising the impact of their attitude and behaviour on individuals."
+        ),
+        "keywords": [
+            "reflection", "reflective practice", "self-awareness", "personal values", "bias",
+            "professional development", "impact on practice", "Code of Professional Practice",
+        ],
+        "sub_outcomes": [
+            {"ref": "1.11a", "desc": "Understands the impact of own attitude and behaviour on individuals and carers"},
+        ],
+    },
+
+    # ── Workbook 2: Principles and Values (Children and Young People) ──────────
+    {
+        "reference": "AWIF 2.1",
+        "name": "Legislation, national policies and codes of conduct (children and young people)",
+        "description": (
+            "Worker is able to: relate the principles and values of the SSWB Act 2014 and Children Act 1989 "
+            "to their practice with children and young people; uphold the codes of conduct and professional practice."
+        ),
+        "keywords": [
+            "Children Act 1989", "SSWB Act 2014", "Code of Professional Practice", "UN CRC",
+            "children's rights", "legislation", "young people", "codes of conduct",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.1a", "desc": "Knows the principles and values of the SSWB Act 2014 and the Children Act 1989"},
+            {"ref": "2.1b", "desc": "Knows the Codes of Conduct and Professional Practice and how they apply"},
+            {"ref": "2.1c", "desc": "Understands how the Codes underpin the principles of health and social care for children"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.2",
+        "name": "Rights-based approaches for children and young people",
+        "description": (
+            "Worker is able to: embed a rights-based approach in their work with children and young people."
+        ),
+        "keywords": [
+            "children's rights", "UN Convention on the Rights of the Child", "UNCRC", "advocacy",
+            "rights-based", "voice of the child", "child participation", "complaints",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.2a", "desc": "Knows the meaning of a rights-based approach for children and young people"},
+            {"ref": "2.2b", "desc": "Knows how legislation underpins rights-based approaches for children"},
+            {"ref": "2.2c", "desc": "Understands advocacy and how it supports children's rights"},
+            {"ref": "2.2d", "desc": "Knows how to support children, families and carers to make a complaint or concern"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.3",
+        "name": "Child-centred approaches",
+        "description": (
+            "Worker is able to: embed child-centred approaches in their practice; support children and young "
+            "people to engage in activities that reflect their preferences; ensure the best interests of the child are paramount."
+        ),
+        "keywords": [
+            "child-centred", "best interests of the child", "voice of the child", "co-production",
+            "active participation", "children's preferences", "consent", "parental responsibility",
+            "personal plan", "child development",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.3a", "desc": "Knows what 'child-centred approaches' means and why these are important"},
+            {"ref": "2.3b", "desc": "Understands co-production and voice, choice and control for children"},
+            {"ref": "2.3c", "desc": "Knows the importance of understanding a child's preferences, background and what matters to them"},
+            {"ref": "2.3d", "desc": "Knows what dignity, respect and consent mean in the context of working with children"},
+            {"ref": "2.3e", "desc": "Knows what 'parental responsibility' means"},
+            {"ref": "2.3f", "desc": "Knows the purpose of personal plans for children and young people"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.4",
+        "name": "Equality, diversity and inclusion (children and young people)",
+        "description": (
+            "Worker is able to: respect and promote equality, diversity and inclusion when working with "
+            "children and young people."
+        ),
+        "keywords": [
+            "equality", "diversity", "inclusion", "discrimination", "children", "cultural background",
+            "religious beliefs", "linguistic heritage", "challenging discrimination",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.4a", "desc": "Knows what equality, diversity, inclusion and discrimination mean in children's services"},
+            {"ref": "2.4b", "desc": "Knows how child-centred approaches promote equality, diversity and inclusion"},
+            {"ref": "2.4c", "desc": "Knows how to value cultural, religious and linguistic backgrounds of children"},
+            {"ref": "2.4d", "desc": "Knows how to challenge discrimination in practice with children"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.5",
+        "name": "Positive risk taking (children and young people)",
+        "description": (
+            "Worker is able to: follow workplace risk assessment policies to support children and young people "
+            "to take positive risks; balance a child's need to experience and learn with their duty to keep them safe."
+        ),
+        "keywords": [
+            "positive risk taking", "children's risk", "child development", "balancing safety",
+            "risk assessment", "experiential learning", "risk benefit analysis",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.5a", "desc": "Knows what positive risk taking means for children and its importance for well-being"},
+            {"ref": "2.5b", "desc": "Knows children's rights to make choices and take risks"},
+            {"ref": "2.5c", "desc": "Knows how balancing rights, risks and responsibilities contributes to child-centred approaches"},
+            {"ref": "2.5d", "desc": "Knows what to consider when supporting children to take positive risks, including stage of development"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.6",
+        "name": "Positive relationships and professional boundaries (children and young people)",
+        "description": (
+            "Worker demonstrates relationship-centred working with children and young people, maintaining "
+            "clear professional boundaries while building trust and positive connections."
+        ),
+        "keywords": [
+            "professional boundaries", "therapeutic relationship", "children", "young people",
+            "trust", "appropriate relationships", "relationship-centred working",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.6a", "desc": "Knows what relationship-centred working means with children and young people"},
+            {"ref": "2.6b", "desc": "Understands the importance of positive relationships with children, families and carers"},
+            {"ref": "2.6c", "desc": "Knows how to balance professional boundaries with relationship-centred working"},
+            {"ref": "2.6d", "desc": "Knows unacceptable practices in relationships with children, young people and families"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.7",
+        "name": "Communication with children and young people",
+        "description": (
+            "Worker is able to: identify and use a range of communication methods to meet the needs and "
+            "preferences of the children and young people they support, including developmentally appropriate approaches."
+        ),
+        "keywords": [
+            "communication", "children's communication", "developmentally appropriate", "play-based",
+            "non-verbal", "language development", "AAC", "listening skills",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.7a", "desc": "Knows what effective communication means in children's services and why it is important"},
+            {"ref": "2.7b", "desc": "Knows how a child's stage of development impacts their communication skills"},
+            {"ref": "2.7c", "desc": "Knows how to find out a child's communication needs, wishes and preferences"},
+            {"ref": "2.7d", "desc": "Knows barriers to communication with children and how to address them"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.8",
+        "name": "Welsh language and culture (children and young people)",
+        "description": (
+            "Worker is able to: implement the principles of Mwy na geiriau / More than just words when "
+            "working with children and young people, supporting Welsh language identity and cultural heritage."
+        ),
+        "keywords": [
+            "Welsh language", "Cymraeg", "cultural identity", "Welsh culture", "Active Offer",
+            "More than just words", "Mwy na geiriau", "bilingual", "children's identity",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.8a", "desc": "Knows the importance of recognising and supporting Welsh language and culture for children"},
+            {"ref": "2.8b", "desc": "Knows Welsh language legislation and national strategies"},
+            {"ref": "2.8c", "desc": "Knows the principles of Mwy na geiriau / More than just words and the Active Offer"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.9",
+        "name": "Positive approaches to reduce restrictive practices (children and young people)",
+        "description": (
+            "Worker is able to: embed positive approaches in their work with children; follow workplace "
+            "policies for behaviour support; actively work to reduce restrictive practices."
+        ),
+        "keywords": [
+            "restrictive practices", "positive behaviour support", "PBS", "de-escalation",
+            "children's behaviour", "proactive approaches", "least restrictive option",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.9a", "desc": "Knows the meaning of 'positive approaches' and 'restrictive practices' in children's services"},
+            {"ref": "2.9b", "desc": "Knows underlying causes that may impact on the behaviour of children and young people"},
+            {"ref": "2.9c", "desc": "Knows how positive approaches can be used to reduce restrictive practices and promote positive behaviour"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.10",
+        "name": "Change and transitions (children and young people)",
+        "description": (
+            "Worker supports children and young people through significant life changes and transitions, "
+            "including preparing young people for adult life."
+        ),
+        "keywords": [
+            "transitions", "life changes", "children's transitions", "care leavers",
+            "moving placements", "significant life events", "preparing for adulthood",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.10a", "desc": "Knows types of change in a child's life as a result of significant life events or transitions"},
+            {"ref": "2.10b", "desc": "Knows factors that make transitions positive or negative for children"},
+            {"ref": "2.10c", "desc": "Knows how to support young people to develop skills, confidence and knowledge for adult life"},
+        ],
+    },
+    {
+        "reference": "AWIF 2.11",
+        "name": "Reflection in practice (children and young people)",
+        "description": (
+            "Worker is able to: reflect on how their attitude and behaviour impacts on the children "
+            "and young people they support."
+        ),
+        "keywords": [
+            "reflection", "self-awareness", "impact on children", "personal values",
+            "bias", "professional development", "reflexive practice",
+        ],
+        "sub_outcomes": [
+            {"ref": "2.11a", "desc": "Understands the impact of own attitude and behaviour on children and young people"},
+        ],
+    },
+
+    # ── Workbook 3: Health and Well-being (Adults) ─────────────────────────────
+    {
+        "reference": "AWIF 3.1",
+        "name": "Well-being of adults",
+        "description": (
+            "Worker is able to: work in ways that recognise the importance of families, friends and community "
+            "networks and support these relationships; recognise what matters to each individual."
+        ),
+        "keywords": [
+            "well-being", "holistic well-being", "community networks", "social connections",
+            "what matters to individuals", "strengths-based", "SSWB Act well-being outcomes",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.1a", "desc": "Knows what 'well-being' means in the context of health and social care for adults"},
+            {"ref": "3.1b", "desc": "Knows factors that affect the well-being of individuals and carers"},
+            {"ref": "3.1c", "desc": "Understands the importance of families, friends and community networks on well-being"},
+            {"ref": "3.1d", "desc": "Knows ways of working that support well-being"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.2",
+        "name": "Factors that impact upon health and well-being (adults)",
+        "description": (
+            "Worker is able to: know where to access further information or support; take account of factors "
+            "impacting the health and well-being of individuals they work with; support health promotion."
+        ),
+        "keywords": [
+            "health factors", "well-being determinants", "disability models", "mental health",
+            "physical health", "social model of disability", "health promotion", "attachment",
+            "self-identity", "health checks", "safeguarding links", "Mental Capacity Act",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.2a", "desc": "Knows human development and factors that can affect it"},
+            {"ref": "3.2b", "desc": "Knows the range of factors that may affect health, well-being and development"},
+            {"ref": "3.2c", "desc": "Knows the difference between the medical and social models of disability"},
+            {"ref": "3.2d", "desc": "Knows what good physical and mental health means and how they are interdependent"},
+            {"ref": "3.2e", "desc": "Knows the importance of self-identity, self-worth and sense of security on well-being"},
+            {"ref": "3.2f", "desc": "Knows the types of changes in an individual that would give cause for concern"},
+            {"ref": "3.2g", "desc": "Understands links between health and well-being and safeguarding"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.3",
+        "name": "Supporting personal care and continence management (adults)",
+        "description": (
+            "Worker is able to: follow individuals' personal plans when assisting with personal care and/or "
+            "continence management; follow infection prevention and control procedures; record appropriately."
+        ),
+        "keywords": [
+            "personal care", "continence", "continence management", "infection prevention",
+            "dignity in care", "privacy", "personal hygiene", "intimate care",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.3a", "desc": "Knows what 'personal care' means and how to establish individual preferences"},
+            {"ref": "3.3b", "desc": "Knows how to protect the privacy and dignity of individuals during personal care"},
+            {"ref": "3.3c", "desc": "Knows factors that may contribute to difficulties with continence"},
+            {"ref": "3.3d", "desc": "Knows aids, equipment and professionals that can support continence management"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.4",
+        "name": "Pressure area care (adults)",
+        "description": (
+            "Worker is able to: follow individuals' personal plans and risk assessments for pressure area care; "
+            "follow infection prevention procedures; report and record any changes in skin condition."
+        ),
+        "keywords": [
+            "pressure area care", "pressure ulcers", "skin integrity", "pressure damage",
+            "tissue viability", "repositioning", "pressure relief", "Waterlow", "wound care",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.4a", "desc": "Knows what pressure area care, pressure damage and pressure ulcers mean"},
+            {"ref": "3.4b", "desc": "Knows factors that cause skin breakdown and pressure damage"},
+            {"ref": "3.4c", "desc": "Knows stages of pressure ulcer development and common affected body parts"},
+            {"ref": "3.4d", "desc": "Knows interventions that can reduce the risk of pressure damage"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.5",
+        "name": "Oral health care and mouth care (adults)",
+        "description": (
+            "Worker is able to: follow individuals' personal plans when assisting with mouth care; "
+            "follow infection prevention procedures; record and report any changes in oral condition."
+        ),
+        "keywords": [
+            "oral health", "mouth care", "dental health", "dentures", "oral hygiene",
+            "nutrition links", "specialist referral", "older adults", "oral health policy",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.5a", "desc": "Knows what oral health care and mouth care means and why it is important"},
+            {"ref": "3.5b", "desc": "Knows national policy and practice guidance on oral health care"},
+            {"ref": "3.5c", "desc": "Knows common oral and dental problems in older people and individuals needing care"},
+            {"ref": "3.5d", "desc": "Knows the impact of poor oral health on health, well-being and self-esteem"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.6",
+        "name": "Foot care (adults)",
+        "description": (
+            "Worker is able to: follow individuals' personal plans when assisting with foot care; "
+            "monitor, record and report on the condition of individuals' feet."
+        ),
+        "keywords": [
+            "foot care", "podiatry", "chiropody", "foot conditions", "toenails",
+            "diabetes foot care", "mobility", "specialist referral",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.6a", "desc": "Knows why foot care is needed and common conditions causing foot problems"},
+            {"ref": "3.6b", "desc": "Knows signs of foot and toenail abnormalities and their impact on well-being"},
+            {"ref": "3.6c", "desc": "Knows the range of professionals who may help with foot care"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.7",
+        "name": "Administration of medication (adults)",
+        "description": (
+            "Worker is aware of what they can and cannot do in relation to medication administration "
+            "at their stage of training; follows workplace policies and procedures for medication."
+        ),
+        "keywords": [
+            "medication", "administration of medication", "MAR chart", "medication errors",
+            "prescribing", "dispensing", "medication safety", "over-the-counter medication",
+            "safeguarding medication", "controlled drugs",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.7a", "desc": "Knows legislation and national guidance related to medication administration"},
+            {"ref": "3.7b", "desc": "Knows the roles and responsibilities of those involved in prescribing, dispensing and supporting medication use"},
+            {"ref": "3.7c", "desc": "Knows links between misadministration of medication and safeguarding"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.8",
+        "name": "Nutrition and hydration (adults)",
+        "description": (
+            "Worker is able to: take account of specific nutrition and hydration requirements for individuals "
+            "they support; follow workplace policies for monitoring and recording nutrition and hydration."
+        ),
+        "keywords": [
+            "nutrition", "hydration", "balanced diet", "malnutrition", "dehydration",
+            "food intake", "MUST tool", "nutritional assessment", "dietary requirements",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.8a", "desc": "Knows what nutrition and hydration means and the principles of a balanced diet"},
+            {"ref": "3.8b", "desc": "Knows national initiatives that support nutrition and hydration"},
+            {"ref": "3.8c", "desc": "Knows the importance of a balanced diet for health and well-being"},
+            {"ref": "3.8d", "desc": "Knows factors that can affect nutrition and hydration"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.9",
+        "name": "Falls prevention (adults)",
+        "description": (
+            "Worker is able to: minimise the factors that can contribute to falls; follow workplace policies "
+            "for recording and reporting concerns about fall risk factors."
+        ),
+        "keywords": [
+            "falls prevention", "falls risk", "fall assessment", "mobility", "balance",
+            "moving safely", "environmental hazards", "older adults", "post-fall review",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.9a", "desc": "Knows factors that can contribute to falls"},
+            {"ref": "3.9b", "desc": "Knows how falls can be prevented and how to report concerns"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.10",
+        "name": "End of life care (adults)",
+        "description": (
+            "Worker is able to: follow workplace policies and procedures when supporting individuals "
+            "with end of life care."
+        ),
+        "keywords": [
+            "end of life", "palliative care", "dying", "bereavement", "advance care planning",
+            "advance directives", "DNACPR", "grief", "culture and death", "spiritual care",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.10a", "desc": "Knows how death, dying, grief and mourning may impact on individuals and key people"},
+            {"ref": "3.10b", "desc": "Knows how culture, religion and personal beliefs impact approach to death and dying"},
+            {"ref": "3.10c", "desc": "Knows what advance care planning and advance directives are and why they are important"},
+            {"ref": "3.10d", "desc": "Knows the range of support available for individuals with end of life care"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.11",
+        "name": "Assistive technology (adults)",
+        "description": (
+            "Worker is able to: follow workplace policies and procedures for the use of assistive technology "
+            "to support individuals' independence and well-being."
+        ),
+        "keywords": [
+            "assistive technology", "electronic assistive technology", "technology-enabled care",
+            "telecare", "smart home", "independence", "accessibility", "digital aids",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.11a", "desc": "Knows what assistive technology means and the range of technological aids available"},
+            {"ref": "3.11b", "desc": "Knows how technological aids support active participation and independence"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.12",
+        "name": "Sensory loss (adults)",
+        "description": (
+            "Worker is able to: take account of sensory loss support requirements when working with individuals."
+        ),
+        "keywords": [
+            "sensory loss", "sight loss", "hearing loss", "deafblindness", "visual impairment",
+            "hearing aids", "glasses", "communication adaptations", "sensory impairment",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.12a", "desc": "Knows what sensory loss means, its causes and conditions"},
+            {"ref": "3.12b", "desc": "Knows indicators and signs of sensory loss"},
+            {"ref": "3.12c", "desc": "Knows factors that impact individuals with sensory loss"},
+            {"ref": "3.12d", "desc": "Knows what to consider when communicating with individuals with sight, hearing or deafblind loss"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.13",
+        "name": "Dementia (adults)",
+        "description": (
+            "Worker is able to: support individuals to live well with dementia using person-centred approaches."
+        ),
+        "keywords": [
+            "dementia", "Alzheimer's", "living well with dementia", "dementia-friendly",
+            "cognitive impairment", "memory loss", "dementia care", "person-centred dementia",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.13a", "desc": "Knows what dementia is, its indicators and signs"},
+            {"ref": "3.13b", "desc": "Knows how dementia can affect individuals and their experience of the world"},
+            {"ref": "3.13c", "desc": "Knows what 'living well with dementia' means and how person-centred approaches support this"},
+            {"ref": "3.13d", "desc": "Knows what to consider when communicating with someone living with dementia"},
+            {"ref": "3.13e", "desc": "Knows the impact of dementia on family carers and how to support them"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.14",
+        "name": "Mental health (adults)",
+        "description": (
+            "Worker is able to: support individuals to live well with mental ill-health in a person-centred way."
+        ),
+        "keywords": [
+            "mental health", "mental ill-health", "mental health conditions", "recovery",
+            "well-being", "stigma", "mental health support", "mental health services",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.14a", "desc": "Knows what mental ill-health means and factors that can contribute to it"},
+            {"ref": "3.14b", "desc": "Knows indicators and signs of mental illness"},
+            {"ref": "3.14c", "desc": "Knows the potential impact of mental ill-health on health and well-being"},
+            {"ref": "3.14d", "desc": "Knows ways individuals can be supported to live well with mental ill-health"},
+        ],
+    },
+    {
+        "reference": "AWIF 3.15",
+        "name": "Substance misuse (adults)",
+        "description": (
+            "Worker recognises the impact of substance misuse on the health and well-being of individuals "
+            "they support and knows what support is available."
+        ),
+        "keywords": [
+            "substance misuse", "alcohol", "drugs", "addiction", "harm reduction",
+            "dependency", "substance use", "recovery services",
+        ],
+        "sub_outcomes": [
+            {"ref": "3.15a", "desc": "Knows what substance misuse means and its indicators and signs"},
+            {"ref": "3.15b", "desc": "Knows the potential impact of substance misuse on health and well-being"},
+            {"ref": "3.15c", "desc": "Knows the range of support available to individuals who misuse substances"},
+        ],
+    },
+
+    # ── Workbook 4: Health and Well-being (Children and Young People) ──────────
+    {
+        "reference": "AWIF 4.1",
+        "name": "Well-being of children and young people",
+        "description": (
+            "Worker is able to: recognise the importance of a child's family and significant others and "
+            "support and develop these relationships in the best interest of the child."
+        ),
+        "keywords": [
+            "children's well-being", "family importance", "significant others", "protective factors",
+            "children's welfare", "SSWB Act well-being outcomes",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.1a", "desc": "Knows what well-being means for children and young people"},
+            {"ref": "4.1b", "desc": "Knows factors that affect the well-being of children and young people"},
+            {"ref": "4.1c", "desc": "Understands the importance of family and significant others in a child's well-being"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.2",
+        "name": "Factors affecting health, well-being and development of children and young people",
+        "description": (
+            "Worker is able to: recognise the impact of experiences and life events on children's lives; "
+            "promote self-identity and self-esteem; support active participation and developmental progress appropriate to age and needs."
+        ),
+        "keywords": [
+            "child development", "developmental factors", "attachment", "resilience", "self-esteem",
+            "self-identity", "adverse childhood experiences", "ACEs", "trauma-informed",
+            "early intervention", "holistic development",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.2a", "desc": "Knows child development stages and factors that can affect development"},
+            {"ref": "4.2b", "desc": "Knows the range of factors affecting health, well-being and development of children"},
+            {"ref": "4.2c", "desc": "Understands the meaning of 'attachment' and its importance in child development"},
+            {"ref": "4.2d", "desc": "Knows the meaning of 'resilience' and why it matters for children"},
+            {"ref": "4.2e", "desc": "Knows what children need to stay healthy physically, mentally and emotionally"},
+            {"ref": "4.2f", "desc": "Knows how to use every-day routines and activities to support children's health and well-being"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.3",
+        "name": "Positive environments for children and young people",
+        "description": (
+            "Worker is able to: support a positive, safe, caring, nurturing and responsive environment "
+            "that meets the health, well-being, development and individual needs of children and young people."
+        ),
+        "keywords": [
+            "positive environment", "nurturing environment", "safe environment", "learning environment",
+            "inclusive environment", "routines", "stimulating", "child-friendly spaces",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.3a", "desc": "Knows the features of a positive environment for children and how it supports holistic development"},
+            {"ref": "4.3b", "desc": "Knows how the environment supports inclusion of all children"},
+            {"ref": "4.3c", "desc": "Understands the importance of consistent routines for children's health and well-being"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.4",
+        "name": "Play (children and young people)",
+        "description": (
+            "Worker is able to: provide a range of opportunities for different types of play; "
+            "adapt the environment and activities to support participation; meet individual needs and preferences."
+        ),
+        "keywords": [
+            "play", "play-based learning", "types of play", "imaginative play", "physical play",
+            "creative play", "exploratory play", "risk in play", "play opportunities",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.4a", "desc": "Knows the importance of play for children's health, well-being and development"},
+            {"ref": "4.4b", "desc": "Knows different types of play and their benefits"},
+            {"ref": "4.4c", "desc": "Knows how to support holistic development through play"},
+            {"ref": "4.4d", "desc": "Understands why risk is important in play and how to support acceptable levels"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.5",
+        "name": "Speech, language and communication (children and young people)",
+        "description": (
+            "Worker is able to: take account of the speech and language communication needs of children "
+            "in their practice."
+        ),
+        "keywords": [
+            "speech and language", "communication development", "language delay", "SLT",
+            "SLCN", "AAC", "early language", "play and communication", "multi-agency",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.5a", "desc": "Knows the importance of speech, language and communication for children's development"},
+            {"ref": "4.5b", "desc": "Knows the importance of early intervention for speech and language delays"},
+            {"ref": "4.5c", "desc": "Knows how play and activities support communication development"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.6",
+        "name": "Additional support needs (children and young people)",
+        "description": (
+            "Worker understands the types of additional support needs children may have and the principles "
+            "of inclusion; adapts the environment and activities to enable all children to take part."
+        ),
+        "keywords": [
+            "additional support needs", "ASN", "SEND", "inclusion", "special educational needs",
+            "disability", "adapting activities", "inclusive practice", "reasonable adjustments",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.6a", "desc": "Knows the types of additional support needs that children may have"},
+            {"ref": "4.6b", "desc": "Knows the principles of inclusion for children with additional support needs"},
+            {"ref": "4.6c", "desc": "Knows how to adapt the environment and activities to enable all children to participate"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.7",
+        "name": "Advice, guidance and support for children and young people",
+        "description": (
+            "Worker knows key areas of health and well-being for children and the range of agencies "
+            "providing information and advice."
+        ),
+        "keywords": [
+            "health information", "children's services", "advice and guidance", "signposting",
+            "multi-agency", "family support", "early help",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.7a", "desc": "Knows areas of health and well-being for children and young people and the range of agencies providing advice"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.8",
+        "name": "Administration of medication (children and young people)",
+        "description": (
+            "Worker is aware of what they can and cannot do in relation to medication administration for "
+            "children; follows workplace policies for medication."
+        ),
+        "keywords": [
+            "medication", "children's medication", "MAR chart", "medication administration",
+            "prescribing", "dispensing", "safeguarding medication", "medication errors",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.8a", "desc": "Knows legislation and national guidance related to medication administration for children"},
+            {"ref": "4.8b", "desc": "Knows the roles and responsibilities for prescribing, dispensing and supporting medication"},
+            {"ref": "4.8c", "desc": "Knows links between misadministration of medication and safeguarding"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.9",
+        "name": "Personal care (children and young people)",
+        "description": (
+            "Worker is able to: support personal care routines that meet individual needs; treat children "
+            "with dignity and respect; follow infection prevention and control policies."
+        ),
+        "keywords": [
+            "personal care", "intimate care", "dignity", "children's personal care",
+            "safe practice", "cultural considerations", "infection control",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.9a", "desc": "Knows the importance of supporting personal care routines for children and young people"},
+            {"ref": "4.9b", "desc": "Knows how to treat children with dignity and respect during personal care, considering cultural background"},
+            {"ref": "4.9c", "desc": "Knows how to support personal care in a way that protects both the child and the worker"},
+        ],
+    },
+    {
+        "reference": "AWIF 4.10",
+        "name": "Nutrition and hydration (children and young people)",
+        "description": (
+            "Worker is able to: take account of specific nutrition and hydration requirements for the "
+            "children and young people they support; provide support for a balanced diet and good hydration."
+        ),
+        "keywords": [
+            "nutrition", "hydration", "children's diet", "balanced diet", "healthy eating",
+            "food allergies", "dietary requirements", "growth", "development and nutrition",
+        ],
+        "sub_outcomes": [
+            {"ref": "4.10a", "desc": "Knows what nutrition and hydration means for children and principles of a balanced diet"},
+            {"ref": "4.10b", "desc": "Knows national initiatives that support nutrition and hydration for children"},
+            {"ref": "4.10c", "desc": "Knows the importance of a balanced diet for children's growth, health and development"},
+            {"ref": "4.10d", "desc": "Knows factors that can affect nutrition and hydration for children"},
+        ],
+    },
+
+    # ── Workbook 5: Professional Practice ──────────────────────────────────────
+    {
+        "reference": "AWIF 5.1",
+        "name": "Role and responsibilities of the health and social care worker",
+        "description": (
+            "Worker is able to: embed the ethos and structure of their organisation; take account of job "
+            "description limits; seek support when needed; report unsafe practices; follow workplace policies; "
+            "maintain duty of candour."
+        ),
+        "keywords": [
+            "professional responsibility", "scope of practice", "accountability", "duty of care",
+            "duty of candour", "confidentiality", "policies and procedures", "reporting unsafe practice",
+            "job description", "professional boundaries",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.1a", "desc": "Knows professional responsibilities and accountabilities within relevant legislative frameworks"},
+            {"ref": "5.1b", "desc": "Knows the purpose of job descriptions and the importance of working within role limits"},
+            {"ref": "5.1c", "desc": "Knows how and when to seek support in situations beyond role, responsibilities or expertise"},
+            {"ref": "5.1d", "desc": "Knows why it is important to report unsafe practices and how this should be done"},
+            {"ref": "5.1e", "desc": "Knows what 'duty of care' means and conflicts that may arise with individual rights"},
+            {"ref": "5.1f", "desc": "Knows what 'duty of candour' is and why being open and honest matters when things go wrong"},
+            {"ref": "5.1g", "desc": "Knows what 'confidentiality' means and when confidential information must be shared"},
+        ],
+    },
+    {
+        "reference": "AWIF 5.2",
+        "name": "Partnership working in health and social care",
+        "description": (
+            "Worker is able to: recognise the range and roles of other workers and agencies; apply "
+            "partnership working and co-production principles; apply confidentiality in all communications; "
+            "develop good professional relationships while maintaining boundaries."
+        ),
+        "keywords": [
+            "partnership working", "multi-disciplinary team", "MDT", "co-production", "collaboration",
+            "multi-agency", "professional relationships", "inter-agency working",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.2a", "desc": "Knows how to develop and maintain effective partnership working"},
+            {"ref": "5.2b", "desc": "Knows the principles of working in partnership and co-production"},
+            {"ref": "5.2c", "desc": "Knows the range and roles of other workers and professionals in health and social care"},
+            {"ref": "5.2d", "desc": "Knows the importance of multi-agency working"},
+        ],
+    },
+    {
+        "reference": "AWIF 5.3",
+        "name": "Team working in health and social care",
+        "description": (
+            "Worker is able to: contribute to the work of their team; fulfil their role and responsibilities; "
+            "support effective communication with team members; reflect on team performance."
+        ),
+        "keywords": [
+            "team working", "teamwork", "team contribution", "handover", "communication within teams",
+            "team roles", "supervision within teams", "shared goals",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.3a", "desc": "Knows types of team working and how teams may differ in structure and purpose"},
+            {"ref": "5.3b", "desc": "Knows the principles that underpin effective team working"},
+            {"ref": "5.3c", "desc": "Knows how effective team working contributes to the well-being of individuals"},
+        ],
+    },
+    {
+        "reference": "AWIF 5.4",
+        "name": "Handling information, records and confidentiality",
+        "description": (
+            "Worker is able to: follow workplace policies for handling information including storing, recording, "
+            "confidentiality and sharing; record written information accurately, clearly and in a timely manner."
+        ),
+        "keywords": [
+            "information handling", "record keeping", "GDPR", "data protection", "UK GDPR",
+            "confidentiality", "information sharing", "secure systems", "accurate recording",
+            "care records", "fact opinion judgement",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.4a", "desc": "Knows what 'handling information' means and the legislation relating to it"},
+            {"ref": "5.4b", "desc": "Knows what secure systems for recording and storing information are and why they matter"},
+            {"ref": "5.4c", "desc": "Knows how to record written information with accuracy, clarity, relevance and appropriate detail"},
+            {"ref": "5.4d", "desc": "Knows the difference between fact, opinion and judgement in recording"},
+            {"ref": "5.4e", "desc": "Understands the importance of sharing recorded information with individuals appropriately"},
+        ],
+    },
+    {
+        "reference": "AWIF 5.5",
+        "name": "Personal conduct of health and social care workers",
+        "description": (
+            "Worker is able to: uphold the profession of health and social care workers and role model "
+            "best practice in their work, including outside work and on social media."
+        ),
+        "keywords": [
+            "personal conduct", "professional conduct", "role modelling", "social media",
+            "professional image", "Code of Professional Practice", "inappropriate relationships",
+            "power dynamics", "professional reputation",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.5a", "desc": "Knows what positive role modelling means in health and social care"},
+            {"ref": "5.5b", "desc": "Knows why conduct outside work and on social media can affect suitability for the role"},
+            {"ref": "5.5c", "desc": "Knows why it is important not to form inappropriate relationships with individuals or families"},
+            {"ref": "5.5d", "desc": "Understands the power dynamics in working with individuals and how not to abuse this power"},
+        ],
+    },
+    {
+        "reference": "AWIF 5.6",
+        "name": "Continuing professional development (CPD)",
+        "description": (
+            "Worker is able to: meet workplace CPD requirements; identify own learning needs and develop "
+            "a personal development plan; prepare for and contribute to supervision and appraisal; "
+            "reflect on practice to support professional development."
+        ),
+        "keywords": [
+            "CPD", "continuing professional development", "supervision", "appraisal",
+            "reflective practice", "personal development plan", "PDP", "learning needs",
+            "professional registration", "Social Care Wales registration", "training",
+        ],
+        "sub_outcomes": [
+            {"ref": "5.6a", "desc": "Knows what continuing professional development (CPD) means"},
+            {"ref": "5.6b", "desc": "Knows legislative requirements and codes relating to CPD"},
+            {"ref": "5.6c", "desc": "Knows how to evaluate own knowledge and practice against relevant standards"},
+            {"ref": "5.6d", "desc": "Knows the range of learning opportunities and how to access information on best practice"},
+            {"ref": "5.6e", "desc": "Knows the principles of reflective practice and why it is important"},
+            {"ref": "5.6f", "desc": "Knows the purpose of supervision and appraisal and the role and responsibilities for these"},
+            {"ref": "5.6g", "desc": "Knows how effective supervision and reflective practice impact on the well-being of individuals"},
+        ],
+    },
+
+    # ── Workbook 6: Safeguarding Individuals ───────────────────────────────────
+    {
+        "reference": "AWIF 6.1",
+        "name": "Legislation, policies and codes for safeguarding",
+        "description": (
+            "Worker is able to: follow their local and workplace policies and procedures for safeguarding individuals."
+        ),
+        "keywords": [
+            "safeguarding legislation", "Wales Safeguarding Procedures", "SSWB Act safeguarding",
+            "Section 47", "categories of abuse", "safeguarding policy", "reporting safeguarding",
+            "recording safeguarding", "adult safeguarding", "child protection",
+        ],
+        "sub_outcomes": [
+            {"ref": "6.1a", "desc": "Knows what safeguarding means"},
+            {"ref": "6.1b", "desc": "Knows the main categories of abuse and neglect"},
+            {"ref": "6.1c", "desc": "Knows common signs and symptoms associated with harm, abuse and neglect"},
+            {"ref": "6.1d", "desc": "Knows legislation, national policies and codes relating to safeguarding both adults and children"},
+            {"ref": "6.1e", "desc": "Knows how legislative frameworks support rights to be protected from harm"},
+            {"ref": "6.1f", "desc": "Knows how to record and report safeguarding concerns"},
+        ],
+    },
+    {
+        "reference": "AWIF 6.2",
+        "name": "Working in ways that safeguard individuals from harm, abuse and neglect",
+        "description": (
+            "Worker is able to: promote and support the safeguarding of individuals through their day-to-day practice."
+        ),
+        "keywords": [
+            "safeguarding practice", "safeguarding culture", "trust and rapport", "reporting concerns",
+            "person-centred safeguarding", "safe working", "online safety", "social media risks",
+            "whistle-blowing", "zero tolerance",
+        ],
+        "sub_outcomes": [
+            {"ref": "6.2a", "desc": "Knows the role and responsibilities of health and social care workers in safeguarding"},
+            {"ref": "6.2b", "desc": "Knows the role of advocacy in relation to safeguarding"},
+            {"ref": "6.2c", "desc": "Understands the importance of establishing relationships that support trust and rapport"},
+            {"ref": "6.2d", "desc": "Knows how to promote an environment where individuals can express fears and concerns safely"},
+            {"ref": "6.2e", "desc": "Knows how to make individuals aware of risks associated with social media, internet and phones"},
+        ],
+    },
+    {
+        "reference": "AWIF 6.3",
+        "name": "Factors that contribute to harm, abuse or neglect",
+        "description": (
+            "Worker is able to: promote safe practice and minimise risks to individuals of harm, abuse or neglect."
+        ),
+        "keywords": [
+            "abuse risk factors", "safeguarding risk", "vulnerability", "perpetrator behaviour",
+            "grooming", "exploitation", "disclosure barriers", "serious case review", "learning lessons",
+        ],
+        "sub_outcomes": [
+            {"ref": "6.3a", "desc": "Knows why some individuals could be more at risk from harm, abuse or neglect"},
+            {"ref": "6.3b", "desc": "Knows why abuse may not be disclosed by adults, children, families or workers"},
+            {"ref": "6.3c", "desc": "Knows actions, behaviours or situations that increase the risk of harm or abuse"},
+            {"ref": "6.3d", "desc": "Knows features of perpetrator behaviour and grooming"},
+            {"ref": "6.3e", "desc": "Knows learning from reviews and reports into serious failures to protect individuals"},
+        ],
+    },
+    {
+        "reference": "AWIF 6.4",
+        "name": "Responding to, recording and reporting safeguarding concerns",
+        "description": (
+            "Worker is able to: access personal support when dealing with safeguarding issues; "
+            "follow workplace policies for recording and reporting concerns accurately and in a timely manner."
+        ),
+        "keywords": [
+            "safeguarding response", "reporting safeguarding", "recording concerns", "whistleblowing",
+            "duty to report", "information sharing safeguarding", "safeguarding boundaries",
+            "allegations", "disclosure",
+        ],
+        "sub_outcomes": [
+            {"ref": "6.4a", "desc": "Knows how to respond to suspected, disclosed or alleged harm, abuse or neglect"},
+            {"ref": "6.4b", "desc": "Knows actions to take if harm, abuse or neglect is suspected or disclosed"},
+            {"ref": "6.4c", "desc": "Knows actions to avoid if harm is suspected to protect any future investigation"},
+            {"ref": "6.4d", "desc": "Knows boundaries of confidentiality in relation to safeguarding"},
+            {"ref": "6.4e", "desc": "Knows what whistleblowing means and why it is important to report concerns"},
+            {"ref": "6.4f", "desc": "Knows potential barriers to reporting or raising concerns"},
+            {"ref": "6.4g", "desc": "Knows how to record safeguarding information with accuracy, clarity and appropriate detail"},
+        ],
+    },
+
+    # ── Workbook 7: Health and Safety ──────────────────────────────────────────
+    {
+        "reference": "AWIF 7.1",
+        "name": "Health and safety in the workplace",
+        "description": (
+            "Worker is able to: meet their responsibilities in line with health and safety legislation; "
+            "adhere to workplace policies and procedures for health and safety; follow processes for "
+            "recording and reporting health and safety concerns or incidents."
+        ),
+        "keywords": [
+            "Health and Safety at Work Act 1974", "HSWA", "health and safety legislation",
+            "employer responsibilities", "worker responsibilities", "unsafe practices",
+            "health and safety reporting",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.1a", "desc": "Knows key relevant health and safety legislation and what this means in practice"},
+            {"ref": "7.1b", "desc": "Knows the responsibilities of employers, workers and others for health and safety"},
+            {"ref": "7.1c", "desc": "Knows the importance of raising concerns about unsafe practices or working conditions"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.2",
+        "name": "Risk assessments for health and safety",
+        "description": (
+            "Worker is able to: comply with health and safety risk assessments for their workplace "
+            "and follow procedures for reporting concerns or incidents."
+        ),
+        "keywords": [
+            "risk assessment", "health and safety risk", "hazard identification", "risk control",
+            "incident reporting", "RIDDOR", "near miss", "risk management",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.2a", "desc": "Knows what risk assessment means in relation to health and safety"},
+            {"ref": "7.2b", "desc": "Knows the types of accidents, incidents, emergencies and hazards that may occur"},
+            {"ref": "7.2c", "desc": "Knows responsibilities for carrying out, recording and following risk assessments"},
+            {"ref": "7.2d", "desc": "Knows the difference between formal risk assessments and routine risk checks"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.3",
+        "name": "Fire safety",
+        "description": (
+            "Worker is able to: adhere to the fire procedures of their work setting, including evacuation procedures."
+        ),
+        "keywords": [
+            "fire safety", "fire evacuation", "fire prevention", "fire legislation",
+            "fire risk assessment", "evacuation plan", "fire exits", "fire extinguisher",
+            "muster point", "Regulatory Reform (Fire Safety) Order",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.3a", "desc": "Knows key legislation relating to fire safety"},
+            {"ref": "7.3b", "desc": "Knows the responsibilities of employers and workers for fire safety"},
+            {"ref": "7.3c", "desc": "Knows practices that prevent fires from starting and spreading"},
+            {"ref": "7.3d", "desc": "Knows the importance of knowing and following fire evacuation procedures"},
+            {"ref": "7.3e", "desc": "Knows the importance of maintaining clear exit routes at all times"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.4",
+        "name": "Moving and handling / moving and positioning",
+        "description": (
+            "Worker is able to: undertake safe moving and positioning and/or moving and handling "
+            "in accordance with their training and the context of their role."
+        ),
+        "keywords": [
+            "moving and handling", "manual handling", "moving and positioning", "LOLER",
+            "MHOR", "hoisting", "transfer technique", "safe handling", "ergonomics",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.4a", "desc": "Knows the meaning of 'moving and handling' and 'moving and positioning'"},
+            {"ref": "7.4b", "desc": "Knows key legislation relating to moving and handling"},
+            {"ref": "7.4c", "desc": "Knows the principles and techniques of moving and handling"},
+            {"ref": "7.4d", "desc": "Knows the implications of poor practice in moving and handling"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.5",
+        "name": "Emergency first aid",
+        "description": (
+            "Worker has attended emergency first aid training suitable to their role and knows when it "
+            "is appropriate to apply emergency first aid and when to seek medical help."
+        ),
+        "keywords": [
+            "first aid", "emergency first aid", "basic life support", "BLS", "CPR",
+            "AED", "choking", "medical emergency", "first aid at work",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.5a", "desc": "Has attended emergency first aid training appropriate to their role"},
+            {"ref": "7.5b", "desc": "Knows when it is appropriate to apply emergency first aid and when medical help is needed"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.6",
+        "name": "Infection prevention and control",
+        "description": (
+            "Worker is able to: follow good hygiene practice; implement workplace infection prevention "
+            "and control policies; follow correct hand washing technique."
+        ),
+        "keywords": [
+            "infection prevention", "IPC", "infection control", "PPE", "personal protective equipment",
+            "hand hygiene", "hand washing", "standard precautions", "MRSA", "C.diff",
+            "isolation precautions", "environmental cleaning",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.6a", "desc": "Knows the difference between bacteria, viruses, fungi and parasites and how infections spread"},
+            {"ref": "7.6b", "desc": "Knows factors that make infections more likely to occur"},
+            {"ref": "7.6c", "desc": "Knows key legislation and standards related to infection prevention and control"},
+            {"ref": "7.6d", "desc": "Knows the role and responsibilities of employers and workers for IPC"},
+            {"ref": "7.6e", "desc": "Knows how to maintain a clean environment and good personal hygiene to prevent infection"},
+            {"ref": "7.6f", "desc": "Knows hand washing technique and the use of PPE to prevent infection spread"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.7",
+        "name": "Food safety",
+        "description": (
+            "Worker is able to: follow workplace policies and procedures in relation to food safety."
+        ),
+        "keywords": [
+            "food safety", "food hygiene", "food handling", "food storage", "food preparation",
+            "food poisoning", "temperature control", "HACCP", "Food Standards Agency",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.7a", "desc": "Knows key legislation for food safety"},
+            {"ref": "7.7b", "desc": "Knows the role and responsibilities of employers and workers for food safety"},
+            {"ref": "7.7c", "desc": "Knows food safety hazards during preparation, serving, clearing and storing"},
+            {"ref": "7.7d", "desc": "Knows safe storage, disposal and preparation of food and drink"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.8",
+        "name": "Hazardous substances (COSHH)",
+        "description": (
+            "Worker is able to: follow workplace policies and procedures for the storage, use and "
+            "disposal of hazardous substances."
+        ),
+        "keywords": [
+            "COSHH", "hazardous substances", "Control of Substances Hazardous to Health",
+            "chemical safety", "cleaning products", "spillage", "SDS", "safe disposal",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.8a", "desc": "Knows what hazardous substances and COSHH mean"},
+            {"ref": "7.8b", "desc": "Knows the types of hazardous substances that may be found in the workplace"},
+            {"ref": "7.8c", "desc": "Knows safe practice for storing, using, dealing with spillages and disposing of hazardous substances"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.9",
+        "name": "Security in the work setting",
+        "description": (
+            "Worker is able to: adhere to arrangements that ensure safety of self, individuals and others "
+            "in the work setting; follow policies for lone working, advising of whereabouts and access."
+        ),
+        "keywords": [
+            "workplace security", "lone working", "access control", "visitor management",
+            "personal safety", "security procedures", "door security", "identity checks",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.9a", "desc": "Knows potential risks to security in the work setting"},
+            {"ref": "7.9b", "desc": "Knows safe practice to ensure security including lone working arrangements"},
+        ],
+    },
+    {
+        "reference": "AWIF 7.10",
+        "name": "Managing stress in health and social care",
+        "description": (
+            "Worker is able to: use supervision to discuss their well-being with their line manager; "
+            "recognise signs of stress and access support."
+        ),
+        "keywords": [
+            "stress management", "worker well-being", "burnout", "compassion fatigue",
+            "supervision and well-being", "resilience", "stress indicators", "support resources",
+        ],
+        "sub_outcomes": [
+            {"ref": "7.10a", "desc": "Knows the common signs and indicators of stress"},
+            {"ref": "7.10b", "desc": "Knows the circumstances that can trigger stress in health and social care"},
+            {"ref": "7.10c", "desc": "Knows ways to manage stress and the importance of recognising stress and taking action"},
+            {"ref": "7.10d", "desc": "Knows where to access additional support if experiencing stress"},
         ],
     },
 ]
@@ -1031,11 +2062,12 @@ SCW_CODE_STANDARDS = [
 
 
 async def seed_welsh_standards():
-    """Seed Welsh standards: CIW (RSI(SPRI)(W)R 2017 regulations), AWIF (7 workbooks), SCW Worker's Code.
+    """Seed Welsh standards: CIW (RSI(SPRI)(W)R 2017 regulations), AWIF (67 section-level entries), SCW Worker's Code.
 
     Migration-aware:
     - If old 7-question CIW entries exist → replace with real numbered regulations.
-    - AWIF and SCW entries are only seeded once (idempotent).
+    - If old 7 AWIF workbook-level entries exist → replace with 67 granular section entries.
+    - JSONB double-encoding is repaired on every startup.
     """
     async with database.with_admin() as conn:
         # ── CIW: detect old structure (7 entries) and migrate ────────────────
@@ -1077,47 +2109,81 @@ async def seed_welsh_standards():
         else:
             logger.info(f"CIW standards already current ({ciw_count} entries) — skipping")
 
-        # ── AWIF + SCW: seed once ────────────────────────────────────────────
-        awif_scw_count = await conn.fetchval(
+        # ── AWIF + SCW: seed once (migrate from 7 workbook-level to 67 section-level) ────
+        awif_count = await conn.fetchval(
             "SELECT COUNT(*) FROM standards_entries "
-            "WHERE type IN ('awif','scw') AND jurisdiction='wales' AND is_system=TRUE"
+            "WHERE type='awif' AND jurisdiction='wales' AND is_system=TRUE"
         )
-        if awif_scw_count > 0:
-            logger.info(f"AWIF/SCW standards already seeded ({awif_scw_count} entries) — skipping")
+        scw_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries "
+            "WHERE type='scw' AND jurisdiction='wales' AND is_system=TRUE"
+        )
+        # Old format: 7 AWIF workbook entries. New format: 67 section entries.
+        # Delete and re-seed if we have the old coarse-grained entries.
+        if awif_count > 0 and awif_count < 50:
+            logger.info(f"AWIF: found {awif_count} legacy workbook-level entries — migrating to granular section entries")
+            await conn.execute(
+                "DELETE FROM standards_entries WHERE type='awif' AND jurisdiction='wales' AND is_system=TRUE"
+            )
+            awif_count = 0
+        if awif_count >= 50 and scw_count > 0:
+            # Repair double-encoded JSONB if needed (happens when TEXT column stores json.dumps'd string)
+            sample = await conn.fetchrow(
+                "SELECT sub_outcomes FROM standards_entries WHERE type='awif' AND jurisdiction='wales' AND is_system=TRUE LIMIT 1"
+            )
+            if sample and isinstance(sample["sub_outcomes"], str):
+                logger.info("AWIF Wales: detected double-encoded JSONB — repairing…")
+                rows = await conn.fetch(
+                    "SELECT id, keywords, sub_outcomes, key_questions FROM standards_entries WHERE type='awif' AND jurisdiction='wales' AND is_system=TRUE"
+                )
+                for row in rows:
+                    kw = json.loads(row["keywords"]) if isinstance(row["keywords"], str) else (row["keywords"] or [])
+                    so = json.loads(row["sub_outcomes"]) if isinstance(row["sub_outcomes"], str) else (row["sub_outcomes"] or [])
+                    if isinstance(so, str):  # triple-encoded: decode once more
+                        so = json.loads(so)
+                    kq = json.loads(row["key_questions"]) if isinstance(row["key_questions"], str) else (row["key_questions"] or [])
+                    await conn.execute(
+                        "UPDATE standards_entries SET keywords=$1, sub_outcomes=$2, key_questions=$3 WHERE id=$4",
+                        json.dumps(kw), json.dumps(so), json.dumps(kq), row["id"],
+                    )
+                logger.info("AWIF Wales JSONB repair complete")
+            logger.info(f"AWIF/SCW standards already seeded ({awif_count} AWIF + {scw_count} SCW entries) — skipping")
             return
 
         now = datetime.now(timezone.utc).isoformat()
         awif_scw_entries = []
 
-        for wb in AWIF_STANDARDS:
-            awif_scw_entries.append({
-                "id": str(uuid.uuid4()),
-                "type": "awif",
-                "reference": wb["reference"],
-                "name": wb["name"],
-                "description": wb["description"],
-                "keywords": wb["keywords"],
-                "sub_outcomes": wb["sub_outcomes"],
-                "key_questions": [],
-                "quality_statement": False,
-                "source": "All Wales Induction Framework for Health and Social Care (AWIF) — Social Care Wales",
-                "created_at": now,
-            })
+        if awif_count == 0:
+            for wb in AWIF_STANDARDS:
+                awif_scw_entries.append({
+                    "id": str(uuid.uuid4()),
+                    "type": "awif",
+                    "reference": wb["reference"],
+                    "name": wb["name"],
+                    "description": wb["description"],
+                    "keywords": wb["keywords"],
+                    "sub_outcomes": wb["sub_outcomes"],
+                    "key_questions": [],
+                    "quality_statement": False,
+                    "source": "All Wales Induction Framework for Health and Social Care (AWIF) — Social Care Wales",
+                    "created_at": now,
+                })
 
         for std in SCW_CODE_STANDARDS:
-            awif_scw_entries.append({
-                "id": str(uuid.uuid4()),
-                "type": "scw",
-                "reference": std["reference"],
-                "name": std["name"],
-                "description": std["description"],
-                "keywords": std["keywords"],
-                "sub_outcomes": std["sub_outcomes"],
-                "key_questions": [],
-                "quality_statement": False,
-                "source": "Social Care Wales — Code of Professional Practice for Social Care (Worker's Code)",
-                "created_at": now,
-            })
+            if scw_count == 0:
+                awif_scw_entries.append({
+                    "id": str(uuid.uuid4()),
+                    "type": "scw",
+                    "reference": std["reference"],
+                    "name": std["name"],
+                    "description": std["description"],
+                    "keywords": std["keywords"],
+                    "sub_outcomes": std["sub_outcomes"],
+                    "key_questions": [],
+                    "quality_statement": False,
+                    "source": "Social Care Wales — Code of Professional Practice for Social Care (Worker's Code)",
+                    "created_at": now,
+                })
 
         await _insert_standards_entries(conn, awif_scw_entries, "wales")
         logger.info(
