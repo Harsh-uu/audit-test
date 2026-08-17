@@ -657,12 +657,17 @@ DROP INDEX IF EXISTS idx_meetings_org_id;
 DROP INDEX IF EXISTS idx_meetings_status;
 
 -- Staff-scoped schedule queries
-CREATE INDEX IF NOT EXISTS idx_schedules_staff_user_id
-    ON schedules(staff_user_id);
+-- NOTE: idx_schedules_staff_user_id dropped — all live queries filter by org_id
+-- first (via RLS), so the planner never picks a standalone staff_user_id index.
+-- A composite (org_id, staff_user_id) would be added here if that query pattern
+-- becomes hot enough to warrant one.
+DROP INDEX IF EXISTS idx_schedules_staff_user_id;
 
 -- Audit trail queries filter and sort by org + time
-CREATE INDEX IF NOT EXISTS idx_audit_logs_org_date
-    ON audit_logs(org_id, timestamp DESC);
+-- NOTE: idx_audit_logs_org_date dropped — the only SELECT on audit_logs filters
+-- by meeting_id (covered by idx_audit_logs_meeting_id). The composite
+-- (org_id, timestamp) can be re-added if an org-level audit page is built.
+DROP INDEX IF EXISTS idx_audit_logs_org_date;
 
 -- refresh_tokens table was never populated (refresh is purely JWT-based);
 -- drop it on all environments so the dead table no longer appears in audits.
