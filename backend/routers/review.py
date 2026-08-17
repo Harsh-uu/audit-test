@@ -1304,10 +1304,24 @@ async def share_meeting(meeting_id: str, data: ShareRequest, current_user=Depend
 async def add_comment(meeting_id: str, data: CommentRequest, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT status, analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT status, analysis_id, attendees, shared_with, created_by FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     role = current_user.get("role")
+    user_id = current_user.get("id", "")
+
+    # Non-admin/manager callers must be an attendee, creator, or shared reviewer
+    if role not in ["admin", "manager"]:
+        attendee_ids = [a.get("user_id", "") for a in _ensure_list(m_row["attendees"])]
+        shared_with_list = _ensure_list(m_row["shared_with"])
+        if (user_id not in attendee_ids
+                and not any(s.get("user_id") == user_id for s in shared_with_list if isinstance(s, dict))
+                and user_id != (m_row.get("created_by") or "")):
+            raise HTTPException(status_code=404, detail="Meeting not found")
+
     if role not in ["admin", "manager"] and (m_row["status"] or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="Comments are only available after sign-off")
     if not m_row["analysis_id"] and role not in ["admin", "manager"]:
@@ -1330,9 +1344,23 @@ async def add_comment(meeting_id: str, data: CommentRequest, current_user=Depend
 async def get_comments(meeting_id: str, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT id, attendees, shared_with, created_by FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Non-admin/manager callers must be an attendee, creator, or shared reviewer
+    user_id = current_user.get("id", "")
+    if current_user.get("role") not in ["admin", "manager"]:
+        attendee_ids = [a.get("user_id", "") for a in _ensure_list(m_row["attendees"])]
+        shared_with_list = _ensure_list(m_row["shared_with"])
+        if (user_id not in attendee_ids
+                and not any(s.get("user_id") == user_id for s in shared_with_list if isinstance(s, dict))
+                and user_id != (m_row.get("created_by") or "")):
+            raise HTTPException(status_code=404, detail="Meeting not found")
+
     async with database.with_org(org_id) as conn:
         rows = await conn.fetch("SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id)
     return [dict(r) for r in rows]
