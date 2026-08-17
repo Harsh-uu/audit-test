@@ -218,38 +218,59 @@ export default function InspectionPrep() {
     return (
       <Layout>
         <div className="p-6 md:p-8" aria-busy="true" aria-label="Loading inspection prep">
-          {/* Page header skeleton */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="space-y-2">
-              <Skeleton className="h-7 w-48" />
-              <Skeleton className="h-4 w-72" />
+
+          {/* Header — icon box + title/subtitle + export button */}
+          <div className="flex items-start gap-3 mb-6">
+            <Skeleton className="w-8 h-8 rounded-lg flex-shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-7 w-52" />
+              <Skeleton className="h-4 w-60" />
             </div>
-            <Skeleton className="h-9 w-32 rounded-lg" />
+            <Skeleton className="h-9 w-36 rounded-lg flex-shrink-0" />
           </div>
-          {/* Filter pill row skeleton */}
-          <div className="flex items-center gap-2 mb-6">
-            {[80, 56, 72, 100].map((w, i) => (
-              <Skeleton key={i} className="h-8 rounded-full" style={{ width: w }} />
+
+          {/* Stats row — 4 StatChip cards (border rounded-xl px-4 py-3) */}
+          <div className="flex gap-3 flex-wrap mb-6">
+            {[108, 120, 108, 120].map((w, i) => (
+              <div key={i} className="border border-gray-200 bg-gray-50 rounded-xl px-4 py-3" style={{ minWidth: w }}>
+                <Skeleton className="h-7 w-8 mb-1.5" />
+                <Skeleton className="h-3 w-20 mb-1" />
+                <Skeleton className="h-2.5 w-24" />
+              </div>
             ))}
           </div>
-          {/* Evidence cards skeleton */}
-          <div className="space-y-3">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="h-5 w-20 rounded-md" />
-                    <Skeleton className="h-4 w-56" />
+
+          {/* Filter pills — right-aligned (ml-auto) to match actual layout */}
+          <div className="flex items-center gap-1 mb-4">
+            <div className="ml-auto flex items-center gap-1">
+              {[40, 72, 80].map((w, i) => (
+                <Skeleton key={i} className="h-7 rounded-full" style={{ width: w }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Coverage rows — mirrors StandardRow: pct-badge + label/progress-bar + chevron */}
+          <div className="space-y-2">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="px-4 py-3 flex items-center gap-3">
+                  {/* Percentage badge (w-11 h-9 rounded-md) */}
+                  <Skeleton className="w-11 h-9 rounded-md flex-shrink-0" />
+                  {/* Regulation name + progress bar */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <Skeleton className="h-4" style={{ width: `${52 + (i % 5) * 8}%` }} />
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="flex-1 h-1.5 rounded-full" />
+                      <Skeleton className="h-3 w-14 flex-shrink-0" />
+                    </div>
                   </div>
-                  <Skeleton className="h-6 w-16 rounded-full" />
-                </div>
-                <div className="flex gap-2">
-                  <Skeleton className="h-6 w-32 rounded-md" />
-                  <Skeleton className="h-6 w-28 rounded-md" />
+                  {/* Chevron icon */}
+                  <Skeleton className="w-3.5 h-3.5 rounded flex-shrink-0" />
                 </div>
               </div>
             ))}
           </div>
+
         </div>
       </Layout>
     );
