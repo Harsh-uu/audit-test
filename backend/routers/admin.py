@@ -1885,6 +1885,57 @@ def _generate_bulk_transcripts_pdf(meetings_data: list) -> bytes:
 
 # ── Integration health check ──────────────────────────────────────────────────
 
+@router.post("/standards/reseed")
+async def force_reseed_standards(current_user=Depends(get_current_user)):
+    """
+    Force re-seed all system standards and rewarm the in-memory cache.
+    Super-admin only. Use when CQC or other standards are missing from production
+    without requiring a full redeploy.
+    """
+    if current_user["role"] != "super_admin":
+        raise HTTPException(403, "Super admin only")
+
+    from utils.seed import seed_standards, seed_welsh_standards, seed_scotland_standards, seed_northern_ireland_standards
+    from utils import standards_cache
+
+    results = {}
+    try:
+        await seed_standards()
+        results["england"] = "ok"
+    except Exception as e:
+        results["england"] = f"error: {e}"
+
+    try:
+        await seed_welsh_standards()
+        results["wales"] = "ok"
+    except Exception as e:
+        results["wales"] = f"error: {e}"
+
+    try:
+        await seed_scotland_standards()
+        results["scotland"] = "ok"
+    except Exception as e:
+        results["scotland"] = f"error: {e}"
+
+    try:
+        await seed_northern_ireland_standards()
+        results["northern_ireland"] = "ok"
+    except Exception as e:
+        results["northern_ireland"] = f"error: {e}"
+
+    # Rewarm the in-process cache so changes are immediately visible
+    try:
+        async with database.with_admin() as conn:
+            await standards_cache.rewarm(conn)
+        cache_counts = {k.split(":")[0]: len(v) for k, v in standards_cache._system.items()}
+        results["cache"] = cache_counts
+    except Exception as e:
+        results["cache"] = f"error: {e}"
+
+    logger.info(f"[admin] Force reseed triggered by {current_user.get('email')} — {results}")
+    return {"status": "complete", "results": results}
+
+
 @router.get("/integrations/health")
 async def integration_health(current_user=Depends(get_current_user)):
     """
