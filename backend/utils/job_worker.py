@@ -102,15 +102,56 @@ async def _process_job(job: dict):
                 logger.info(f"[queue] Job {job_id} will retry (attempt {attempt}/{MAX_ATTEMPTS})")
 
 
+async def _sweep_audio_deletions():
+    """
+    Recovery sweep: delete audio for meetings whose grace period has expired but
+    whose background task was lost (e.g. process restarted during the 5-min window).
+    Safe to run repeatedly — only targets rows still in 'grace_period'.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=300)).isoformat()
+    async with database.with_admin() as conn:
+        rows = await conn.fetch(
+            """SELECT id, audio_file_id FROM meetings
+               WHERE audio_deletion_status = 'grace_period'
+                 AND audio_grace_period_started_at < $1
+                 AND status = 'signed_off'""",
+            cutoff,
+        )
+    if not rows:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    for row in rows:
+        meeting_id = row["id"]
+        audio_file_id = row["audio_file_id"]
+        try:
+            if audio_file_id:
+                async with database.with_admin() as conn:
+                    await conn.execute(
+                        "UPDATE audio_files SET is_deleted=TRUE, deletion_status='deleted', deleted_at=$1 WHERE id=$2",
+                        now, audio_file_id,
+                    )
+            async with database.with_admin() as conn:
+                await conn.execute(
+                    "UPDATE meetings SET audio_deletion_status='deleted', audio_deleted_at=$1, updated_at=$1 WHERE id=$2",
+                    now, meeting_id,
+                )
+            logger.info("[queue] Audio sweep: deleted audio for meeting %s", meeting_id)
+        except Exception as e:
+            logger.error("[queue] Audio sweep: deletion failed for meeting %s: %s", meeting_id, e)
+
+
 async def start_worker():
     logger.info(f"[queue] Worker started — polling every {POLL_INTERVAL}s")
     await _recover_stuck_jobs()
+    await _sweep_audio_deletions()   # recover any deletions lost across restarts
     poll_count = 0
     while True:
         try:
             poll_count += 1
             if poll_count % 60 == 0:
                 await _recover_stuck_jobs()
+            if poll_count % 12 == 0:          # every ~60 s — belt-and-suspenders
+                await _sweep_audio_deletions()
             job = await _claim_next_job()
             if job:
                 await _process_job(job)

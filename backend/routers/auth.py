@@ -628,8 +628,11 @@ async def accept_invite(data: AcceptInviteRequest):
 
     user_id = invite["user_id"]
     email = user["email"]
+    # password_changed_at was just set to `now` in the UPDATE above — use it as
+    # pwd_ts so the refresh token is valid immediately (pwd_ts=0.0 would be
+    # rejected by the refresh endpoint because 0.0 < now).
     access_token = create_access_token(user_id, email)
-    refresh_token_val = create_refresh_token(user_id, 0.0)
+    refresh_token_val = create_refresh_token(user_id, _to_pwd_ts({"password_changed_at": now}))
     return {
         "id": user_id,
         "email": email,

@@ -419,8 +419,11 @@ async def upload_audio(
         result = await put_audio(storage_path, audio_data, content_type)
         actual_path = result.get("path", storage_path)
     except Exception as e:
-        logger.error(f"Storage upload failed: {e}")
-        actual_path = storage_path
+        logger.error(f"Storage upload failed for meeting {meeting_id}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Audio storage unavailable — please try again. Your recording has not been lost; re-upload when ready.",
+        )
 
     now = datetime.now(timezone.utc).isoformat()
     audio_file_id = str(uuid.uuid4())

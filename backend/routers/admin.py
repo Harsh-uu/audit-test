@@ -186,18 +186,22 @@ async def delete_user(user_id: str, current_user=Depends(get_current_user)):
 
 
 
+@router.post("/users/{user_id}/reset-password")
 async def reset_user_password(user_id: str, data: ResetPasswordRequest, current_user=Depends(get_current_user)):
     if current_user["role"] != "admin":
         raise HTTPException(403, "Admin only")
-    if len(data.new_password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
-    from routers.auth import hash_password
+    from routers.auth import hash_password, validate_password_strength
+    validate_password_strength(data.new_password)
     org_id = current_user.get("org_id", "")
+    now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
         u = await conn.fetchrow("SELECT id FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
         if not u:
             raise HTTPException(404, "User not found")
-        await conn.execute("UPDATE users SET password_hash = $1 WHERE id = $2", hash_password(data.new_password), user_id)
+        await conn.execute(
+            "UPDATE users SET password_hash=$1, must_change_password=TRUE, password_changed_at=$2 WHERE id=$3",
+            hash_password(data.new_password), now, user_id,
+        )
     return {"message": "Password reset successfully"}
 
 
