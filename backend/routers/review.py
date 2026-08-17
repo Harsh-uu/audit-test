@@ -203,6 +203,10 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
                 t = dict(t_row)
                 t["safety_warnings"] = _ensure_list(t.get("safety_warnings"))
                 t["speaker_colors"] = _ensure_dict(t.get("speaker_colors"))
+                # Raw text (~50 KB) is superseded by speaker_text in the UI.
+                # Find-replace has its own focused SELECT; no need to ship text here.
+                if t.get("speaker_text"):
+                    t.pop("text", None)
                 meeting["transcript"] = t
         except Exception:
             pass
@@ -218,7 +222,7 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
 
     async with database.with_org(org_id) as conn:
         c_rows = await conn.fetch(
-            "SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC",
+            "SELECT id, user_id, user_name, role, text, created_at FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC",
             meeting_id,
         )
     meeting["comments"] = [dict(c) for c in c_rows]

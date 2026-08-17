@@ -262,7 +262,8 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
                    ORDER BY type, reference""",
                 jurisdiction, org_id,
             )
-    return [dict(r) for r in rows]
+    _strip = {"org_id", "jurisdiction", "service_type", "created_at", "is_active"}
+    return [{k: v for k, v in dict(r).items() if k not in _strip} for r in rows]
 
 
 @router.post("/standards")

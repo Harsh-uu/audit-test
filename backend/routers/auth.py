@@ -249,7 +249,6 @@ async def login(data: LoginRequest, request: Request):
         return {
             "requires_mfa": True,
             "mfa_session": mfa_session,
-            "email": user["email"],
         }
 
     access_token = create_access_token(user_id, user["email"])
@@ -410,6 +409,9 @@ async def me(current_user=Depends(get_current_user)):
             user["org_name"] = org["name"] or ""
             user["org_jurisdiction"] = org["jurisdiction"] or "england"
             user["org_service_type"] = org["service_type"] or ""
+    # Strip internal fields never consumed by the frontend
+    for _f in ("password_changed_at", "is_active", "updated_at"):
+        user.pop(_f, None)
     return user
 
 

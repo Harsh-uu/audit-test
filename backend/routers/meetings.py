@@ -9,6 +9,17 @@ import database
 
 router = APIRouter()
 
+# Columns returned for the list view — heavy/report-only fields are excluded.
+# Detail view (GET /{id}) still uses SELECT * so the report page gets everything.
+_LIST_COLS = (
+    "id, org_id, title, date, location, meeting_type, "
+    "created_by, created_by_name, sign_off_manager_id, sign_off_manager_name, "
+    "attendees, team_id, setting_id, schedule_id, status, "
+    "analysis_id, transcript_id, transcript_has_warnings, "
+    "shared_with, total_paused_duration_seconds, "
+    "audio_file_id, created_at, updated_at"
+)
+
 
 class CreateMeetingRequest(BaseModel):
     title: str
@@ -70,11 +81,16 @@ def _ensure_dict(val):
 
 
 def _parse_meeting_row(m: dict) -> dict:
-    """Normalize JSONB list/dict fields on a meeting row."""
+    """Normalize JSONB list/dict fields on a meeting row.
+    Only touches keys already present — so list queries that omit heavy
+    fields (recording_events, paused_periods, etc.) don't get them re-added.
+    """
     for field in ("attendees", "recording_events", "paused_periods", "shared_with", "pii_redactions"):
-        m[field] = _ensure_list(m.get(field))
+        if field in m:
+            m[field] = _ensure_list(m.get(field))
     for field in ("sign_off_record", "reopen_record"):
-        m[field] = _ensure_dict(m.get(field))
+        if field in m:
+            m[field] = _ensure_dict(m.get(field))
     return m
 
 
@@ -157,7 +173,7 @@ async def list_meetings(current_user=Depends(get_current_user)):
     if role not in ("admin", "manager") and not org_id:
         async with database.with_admin() as conn:
             rows = await conn.fetch(
-                """SELECT * FROM meetings
+                f"""SELECT {_LIST_COLS} FROM meetings
                    WHERE created_by=$1
                       OR EXISTS (
                           SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
@@ -178,14 +194,14 @@ async def list_meetings(current_user=Depends(get_current_user)):
     async with database.with_org(org_id) as conn:
         if role == "admin":
             rows = await conn.fetch(
-                "SELECT * FROM meetings ORDER BY created_at DESC LIMIT 500"
+                f"SELECT {_LIST_COLS} FROM meetings ORDER BY created_at DESC LIMIT 500"
             )
 
         elif role == "manager":
             if scope["level"] == "org":
                 # Org-level manager sees every meeting in the org
                 rows = await conn.fetch(
-                    "SELECT * FROM meetings ORDER BY created_at DESC LIMIT 500"
+                    f"SELECT {_LIST_COLS} FROM meetings ORDER BY created_at DESC LIMIT 500"
                 )
             else:
                 # Scoped manager — get current team/setting members
@@ -198,7 +214,7 @@ async def list_meetings(current_user=Depends(get_current_user)):
                 all_scoped_str = [str(uid) for uid in all_scoped]
 
                 rows = await conn.fetch(
-                    """SELECT * FROM meetings
+                    f"""SELECT {_LIST_COLS} FROM meetings
                        WHERE created_by::text = ANY($1)
                           OR sign_off_manager_id::text = ANY($1)
                           OR EXISTS (
@@ -226,7 +242,7 @@ async def list_meetings(current_user=Depends(get_current_user)):
 
         else:
             rows = await conn.fetch(
-                """SELECT * FROM meetings
+                f"""SELECT {_LIST_COLS} FROM meetings
                    WHERE created_by=$1
                       OR EXISTS (
                           SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
@@ -269,6 +285,10 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
                 tr = dict(t_row)
                 tr["safety_warnings"] = _ensure_list(tr.get("safety_warnings"))
                 tr["speaker_colors"] = _ensure_dict(tr.get("speaker_colors"))
+                # speaker_text is the diarised view rendered in the UI; raw text is ~50 KB
+                # and only needed for find-replace (its own endpoint fetches it separately).
+                if tr.get("speaker_text"):
+                    tr.pop("text", None)
                 meeting["transcript"] = tr
 
         # Attach analysis
@@ -279,7 +299,8 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
 
         # Attach comments
         c_rows = await conn.fetch(
-            "SELECT * FROM reviewer_comments WHERE meeting_id = $1 ORDER BY created_at ASC", meeting_id
+            "SELECT id, user_id, user_name, role, text, created_at FROM reviewer_comments WHERE meeting_id = $1 ORDER BY created_at ASC",
+            meeting_id,
         )
         meeting["comments"] = [dict(c) for c in c_rows]
 
