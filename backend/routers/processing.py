@@ -390,8 +390,15 @@ async def upload_audio(
     audio_data = await request.body()
     if not audio_data:
         raise HTTPException(status_code=400, detail="Empty audio body")
-    if len(audio_data) > 500 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Recording too large (max 500 MB)")
+    if len(audio_data) > 350 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Recording too large (max 350 MB)")
+
+    _size_mb = len(audio_data) / (1024 * 1024)
+    if _size_mb > 300:
+        logger.warning(
+            "Large audio upload: meeting=%s org=%s size=%.1f MB — approaching 350 MB bucket limit",
+            meeting_id, org_id, _size_mb,
+        )
 
     content_type = request.headers.get("content-type", "audio/webm").split(";")[0].strip()
     file_ext = "webm"
