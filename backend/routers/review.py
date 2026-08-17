@@ -538,35 +538,42 @@ async def get_risk_suggestions(meeting_id: str, risk_id: str, current_user=Depen
 @router.post("/{meeting_id}/mark-reviewed")
 async def mark_reviewed(meeting_id: str, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
-    async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
-    if not m_row:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = dict(m_row)
-    if meeting.get("status") not in ["in_review"]:
-        raise HTTPException(status_code=400, detail="Meeting not in review state")
-
     user_id = current_user["id"]
     now = datetime.now(timezone.utc).isoformat()
-    attendees = _ensure_list(meeting.get("attendees"))
-    found = False
-    for a in attendees:
-        if a.get("user_id") == user_id:
-            a["reviewed"] = True
-            a["reviewed_at"] = now
-            found = True
-            break
-    if not found and meeting.get("created_by") != user_id:
-        raise HTTPException(status_code=403, detail="You are not an attendee of this meeting")
 
-    all_reviewed = all(a.get("reviewed", False) for a in attendees) if attendees else True
-    new_status = "reviewed" if all_reviewed else "in_review"
-
+    # Single transaction: SELECT FOR UPDATE locks the row so concurrent
+    # mark-reviewed calls are serialised — each reads the other's change
+    # before writing, preventing the lost-update race.
     async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow(
+            "SELECT * FROM meetings WHERE id=$1 AND org_id=$2 FOR UPDATE",
+            meeting_id, org_id,
+        )
+        if not m_row:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        meeting = dict(m_row)
+        if meeting.get("status") not in ["in_review"]:
+            raise HTTPException(status_code=400, detail="Meeting not in review state")
+
+        attendees = _ensure_list(meeting.get("attendees"))
+        found = False
+        for a in attendees:
+            if a.get("user_id") == user_id:
+                a["reviewed"] = True
+                a["reviewed_at"] = now
+                found = True
+                break
+        if not found and meeting.get("created_by") != user_id:
+            raise HTTPException(status_code=403, detail="You are not an attendee of this meeting")
+
+        all_reviewed = all(a.get("reviewed", False) for a in attendees) if attendees else True
+        new_status = "reviewed" if all_reviewed else "in_review"
+
         await conn.execute(
             "UPDATE meetings SET attendees=$1::jsonb, status=$2, updated_at=$3 WHERE id=$4",
             json.dumps(attendees), new_status, now, meeting_id,
         )
+
     _admin_stats_cache.pop(org_id, None)
     return {"message": "Marked as reviewed", "all_reviewed": all_reviewed, "status": new_status}
 
