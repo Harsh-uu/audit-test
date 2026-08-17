@@ -313,9 +313,8 @@ export default function StaffPortfolio() {
   const exportPdf = async () => {
     setExporting(true);
     try {
-      const token = localStorage.getItem("supervision_token");
       const resp = await fetch(`${API}/portfolio/${effectiveUserId}/export-pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();

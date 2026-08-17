@@ -16,7 +16,7 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - **Transcription:** AssemblyAI EU endpoint only (Dublin) — strict data governance, no Whisper
 - **Email:** Resend (hardcoded `noreply@notify.1two.one`)
 - **Storage:** Supabase Storage for audio + supervision docs; Emergent Object Storage for org logos only
-- **Auth:** JWT (Bearer token in localStorage), Email OTP 2FA
+- **Auth:** JWT (HttpOnly Secure Cookies since P3b fix Aug 2026), Email OTP 2FA. Cookie names: `supervision_access` (30min), `supervision_refresh` (7d). Backend supports Bearer token fallback for backward compat.
 
 ---
 
@@ -329,3 +329,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - **New repair endpoint**: `POST /api/admin/users/fix-org-by-email?email=<email>` + body `{org_id}` lets admins/super_admins fix existing users with null org_id (e.g., Connor in production).
 - **BrandingTab re-fetches on mount**: `BrandingTab.js` now calls `GET /api/org/branding` on mount so saved brand color is always shown — even immediately after a fresh login (not just after a hard browser refresh).
 - **AuthContext fetches full profile after login**: `login()` and `completeLogin()` in `AuthContext.js` now call `GET /api/auth/me` after setting the initial user state, ensuring `org_branding`, `org_name`, `org_jurisdiction` are populated in the context from the first page load after login.
+
+
+### P0 (Done — Aug 2026, Session 9 — Security P3b/P3c)
+- **P3b HttpOnly Cookies**: JWT tokens moved from `localStorage` to HttpOnly+Secure+SameSite=Lax cookies (`supervision_access` 30min, `supervision_refresh` 7d). All auth endpoints updated (`login`, `verify-mfa`, `accept-invite`, `refresh`, `logout`). `deps.py` reads cookie first, falls back to Bearer header for backward compat. Frontend `AuthContext.js` sets `axios.defaults.withCredentials = true` globally; all stale `localStorage.getItem("supervision_token")` calls removed from 9 files; `fetch()` calls updated with `credentials: 'include'`. Eliminates XSS token theft risk.
+- **P3c Sign-off Gate**: `POST /api/review/{meeting_id}/signoff` now strictly requires `status == "reviewed"` (all attendees reviewed). Attempting sign-off when `status == "in_review"` returns HTTP 400 with a list of pending reviewers. No admin override — if outstanding, the record shows as incomplete. Frontend MeetingReport.js disables the Sign Off button with a tooltip when `isInReview`. Sign-off confirmation modal shows blocking red warning with attendee names.
+- **Security test suite updated**: `test_security_jwt_idor.py` `login()` helper updated to read token from `supervision_access` cookie. 2 new `TestSignOffGate` tests added. All 26 tests pass.

@@ -617,11 +617,22 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_u
         if current_user["role"] != "admin":
             raise HTTPException(status_code=403, detail="You are not the assigned sign-off manager")
     if meeting.get("status") not in ["reviewed", "in_review"]:
-        raise HTTPException(status_code=400, detail="Meeting must be reviewed before sign-off")
+        raise HTTPException(status_code=400, detail="Meeting must be in review state before sign-off")
 
     now = datetime.now(timezone.utc).isoformat()
     attendees = _ensure_list(meeting.get("attendees"))
-    unreviewed_names = [a["name"] for a in attendees if not a.get("reviewed", False)]
+
+    # P3c: All attendees must have reviewed before sign-off is permitted.
+    # This prevents regulated supervision records being signed off prematurely.
+    if meeting.get("status") == "in_review":
+        unreviewed = [a.get("name", "Unknown") for a in attendees if not a.get("reviewed", False)]
+        names = ", ".join(unreviewed) if unreviewed else "some attendees"
+        raise HTTPException(
+            status_code=400,
+            detail=f"All attendees must mark the meeting as reviewed before sign-off. Pending: {names}",
+        )
+
+    unreviewed_names: list = []  # status == "reviewed" means all have reviewed
     sign_off_record = {"signed_by": current_user["id"], "signed_by_name": current_user["name"], "signed_at": now}
 
     async with database.with_org(org_id) as conn:

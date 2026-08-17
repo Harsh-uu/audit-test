@@ -16,9 +16,13 @@ async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = credentials.credentials
+    # P3b: HttpOnly cookie takes priority; fall back to Authorization header
+    # for backward-compat with any sessions that pre-date the cookie migration.
+    token = request.cookies.get("supervision_access")
+    if not token:
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        token = credentials.credentials
     secret = os.environ["JWT_SECRET"]
     try:
         payload = jwt.decode(token, secret, algorithms=["HS256"])

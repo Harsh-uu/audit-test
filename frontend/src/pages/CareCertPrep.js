@@ -292,12 +292,11 @@ export default function CareCertPrep() {
   const handleExportExcerpts = async () => {
     setExporting(true);
     try {
-      const token = localStorage.getItem("supervision_token");
       const params = selectedStaff.size > 0
         ? `?staff_ids=${Array.from(selectedStaff).join(",")}`
         : "";
       const resp = await fetch(`${API}/admin/export-cc-excerpts${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();

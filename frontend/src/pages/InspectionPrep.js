@@ -196,9 +196,8 @@ export default function InspectionPrep() {
     setExporting(true);
     const { exportFile } = getInspectionLabels(user?.org_jurisdiction || "england");
     try {
-      const token = localStorage.getItem("supervision_token");
       const resp = await fetch(`${API}/admin/export-cqc-excerpts`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();

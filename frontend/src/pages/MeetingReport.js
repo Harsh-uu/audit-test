@@ -408,9 +408,9 @@ export default function MeetingReport() {
   const exportPdf = async () => {
     setExportingPdf(true);
     try {
-      const token = localStorage.getItem("supervision_token");
+      // P3b: use credentials:'include' so HttpOnly cookie is sent by fetch()
       const resp = await fetch(`${API}/review/${meetingId}/export-pdf?include_transcript=${includeTranscript}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();
@@ -427,9 +427,9 @@ export default function MeetingReport() {
   const exportTranscript = async () => {
     setExportingTranscript(true);
     try {
-      const token = localStorage.getItem("supervision_token");
+      // P3b: use credentials:'include' so HttpOnly cookie is sent by fetch()
       const resp = await fetch(`${API}/review/${meetingId}/export-transcript`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();
@@ -614,7 +614,13 @@ export default function MeetingReport() {
               </span>
             )}
             {canSignOff && !isSignedOff && !isProcessing && analysis && (
-              <button onClick={() => setShowSignOffConfirm(true)} disabled={submitting} className="flex items-center gap-2 bg-[#1E3A8A] text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60" data-testid="sign-off-btn">
+              <button
+                onClick={() => setShowSignOffConfirm(true)}
+                disabled={submitting || isInReview}
+                title={isInReview ? "All attendees must mark the session as reviewed before sign-off can be triggered" : "Sign off this session"}
+                className="flex items-center gap-2 bg-[#1E3A8A] text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                data-testid="sign-off-btn"
+              >
                 <Shield className="w-4 h-4" />
                 <span className="hidden sm:inline">Sign Off</span>
               </button>
@@ -950,11 +956,11 @@ export default function MeetingReport() {
                 <h3 className="text-base font-semibold text-gray-900 mb-2">Sign off this session?</h3>
                 <p className="text-sm text-gray-500 mb-4">This will start the audio deletion process and mark the meeting as complete.</p>
                 {unreviewed.length > 0 && (
-                  <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3" data-testid="unreviewed-attendees-warning">
-                    <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-blue-800">
-                      <span className="font-medium">{unreviewed.length} {unreviewed.length === 1 ? "attendee has" : "attendees have"} not yet reviewed:</span>{" "}
-                      {unreviewed.map(a => a.name).join(", ")}.
+                  <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-lg p-3 mb-3" data-testid="unreviewed-attendees-warning">
+                    <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-800">
+                      <span className="font-medium">{unreviewed.length} {unreviewed.length === 1 ? "attendee has" : "attendees have"} not reviewed:</span>{" "}
+                      {unreviewed.map(a => a.name).join(", ")}. Sign-off is blocked until all attendees have reviewed.
                     </p>
                   </div>
                 )}
@@ -977,7 +983,7 @@ export default function MeetingReport() {
                   </button>
                   <button
                     onClick={signOff}
-                    disabled={submitting}
+                    disabled={submitting || unreviewed.length > 0}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#1E3A8A] text-white rounded-md hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
                     data-testid="signoff-confirm-btn"
                   >

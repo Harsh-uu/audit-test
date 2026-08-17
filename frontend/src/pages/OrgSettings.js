@@ -425,7 +425,6 @@ export default function OrgSettings({ embedded = false }) {
     setExportLoading(true);
     setError("");
     try {
-      const token = localStorage.getItem("supervision_token");
       const payload = {
         format: "pdf",
         staff_ids: exportStaffIds.length ? exportStaffIds : null,
@@ -435,7 +434,8 @@ export default function OrgSettings({ embedded = false }) {
       };
       const resp = await fetch(`${API}/admin/export-evidence`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        credentials: 'include',
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!resp.ok) throw new Error(await resp.text());
@@ -454,7 +454,6 @@ export default function OrgSettings({ embedded = false }) {
     setTxExportLoading(true);
     setError("");
     try {
-      const token = localStorage.getItem("supervision_token");
       const payload = {
         staff_ids: exportStaffIds.length ? exportStaffIds : null,
         date_from: exportDateFrom || null,
@@ -463,7 +462,8 @@ export default function OrgSettings({ embedded = false }) {
       };
       const resp = await fetch(`${API}/admin/export-transcripts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        credentials: 'include',
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!resp.ok) throw new Error(await resp.text());

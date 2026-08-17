@@ -437,11 +437,9 @@ export default function RecordingScreen() {
 
     try {
       try { await silentRefresh(); } catch {}
-      const token = localStorage.getItem("supervision_token");
       await axios.post(`${API}/processing/${meetingId}/upload`, blob, {
         headers: {
           "Content-Type": "application/octet-stream",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         onUploadProgress: (e) => {
           if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));

@@ -194,12 +194,10 @@ export default function UploadSupervision() {
     form.append("meeting_date", meetingDate);
     form.append("doc_type", docType === "other" && customDocType.trim() ? customDocType.trim() : docType);
 
-    const token = localStorage.getItem("supervision_token");
     try {
       await axios.post(`${API}/doc-uploads/`, form, {
         headers: {
           "Content-Type": "multipart/form-data",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
       setFile(null);

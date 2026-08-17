@@ -44,10 +44,9 @@ export function BrandingTab() {
     setError("");
     const formData = new FormData();
     formData.append("file", file);
-    const token = localStorage.getItem("supervision_token");
     try {
       await axios.post(`${API}/org/branding/logo`, formData, {
-        headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "multipart/form-data" },
       });
       setHasLogo(true);
       setLogoPreview(`${API}/org/branding/logo/${user?.org_id}?t=${Date.now()}`);

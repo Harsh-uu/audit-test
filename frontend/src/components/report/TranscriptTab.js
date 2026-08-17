@@ -649,11 +649,9 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     const label = backupBy ? ` (saved by ${backupBy}${backupAt ? ` at ${new Date(backupAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""})` : "";
     if (!window.confirm(`Restore the previous version of speaker labels${label}? This will overwrite the current labels.`)) return;
     try {
-      const token = localStorage.getItem("supervision_token");
       const res = await axios.post(
         `${API}/api/review/${meeting.id}/speaker-text/restore-backup`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        {}
       );
       toast.success("Previous speaker labels restored");
       if (onSpeakerTextGenerated) onSpeakerTextGenerated(res.data.speaker_text, res.data.edited_by_name, res.data.edited_at);
@@ -665,10 +663,8 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
   const handleReset = async () => {
     if (!window.confirm("This will clear the edited speaker labels and restore the full raw transcript. Continue?")) return;
     try {
-      const token = localStorage.getItem("supervision_token");
       await axios.delete(
-        `${API}/api/review/${meeting.id}/speaker-text`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `${API}/api/review/${meeting.id}/speaker-text`
       );
       setLocalTurns([]);
       setDirty(false);
@@ -683,7 +679,6 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
   const handleSave = async (stagedOverrides = {}) => {
     setSaving(true);
     try {
-      const token = localStorage.getItem("supervision_token");
       // Apply any renames still pending in the panel's staged map (user clicked
       // Save without blurring the input first, so localTurns may be stale).
       const finalTurns = Object.keys(stagedOverrides).length
@@ -703,8 +698,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
 
       const res = await axios.patch(
         `${API}/api/review/${meeting.id}/speaker-text`,
-        { speaker_text: newText, speaker_colors: Object.keys(finalColors).length ? finalColors : null },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { speaker_text: newText, speaker_colors: Object.keys(finalColors).length ? finalColors : null }
       );
       // Immediately commit the saved state — must happen before onSpeakerTextGenerated
       // so the isDirty guard in the useEffect doesn't skip the reset
@@ -722,11 +716,9 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
   const generateSpeakerView = async () => {
     setGenerating(true);
     try {
-      const token = localStorage.getItem("supervision_token");
       const res = await axios.post(
         `${API}/api/processing/${meeting.id}/diarize`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        {}
       );
 
       if (res.data.status === "processing") {
@@ -735,16 +727,14 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
         const intervalId = setInterval(async () => {
           try {
             const poll = await axios.get(
-              `${API}/api/processing/${meeting.id}/status`,
-              { headers: { Authorization: `Bearer ${token}` } }
+              `${API}/api/processing/${meeting.id}/status`
             );
             if (poll.data.diarize_status === "done") {
               clearInterval(intervalId);
               // Only update localTurns if the user hasn't made manual changes
               if (!isDirtyRef.current) {
                 const updated = await axios.get(
-                  `${API}/api/review/${meeting.id}`,
-                  { headers: { Authorization: `Bearer ${token}` } }
+                  `${API}/api/review/${meeting.id}`
                 );
                 const newSpeakerText = updated.data.transcript?.speaker_text;
                 if (onSpeakerTextGenerated) onSpeakerTextGenerated(newSpeakerText, null, null);

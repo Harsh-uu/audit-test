@@ -65,12 +65,18 @@ _token_cache: dict[str, str] = {}
 
 
 def login(email: str, password: str) -> str:
-    """Login and return the Bearer access token. Fails hard if login fails."""
+    """Login and return the access token.
+    P3b: tokens now in HttpOnly cookies. We extract the cookie value for tests.
+    The backend still accepts Bearer tokens as a fallback, so we pass the
+    cookie value in Authorization: Bearer headers for all security test requests.
+    """
     r = requests.post(api("/auth/login"), json={"email": email, "password": password}, timeout=15)
     assert r.status_code == 200, f"Login failed for {email}: {r.text}"
     data = r.json()
-    assert "token" in data, f"No token in login response: {data}"
-    return data["token"]
+    # P3b: token is now the supervision_access cookie, not in the response body
+    token = r.cookies.get("supervision_access")
+    assert token, f"No supervision_access cookie in login response for {email}. Body: {data}"
+    return token
 
 
 def login_cached(email: str, password: str) -> str:
@@ -511,3 +517,105 @@ class TestIDORCrossTenant:
             f"Staff accessed /admin/team-insights! Got {r.status_code}"
         )
         print(f"PASS: cross-tenant → GET team-insights with org_b param → 403 (role block + no data leak)")
+
+
+
+# ── P3c: Sign-off Gate ────────────────────────────────────────────────────────
+
+class TestSignOffGate:
+    """P3c: Sign-off is blocked when status == in_review (not all attendees reviewed)."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """Create an org + manager + meeting in in_review state for the test."""
+        self.org_id  = str(uuid.uuid4())
+        self.mgr_id  = str(uuid.uuid4())
+        self.mtg_id  = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        async def _setup():
+            import database
+            await database.create_pool()
+            async with database.with_admin() as conn:
+                await conn.execute(
+                    """INSERT INTO organisations (id, name, created_at, jurisdiction, service_type, status)
+                       VALUES ($1, $2, $3, 'england', 'residential', 'active')
+                       ON CONFLICT DO NOTHING""",
+                    self.org_id, "P3cTestOrg", now,
+                )
+                import bcrypt
+                pw_hash = bcrypt.hashpw(b"P3cTest999!", bcrypt.gensalt()).decode()
+                await conn.execute(
+                    "INSERT INTO users (id, org_id, email, password_hash, name, role, is_active, created_at) "
+                    "VALUES ($1,$2,$3,$4,$5,'manager',TRUE,$6) ON CONFLICT DO NOTHING",
+                    self.mgr_id, self.org_id, f"mgr_{self.mgr_id[:8]}@p3c.test", pw_hash, "P3cManager", now,
+                )
+                attendees = json.dumps([
+                    {"name": "Alice Unreviewed", "email": "alice@p3c.test", "reviewed": False}
+                ])
+                await conn.execute(
+                    "INSERT INTO meetings (id, org_id, title, status, attendees, created_by, created_at) "
+                    "VALUES ($1,$2,$3,'in_review',$4,$5,$6) ON CONFLICT DO NOTHING",
+                    self.mtg_id, self.org_id, "P3cTestMeeting", attendees, self.mgr_id, now,
+                )
+        _run_async(_setup())
+        yield
+        # Teardown
+        async def _teardown():
+            conn = await asyncpg.connect(_PG_DSN)
+            try:
+                await conn.execute("DELETE FROM meetings WHERE id=$1", self.mtg_id)
+                await conn.execute("DELETE FROM users WHERE id=$1", self.mgr_id)
+                await conn.execute("DELETE FROM organisations WHERE id=$1", self.org_id)
+            finally:
+                await conn.close()
+        _run_async(_teardown())
+
+    def _mgr_token(self) -> str:
+        return forge_token({"sub": self.mgr_id, "type": "access", "email": f"mgr_{self.mgr_id[:8]}@p3c.test"})
+
+    def test_signoff_blocked_when_in_review(self):
+        """P3c: sign-off is rejected (400) when status is in_review."""
+        token = self._mgr_token()
+        r = requests.post(
+            api(f"/review/{self.mtg_id}/signoff"),
+            headers=auth_header(token),
+            timeout=30,
+        )
+        assert r.status_code == 400, (
+            f"P3c FAIL: sign-off was allowed on in_review meeting! "
+            f"Got {r.status_code}: {r.text}"
+        )
+        assert "Pending" in r.json().get("detail", ""), (
+            f"P3c FAIL: 400 response missing expected pending-attendees message: {r.text}"
+        )
+        print(f"PASS P3c: sign-off blocked on in_review meeting → 400 with: {r.json()['detail'][:80]}")
+
+    def test_signoff_allowed_when_all_reviewed(self):
+        """P3c: sign-off proceeds (200) once status is 'reviewed'."""
+        # Update meeting status + attendee.reviewed=True using direct connection
+        async def _set_reviewed():
+            conn = await asyncpg.connect(_PG_DSN)
+            try:
+                attendees = json.dumps([
+                    {"name": "Alice Reviewed", "email": "alice@p3c.test", "reviewed": True}
+                ])
+                await conn.execute(
+                    "UPDATE meetings SET status='reviewed', attendees=$1::jsonb WHERE id=$2",
+                    attendees, self.mtg_id,
+                )
+            finally:
+                await conn.close()
+        _run_async(_set_reviewed())
+
+        token = self._mgr_token()
+        r = requests.post(
+            api(f"/review/{self.mtg_id}/signoff"),
+            headers=auth_header(token),
+            timeout=30,
+        )
+        assert r.status_code == 200, (
+            f"P3c FAIL: sign-off was blocked on a fully-reviewed meeting! "
+            f"Got {r.status_code}: {r.text}"
+        )
+        print(f"PASS P3c: sign-off allowed on reviewed meeting → 200")

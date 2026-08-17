@@ -42,11 +42,9 @@ export default function AcceptInvite() {
         name: form.name,
         password: form.password,
       });
-      // Store tokens and log in
-      if (data.token) localStorage.setItem("supervision_token", data.token);
-      if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
+      // P3b: server sets HttpOnly cookies on accept-invite; no localStorage needed
       setStatus("success");
-      // Hard redirect so AuthProvider re-reads the token on mount
+      // Hard redirect so AuthProvider re-reads the session via cookie on mount
       setTimeout(() => { window.location.href = "/dashboard"; }, 1400);
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to accept invitation. Please try again.");

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from pydantic import BaseModel, EmailStr
 import bcrypt
 import jwt
@@ -83,6 +83,36 @@ def create_refresh_token(user_id: str, pwd_ts: float = 0.0) -> str:
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
 
 
+# ── HttpOnly cookie helpers (P3b) ────────────────────────────────────────────
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    """Set HttpOnly Secure cookies for both tokens."""
+    response.set_cookie(
+        key="supervision_access",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=1800,   # 30 minutes — matches access token expiry
+        path="/",
+    )
+    response.set_cookie(
+        key="supervision_refresh",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=604800,  # 7 days — matches refresh token expiry
+        path="/",
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    """Delete both auth cookies (sets Max-Age=0)."""
+    response.delete_cookie(key="supervision_access", path="/", samesite="lax", secure=True, httponly=True)
+    response.delete_cookie(key="supervision_refresh", path="/", samesite="lax", secure=True, httponly=True)
+
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
@@ -163,7 +193,7 @@ async def register(_data: dict = {}):
 
 
 @router.post("/login")
-async def login(data: LoginRequest, request: Request):
+async def login(data: LoginRequest, request: Request, response: Response):
     email = data.email.lower()
     identifier = email.lower()  # email-only — ingress pod IPs are unreliable in k8s/proxy setups
 
@@ -250,20 +280,22 @@ async def login(data: LoginRequest, request: Request):
 
     access_token = create_access_token(user_id, user["email"])
     refresh_token = create_refresh_token(user_id, _to_pwd_ts(user))
+    # P3b: set HttpOnly cookies; tokens no longer returned in body
+    _set_auth_cookies(response, access_token, refresh_token)
     return {
         "id": user_id, "email": user["email"], "name": user["name"], "role": user["role"],
-        "token": access_token, "refresh_token": refresh_token,
         "must_change_password": user.get("must_change_password", False),
     }
 
 
 @router.post("/logout")
-async def logout():
+async def logout(response: Response):
+    _clear_auth_cookies(response)
     return {"message": "Logged out"}
 
 
 @router.post("/verify-mfa")
-async def verify_mfa(data: VerifyMfaRequest):
+async def verify_mfa(data: VerifyMfaRequest, response: Response):
     """Complete MFA login: validate OTP and issue full JWT."""
     try:
         payload = jwt.decode(data.mfa_session, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM])
@@ -317,9 +349,10 @@ async def verify_mfa(data: VerifyMfaRequest):
 
     access_token = create_access_token(user_id, user["email"])
     refresh_token = create_refresh_token(user_id, _to_pwd_ts(user))
+    # P3b: set HttpOnly cookies; tokens no longer returned in body
+    _set_auth_cookies(response, access_token, refresh_token)
     return {
         "id": user_id, "email": user["email"], "name": user["name"], "role": user["role"],
-        "token": access_token, "refresh_token": refresh_token,
         "must_change_password": user.get("must_change_password", False),
     }
 
@@ -413,9 +446,13 @@ async def me(current_user=Depends(get_current_user)):
 
 
 @router.post("/refresh")
-async def refresh_token(request: Request):
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header[7:] if auth_header.startswith("Bearer ") else None
+async def refresh_token(request: Request, response: Response):
+    # P3b: read refresh token from HttpOnly cookie first; fall back to
+    # Authorization header for clients that pre-date the cookie migration.
+    token = request.cookies.get("supervision_refresh")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header[7:] if auth_header.startswith("Bearer ") else None
     if not token:
         raise HTTPException(status_code=401, detail="No refresh token")
     try:
@@ -445,6 +482,8 @@ async def refresh_token(request: Request):
         user_id = user["id"]
         new_access = create_access_token(user_id, user["email"])
         new_refresh = create_refresh_token(user_id, db_pwd_ts)
+        # P3b: rotate both cookies on every refresh
+        _set_auth_cookies(response, new_access, new_refresh)
         return {"access_token": new_access, "refresh_token": new_refresh, "message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
@@ -600,7 +639,7 @@ class AcceptInviteRequest(BaseModel):
 
 
 @router.post("/accept-invite")
-async def accept_invite(data: AcceptInviteRequest):
+async def accept_invite(data: AcceptInviteRequest, response: Response):
     validate_password_strength(data.password)
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
@@ -630,11 +669,11 @@ async def accept_invite(data: AcceptInviteRequest):
     # rejected by the refresh endpoint because 0.0 < now).
     access_token = create_access_token(user_id, email)
     refresh_token_val = create_refresh_token(user_id, _to_pwd_ts({"password_changed_at": now}))
+    # P3b: set HttpOnly cookies; tokens no longer returned in body
+    _set_auth_cookies(response, access_token, refresh_token_val)
     return {
         "id": user_id,
         "email": email,
         "name": name,
         "role": user["role"],
-        "token": access_token,
-        "refresh_token": refresh_token_val,
     }

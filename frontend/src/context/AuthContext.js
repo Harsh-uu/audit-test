@@ -5,29 +5,20 @@ import { clearCache } from "@/utils/apiCache";
 const AuthContext = createContext(null);
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
-axios.defaults.withCredentials = false;
-
-// ── Token helpers ────────────────────────────────────────────────────────────
-const getStoredToken = () => localStorage.getItem("supervision_token");
-const getStoredRefresh = () => localStorage.getItem("supervision_refresh_token");
+// P3b: withCredentials=true sends HttpOnly cookies on every request.
+// Tokens no longer stored in localStorage — cookies are set by the server.
+axios.defaults.withCredentials = true;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined = loading
   const isRefreshing = useRef(false);
   const refreshQueue = useRef([]); // pending requests waiting for refresh
 
-  // Silent token refresh using stored refresh token
+  // Silent token refresh — cookie sent automatically; no explicit token needed
   const silentRefresh = async () => {
-    const refreshToken = getStoredRefresh();
-    if (!refreshToken) throw new Error("No refresh token");
-    const { data } = await axios.post(
-      `${API}/auth/refresh`,
-      {},
-      { headers: { Authorization: `Bearer ${refreshToken}` } }
-    );
-    localStorage.setItem("supervision_token", data.access_token);
-    if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
-    return data.access_token;
+    // POST to /auth/refresh; supervision_refresh cookie auto-sent by browser.
+    // Server sets a new supervision_access cookie on success.
+    await axios.post(`${API}/auth/refresh`, {});
   };
 
   // Axios response interceptor: auto-refresh on 401, then replay original request
@@ -47,8 +38,9 @@ export function AuthProvider({ children }) {
             // Queue this request until the ongoing refresh finishes
             return new Promise((resolve, reject) => {
               refreshQueue.current.push({ resolve, reject });
-            }).then(newToken => {
-              original.headers.Authorization = `Bearer ${newToken}`;
+            }).then(() => {
+              // Cookie refreshed — replay without stale Authorization header
+              delete original.headers?.Authorization;
               return axios(original);
             });
           }
@@ -57,19 +49,17 @@ export function AuthProvider({ children }) {
           isRefreshing.current = true;
 
           try {
-            const newToken = await silentRefresh();
+            await silentRefresh();
             isRefreshing.current = false;
-            refreshQueue.current.forEach(p => p.resolve(newToken));
+            refreshQueue.current.forEach(p => p.resolve());
             refreshQueue.current = [];
-            original.headers = original.headers || {};
-            original.headers.Authorization = `Bearer ${newToken}`;
+            // Cookie is now fresh — replay request; no Authorization header needed
+            delete original.headers?.Authorization;
             return axios(original);
           } catch {
             isRefreshing.current = false;
             refreshQueue.current.forEach(p => p.reject());
             refreshQueue.current = [];
-            localStorage.removeItem("supervision_token");
-            localStorage.removeItem("supervision_refresh_token");
             setUser(null);
             return Promise.reject(err);
           }
@@ -81,10 +71,9 @@ export function AuthProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // On mount: /auth/me is called with withCredentials=true — cookie auto-sent
   useEffect(() => {
-    const token = getStoredToken();
-    const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-    axios.get(`${API}/auth/me`, config)
+    axios.get(`${API}/auth/me`)
       .then(r => setUser(r.data))
       .catch(() => setUser(null));
   }, []);
@@ -92,14 +81,11 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const { data } = await axios.post(`${API}/auth/login`, { email, password });
     if (data.requires_mfa) return data; // MFA pending — caller handles OTP flow
-    if (data.token) localStorage.setItem("supervision_token", data.token);
-    if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
-    setUser(data); // Set immediately so routes and navigation work right away
-    // Fetch full profile (includes org_branding, org_name) in the background
+    // P3b: server sets HttpOnly cookies; no localStorage writes needed
+    setUser(data);
+    // Fetch full profile (includes org_branding, org_name) via cookie
     try {
-      const { data: profile } = await axios.get(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${data.token}` },
-      });
+      const { data: profile } = await axios.get(`${API}/auth/me`);
       setUser(profile);
       return profile;
     } catch {
@@ -108,14 +94,10 @@ export function AuthProvider({ children }) {
   };
 
   const completeLogin = async (data) => {
-    if (data.token) localStorage.setItem("supervision_token", data.token);
-    if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
-    setUser(data); // Set immediately so navigation in the caller works without await
-    // Fetch full profile so org_branding is populated
+    // P3b: server set cookies during verify-mfa; just update state
+    setUser(data);
     try {
-      const { data: profile } = await axios.get(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${data.token}` },
-      });
+      const { data: profile } = await axios.get(`${API}/auth/me`);
       setUser(profile);
     } catch {
       // Keep login data as fallback
@@ -128,24 +110,26 @@ export function AuthProvider({ children }) {
 
   const register = async (email, password, name, role) => {
     const { data } = await axios.post(`${API}/auth/register`, { email, password, name, role });
-    if (data.token) localStorage.setItem("supervision_token", data.token);
-    if (data.refresh_token) localStorage.setItem("supervision_refresh_token", data.refresh_token);
+    // P3b: server sets cookies
     setUser(data);
     return data;
   };
 
   const logout = async () => {
-    try { await axios.post(`${API}/auth/logout`); } catch {}
+    try {
+      // Server clears HttpOnly cookies
+      await axios.post(`${API}/auth/logout`);
+    } catch {}
+    // Also clear any legacy localStorage tokens from pre-migration sessions
     localStorage.removeItem("supervision_token");
     localStorage.removeItem("supervision_refresh_token");
     clearCache();
     setUser(null);
   };
 
-  const getAuthConfig = () => {
-    const token = getStoredToken();
-    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-  };
+  // P3b: returns empty config — HttpOnly cookies are sent automatically via
+  // axios.defaults.withCredentials = true. Kept for call-site compatibility.
+  const getAuthConfig = () => ({});
 
   // Mutates the in-memory user.org_branding without a round-trip to /me
   const updateOrgBranding = (branding) => {

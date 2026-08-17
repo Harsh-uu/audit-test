@@ -154,10 +154,9 @@ export default function AdminLibrary() {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("label", uploadLabel || file.name.replace(/\.[^.]+$/, ""));
-    const token = localStorage.getItem("supervision_token");
     try {
       await axios.post(`${API}/admin/standards/upload`, formData, {
-        headers: { "Content-Type": "multipart/form-data", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "multipart/form-data" },
       });
       setMessage("Document uploaded — AI is now extracting criteria (this takes ~10 seconds)");
       setUploadLabel("");
