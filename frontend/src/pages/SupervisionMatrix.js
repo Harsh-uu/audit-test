@@ -141,30 +141,35 @@ export default function SupervisionMatrix() {
               <Skeleton className="h-7 w-20 rounded-full" />
             </div>
           </div>
-          {/* Filter tab row skeleton */}
+          {/* Filter pills skeleton */}
           <div className="flex items-center gap-2 mb-5">
-            {[72, 64, 80].map((w, i) => (
-              <Skeleton key={i} className="h-8 rounded-full" style={{ width: w }} />
+            {[72, 88, 96, 90].map((w, i) => (
+              <Skeleton key={i} className="h-7 rounded-full" style={{ width: w }} />
             ))}
           </div>
-          {/* Schedule row cards skeleton */}
-          <div className="space-y-3">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <Skeleton className="h-8 w-8 rounded-full flex-shrink-0" />
-                  <div className="space-y-1.5 min-w-0">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-24" />
+          {/* Grid of skeleton cards — same layout as actual MatrixCard grid */}
+          <div
+            className="grid gap-2.5"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))" }}
+          >
+            {[...Array(16)].map((_, i) => (
+              <div
+                key={i}
+                className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 flex flex-col gap-2 shadow-sm"
+              >
+                {/* Dot + name + staff row */}
+                <div className="flex items-start gap-1.5">
+                  <Skeleton className="w-2 h-2 rounded-full mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <Skeleton className="h-3 w-full max-w-[88px]" />
+                    <Skeleton className="h-2.5 w-3/4" />
                   </div>
                 </div>
-                <Skeleton className="h-3 w-20 flex-shrink-0" />
-                <Skeleton className="h-3 w-20 flex-shrink-0" />
-                <div className="flex items-center gap-2 w-32 flex-shrink-0">
-                  <Skeleton className="h-2 flex-1 rounded-full" />
-                  <Skeleton className="h-3 w-8" />
+                {/* Status + button row */}
+                <div className="flex items-center justify-between gap-1 mt-auto">
+                  <Skeleton className="h-2.5 w-14" />
+                  <Skeleton className="h-5 w-10 rounded" />
                 </div>
-                <Skeleton className="h-6 w-20 rounded-full flex-shrink-0" />
               </div>
             ))}
           </div>
