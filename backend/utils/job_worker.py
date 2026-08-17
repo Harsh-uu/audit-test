@@ -82,7 +82,7 @@ async def _claim_next_job() -> dict | None:
                    WHERE status='pending' AND attempts < $2
                      AND (
                        attempts = 0
-                       OR updated_at < (CURRENT_TIMESTAMP - (attempts * interval '30 seconds'))
+                       OR updated_at::timestamptz < (CURRENT_TIMESTAMP - (attempts * interval '30 seconds'))
                      )
                    ORDER BY created_at ASC
                    LIMIT 1
