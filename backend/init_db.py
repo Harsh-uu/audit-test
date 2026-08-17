@@ -60,8 +60,8 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS users_rls ON users;
 CREATE POLICY users_rls ON users FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS meetings (
     id TEXT PRIMARY KEY,
@@ -105,8 +105,8 @@ ALTER TABLE meetings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meetings FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS meetings_rls ON meetings;
 CREATE POLICY meetings_rls ON meetings FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS transcripts (
     id TEXT PRIMARY KEY,
@@ -122,8 +122,8 @@ ALTER TABLE transcripts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transcripts FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS transcripts_rls ON transcripts;
 CREATE POLICY transcripts_rls ON transcripts FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS analyses (
     id TEXT PRIMARY KEY,
@@ -145,8 +145,8 @@ ALTER TABLE analyses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analyses FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS analyses_rls ON analyses;
 CREATE POLICY analyses_rls ON analyses FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS audio_files (
     id TEXT PRIMARY KEY,
@@ -167,8 +167,8 @@ ALTER TABLE audio_files ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audio_files FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS audio_files_rls ON audio_files;
 CREATE POLICY audio_files_rls ON audio_files FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS review_edits (
     id TEXT PRIMARY KEY,
@@ -184,8 +184,8 @@ ALTER TABLE review_edits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE review_edits FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS review_edits_rls ON review_edits;
 CREATE POLICY review_edits_rls ON review_edits FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS reviewer_comments (
     id TEXT PRIMARY KEY,
@@ -201,8 +201,8 @@ ALTER TABLE reviewer_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviewer_comments FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS reviewer_comments_rls ON reviewer_comments;
 CREATE POLICY reviewer_comments_rls ON reviewer_comments FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 -- Standards entries: system CQC/CareCert (org_id IS NULL) are visible to all orgs.
 -- Custom org standards are scoped to the owning org.
@@ -229,10 +229,10 @@ ALTER TABLE standards_entries FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS standards_entries_rls ON standards_entries;
 CREATE POLICY standards_entries_rls ON standards_entries FOR ALL
     USING (
-        org_id IS NULL                                                  -- system-wide (CQC / Care Cert)
-        OR org_id = current_setting('app.current_org_id', TRUE)        -- org-custom standards
+        org_id IS NULL                                                                          -- system-wide (CQC / Care Cert)
+        OR org_id = (SELECT current_setting('app.current_org_id', TRUE))                       -- org-custom standards
     )
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE)); -- writes always scoped to org
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE))); -- writes always scoped to org
 
 -- Standards documents (org-uploaded custom docs)
 CREATE TABLE IF NOT EXISTS standards_documents (
@@ -259,8 +259,8 @@ ALTER TABLE standards_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE standards_documents FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS standards_documents_rls ON standards_documents;
 CREATE POLICY standards_documents_rls ON standards_documents FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 -- Brute-force protection — no RLS
 CREATE TABLE IF NOT EXISTS login_attempts (
@@ -324,8 +324,8 @@ ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS audit_logs_rls ON audit_logs;
 CREATE POLICY audit_logs_rls ON audit_logs FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 -- Org settings (teams hierarchy)
 CREATE TABLE IF NOT EXISTS org_settings (
@@ -340,8 +340,8 @@ ALTER TABLE org_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org_settings FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS org_settings_rls ON org_settings;
 CREATE POLICY org_settings_rls ON org_settings FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS teams (
     id TEXT PRIMARY KEY,
@@ -357,8 +357,8 @@ ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teams FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS teams_rls ON teams;
 CREATE POLICY teams_rls ON teams FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS schedules (
     id TEXT PRIMARY KEY,
@@ -375,8 +375,8 @@ ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schedules FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS schedules_rls ON schedules;
 CREATE POLICY schedules_rls ON schedules FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS meeting_types (
     id TEXT PRIMARY KEY,
@@ -391,8 +391,8 @@ ALTER TABLE meeting_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meeting_types FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS meeting_types_rls ON meeting_types;
 CREATE POLICY meeting_types_rls ON meeting_types FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS meeting_prep (
     id TEXT PRIMARY KEY,
@@ -411,8 +411,8 @@ ALTER TABLE meeting_prep ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meeting_prep FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS meeting_prep_rls ON meeting_prep;
 CREATE POLICY meeting_prep_rls ON meeting_prep FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS focus_topics (
     id TEXT PRIMARY KEY,
@@ -427,8 +427,8 @@ ALTER TABLE focus_topics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE focus_topics FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS focus_topics_rls ON focus_topics;
 CREATE POLICY focus_topics_rls ON focus_topics FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS supervision_uploads (
     id TEXT PRIMARY KEY,
@@ -456,8 +456,8 @@ ALTER TABLE supervision_uploads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE supervision_uploads FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS supervision_uploads_rls ON supervision_uploads;
 CREATE POLICY supervision_uploads_rls ON supervision_uploads FOR ALL
-    USING      (org_id = current_setting('app.current_org_id', TRUE))
-    WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_meetings_org_id ON meetings(org_id);

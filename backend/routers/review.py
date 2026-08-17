@@ -9,7 +9,7 @@ import os
 import re
 import uuid
 
-from deps import get_current_user
+from deps import get_current_user, get_manager_scope, get_scoped_staff_ids
 import database
 from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
@@ -187,13 +187,27 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
     meeting = _parse_meeting_row(dict(row))
 
     user_id = current_user.get("id", "")
-    if current_user.get("role") not in ["admin", "manager"]:
+    role = current_user.get("role")
+
+    if role not in ["admin", "manager"]:
+        # Non-privileged: must be attendee, creator, or shared reviewer
         attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
         shared_with = meeting["shared_with"]
         if (user_id not in attendee_ids
                 and not any(s.get("user_id") == user_id for s in shared_with if isinstance(s, dict))
                 and user_id != meeting.get("created_by", "")):
             raise HTTPException(status_code=404, detail="Meeting not found")
+    elif role == "manager":
+        # SEC-003: branch/team-scoped managers must only read meetings where at least
+        # one attendee (or the creator) is within their assigned scope.
+        mgr_scope = get_manager_scope(current_user)
+        if mgr_scope["level"] != "org":
+            async with database.with_org(org_id) as _conn:
+                scoped_ids = await get_scoped_staff_ids(_conn, org_id, mgr_scope) or []
+            attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
+            if (user_id != meeting.get("created_by", "")
+                    and not any(aid in scoped_ids for aid in attendee_ids)):
+                raise HTTPException(status_code=404, detail="Meeting not found")
 
     if meeting.get("transcript_id"):
         try:

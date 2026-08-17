@@ -84,7 +84,16 @@ async def list_users(ignore_scope: bool = False, current_user=Depends(get_curren
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
-    scope = get_manager_scope(current_user) if not ignore_scope else {"level": "org"}
+
+    # Scope is always derived server-side from the caller's team/setting assignment.
+    # ignore_scope is honoured only for admins — never for team/setting-scoped managers
+    # (prevents SEC-001: scope-bypass via ?ignore_scope=true URL flag).
+    base_scope = get_manager_scope(current_user)
+    if ignore_scope and current_user["role"] == "admin":
+        scope = {"level": "org"}
+    else:
+        scope = base_scope
+
     _cols = "SELECT id, org_id, email, name, role, is_active, mfa_enabled, team_id, setting_id, created_at FROM users"
     async with database.with_org(org_id) as conn:
         if scope["level"] == "team":
