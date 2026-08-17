@@ -1179,12 +1179,12 @@ async def get_registers(
             achs_out.append({
                 "id": ach.get("id", ""),
                 "text": text,
-                "acknowledged": ach.get("acknowledged", False),
                 "staff_names": staff_names,
                 "staff_ids": staff_ids_list,
                 "meeting_title": mtg_title,
                 "meeting_date": mtg_date,
                 "meeting_id": mtg_id,
+                "meeting_status": r.get("status", ""),
             })
 
     today = datetime.now(timezone.utc).date().isoformat()
@@ -1206,10 +1206,8 @@ async def get_registers(
     done_l  = [l for l in lns_out if l["completed"]]
     lns_out = open_l + done_l
 
-    # Achievements: unacknowledged first, then acknowledged
-    open_ac  = [a for a in achs_out if not a["acknowledged"]]
-    done_ac  = [a for a in achs_out if a["acknowledged"]]
-    achs_out = open_ac + done_ac
+    # Achievements: newest meeting first
+    achs_out.sort(key=lambda a: a.get("meeting_date") or "", reverse=True)
 
     return {"actions": actions_out, "risks": risks_out, "learning_needs": lns_out, "achievements": achs_out}
 

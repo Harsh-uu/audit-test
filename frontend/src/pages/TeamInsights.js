@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Grid3x3, TrendingUp, AlertTriangle, ClipboardList, Shield, Award,
   FileText, Users, RefreshCw, ChevronRight, Building2, Check, X, Download,
-  BookOpen, Square, CheckSquare,
+  BookOpen, Square, CheckSquare, Search, ExternalLink,
 } from "lucide-react";
 
 // ── Cell rendering ──────────────────────────────────────────────────────────
@@ -434,6 +434,257 @@ function ThemesView({ themes }) {
   );
 }
 
+// ── AchievementsTimeline ─────────────────────────────────────────────────────
+// "New" = recorded within 7 days AND meeting not yet signed off
+function isNew(item) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const notSignedOff = !["signed_off", "shared"].includes(item.meeting_status || "");
+  return notSignedOff && (item.meeting_date || "") >= sevenDaysAgo;
+}
+
+const SHOW_LIMIT = 3;
+
+function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onStaffFilterChange, staffList = [] }) {
+  const navigate = useNavigate();
+  const [expandedPersons, setExpandedPersons] = useState(() => new Set());
+  const [expandedItems, setExpandedItems] = useState(() => new Set());
+  const [showAllFor, setShowAllFor] = useState(() => new Set());
+
+  // Filter
+  const filtered = items.filter(item => {
+    if (staffFilter !== "all" && !(item.staff_names || "").includes(staffFilter)) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!item.text.toLowerCase().includes(q) && !(item.staff_names || "").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Group by individual staff name (one achievement may cover multiple people)
+  const groupMap = new Map();
+  filtered.forEach(item => {
+    const names = (item.staff_names || "Unknown").split(/,\s*/);
+    names.forEach(name => {
+      const key = name.trim() || "Unknown";
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      // avoid duplicate if name appears twice
+      if (!groupMap.get(key).find(e => e.id === item.id && e.meeting_id === item.meeting_id)) {
+        groupMap.get(key).push(item);
+      }
+    });
+  });
+
+  // Sort groups: most recent first; within group newest first
+  const groups = [...groupMap.entries()].sort((a, b) => {
+    const aDate = (a[1][0]?.meeting_date || "");
+    const bDate = (b[1][0]?.meeting_date || "");
+    return bDate.localeCompare(aDate);
+  });
+
+  // Auto-expand first person on load
+  useEffect(() => {
+    if (groups.length > 0) setExpandedPersons(new Set([groups[0][0]]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
+
+  const togglePerson = name => setExpandedPersons(prev => {
+    const next = new Set(prev);
+    next.has(name) ? next.delete(name) : next.add(name);
+    return next;
+  });
+
+  const toggleItem = id => setExpandedItems(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const newCount = items.filter(isNew).length;
+  const thisMonth = (() => {
+    const ym = new Date().toISOString().slice(0, 7);
+    return items.filter(i => (i.meeting_date || "").startsWith(ym)).length;
+  })();
+
+  if (filtered.length === 0 && !search && staffFilter === "all") {
+    return (
+      <div className="text-center py-16">
+        <Award className="w-10 h-10 mx-auto mb-3 text-gray-200" />
+        <p className="text-gray-500 font-medium text-sm">No achievements recorded yet</p>
+        <p className="text-xs text-gray-400 mt-1">Achievements are captured automatically during meeting analysis</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Search + staff filter bar */}
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search achievements…"
+            value={search}
+            onChange={e => onSearchChange(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
+          />
+        </div>
+        {staffList.length > 1 && (
+          <select
+            value={staffFilter}
+            onChange={e => onStaffFilterChange(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg bg-white px-3 py-2 text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
+          >
+            <option value="all">All staff</option>
+            {staffList.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        )}
+      </div>
+      {/* Stats strip */}
+      <div className="grid grid-cols-4 gap-3 mb-2">
+        {[
+          { label: "Total recorded", value: items.length, green: true },
+          { label: "This month", value: thisMonth },
+          { label: "Staff celebrated", value: groupMap.size },
+          { label: "New (last 7 days)", value: newCount, green: newCount > 0 },
+        ].map(({ label, value, green }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+            <p className={`text-xl font-bold ${green ? "text-[#059669]" : "text-gray-800"}`}>{value}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Person groups */}
+      {groups.map(([personName, personItems]) => {
+        const open = expandedPersons.has(personName);
+        const hasNew = personItems.some(isNew);
+        const visible = showAllFor.has(personName) ? personItems : personItems.slice(0, SHOW_LIMIT);
+        const hiddenCount = personItems.length - SHOW_LIMIT;
+
+        return (
+          <div key={personName} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            {/* Person header — always visible */}
+            <button
+              className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-gray-50 transition-colors"
+              onClick={() => togglePerson(personName)}
+              data-testid={`ach-person-${personName.replace(/\s/g, "-")}`}
+            >
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                style={{ background: avatarColor(personName) }}
+              >
+                {personName[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900">{personName}</p>
+                {!open && (
+                  <p className="text-xs text-gray-400 truncate italic mt-0.5">
+                    "{personItems[0]?.text?.slice(0, 70)}…"
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {hasNew && (
+                  <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                    New
+                  </span>
+                )}
+                <span className="text-xs font-semibold text-[#059669] bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+                  {personItems.length} {personItems.length === 1 ? "achievement" : "achievements"}
+                </span>
+                <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-90" : ""}`} />
+              </div>
+            </button>
+
+            {/* Timeline body */}
+            {open && (
+              <div className="px-5 pb-4 border-t border-gray-100">
+                <div className="relative pl-7 pt-4 space-y-5">
+                  {/* Vertical connector line */}
+                  <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-gray-100" />
+
+                  {visible.map((item, idx) => {
+                    const _new = isNew(item);
+                    const expandKey = `${item.meeting_id}-${item.id}-${idx}`;
+                    const expanded = expandedItems.has(expandKey);
+                    const faded = idx >= SHOW_LIMIT && !showAllFor.has(personName);
+
+                    return (
+                      <div key={expandKey} className={`relative transition-opacity ${faded ? "opacity-50" : "opacity-100"}`}>
+                        {/* Timeline dot */}
+                        <div className={`absolute left-[-28px] top-1 w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center flex-shrink-0 ${_new ? "bg-amber-400" : "bg-[#059669]"}`}>
+                          <Award className="w-2.5 h-2.5 text-white" />
+                        </div>
+
+                        {/* Entry */}
+                        <button
+                          className="w-full text-left group"
+                          onClick={() => toggleItem(expandKey)}
+                          data-testid={`ach-item-${item.id}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <p className={`text-sm font-medium leading-snug flex-1 text-gray-900 group-hover:text-[#059669] transition-colors ${expanded ? "text-[#059669]" : ""}`}>
+                              {item.text}
+                            </p>
+                            {_new && (
+                              <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5">
+                                New
+                              </span>
+                            )}
+                            <ChevronRight className={`w-3.5 h-3.5 text-gray-300 flex-shrink-0 mt-1 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="text-xs text-gray-400">{item.meeting_title}</span>
+                            <span className="text-gray-200 text-xs">·</span>
+                            <span className="text-xs font-medium text-gray-500">{item.meeting_date}</span>
+                          </div>
+                        </button>
+
+                        {/* Inline expansion */}
+                        {expanded && (
+                          <div className="mt-2.5 ml-0 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            <p className="text-sm text-gray-700 leading-relaxed mb-3">{item.text}</p>
+                            <button
+                              onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1E3A8A] hover:text-[#1E3A8A]/80 hover:underline"
+                              data-testid={`ach-view-meeting-${item.id}`}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              View in meeting report
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Show more / collapse */}
+                  {hiddenCount > 0 && (
+                    <button
+                      onClick={() => setShowAllFor(prev => {
+                        const next = new Set(prev);
+                        next.has(personName) ? next.delete(personName) : next.add(personName);
+                        return next;
+                      })}
+                      className="text-xs font-medium text-[#059669] hover:text-[#059669]/80 pl-0 flex items-center gap-1"
+                    >
+                      {showAllFor.has(personName)
+                        ? <><ChevronRight className="w-3 h-3 rotate-90" /> Show fewer</>
+                        : <><ChevronRight className="w-3 h-3 -rotate-90" /> Show {hiddenCount} earlier {hiddenCount === 1 ? "achievement" : "achievements"}</>
+                      }
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Register helpers ─────────────────────────────────────────────────────────
 const SEV_CFG = {
   high:   { badge: "bg-red-100 text-red-700",    bar: "#DC2626" },
@@ -454,7 +705,6 @@ function RegisterView({ type, items = [], loading, onToggle }) {
   const [search, setSearch] = useState("");
   const [staffFilter, setStaffFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-
   const ACCENT = { actions: "#D97706", risks: "#DC2626", learning_needs: "#0D9488", achievements: "#059669" };
   const accent = ACCENT[type];
 
@@ -485,8 +735,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
         if (statusFilter === "outstanding" && item.completed) return false;
         if (statusFilter === "addressed" && !item.completed) return false;
       } else if (type === "achievements") {
-        if (statusFilter === "unacknowledged" && item.acknowledged) return false;
-        if (statusFilter === "acknowledged" && !item.acknowledged) return false;
+        // achievements handled by AchievementsTimeline — no status filter here
       }
       return true;
     });
@@ -518,18 +767,8 @@ function RegisterView({ type, items = [], loading, onToggle }) {
         { value: open,         label: "Open",             accentColor: null },
       ];
     }
-    // achievements
-    if (type === "achievements") {
-      const unacked        = items.filter(i => !i.acknowledged).length;
-      const acked          = items.filter(i => i.acknowledged).length;
-      const staffCelebrated = new Set(items.flatMap(i => i.staff_ids || [])).size;
-      return [
-        { value: items.length,    label: "Total recorded",   accentColor: accent },
-        { value: unacked,         label: "Unacknowledged",   accentColor: null },
-        { value: acked,           label: "Acknowledged",     accentColor: "#059669" },
-        { value: staffCelebrated, label: "Staff celebrated", accentColor: null },
-      ];
-    }
+    // achievements — stats rendered inside AchievementsTimeline
+    if (type === "achievements") return [];
     // learning_needs
     const outstanding   = items.filter(i => !i.completed).length;
     const addressed     = items.filter(i => i.completed).length;
@@ -555,8 +794,8 @@ function RegisterView({ type, items = [], loading, onToggle }) {
       headers = ["Staff","Meeting","Date","Learning Need","Assigned To","Due Date","Status"];
       rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.assigned_to || "", i.due_date || "", i.completed ? "Addressed" : "Outstanding"]);
     } else {
-      headers = ["Staff","Meeting","Date","Achievement","Status"];
-      rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.acknowledged ? "Acknowledged" : "New"]);
+      headers = ["Staff","Meeting","Date","Achievement"];
+      rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text]);
     }
     const csv = [headers.map(esc).join(","), ...rows.map(r => r.map(esc).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -763,6 +1002,20 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     );
   }
 
+  // Achievements use a dedicated grouped timeline — bypass the generic list
+  if (type === "achievements") {
+    return (
+      <AchievementsTimeline
+        items={items}
+        search={search}
+        staffFilter={staffFilter}
+        onSearchChange={setSearch}
+        onStaffFilterChange={setStaffFilter}
+        staffList={staffList}
+      />
+    );
+  }
+
   const EMPTY_MSG = {
     actions:        "No outstanding actions — great!",
     risks:          "No risks recorded yet",
@@ -773,7 +1026,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     actions:        [{ v: "all", l: "All statuses" }, { v: "outstanding", l: "Outstanding" }, { v: "completed", l: "Completed" }],
     risks:          [{ v: "all", l: "All statuses" }, { v: "open", l: "Open" }, { v: "resolved", l: "Resolved" }, { v: "high", l: "High severity" }, { v: "medium", l: "Medium severity" }],
     learning_needs: [{ v: "all", l: "All statuses" }, { v: "outstanding", l: "Outstanding" }, { v: "addressed", l: "Addressed" }],
-    achievements:   [{ v: "all", l: "All statuses" }, { v: "unacknowledged", l: "Unacknowledged" }, { v: "acknowledged", l: "Acknowledged" }],
+    achievements:   [],
   };
   const SEARCH_PH = { actions: "Search actions…", risks: "Search risks…", learning_needs: "Search learning needs…", achievements: "Search achievements…" };
 
