@@ -345,6 +345,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ### P0 Meeting Load Fix Verified (Aug 2026, Session 11)
 - **`operator does not exist: text = uuid` fix confirmed**: `meetings.py` line 314 `$1::uuid[]` cast changed to `$1::text[]` (users.id is TEXT not UUID type). End-to-end verified: `POST /api/meetings/` then `GET /api/meetings/{id}` returns 200 with correct data. Manager account password (Manager123!) confirmed and MFA bypass approach documented in test_credentials.md.
 
+### Vite Config ESM Fix (Aug 2026, Session 11)
+- **`vite.config.js` → `vite.config.mjs`**: Renamed config to `.mjs` (ESM) to prevent Vite 6 from loading it as CommonJS. Root cause: CJS mode forced `@vitejs/plugin-react`'s CJS build, which requires `@rolldown/pluginutils` (not installed). This caused a `server restart failed` every ~2 minutes, dropping the HMR WebSocket and reloading the browser. Switching to `.mjs` uses the ESM build of the plugin which has no rolldown dependency. Added `fileURLToPath`+`import.meta.url` polyfill for `__dirname` (not available in ESM). Verified: 2.5 min monitoring shows zero new errors (was failing every ~2 min previously).
+
 ### Vite 6 Upgrade (Aug 2026, Session 10)
 - **Upgraded Vite 5.4.21 → 6.4.3**: Resolves all 3 GitHub Dependabot CVE alerts (server.fs.deny bypass, path traversal in .map, launch-editor NTLMv2). Cleared the 90-second blink/reload cycle caused by Vite 5.4.x's experimental "native" config loader failing when rolldown was partially installed in node_modules. Vite 6's rolldown integration is first-class — no more `@rolldown/pluginutils` crash.
 - `@vitejs/plugin-react@4.3.4` already declared Vite 6 support (`^6.0.0`) — no plugin or config changes needed.
