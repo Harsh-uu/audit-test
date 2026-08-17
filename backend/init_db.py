@@ -35,6 +35,14 @@ CREATE TABLE IF NOT EXISTS organisations (
     created_at TEXT,
     updated_at TEXT
 );
+-- RLS: with_org() connections can only see their own org row.
+-- with_admin() bypasses via SET LOCAL row_security = off.
+ALTER TABLE organisations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organisations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS organisations_rls ON organisations;
+CREATE POLICY organisations_rls ON organisations FOR ALL
+    USING      (id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -279,7 +287,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     used BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- Invitations — no RLS (token-based access)
+-- Invitations — RLS: org can only see its own invitations
 CREATE TABLE IF NOT EXISTS invitations (
     id TEXT PRIMARY KEY,
     org_id TEXT,
@@ -289,13 +297,25 @@ CREATE TABLE IF NOT EXISTS invitations (
     used_at TEXT,
     created_at TEXT
 );
+ALTER TABLE invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invitations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS invitations_rls ON invitations;
+CREATE POLICY invitations_rls ON invitations FOR ALL
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
--- Settings key-value — no RLS (uses compound org-keyed id)
+-- Settings key-value — RLS: org can only see its own settings
 CREATE TABLE IF NOT EXISTS settings (
     id TEXT PRIMARY KEY,
     org_id TEXT,
     data JSONB NOT NULL DEFAULT '{}'
 );
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settings FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS settings_rls ON settings;
+CREATE POLICY settings_rls ON settings FOR ALL
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 -- Background job queue — no RLS (worker processes all orgs)
 CREATE TABLE IF NOT EXISTS jobs (
@@ -557,7 +577,8 @@ ALTER TABLE analyses ADD COLUMN IF NOT EXISTS pii_redactions JSONB NOT NULL DEFA
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS achievements JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE analyses ADD COLUMN IF NOT EXISTS learning_needs JSONB NOT NULL DEFAULT '[]';
 
--- Evidence feedback — training data log (no RLS; super-admin readable, append-only)
+-- Evidence feedback — training data log; RLS scopes writes/reads to the owning org.
+-- Super-admin access is still available via with_admin() which sets row_security=off.
 CREATE TABLE IF NOT EXISTS evidence_feedback (
     id TEXT PRIMARY KEY,
     meeting_id TEXT,
@@ -576,6 +597,12 @@ CREATE TABLE IF NOT EXISTS evidence_feedback (
     meeting_jurisdiction TEXT,
     timestamp TEXT
 );
+ALTER TABLE evidence_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE evidence_feedback FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS evidence_feedback_rls ON evidence_feedback;
+CREATE POLICY evidence_feedback_rls ON evidence_feedback FOR ALL
+    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
+    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_at TEXT;
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by TEXT;
@@ -602,7 +629,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
     audit_logs, org_settings, teams, schedules, meeting_types,
     meeting_prep, focus_topics, supervision_uploads,
     users, organisations, invitations, settings, jobs,
-    login_attempts, password_reset_tokens
+    login_attempts, password_reset_tokens, evidence_feedback
 TO app_rls_user;
 
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_rls_user;
@@ -622,6 +649,12 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 -- (org_id filter + status filter + created_at sort in one index scan)
 CREATE INDEX IF NOT EXISTS idx_meetings_org_status_date
     ON meetings(org_id, status, created_at DESC);
+
+-- Drop single-column indexes now covered by the composite above.
+-- idx_meetings_org_id  → leftmost column of idx_meetings_org_status_date
+-- idx_meetings_status  → with RLS, every query has org_id; standalone status index unused
+DROP INDEX IF EXISTS idx_meetings_org_id;
+DROP INDEX IF EXISTS idx_meetings_status;
 
 -- Staff-scoped schedule queries
 CREATE INDEX IF NOT EXISTS idx_schedules_staff_user_id
