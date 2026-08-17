@@ -48,6 +48,18 @@ async def warm(conn) -> None:
     logger.info("Standards cache warmed: %d entries — %s", len(rows), dict(by_type))
 
 
+async def rewarm(conn) -> None:
+    """Force a full cache reload from the DB.
+    Call after inserting new system standards rows within the same process run
+    (e.g. seed_standards inserts CQC on a deployment that previously only had Care Cert).
+    """
+    global _warmed
+    _warmed = False
+    _system.clear()
+    await warm(conn)
+    logger.info("Standards cache re-warmed")
+
+
 def get_system(type_: str, jurisdiction: str | None = None) -> list[dict]:
     """Return cached system standards. Falls back to [] if not warmed yet."""
     key = f"{type_}:{jurisdiction}" if jurisdiction else type_

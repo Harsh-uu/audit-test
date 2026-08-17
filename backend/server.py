@@ -176,10 +176,11 @@ async def startup():
     app.state.pool = pool
     logger.info("PostgreSQL pool ready")
 
-    # Warm the in-process standards cache (system standards never change)
+    # Warm the in-process standards cache AFTER seeding so the cache always
+    # reflects the current DB state (including any rows seeded this boot).
+    # Previously this ran before seed_all() which left the cache stale if
+    # new system standards were inserted on first boot after a fix.
     from utils.standards_cache import warm as warm_standards
-    async with database.with_admin() as conn:
-        await warm_standards(conn)
 
     # Run schema creation/migration on every startup (all statements are idempotent)
     await create_schema()
@@ -187,6 +188,9 @@ async def startup():
 
     await seed_all()
     logger.info("Seeding complete")
+
+    async with database.with_admin() as conn:
+        await warm_standards(conn)
 
     try:
         init_storage()

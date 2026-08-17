@@ -288,6 +288,10 @@ async def seed_standards():
         if entries:
             await _insert_standards_entries(conn, entries, "england")
             logger.info(f"Seeded {len(entries)} England standards entries (cqc={cqc_count or 0}, care_cert={care_cert_count or 0} were present before)")
+            # Re-warm the in-process cache so AI analysis picks up the new rows
+            # in the same process run without requiring another restart.
+            from utils.standards_cache import rewarm
+            await rewarm(conn)
 
 
 # ── CIW (Care Inspectorate Wales) — RSI(SPRI)(W)R 2017 Numbered Regulations ──
