@@ -312,7 +312,7 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
             all_uids = list({uid for uid in attendee_uids + ([created_by_id] if created_by_id else [])})
 
             user_rows = await conn.fetch(
-                "SELECT id, email, name FROM users WHERE id = ANY($1::uuid[])", all_uids
+                "SELECT id, email, name FROM users WHERE id = ANY($1::text[])", all_uids
             ) if all_uids else []
             user_map = {str(r["id"]): r for r in user_rows}
 

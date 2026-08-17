@@ -342,6 +342,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - **2 redundant indexes dropped**: `idx_meetings_org_id` and `idx_meetings_status` — both covered by the composite `idx_meetings_org_status_date`. Unused-index advisor warnings cleared.
 - **`evidence_feedback` added to explicit GRANT** for `app_rls_user`.
 
+### P0 Meeting Load Fix Verified (Aug 2026, Session 11)
+- **`operator does not exist: text = uuid` fix confirmed**: `meetings.py` line 314 `$1::uuid[]` cast changed to `$1::text[]` (users.id is TEXT not UUID type). End-to-end verified: `POST /api/meetings/` then `GET /api/meetings/{id}` returns 200 with correct data. Manager account password (Manager123!) confirmed and MFA bypass approach documented in test_credentials.md.
+
 ### Vite 6 Upgrade (Aug 2026, Session 10)
 - **Upgraded Vite 5.4.21 → 6.4.3**: Resolves all 3 GitHub Dependabot CVE alerts (server.fs.deny bypass, path traversal in .map, launch-editor NTLMv2). Cleared the 90-second blink/reload cycle caused by Vite 5.4.x's experimental "native" config loader failing when rolldown was partially installed in node_modules. Vite 6's rolldown integration is first-class — no more `@rolldown/pluginutils` crash.
 - `@vitejs/plugin-react@4.3.4` already declared Vite 6 support (`^6.0.0`) — no plugin or config changes needed.
