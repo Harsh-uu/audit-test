@@ -96,12 +96,14 @@ export default defineConfig(({ mode }) => {
       host: process.env.HOST || "0.0.0.0",
       port: parseInt(process.env.PORT || "3000", 10),
       strictPort: true,
-      // Allow all hosts — the app runs behind the Kubernetes ingress with a
-      // dynamic preview subdomain that we can't hardcode.
       allowedHosts: true,
-      // The preview URL is served over HTTPS/443 by the Kubernetes ingress.
       hmr: {
         clientPort: 443,
+        // Ping every 5 s to prevent the K8s ingress from timing out the
+        // idle WebSocket. Default is 30 s; if the ingress timeout is ≤ 30 s
+        // the WS drops, Vite immediately re-pings, reconnects, and calls
+        // location.reload() — causing the unexplained blink mid-session.
+        timeout: 5000,
       },
     },
 
