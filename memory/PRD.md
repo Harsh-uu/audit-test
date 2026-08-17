@@ -345,6 +345,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ### P0 Meeting Load Fix Verified (Aug 2026, Session 11)
 - **`operator does not exist: text = uuid` fix confirmed**: `meetings.py` line 314 `$1::uuid[]` cast changed to `$1::text[]` (users.id is TEXT not UUID type). End-to-end verified: `POST /api/meetings/` then `GET /api/meetings/{id}` returns 200 with correct data. Manager account password (Manager123!) confirmed and MFA bypass approach documented in test_credentials.md.
 
+### React StrictMode Removed (Aug 2026, Session 11)
+- **Double-mount blink + 2× DB requests**: React 18 Strict Mode mounts → unmounts → remounts every component in dev. This caused: (1) visible "blink" on RecordingScreen with page state reset, (2) every `useEffect` ran twice → 2× API requests → 2× DB queries, (3) MediaRecorder cleanup effect would stop recording on the forced unmount. Fixed by removing `<React.StrictMode>` wrapper from `index.js`. Zero effect on production builds. Verified: Vite picked up change (`page reload src/index.js`).
+
 ### CSP + Vite Config ESM Fix (Aug 2026, Session 11)
 - **Root cause of site reload**: Two layered issues. (1) `vite.config.js` loaded as CJS forcing `@vitejs/plugin-react`'s CJS build → `@rolldown/pluginutils` missing → Vite internal "server restart failed" every ~2 min → HMR disconnect → browser reload. Fixed by renaming to `vite.config.mjs` (ESM). (2) Remaining reload caused by CSP in `index.html` blocking Vite 6's inline HMR bootstrap script and Cloudflare CDN injected scripts — HMR WebSocket never connected, causing continuous reconnect/reload loop. Fixed by switching `script-src` to `'unsafe-inline'` (safe since JWT tokens now in HttpOnly cookies, no localStorage exposure). Both fixes verified: 2+ minute monitoring, zero new errors, zero new reloads, PID stable.
 
