@@ -424,7 +424,7 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
     config = aai.TranscriptionConfig(
         speaker_labels=True,
         speakers_expected=speakers_expected if speakers_expected and speakers_expected >= 2 else None,
-        speech_models=["universal-3-5-pro", "universal-2"],  # Latest EU-available models
+        speech_model=aai.SpeechModel.best,   # "best" → Universal model on EU endpoint
         language_detection=True,
         content_safety=False,              # Disabled — over-flags benign care sector discussions
         word_boost=[                        # Reinforce UK adult social care terminology
