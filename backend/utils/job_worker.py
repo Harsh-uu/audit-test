@@ -32,21 +32,47 @@ async def enqueue_job(meeting_id: str, audio_path: str) -> str:
 
 async def _recover_stuck_jobs():
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=STUCK_TIMEOUT)).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
-        result = await conn.execute(
-            """UPDATE jobs SET status='pending', updated_at=$1
+        # Permanently fail stuck jobs that have exhausted all retry attempts
+        fail_result = await conn.execute(
+            """UPDATE jobs
+               SET status='failed',
+                   error='Timed out in processing state — all retry attempts exhausted',
+                   updated_at=$1
+               WHERE status='processing'
+                 AND updated_at < $2
+                 AND attempts >= $3""",
+            now, cutoff, MAX_ATTEMPTS,
+        )
+        fail_count = int(fail_result.split()[-1])
+
+        # Re-queue stuck jobs that still have retries remaining
+        retry_result = await conn.execute(
+            """UPDATE jobs
+               SET status='pending',
+                   error='Recovered from stuck processing state — will retry',
+                   updated_at=$1
                WHERE status='processing'
                  AND updated_at < $2
                  AND attempts < $3""",
-            datetime.now(timezone.utc).isoformat(), cutoff, MAX_ATTEMPTS,
+            now, cutoff, MAX_ATTEMPTS,
         )
-    count = int(result.split()[-1])
-    if count:
-        logger.warning(f"[queue] Recovered {count} stuck job(s)")
+        retry_count = int(retry_result.split()[-1])
+
+    if fail_count:
+        logger.error(f"[queue] Permanently failed {fail_count} stuck job(s) — max attempts exhausted")
+    if retry_count:
+        logger.warning(f"[queue] Re-queued {retry_count} stuck job(s) for retry")
 
 
 async def _claim_next_job() -> dict | None:
-    """Atomically grab the oldest pending job and mark it as processing."""
+    """Atomically grab the oldest pending job and mark it as processing.
+
+    Fresh jobs (attempts=0) are claimed immediately.  Retried jobs observe a
+    linear backoff of attempts × 30 seconds so a flapping external API is not
+    hammered on every poll cycle.
+    """
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
         row = await conn.fetchrow(
@@ -54,6 +80,10 @@ async def _claim_next_job() -> dict | None:
                WHERE id = (
                    SELECT id FROM jobs
                    WHERE status='pending' AND attempts < $2
+                     AND (
+                       attempts = 0
+                       OR updated_at < (CURRENT_TIMESTAMP - (attempts * interval '30 seconds'))
+                     )
                    ORDER BY created_at ASC
                    LIMIT 1
                    FOR UPDATE SKIP LOCKED
