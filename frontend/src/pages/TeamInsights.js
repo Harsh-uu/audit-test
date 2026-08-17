@@ -1178,6 +1178,49 @@ export default function TeamInsights() {
           {/* Matrix / Themes: require main data */}
           {(tab === "matrix" || tab === "themes") && (
             loading ? (
+              tab === "themes" ? (
+                /* ── Themes skeleton — 3-col GapBar card grid ── */
+                <div className="space-y-8 p-6" aria-busy="true" aria-label="Loading standards coverage">
+                  {/* Section heading */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Skeleton className="w-4 h-4 rounded" />
+                      <Skeleton className="h-4 w-48" />
+                    </div>
+                    {/* 3-column card grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {[
+                        { w: 36, color: "text-purple-600" },
+                        { w: 44, color: "text-blue-600" },
+                        { w: 32, color: "text-teal-600" },
+                      ].map((col, ci) => (
+                        <div key={ci} className="bg-white border border-gray-200 rounded-lg p-4">
+                          {/* Card header: icon + title + count */}
+                          <div className="flex items-center gap-1.5 mb-3">
+                            <Skeleton className="w-3.5 h-3.5 rounded" />
+                            <Skeleton className={`h-3.5`} style={{ width: col.w + 80 }} />
+                            <Skeleton className="ml-auto h-3 w-16" />
+                          </div>
+                          {/* GapBar rows */}
+                          {[...Array(5)].map((_, ri) => (
+                            <div key={ri} className="mb-3">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <Skeleton className="h-4 w-10 rounded flex-shrink-0" />
+                                  <Skeleton className="h-3.5 flex-1" style={{ maxWidth: `${50 + (ri % 4) * 12}%` }} />
+                                </div>
+                                <Skeleton className="h-3 w-12 ml-2 flex-shrink-0" />
+                              </div>
+                              <Skeleton className="h-1.5 w-full rounded-full" />
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+              /* ── Matrix skeleton ── */
               <div className="p-6 space-y-4" aria-busy="true" aria-label="Loading team insights">
                 {/* Filter bar shimmer */}
                 <div className="flex items-center gap-3 mb-2">
@@ -1205,6 +1248,7 @@ export default function TeamInsights() {
                   </div>
                 ))}
               </div>
+              )
             ) : !data ? (
               <div className="text-center py-16 text-gray-400 text-sm">Failed to load insights</div>
             ) : data.staff_count === 0 ? (

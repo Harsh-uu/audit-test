@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Award, ChevronDown, ChevronRight,
   Loader2, AlertCircle, CheckCircle, TrendingUp, Download, ExternalLink,
@@ -315,8 +316,60 @@ export default function CareCertPrep() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center py-24 text-gray-400">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…
+        <div className="p-6 md:p-8" aria-busy="true" aria-label="Loading Care Certificate">
+
+          {/* Header — blue icon + title/subtitle + staff picker + export button */}
+          <div className="flex items-start gap-3 mb-6">
+            <Skeleton className="w-8 h-8 rounded-lg flex-shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-7 w-44" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-28 rounded-lg flex-shrink-0" />
+              <Skeleton className="h-9 w-36 rounded-lg flex-shrink-0" />
+            </div>
+          </div>
+
+          {/* Stats row — 4 StatChip cards */}
+          <div className="flex gap-3 flex-wrap mb-6">
+            {[108, 120, 108, 108].map((w, i) => (
+              <div key={i} className="border border-gray-200 bg-gray-50 rounded-xl px-4 py-3" style={{ minWidth: w }}>
+                <Skeleton className="h-7 w-8 mb-1.5" />
+                <Skeleton className="h-3 w-20 mb-1" />
+                <Skeleton className="h-2.5 w-24" />
+              </div>
+            ))}
+          </div>
+
+          {/* Filter pills — right-aligned */}
+          <div className="flex items-center gap-1 mb-4">
+            <div className="ml-auto flex items-center gap-1">
+              {[40, 72, 80].map((w, i) => (
+                <Skeleton key={i} className="h-7 rounded-full" style={{ width: w }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Coverage rows — mirrors StandardRow: pct-badge + label/bar + chevron */}
+          <div className="space-y-2">
+            {[...Array(10)].map((_, i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="px-4 py-3 flex items-center gap-3">
+                  <Skeleton className="w-11 h-9 rounded-md flex-shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <Skeleton className="h-4" style={{ width: `${50 + (i % 6) * 7}%` }} />
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="flex-1 h-1.5 rounded-full" />
+                      <Skeleton className="h-3 w-14 flex-shrink-0" />
+                    </div>
+                  </div>
+                  <Skeleton className="w-3.5 h-3.5 rounded flex-shrink-0" />
+                </div>
+              </div>
+            ))}
+          </div>
+
         </div>
       </Layout>
     );
