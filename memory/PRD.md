@@ -341,3 +341,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 - **4 tables hardened with RLS**: `organisations`, `invitations`, `settings`, `evidence_feedback` — all now have `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` + `CREATE POLICY ... USING (col = (SELECT current_setting('app.current_org_id', TRUE)))`. Resolves remaining Supabase security advisor warnings. `with_admin()` still bypasses RLS via `SET LOCAL row_security = off` for all admin/super-admin operations.
 - **2 redundant indexes dropped**: `idx_meetings_org_id` and `idx_meetings_status` — both covered by the composite `idx_meetings_org_status_date`. Unused-index advisor warnings cleared.
 - **`evidence_feedback` added to explicit GRANT** for `app_rls_user`.
+
+### Vite 6 Upgrade (Aug 2026, Session 10)
+- **Upgraded Vite 5.4.21 → 6.4.3**: Resolves all 3 GitHub Dependabot CVE alerts (server.fs.deny bypass, path traversal in .map, launch-editor NTLMv2). Cleared the 90-second blink/reload cycle caused by Vite 5.4.x's experimental "native" config loader failing when rolldown was partially installed in node_modules. Vite 6's rolldown integration is first-class — no more `@rolldown/pluginutils` crash.
+- `@vitejs/plugin-react@4.3.4` already declared Vite 6 support (`^6.0.0`) — no plugin or config changes needed.
+- Vite 7/8 migration remains P2 (blocked by Rolldown JSX compiler issue for the main bundler).
+
