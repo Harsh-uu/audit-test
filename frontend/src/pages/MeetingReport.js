@@ -184,14 +184,15 @@ export default function MeetingReport() {
 
   const updateEvidence = useCallback(async (evidenceId, updates) => {
     const prev = meeting;
-    // Optimistic: patch the matching evidence item immediately
+    // Optimistic: patch the matching item across all three mapping arrays
+    const patchMappings = arr => (arr || []).map(e => e.id === evidenceId ? { ...e, ...updates } : e);
     setMeeting(m => ({
       ...m,
       analysis: {
         ...m.analysis,
-        evidence_mappings: (m.analysis?.evidence_mappings || []).map(e =>
-          e.id === evidenceId ? { ...e, ...updates } : e
-        ),
+        cqc_mappings:       patchMappings(m.analysis?.cqc_mappings),
+        care_cert_mappings: patchMappings(m.analysis?.care_cert_mappings),
+        custom_mappings:    patchMappings(m.analysis?.custom_mappings),
       },
     }));
     try {
