@@ -304,26 +304,29 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
         )
         meeting["comments"] = [dict(c) for c in c_rows]
 
-    # Enrich attendee emails from live user accounts
+    # Enrich attendee emails from live user accounts — single batch query (no N+1)
     if meeting.get("attendees"):
         async with database.with_admin() as conn:
-            enriched = []
-            for attendee in meeting["attendees"]:
-                uid = attendee.get("user_id")
-                if uid:
-                    u = await conn.fetchrow("SELECT email FROM users WHERE id = $1", uid)
-                    if u and u["email"]:
-                        attendee = {**attendee, "email": u["email"]}
-                enriched.append(attendee)
-            meeting["attendees"] = enriched
+            attendee_uids = [a.get("user_id") for a in meeting["attendees"] if a.get("user_id")]
+            created_by_id = meeting.get("created_by")
+            all_uids = list({uid for uid in attendee_uids + ([created_by_id] if created_by_id else [])})
 
-            if meeting.get("created_by"):
-                creator = await conn.fetchrow(
-                    "SELECT email, name FROM users WHERE id = $1", meeting["created_by"]
-                )
-                if creator:
-                    meeting["created_by_email"] = creator["email"]
-                    meeting["created_by_name"] = meeting.get("created_by_name") or creator["name"]
+            user_rows = await conn.fetch(
+                "SELECT id, email, name FROM users WHERE id = ANY($1::uuid[])", all_uids
+            ) if all_uids else []
+            user_map = {str(r["id"]): r for r in user_rows}
+
+            meeting["attendees"] = [
+                {**a, "email": user_map[a["user_id"]]["email"]}
+                if a.get("user_id") and a["user_id"] in user_map and user_map[a["user_id"]]["email"]
+                else a
+                for a in meeting["attendees"]
+            ]
+
+            if created_by_id and created_by_id in user_map:
+                creator = user_map[created_by_id]
+                meeting["created_by_email"] = creator["email"]
+                meeting["created_by_name"] = meeting.get("created_by_name") or creator["name"]
 
     # Apply PII redactions
     from routers.review import _apply_redactions_to_text, _apply_redactions_deep, _has_privileged_access

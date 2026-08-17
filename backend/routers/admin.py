@@ -429,30 +429,28 @@ async def rescan_meetings_background(doc_id: str, org_id: str):
             if not doc_row:
                 return
             doc = dict(doc_row)
-            analysis_rows = await conn.fetch("SELECT * FROM analyses")
+            # Single JOIN: fetch all analyses + their meeting transcript in one query (no N+1)
+            scan_rows = await conn.fetch(
+                """SELECT a.id AS analysis_id, a.custom_mappings,
+                          t.text AS transcript_text
+                   FROM analyses a
+                   JOIN meetings m ON m.analysis_id = a.id
+                   JOIN transcripts t ON t.id = m.transcript_id
+                   WHERE m.org_id = $1 AND t.text IS NOT NULL""",
+                org_id,
+            )
 
         updated = 0
-        for a_row in analysis_rows:
-            analysis = dict(a_row)
-            custom_mappings = analysis.get("custom_mappings") or []
+        for row in scan_rows:
+            custom_mappings = _jlist(row["custom_mappings"]) if row["custom_mappings"] else []
             if any(m.get("document_id") == doc_id for m in custom_mappings):
                 continue
-            async with database.with_org(org_id) as conn:
-                mtg = await conn.fetchrow(
-                    "SELECT id, transcript_id FROM meetings WHERE analysis_id=$1", analysis["id"]
-                )
-            if not mtg or not mtg["transcript_id"]:
-                continue
-            async with database.with_org(org_id) as conn:
-                t_row = await conn.fetchrow("SELECT text FROM transcripts WHERE id=$1", mtg["transcript_id"])
-            if not t_row:
-                continue
-            new_mappings = await analyze_custom_only(t_row["text"], doc)
+            new_mappings = await analyze_custom_only(row["transcript_text"], doc)
             if new_mappings:
                 async with database.with_org(org_id) as conn:
                     await conn.execute(
                         "UPDATE analyses SET custom_mappings=$1::jsonb WHERE id=$2",
-                        json.dumps(custom_mappings + new_mappings), analysis["id"],
+                        json.dumps(custom_mappings + new_mappings), row["analysis_id"],
                     )
                 updated += 1
         logger.info(f"Auto-rescan complete: {updated} meeting(s) updated for doc '{doc.get('label', doc_id)}'")
@@ -603,25 +601,35 @@ async def get_team_insights(
         cqc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
         cc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
 
-        # Meetings with analyses
-        date_conds = ["status IN ('in_review','reviewed','signed_off','shared')", "analysis_id IS NOT NULL"]
+        # Meetings with analyses — single JOIN (no N+1)
+        date_conds = ["m.status IN ('in_review','reviewed','signed_off','shared')", "m.analysis_id IS NOT NULL"]
         date_params: list = []
         if date_from:
             date_params.append(date_from)
-            date_conds.append(f"date >= ${len(date_params)}")
+            date_conds.append(f"m.date >= ${len(date_params)}")
         if date_to:
             date_params.append(date_to + "T23:59:59")
-            date_conds.append(f"date <= ${len(date_params)}")
-        mtg_rows = await conn.fetch(
-            f"SELECT * FROM meetings WHERE {' AND '.join(date_conds)}",
+            date_conds.append(f"m.date <= ${len(date_params)}")
+        joined_rows = await conn.fetch(
+            f"""SELECT m.*, a.cqc_mappings, a.care_cert_mappings, a.custom_mappings,
+                       a.actions, a.risks, a.learning_needs, a.achievements
+                FROM meetings m
+                JOIN analyses a ON a.id = m.analysis_id
+                WHERE {' AND '.join(date_conds)}""",
             *date_params,
         )
-        all_items = []
-        for mtg_row in mtg_rows:
-            mtg = dict(mtg_row)
-            a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", mtg["analysis_id"])
-            if a_row:
-                all_items.append({"meeting": mtg, "analysis": dict(a_row)})
+        all_items = [
+            {"meeting": dict(r), "analysis": {
+                "cqc_mappings": r["cqc_mappings"],
+                "care_cert_mappings": r["care_cert_mappings"],
+                "custom_mappings": r["custom_mappings"],
+                "actions": r["actions"],
+                "risks": r["risks"],
+                "learning_needs": r["learning_needs"],
+                "achievements": r["achievements"],
+            }}
+            for r in joined_rows
+        ]
 
         # Fetch accepted evidence from uploaded supervision documents
         upload_rows = []
