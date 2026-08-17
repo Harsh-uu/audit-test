@@ -26,6 +26,13 @@ const TTL_MAP = {
   "/prep/focus-topics":         300_000,   // 5 min
 };
 
+// Minimum item count for array responses before the result is considered
+// valid enough to cache. If a response returns fewer items than this threshold
+// (e.g. during a server restart) it is NOT cached — the next request retries live.
+const MIN_ITEMS_MAP = {
+  "/admin/standards": 10,   // should always have CQC + Care Cert (47 + 16 minimum)
+};
+
 function _ttl(url) {
   const path = url.replace(/^https?:\/\/[^/]+/, "");
   for (const [pattern, ttl] of Object.entries(TTL_MAP)) {
@@ -34,9 +41,19 @@ function _ttl(url) {
   return 0;
 }
 
+function _minItems(url) {
+  const path = url.replace(/^https?:\/\/[^/]+/, "");
+  for (const [pattern, min] of Object.entries(MIN_ITEMS_MAP)) {
+    if (path.includes(pattern)) return min;
+  }
+  return 0;
+}
+
 /**
  * Drop-in replacement for axios.get that caches stable responses.
  * Falls back to a live request when no TTL is configured for the URL.
+ * Never caches a response whose array length falls below MIN_ITEMS_MAP threshold
+ * (guards against caching transient empty responses during server restarts).
  */
 export async function cachedGet(url, config = {}) {
   const ttl = _ttl(url);
@@ -45,7 +62,16 @@ export async function cachedGet(url, config = {}) {
     if (hit && Date.now() - hit.ts < ttl) return hit.res;
   }
   const res = await axios.get(url, config);
-  if (ttl) _cache.set(url, { res, ts: Date.now() });
+  if (ttl) {
+    const min = _minItems(url);
+    const count = Array.isArray(res.data) ? res.data.length : null;
+    if (min > 0 && count !== null && count < min) {
+      // Transient empty/short response — skip cache so next call retries live
+      console.warn(`[cache] Skipping cache for ${url}: got ${count} items, expected ≥${min}`);
+    } else {
+      _cache.set(url, { res, ts: Date.now() });
+    }
+  }
   return res;
 }
 
