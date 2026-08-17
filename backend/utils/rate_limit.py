@@ -76,7 +76,7 @@ async def check_rate_limit(
            ON CONFLICT (identifier) DO UPDATE
                SET count       = login_attempts.count + 1,
                    locked_until = CASE
-                       WHEN login_attempts.count + 1 >= $3
+                       WHEN login_attempts.count + 1 > $3
                        THEN $4
                        ELSE NULL
                    END,

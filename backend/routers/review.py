@@ -618,6 +618,7 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_u
             json.dumps(sign_off_record), now, meeting_id,
         )
 
+    _admin_stats_cache.pop(org_id, None)
     background_tasks.add_task(delete_audio_after_grace, meeting_id)
     return {"message": "Meeting signed off successfully", "signed_at": now, "unreviewed_attendees": unreviewed_names}
 
@@ -781,8 +782,6 @@ async def find_replace_transcript(meeting_id: str, data: FindReplaceRequest, cur
         if not original:
             continue
         if data.replace_one:
-            if field != "text":
-                continue
             all_matches = list(pattern.finditer(original))
             idx = data.occurrence_index
             if idx < len(all_matches):

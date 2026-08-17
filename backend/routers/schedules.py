@@ -12,9 +12,10 @@ import database
 router = APIRouter()
 
 # ── Meeting types cache ───────────────────────────────────────────────────────
-# meeting_types rarely change — cache indefinitely per org_id, invalidate on
-# any create / update / delete. Each entry: list[dict].
-_meeting_types_cache: dict[str, list[dict]] = {}
+# meeting_types rarely change — cached per org_id with a 5-minute TTL.
+# Explicit pop on any write; TTL ensures stale data auto-expires across workers.
+_meeting_types_cache: dict[str, tuple[float, list[dict]]] = {}
+_MEETING_TYPES_TTL = 300  # seconds (5 minutes)
 
 DEFAULT_MEETING_TYPES = [
     {"name": "Supervision",                "default_frequency": "monthly",   "color": "#3B82F6"},
@@ -161,9 +162,10 @@ class ScheduleUpdate(BaseModel):
 async def list_meeting_types(current_user=Depends(get_current_user)):
     org_id = current_user["org_id"]
 
-    # Return from cache if populated — invalidated explicitly on any write
-    if org_id in _meeting_types_cache:
-        return _meeting_types_cache[org_id]
+    # Return from cache if populated and not expired
+    cached = _meeting_types_cache.get(org_id)
+    if cached and (time.monotonic() - cached[0]) < _MEETING_TYPES_TTL:
+        return cached[1]
 
     async with database.with_org(org_id) as conn:
         await seed_meeting_types(conn, org_id)
@@ -171,7 +173,7 @@ async def list_meeting_types(current_user=Depends(get_current_user)):
             "SELECT * FROM meeting_types WHERE org_id = $1 AND is_active = TRUE ORDER BY name ASC", org_id
         )
     result = [dict(r) for r in rows]
-    _meeting_types_cache[org_id] = result
+    _meeting_types_cache[org_id] = (time.monotonic(), result)
     return result
 
 
