@@ -335,58 +335,68 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can edit evidence items")
     org_id = current_user.get("org_id", "")
-    async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
-    if not m_row:
-        raise HTTPException(status_code=404, detail="Meeting not found")
 
-    meeting_status = m_row["status"] or ""
-    is_finalised = meeting_status in ["signed_off", "shared"]
-    analysis_id = m_row["analysis_id"]
-    if not analysis_id:
-        raise HTTPException(status_code=400, detail="No analysis found")
-
-    async with database.with_org(org_id) as conn:
-        a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", analysis_id)
-    if not a_row:
-        raise HTTPException(status_code=404, detail="Analysis not found")
-    analysis = dict(a_row)
-
+    # Single transaction: SELECT analyses FOR UPDATE serialises concurrent evidence
+    # edits so two managers reviewing the same meeting simultaneously cannot
+    # overwrite each other's changes.
     update_cols = {}
     changed_fields = []
-    for mapping_type in ["cqc_mappings", "care_cert_mappings", "custom_mappings"]:
-        mappings = _ensure_list(analysis.get(mapping_type))
-        for i, m in enumerate(mappings):
-            if m.get("id") == evidence_id:
-                if is_finalised:
-                    if data.edited_evidence_summary is not None:
-                        raise HTTPException(409, "Report is locked. Cannot edit evidence wording after sign-off.")
-                    if data.notes is not None:
-                        raise HTTPException(409, "Report is locked. Cannot edit evidence notes after sign-off.")
-                if data.edited_evidence_summary is not None:
-                    old_val = m.get("edited_evidence_summary") or m.get("evidence_summary", "")
-                    mappings[i]["edited_evidence_summary"] = data.edited_evidence_summary
-                    changed_fields.append(f"evidence_summary changed from '{old_val[:80]}' to '{data.edited_evidence_summary[:80]}'")
-                if data.notes is not None:
-                    mappings[i]["notes"] = data.notes
-                    changed_fields.append("notes updated")
-                if data.status is not None and data.status != m.get("status"):
-                    changed_fields.append(f"status changed from '{m.get('status')}' to '{data.status}'")
-                    mappings[i]["status"] = data.status
-                update_cols[mapping_type] = mappings
-                break
+    is_finalised = False
 
-    if update_cols:
-        now = datetime.now(timezone.utc).isoformat()
-        set_parts = [f"last_edited_at=$1", f"last_edited_by=$2"]
-        values = [now, current_user["id"]]
-        idx = 3
-        for field, val in update_cols.items():
-            set_parts.append(f"{field}=${idx}::jsonb")
-            values.append(json.dumps(val))
-            idx += 1
-        values.append(analysis_id)
-        async with database.with_org(org_id) as conn:
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow(
+            "SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
+        if not m_row:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+
+        meeting_status = m_row["status"] or ""
+        is_finalised = meeting_status in ["signed_off", "shared"]
+        analysis_id = m_row["analysis_id"]
+        if not analysis_id:
+            raise HTTPException(status_code=400, detail="No analysis found")
+
+        # Lock the analyses row — held until this transaction commits
+        a_row = await conn.fetchrow(
+            "SELECT * FROM analyses WHERE id=$1 FOR UPDATE", analysis_id
+        )
+        if not a_row:
+            raise HTTPException(status_code=404, detail="Analysis not found")
+        analysis = dict(a_row)
+
+        for mapping_type in ["cqc_mappings", "care_cert_mappings", "custom_mappings"]:
+            mappings = _ensure_list(analysis.get(mapping_type))
+            for i, m in enumerate(mappings):
+                if m.get("id") == evidence_id:
+                    if is_finalised:
+                        if data.edited_evidence_summary is not None:
+                            raise HTTPException(409, "Report is locked. Cannot edit evidence wording after sign-off.")
+                        if data.notes is not None:
+                            raise HTTPException(409, "Report is locked. Cannot edit evidence notes after sign-off.")
+                    if data.edited_evidence_summary is not None:
+                        old_val = m.get("edited_evidence_summary") or m.get("evidence_summary", "")
+                        mappings[i]["edited_evidence_summary"] = data.edited_evidence_summary
+                        changed_fields.append(f"evidence_summary changed from '{old_val[:80]}' to '{data.edited_evidence_summary[:80]}'")
+                    if data.notes is not None:
+                        mappings[i]["notes"] = data.notes
+                        changed_fields.append("notes updated")
+                    if data.status is not None and data.status != m.get("status"):
+                        changed_fields.append(f"status changed from '{m.get('status')}' to '{data.status}'")
+                        mappings[i]["status"] = data.status
+                    update_cols[mapping_type] = mappings
+                    break
+
+        if update_cols:
+            now = datetime.now(timezone.utc).isoformat()
+            set_parts = [f"last_edited_at=$1", f"last_edited_by=$2"]
+            values = [now, current_user["id"]]
+            idx = 3
+            for field, val in update_cols.items():
+                set_parts.append(f"{field}=${idx}::jsonb")
+                values.append(json.dumps(val))
+                idx += 1
+            values.append(analysis_id)
             await conn.execute(
                 f"UPDATE analyses SET {', '.join(set_parts)} WHERE id=${idx}",
                 *values,
@@ -394,35 +404,36 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
             edit_type = "post_signoff_evidence_edit" if is_finalised else "evidence"
             detail = "; ".join(changed_fields) if changed_fields else "evidence updated"
             await _log_edit(conn, meeting_id, org_id, edit_type, current_user["id"], current_user.get("name", ""), detail)
-            # ── Training data: record every manager interaction with evidence ──────
-            for mapping_type, mappings in update_cols.items():
-                type_label = {"cqc_mappings": "cqc", "care_cert_mappings": "care_cert", "custom_mappings": "custom"}.get(mapping_type, mapping_type)
-                for item in mappings:
-                    if item.get("id") != evidence_id:
-                        continue
-                    action = data.status if data.status and data.status != item.get("status") else ("edited_summary" if data.edited_evidence_summary is not None else "viewed")
-                    ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
-                    name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
-                    try:
-                        async with database.with_admin() as fb_conn:
-                            await fb_conn.execute(
-                                """INSERT INTO evidence_feedback
-                                   (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
-                                    evidence_type, standard_ref, standard_name, ai_confidence,
-                                    manager_action, evidence_summary, edited_summary,
-                                    transcript_excerpt, timestamp)
-                                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
-                                str(uuid.uuid4()), meeting_id, org_id,
-                                current_user["id"], current_user.get("name", ""),
-                                evidence_id, type_label, ref, name,
-                                item.get("confidence", ""), action,
-                                item.get("evidence_summary", ""),
-                                data.edited_evidence_summary,
-                                item.get("transcript_excerpt", ""),
-                                datetime.now(timezone.utc).isoformat(),
-                            )
-                    except Exception as _fb_err:
-                        logger.warning(f"evidence_feedback insert skipped: {_fb_err}")
+
+    # Training data — separate admin connection intentionally outside the main transaction
+    for mapping_type, mappings in update_cols.items():
+        type_label = {"cqc_mappings": "cqc", "care_cert_mappings": "care_cert", "custom_mappings": "custom"}.get(mapping_type, mapping_type)
+        for item in mappings:
+            if item.get("id") != evidence_id:
+                continue
+            action = data.status if data.status and data.status != item.get("status") else ("edited_summary" if data.edited_evidence_summary is not None else "viewed")
+            ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
+            name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
+            try:
+                async with database.with_admin() as fb_conn:
+                    await fb_conn.execute(
+                        """INSERT INTO evidence_feedback
+                           (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
+                            evidence_type, standard_ref, standard_name, ai_confidence,
+                            manager_action, evidence_summary, edited_summary,
+                            transcript_excerpt, timestamp)
+                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
+                        str(uuid.uuid4()), meeting_id, org_id,
+                        current_user["id"], current_user.get("name", ""),
+                        evidence_id, type_label, ref, name,
+                        item.get("confidence", ""), action,
+                        item.get("evidence_summary", ""),
+                        data.edited_evidence_summary,
+                        item.get("transcript_excerpt", ""),
+                        datetime.now(timezone.utc).isoformat(),
+                    )
+            except Exception as _fb_err:
+                logger.warning(f"evidence_feedback insert skipped: {_fb_err}")
 
     return {"message": "Evidence updated"}
 
