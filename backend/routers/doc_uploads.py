@@ -94,6 +94,13 @@ async def upload_supervision_doc(
     if len(file_data) > 20 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 20 MB)")
 
+    # Magic-byte validation — consistent with standards/logo upload endpoints
+    from utils.file_security import validate_upload
+    try:
+        validate_upload(file_data, file_ext)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     upload_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
@@ -342,7 +349,7 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
             async with database.with_org(org_id) as conn:
                 await conn.execute(
                     "UPDATE supervision_uploads SET status=$1, error=$2 WHERE id=$3",
-                    "failed", str(exc), upload_id,
+                    "failed", "Processing failed — please retry or contact support.", upload_id,
                 )
         except Exception:
             pass

@@ -1560,6 +1560,21 @@ async def send_email_report(meeting_id: str, data: EmailRequest, background_task
     if current_user["role"] not in ["manager", "admin"]:
         raise HTTPException(status_code=403, detail="Only managers can email meeting reports")
     org_id = current_user.get("org_id", "")
+
+    # SEC-003: Validate all recipients are active members of the org — prevents
+    # using the platform to relay branded emails to arbitrary external addresses.
+    async with database.with_admin() as conn:
+        org_user_rows = await conn.fetch(
+            "SELECT email FROM users WHERE org_id=$1 AND is_active=TRUE", org_id
+        )
+    allowed_emails = {r["email"].lower() for r in org_user_rows}
+    invalid = [r for r in data.recipients if r.lower() not in allowed_emails]
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail="All recipients must be active members of your organisation",
+        )
+
     async with database.with_org(org_id) as conn:
         m_row = await conn.fetchrow("SELECT title, date, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
     if not m_row:

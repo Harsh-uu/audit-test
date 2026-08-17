@@ -25,6 +25,17 @@ def _jlist(val):
     return val or []
 
 
+def _assert_meeting_actor(meeting: dict, user_id: str, role: str) -> None:
+    """Raise 403 if caller is not an attendee, creator, or manager/admin of the meeting."""
+    if role in ("admin", "manager"):
+        return
+    if str(meeting.get("created_by", "")) == str(user_id):
+        return
+    if any(str(a.get("user_id", "")) == str(user_id) for a in _jlist(meeting.get("attendees"))):
+        return
+    raise HTTPException(status_code=403, detail="You are not a participant in this meeting")
+
+
 def _parse_std_row(r) -> dict:
     """Normalize standards_entries JSONB columns (sub_outcomes, key_questions, keywords)."""
     s = dict(r)
@@ -383,9 +394,12 @@ async def upload_audio(
 ):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        meeting_row = await conn.fetchrow("SELECT id, status FROM meetings WHERE id=$1", meeting_id)
+        meeting_row = await conn.fetchrow(
+            "SELECT id, status, created_by, attendees FROM meetings WHERE id=$1", meeting_id
+        )
     if not meeting_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    _assert_meeting_actor(dict(meeting_row), current_user["id"], current_user.get("role", ""))
 
     # Early Content-Length guard — rejects oversized uploads at the HTTP layer
     # before streaming the body into memory. Content-Length may be absent for
@@ -464,6 +478,7 @@ async def retry_processing(
     if not meeting_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(meeting_row)
+    _assert_meeting_actor(meeting, current_user["id"], current_user.get("role", ""))
     if meeting.get("status") not in ("processing_failed", "processing", "in_review", "reviewed"):
         raise HTTPException(status_code=400, detail="Only processing_failed meetings can be retried")
 
@@ -543,6 +558,7 @@ async def diarize_meeting_transcript(
     if not meeting_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(meeting_row)
+    _assert_meeting_actor(meeting, current_user["id"], current_user.get("role", ""))
 
     transcript_id = meeting.get("transcript_id")
     if not transcript_id:

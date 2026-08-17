@@ -1431,10 +1431,16 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
 
     if fmt == "csv":
         import csv, io
+
+        def _csv_safe(val: str) -> str:
+            """Prevent spreadsheet formula injection (OWASP CSV Injection)."""
+            s = str(val) if val is not None else ""
+            return ("\t" + s) if s and s[0] in ("=", "+", "-", "@", "|", "%") else s
+
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(["Staff Member", "Meeting", "Date", "Evidence Type", "Reference", "Standard Name", "Confidence", "Status", "Evidence Summary"])
-        writer.writerows(rows_csv)
+        writer.writerows([[_csv_safe(cell) for cell in row] for row in rows_csv])
         return _Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="evidence_export.csv"'})
     else:
         return _Response(content=_generate_export_pdf(mtg_analyses), media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="evidence_export.pdf"'})

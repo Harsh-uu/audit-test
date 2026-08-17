@@ -30,11 +30,32 @@ class RecordingEventRequest(BaseModel):
     pause_start: Optional[str] = None
 
 
+def _assert_meeting_actor(meeting: dict, user_id: str, role: str) -> None:
+    """Raise 403 if the caller is not an attendee, creator, or manager/admin."""
+    if role in ("admin", "manager"):
+        return
+    if str(meeting.get("created_by", "")) == str(user_id):
+        return
+    raw = meeting.get("attendees") or []
+    attendees = json.loads(raw) if isinstance(raw, str) else raw
+    if isinstance(attendees, list) and any(
+        str(a.get("user_id", "")) == str(user_id) for a in attendees
+    ):
+        return
+    raise HTTPException(status_code=403, detail="You are not a participant in this meeting")
+
+
 @router.post("/{meeting_id}/notice")
 async def log_notice(meeting_id: str, current_user=Depends(get_current_user)):
     now = datetime.now(timezone.utc).isoformat()
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
+        _m = await conn.fetchrow(
+            "SELECT created_by, attendees FROM meetings WHERE id=$1", meeting_id
+        )
+        if not _m:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        _assert_meeting_actor(dict(_m), current_user["id"], current_user.get("role", ""))
         await conn.execute(
             "UPDATE meetings SET recording_notice_shown_at=$1, updated_at=$1 WHERE id=$2",
             now, meeting_id,
@@ -53,6 +74,12 @@ async def start_recording(meeting_id: str, request: Request, current_user=Depend
     event = {"type": "started", "timestamp": ts, "user_id": current_user["id"]}
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
+        _m = await conn.fetchrow(
+            "SELECT created_by, attendees FROM meetings WHERE id=$1", meeting_id
+        )
+        if not _m:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        _assert_meeting_actor(dict(_m), current_user["id"], current_user.get("role", ""))
         try:
             await conn.execute(
                 """UPDATE meetings
@@ -86,6 +113,12 @@ async def pause_recording(meeting_id: str, request: Request, current_user=Depend
     event = {"type": "paused", "timestamp": ts, "user_id": current_user["id"]}
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
+        _m = await conn.fetchrow(
+            "SELECT created_by, attendees FROM meetings WHERE id=$1", meeting_id
+        )
+        if not _m:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        _assert_meeting_actor(dict(_m), current_user["id"], current_user.get("role", ""))
         await conn.execute(
             """UPDATE meetings
                SET recording_events = recording_events || $1::jsonb,
@@ -109,6 +142,12 @@ async def resume_recording(meeting_id: str, request: Request, current_user=Depen
     now = datetime.now(timezone.utc).isoformat()
 
     async with database.with_org(org_id) as conn:
+        _m = await conn.fetchrow(
+            "SELECT created_by, attendees FROM meetings WHERE id=$1", meeting_id
+        )
+        if not _m:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        _assert_meeting_actor(dict(_m), current_user["id"], current_user.get("role", ""))
         if data.pause_start:
             try:
                 pause_dt = datetime.fromisoformat(data.pause_start.replace("Z", "+00:00"))
@@ -148,6 +187,12 @@ async def stop_recording(meeting_id: str, request: Request, current_user=Depends
     event = {"type": "stopped", "timestamp": ts, "user_id": current_user["id"]}
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
+        _m = await conn.fetchrow(
+            "SELECT created_by, attendees FROM meetings WHERE id=$1", meeting_id
+        )
+        if not _m:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        _assert_meeting_actor(dict(_m), current_user["id"], current_user.get("role", ""))
         try:
             await conn.execute(
                 """UPDATE meetings
@@ -174,11 +219,13 @@ async def get_events(meeting_id: str, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         row = await conn.fetchrow(
-            "SELECT recording_events, paused_periods, total_paused_duration_seconds FROM meetings WHERE id=$1",
+            "SELECT created_by, attendees, recording_events, paused_periods, total_paused_duration_seconds "
+            "FROM meetings WHERE id=$1",
             meeting_id,
         )
     if not row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    _assert_meeting_actor(dict(row), current_user["id"], current_user.get("role", ""))
     return {
         "recording_events": row["recording_events"] if isinstance(row["recording_events"], list) else (json.loads(row["recording_events"]) if isinstance(row["recording_events"], str) else []),
         "paused_periods": row["paused_periods"] if isinstance(row["paused_periods"], list) else (json.loads(row["paused_periods"]) if isinstance(row["paused_periods"], str) else []),
