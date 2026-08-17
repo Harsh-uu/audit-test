@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from typing import Optional, List
 import asyncio
@@ -70,33 +70,33 @@ def _parse_analysis_row(a: dict) -> dict:
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class UpdateSummaryRequest(BaseModel):
-    summary: str
+    summary: str = Field(max_length=10_000)
 
 class UpdateActionsRequest(BaseModel):
     actions: List[dict]
 
 class UpdateEvidenceRequest(BaseModel):
-    edited_evidence_summary: Optional[str] = None
-    notes: Optional[str] = None
+    edited_evidence_summary: Optional[str] = Field(None, max_length=2_000)
+    notes: Optional[str] = Field(None, max_length=2_000)
     status: Optional[str] = None
 
 class UpdateRiskRequest(BaseModel):
     is_resolved: Optional[bool] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=2_000)
 
 class ShareRequest(BaseModel):
     user_ids: List[str]
 
 class CommentRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=2_000)
 
 class PIIReviewRequest(BaseModel):
     redactions: List[dict] = []
     skipped: bool = False
 
 class FindReplaceRequest(BaseModel):
-    find: str
-    replace: str
+    find: str = Field(max_length=500)
+    replace: str = Field(max_length=1_000)
     case_sensitive: bool = False
     replace_one: bool = False
     occurrence_index: int = 0

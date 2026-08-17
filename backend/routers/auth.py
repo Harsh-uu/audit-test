@@ -106,11 +106,8 @@ class MfaConfirmRequest(BaseModel):
 
 # ── MFA helpers ──────────────────────────────────────────────────────────────
 
-MFA_REQUIRES_ROLES = {"super_admin", "admin", "manager"}
-
-
-def _mfa_required_for_role(role: str, mfa_enabled: bool) -> bool:
-    """Admins, managers and super_admins always require MFA — mandatory, not opt-in."""
+def _mfa_required_for_role(role: str) -> bool:
+    """super_admin, admin, and manager always require MFA — mandatory, not opt-in."""
     return role in ("super_admin", "admin", "manager")
 
 
@@ -242,7 +239,7 @@ async def login(data: LoginRequest, request: Request):
     user_id = user["id"]
 
     # ── MFA gate ──────────────────────────────────────────────────────────────
-    if _mfa_required_for_role(user["role"], bool(user.get("mfa_enabled"))):
+    if _mfa_required_for_role(user["role"]):
         async with database.with_admin() as conn2:
             await _generate_and_send_mfa(conn2, user)
         mfa_session = create_mfa_session_token(user_id)
@@ -522,8 +519,8 @@ async def forgot_password(data: ForgotPasswordRequest, request: Request):
                 "</div>"
             ),
         })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"[auth] forgot-password: email delivery failed: {e}")
     return {"message": "If that email exists, a reset link has been sent."}
 
 

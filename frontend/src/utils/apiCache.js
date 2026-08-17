@@ -85,3 +85,11 @@ export function invalidateCache(...patterns) {
     if (patterns.some(p => key.includes(p))) _cache.delete(key);
   }
 }
+
+/**
+ * Wipe the entire cache — call on logout so a different user logging in on the
+ * same tab is never served the previous user's /admin/* or /org/* data.
+ */
+export function clearCache() {
+  _cache.clear();
+}

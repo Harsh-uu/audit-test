@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
+import { clearCache } from "@/utils/apiCache";
 
 const AuthContext = createContext(null);
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
@@ -137,6 +138,7 @@ export function AuthProvider({ children }) {
     try { await axios.post(`${API}/auth/logout`); } catch {}
     localStorage.removeItem("supervision_token");
     localStorage.removeItem("supervision_refresh_token");
+    clearCache();
     setUser(null);
   };
 

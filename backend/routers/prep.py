@@ -14,7 +14,7 @@ Focus topics (org-level):
   DELETE /api/prep/focus-topics/{id}    — remove (admin only)
 """
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from typing import Optional, List
 import json
@@ -49,7 +49,7 @@ def _ensure_dict(val):
 
 
 class FocusTopicCreate(BaseModel):
-    topic: str
+    topic: str = Field(max_length=500)
     is_current: bool = False
     active_month: Optional[str] = None  # YYYY-MM format, e.g. "2026-01"
 
@@ -67,12 +67,12 @@ class SectionUpdate(BaseModel):
 
 
 class GeneratePrepRequest(BaseModel):
-    focus_topic: Optional[str] = None
+    focus_topic: Optional[str] = Field(None, max_length=500)
     included_source_ids: Optional[List[str]] = None
 
 
 class PrepSave(BaseModel):
-    focus_topic: Optional[str] = None
+    focus_topic: Optional[str] = Field(None, max_length=500)
     context_source_ids: Optional[List[str]] = None
     sections: Optional[List[SectionUpdate]] = None
     shared_with_attendees: Optional[bool] = None

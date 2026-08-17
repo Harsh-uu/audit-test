@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
@@ -1120,8 +1120,14 @@ export default function TeamInsights() {
   const [drillDown, setDrillDown] = useState(null);
   const [registers, setRegisters] = useState(null);
   const [registersLoading, setRegistersLoading] = useState(false);
+  // Stale-request guards: each filter change bumps the counter; callbacks
+  // discard responses that arrive after a newer request was dispatched.
+  const loadReqRef = useRef(0);
+  const regReqRef  = useRef(0);
 
   const load = useCallback(async (filter = {}) => {
+    loadReqRef.current += 1;
+    const req = loadReqRef.current;
     setLoading(true);
     try {
       const params = {};
@@ -1130,16 +1136,19 @@ export default function TeamInsights() {
       if (filter.date_from) params.date_from = filter.date_from;
       if (filter.date_to) params.date_to = filter.date_to;
       const { data: d } = await cachedGet(`${API}/admin/team-insights`, { ...getAuthConfig(), params });
+      if (req !== loadReqRef.current) return;
       setData(d);
     } catch (err) {
       console.error("Team insights error", err.message);
     } finally {
-      setLoading(false);
+      if (req === loadReqRef.current) setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
 
   const loadRegisters = useCallback(async (filter = {}) => {
+    regReqRef.current += 1;
+    const req = regReqRef.current;
     setRegistersLoading(true);
     try {
       const params = {};
@@ -1148,11 +1157,12 @@ export default function TeamInsights() {
       if (filter.date_from) params.date_from = filter.date_from;
       if (filter.date_to) params.date_to = filter.date_to;
       const { data: d } = await cachedGet(`${API}/admin/team-insights/registers`, { ...getAuthConfig(), params });
+      if (req !== regReqRef.current) return;
       setRegisters(d);
     } catch (err) {
       console.error("Registers error", err.message);
     } finally {
-      setRegistersLoading(false);
+      if (req === regReqRef.current) setRegistersLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
