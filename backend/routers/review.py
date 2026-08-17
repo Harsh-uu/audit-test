@@ -1573,12 +1573,13 @@ async def send_email_report(meeting_id: str, data: EmailRequest, background_task
     except Exception:
         friendly_date = str(raw_date)
 
+    import html as _html
     html = f"""<html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
 <h2 style="color: #1E3A8A;">Supervision Meeting Report</h2>
-<p><strong>Meeting:</strong> {m_row['title']}</p>
+<p><strong>Meeting:</strong> {_html.escape(str(m_row['title'] or ''))}</p>
 <p><strong>Date:</strong> {friendly_date}</p>
 <p><strong>Status:</strong> Signed Off</p>
-<p>{data.message or 'Please review the meeting report linked below.'}</p>
+<p>{_html.escape(str(data.message or 'Please review the meeting report linked below.'))}</p>
 <p><a href="{frontend_url}/meetings/{meeting_id}/report" style="background:#1E3A8A;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;">View Report</a></p>
 <hr/><p style="color:#666;font-size:12px;">Supervision 2.0 - Compliance Evidence Platform</p>
 </body></html>"""

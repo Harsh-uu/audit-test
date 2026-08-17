@@ -39,7 +39,6 @@ export default function SetPassword() {
       // Refresh user data so must_change_password is cleared
       const { data } = await axios.get(`${API}/auth/me`, getAuthConfig());
       // Update user in context via a page reload (simplest — avoids needing a setUser export)
-      localStorage.setItem("supervision_user_refresh", "1");
       if (data?.role === "super_admin") {
         navigate("/super-admin", { replace: true });
       } else {

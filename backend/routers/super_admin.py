@@ -160,7 +160,7 @@ async def delete_org(org_id: str, current_user=Depends(get_current_user)):
                 totals[table] = int(result.split()[-1])
 
         for table in ["meetings", "users", "schedules", "meeting_types", "standards_documents",
-                       "supervision_uploads", "invitations", "refresh_tokens"]:
+                       "supervision_uploads", "invitations"]:
             result = await conn.execute(f"DELETE FROM {table} WHERE org_id = $1", org_id)
             totals[table] = int(result.split()[-1])
 
@@ -256,7 +256,6 @@ async def delete_org_user(org_id: str, user_id: str, current_user=Depends(get_cu
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
         sched = await conn.execute("DELETE FROM schedules WHERE staff_user_id = $1", user_id)
-        tokens = await conn.execute("DELETE FROM refresh_tokens WHERE user_id = $1", user_id)
         await conn.execute("DELETE FROM users WHERE id = $1", user_id)
     return {"message": f"User '{u['name']}' deleted"}
 

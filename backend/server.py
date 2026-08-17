@@ -45,6 +45,42 @@ else:
 
 app = FastAPI(title="Supervision 2.0 API")
 
+# ── Path-aware request body size limits ───────────────────────────────────────
+# Checked via Content-Length header BEFORE the body is read — zero memory cost.
+# Handlers that read files already apply their own in-memory guards, but this
+# middleware catches oversized requests at the HTTP layer for all endpoints.
+_ROUTE_SIZE_LIMITS = [
+    ("/api/processing/", 360 * 1024 * 1024),        # audio upload — 360 MB
+    ("/api/doc-uploads/", 26 * 1024 * 1024),         # supervision doc — 26 MB
+    ("/api/admin/standards/upload", 30 * 1024 * 1024),  # standards doc — 30 MB
+    ("/api/org/branding/logo", 3 * 1024 * 1024),     # org logo — 3 MB
+]
+_DEFAULT_BODY_LIMIT = 1 * 1024 * 1024  # 1 MB for all JSON endpoints
+
+
+class ContentSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Content-Length header exceeds the route limit."""
+
+    async def dispatch(self, request: Request, call_next):
+        cl = request.headers.get("content-length")
+        if cl:
+            try:
+                size = int(cl)
+            except ValueError:
+                size = 0
+            limit = _DEFAULT_BODY_LIMIT
+            for prefix, max_bytes in _ROUTE_SIZE_LIMITS:
+                if request.url.path.startswith(prefix):
+                    limit = max_bytes
+                    break
+            if size > limit:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    {"detail": "Request body too large"},
+                    status_code=413,
+                )
+        return await call_next(request)
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     # CSP built once at class level — same value for every response
     _CSP = (
@@ -67,6 +103,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(ContentSizeLimitMiddleware)
 
 cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
 

@@ -417,11 +417,8 @@ async def me(current_user=Depends(get_current_user)):
 
 @router.post("/refresh")
 async def refresh_token(request: Request):
-    token = request.cookies.get("refresh_token")
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else None
     if not token:
         raise HTTPException(status_code=401, detail="No refresh token")
     try:
@@ -549,11 +546,6 @@ async def reset_password(data: ResetPasswordRequest):
             hash_password(data.new_password), now, record["email"],
         )
         await conn.execute("UPDATE password_reset_tokens SET used=TRUE WHERE token=$1", data.token)
-        # Invalidate all existing sessions for this user
-        await conn.execute(
-            "DELETE FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE email = $1)",
-            record["email"],
-        )
     return {"message": "Password updated successfully. You can now log in."}
 
 
@@ -579,8 +571,6 @@ async def change_password(data: ChangePasswordRequest, current_user=Depends(get_
                password_changed_at=$2 WHERE id=$3""",
             hash_password(data.new_password), now, current_user["id"],
         )
-        # Invalidate all existing sessions — stolen refresh tokens no longer valid
-        await conn.execute("DELETE FROM refresh_tokens WHERE user_id = $1", current_user["id"])
     return {"message": "Password changed successfully"}
 
 

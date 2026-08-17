@@ -459,16 +459,6 @@ CREATE POLICY supervision_uploads_rls ON supervision_uploads FOR ALL
     USING      (org_id = current_setting('app.current_org_id', TRUE))
     WITH CHECK (org_id = current_setting('app.current_org_id', TRUE));
 
--- Refresh tokens — no RLS
-CREATE TABLE IF NOT EXISTS refresh_tokens (
-    id TEXT PRIMARY KEY,
-    user_id TEXT,
-    org_id TEXT,
-    token_hash TEXT UNIQUE,
-    expires_at TEXT,
-    created_at TEXT
-);
-
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_meetings_org_id ON meetings(org_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_created_at ON meetings(created_at DESC);
@@ -612,7 +602,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
     audit_logs, org_settings, teams, schedules, meeting_types,
     meeting_prep, focus_topics, supervision_uploads,
     users, organisations, invitations, settings, jobs,
-    refresh_tokens, login_attempts, password_reset_tokens
+    login_attempts, password_reset_tokens
 TO app_rls_user;
 
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_rls_user;
@@ -627,6 +617,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_rls_user;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO app_rls_user;
+
+-- ── Schema cleanup migrations ─────────────────────────────────────────
+-- refresh_tokens table was never populated (refresh is purely JWT-based);
+-- drop it on all environments so the dead table no longer appears in audits.
+DROP TABLE IF EXISTS refresh_tokens;
 """
 
 

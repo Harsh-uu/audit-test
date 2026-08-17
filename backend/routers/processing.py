@@ -387,6 +387,17 @@ async def upload_audio(
     if not meeting_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
+    # Early Content-Length guard — rejects oversized uploads at the HTTP layer
+    # before streaming the body into memory. Content-Length may be absent for
+    # chunked transfers; the post-read check below still applies in that case.
+    _cl_header = request.headers.get("content-length")
+    if _cl_header:
+        try:
+            if int(_cl_header) > 350 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Recording too large (max 350 MB)")
+        except ValueError:
+            pass
+
     audio_data = await request.body()
     if not audio_data:
         raise HTTPException(status_code=400, detail="Empty audio body")
