@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import Layout from "@/components/Layout";
@@ -288,7 +289,7 @@ export default function MeetingPrep() {
         axios.get(`${API}/meetings/${meetingId}`, getAuthConfig()),
         axios.get(`${API}/prep/${meetingId}/context`, getAuthConfig()),
         axios.get(`${API}/prep/${meetingId}`, getAuthConfig()),
-        axios.get(`${API}/prep/focus-topics`, getAuthConfig()),
+        cachedGet(`${API}/prep/focus-topics`, getAuthConfig()),
       ]);
 
       // Meeting is critical — hard fail if it's missing

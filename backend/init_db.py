@@ -618,7 +618,19 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO app_rls_user;
 
--- ── Schema cleanup migrations ─────────────────────────────────────────
+-- Composite covering index for the dashboard meeting list
+-- (org_id filter + status filter + created_at sort in one index scan)
+CREATE INDEX IF NOT EXISTS idx_meetings_org_status_date
+    ON meetings(org_id, status, created_at DESC);
+
+-- Staff-scoped schedule queries
+CREATE INDEX IF NOT EXISTS idx_schedules_staff_user_id
+    ON schedules(staff_user_id);
+
+-- Audit trail queries filter and sort by org + time
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org_date
+    ON audit_logs(org_id, timestamp DESC);
+
 -- refresh_tokens table was never populated (refresh is purely JWT-based);
 -- drop it on all environments so the dead table no longer appears in audits.
 DROP TABLE IF EXISTS refresh_tokens;

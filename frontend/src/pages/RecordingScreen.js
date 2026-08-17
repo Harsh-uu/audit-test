@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
@@ -119,7 +120,7 @@ export default function RecordingScreen() {
 
   useEffect(() => {
     setInIframe(isInIframe());
-    axios.get(`${API}/admin/template`, getAuthConfig())
+    cachedGet(`${API}/admin/template`, getAuthConfig())
       .then(r => { if (r.data?.steps?.length > 0) setTemplate(r.data); })
       .catch(() => {});
     // Load prep agenda if it exists

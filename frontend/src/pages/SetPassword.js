@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { Eye, EyeOff, CheckCircle, XCircle, Lock } from "lucide-react";
 
 const checks = [
@@ -37,7 +38,7 @@ export default function SetPassword() {
     try {
       await axios.post(`${API}/auth/change-password`, { current_password: current, new_password: next }, getAuthConfig());
       // Refresh user data so must_change_password is cleared
-      const { data } = await axios.get(`${API}/auth/me`, getAuthConfig());
+      const { data } = await cachedGet(`${API}/auth/me`, getAuthConfig());
       // Update user in context via a page reload (simplest — avoids needing a setUser export)
       if (data?.role === "super_admin") {
         navigate("/super-admin", { replace: true });

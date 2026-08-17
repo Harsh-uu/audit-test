@@ -143,7 +143,7 @@ export default function Schedules() {
     try {
       const [typesRes, schedRes, usersRes, structRes] = await Promise.all([
         cachedGet(`${API}/schedules/meeting-types`, getAuthConfig()),
-        axios.get(`${API}/schedules/`, getAuthConfig()),
+        cachedGet(`${API}/schedules/`, getAuthConfig()),
         cachedGet(`${API}/admin/users`, getAuthConfig()),
         cachedGet(`${API}/org/structure`, getAuthConfig()),
       ]);

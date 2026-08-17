@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield } from "lucide-react";
@@ -18,7 +19,7 @@ function FocusTopicsTab({ API, getAuthConfig }) {
 
   const load = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API}/prep/focus-topics`, getAuthConfig());
+      const { data } = await cachedGet(`${API}/prep/focus-topics`, getAuthConfig());
       setTopics(data || []);
     } catch { toast.error("Failed to load focus topics"); }
   }, [API, getAuthConfig]);
@@ -363,8 +364,8 @@ export default function OrgSettings({ embedded = false }) {
       setLoading(true);
       try {
         const [tmplRes, usersRes] = await Promise.all([
-          axios.get(`${API}/admin/template`, getAuthConfig()),
-          axios.get(`${API}/admin/users`, getAuthConfig()),
+          cachedGet(`${API}/admin/template`, getAuthConfig()),
+          cachedGet(`${API}/admin/users`, getAuthConfig()),
         ]);
         setTemplate(tmplRes.data || { name: "Supervision Template", description: "", steps: [] });
         setUsers(usersRes.data || []);
@@ -380,7 +381,7 @@ export default function OrgSettings({ embedded = false }) {
   const fetchExportMeetings = async () => {
     setExportMeetingsLoading(true);
     try {
-      const { data } = await axios.get(`${API}/admin/meetings-brief`, getAuthConfig());
+      const { data } = await cachedGet(`${API}/admin/meetings-brief`, getAuthConfig());
       setExportMeetings(data);
     } catch { /* silent */ }
     setExportMeetingsLoading(false);

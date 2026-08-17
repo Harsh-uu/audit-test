@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import {
@@ -126,7 +127,7 @@ export default function UploadSupervision() {
 
   const fetchStaff = async () => {
     try {
-      const { data } = await axios.get(`${API}/admin/users`, getAuthConfig());
+      const { data } = await cachedGet(`${API}/admin/users`, getAuthConfig());
       setStaffList(data.filter(u => u.is_active !== false));
     } catch {
       setError("Could not load staff list");

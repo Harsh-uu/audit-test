@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, Sparkles, ChevronRight } from "lucide-react";
@@ -57,7 +58,7 @@ export default function NewMeeting() {
   });
 
   useEffect(() => {
-    axios.get(`${API}/admin/users?ignore_scope=true`, getAuthConfig())
+    cachedGet(`${API}/admin/users?ignore_scope=true`, getAuthConfig())
       .then(r => setUsers(r.data))
       .catch(e => console.error("Failed to load members:", e.message));
   // eslint-disable-next-line react-hooks/exhaustive-deps

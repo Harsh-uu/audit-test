@@ -52,7 +52,7 @@ export default function AdminLibrary() {
     if (hasParsingDocs && !pollRef.current) {
       pollRef.current = setInterval(async () => {
         try {
-          const { data } = await axios.get(`${API}/admin/standards/documents`, getAuthConfig());
+          const { data } = await cachedGet(`${API}/admin/standards/documents`, getAuthConfig());
           setDocs(data);
           const stillParsing = data.some(d => d.parse_status === "parsing" || d.parse_status === "uploaded");
           if (!stillParsing && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }

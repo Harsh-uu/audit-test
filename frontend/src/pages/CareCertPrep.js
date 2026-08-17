@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -271,12 +272,12 @@ export default function CareCertPrep() {
   const [selectedStaff, setSelectedStaff] = useState(new Set());
 
   useEffect(() => {
-    axios.get(`${API}/admin/team-insights`, getAuthConfig())
+    cachedGet(`${API}/admin/team-insights`, getAuthConfig())
       .then(r => setInsights(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
     // Fetch org users for the staff picker
-    axios.get(`${API}/admin/users`, getAuthConfig())
+    cachedGet(`${API}/admin/users`, getAuthConfig())
       .then(r => setUsers((r.data || []).filter(u => u.role === "attendee" || u.role === "manager")))
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps

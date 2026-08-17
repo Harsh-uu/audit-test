@@ -43,6 +43,8 @@ if _loki_url and _loki_user and _loki_token:
 else:
     logger.warning("Loki credentials not set — logging to console only")
 
+from starlette.middleware.gzip import GZipMiddleware
+
 app = FastAPI(title="Supervision 2.0 API")
 
 # ── Path-aware request body size limits ───────────────────────────────────────
@@ -102,6 +104,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Content-Security-Policy"] = self._CSP
         return response
 
+app.add_middleware(GZipMiddleware, minimum_size=500)  # compress JSON ≥ 500 bytes
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(ContentSizeLimitMiddleware)
 
