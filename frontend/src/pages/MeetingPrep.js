@@ -254,7 +254,87 @@ function PendingUploadCard({ item }) {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Skeleton shimmer block ─────────────────────────────────────────────────
+const Sk = ({ className }) => (
+  <div className={`bg-gray-200 rounded animate-pulse ${className}`} />
+);
+
+// ── Prepare page skeleton — mirrors Phase 1 layout exactly ─────────────────
+function PrepSkeleton({ fromNew }) {
+  return (
+    <Layout>
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+        {/* Breadcrumb (wizard flow only) */}
+        {fromNew && (
+          <div className="flex items-center gap-2">
+            <Sk className="h-3 w-28" />
+            <Sk className="h-3 w-3 rounded-sm" />
+            <Sk className="h-3 w-36" />
+            <Sk className="h-3 w-3 rounded-sm" />
+            <Sk className="h-3 w-20" />
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="flex items-start gap-4">
+          {!fromNew && <Sk className="mt-1 w-9 h-9 rounded-lg flex-shrink-0" />}
+          <div className="flex-1 space-y-2">
+            <Sk className="h-6 w-56" />
+            <Sk className="h-4 w-72" />
+          </div>
+        </div>
+
+        {/* Focus Topic card */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Sk className="h-4 w-4 rounded-sm flex-shrink-0" />
+            <Sk className="h-4 w-24 flex-shrink-0" />
+            <Sk className="flex-1 min-w-48 h-9 rounded-lg" />
+          </div>
+        </div>
+
+        {/* Context Sources card */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+          {/* Header row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sk className="h-4 w-4 rounded-sm" />
+              <Sk className="h-4 w-36" />
+              <Sk className="h-5 w-16 rounded-full" />
+            </div>
+            <Sk className="h-4 w-28" />
+          </div>
+
+          {/* 3-column source card grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[0, 1, 2].map(i => (
+              <div
+                key={i}
+                className="flex items-start gap-3 p-3 rounded-lg border border-gray-200"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
+                <Sk className="mt-0.5 w-8 h-8 rounded-lg flex-shrink-0" />
+                <div className="flex-1 space-y-1.5 min-w-0">
+                  <Sk className="h-3.5 w-3/4" />
+                  <Sk className="h-3 w-1/2" />
+                </div>
+                <Sk className="w-5 h-5 rounded flex-shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Generate button */}
+        <Sk className="h-14 w-full rounded-xl bg-indigo-100" />
+
+        {/* Skip link */}
+        {fromNew && <Sk className="h-3 w-40 mx-auto" />}
+
+      </div>
+    </Layout>
+  );
+}
 export default function MeetingPrep() {
   const { meetingId } = useParams();
   const navigate = useNavigate();
@@ -491,13 +571,7 @@ export default function MeetingPrep() {
   const generating = prep?.gen_status === "generating";
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  if (loading) return (
-    <Layout>
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-      </div>
-    </Layout>
-  );
+  if (loading) return <PrepSkeleton fromNew={fromNew} />;
 
   const superviseeNames = context?.supervisees?.map(s => s.name).join(", ") || "supervisee";
 
