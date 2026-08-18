@@ -105,6 +105,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasMoreMeetings, setHasMoreMeetings] = useState(false);
+  const [loadingAll, setLoadingAll] = useState(false);
   const [deletingId, setDeletingId] = useState(null);   // meeting id currently pending confirm
   const [deleteLoadingId, setDeleteLoadingId] = useState(null); // in-flight delete
   const [search, setSearch] = useState("");
@@ -116,38 +118,57 @@ export default function Dashboard() {
   const [orgFilter, setOrgFilter] = useState({ setting_id: "", team_id: "" });
   const [orgStructure, setOrgStructure] = useState({ settings: [], unassigned_users: [] });
   const [dueMeetings, setDueMeetings] = useState([]);
-  const [dueLoading, setDueLoading] = useState(false);
+  const [dueLoading, setDueLoading] = useState(true);
   const [showHistorical, setShowHistorical] = useState(false);
   const [actionStats, setActionStats] = useState(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    fetchMeetings();
-    if (user?.role === "admin" || user?.role === "manager") {
-      cachedGet(`${API}/org/structure`, getAuthConfig()).then(r => setOrgStructure(r.data)).catch(() => {});
-      setDueLoading(true);
-      cachedGet(`${API}/schedules/due`, getAuthConfig())
-        .then(r => setDueMeetings(r.data))
-        .catch(() => {})
-        .finally(() => setDueLoading(false));
-      cachedGet(`${API}/admin/team-insights/action-stats`, getAuthConfig())
-        .then(r => setActionStats(r.data))
-        .catch(() => {});
-    }
-    const interval = setInterval(fetchMeetings, 15000);
+    // Initial load: single combined endpoint (1 round-trip instead of 4)
+    cachedGet(`${API}/dashboard`, getAuthConfig())
+      .then(r => {
+        const d = r.data;
+        setMeetings(d.meetings || []);
+        setHasMoreMeetings(d.has_more_meetings || false);
+        if (d.due_schedules) setDueMeetings(d.due_schedules);
+        if (d.action_stats)  setActionStats(d.action_stats);
+        if (d.org_structure) setOrgStructure(d.org_structure);
+      })
+      .catch(err => console.error("Dashboard load failed", err.message))
+      .finally(() => { setLoading(false); setDueLoading(false); });
+
+    // Background polling: only re-fetch meetings (lightweight, detects processing complete)
+    const interval = setInterval(fetchMeetingsOnly, 15000);
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchMeetings = async () => {
+  // Lightweight poll — keeps meeting statuses live without re-fetching all dashboard data
+  const fetchMeetingsOnly = async () => {
     try {
       const { data } = await axios.get(`${API}/meetings/`, getAuthConfig());
       setMeetings(data);
+      setHasMoreMeetings(false); // full list loaded
     } catch (err) {
-      console.error("Failed to load meetings", err.message);
-    } finally {
-      setLoading(false);
+      console.error("Failed to refresh meetings", err.message);
     }
   };
+
+  // Called when user clicks "Load all meetings" — fetches full untruncated list
+  const loadAllMeetings = async () => {
+    setLoadingAll(true);
+    try {
+      const { data } = await axios.get(`${API}/meetings/`, getAuthConfig());
+      setMeetings(data);
+      setHasMoreMeetings(false);
+    } catch (err) {
+      console.error("Failed to load all meetings", err.message);
+    } finally {
+      setLoadingAll(false);
+    }
+  };
+
+  // Legacy alias so delete handler can call fetchMeetings after delete
+  const fetchMeetings = fetchMeetingsOnly;
 
   const activeMeetings = useMemo(() => meetings.filter(m => !m.is_historical), [meetings]);
   const historicalMeetings = useMemo(() => meetings.filter(m => m.is_historical === true), [meetings]);
@@ -470,6 +491,12 @@ export default function Dashboard() {
                 {filteredMeetings.length} of {meetings.length} meetings
               </span>
             )}
+            {/* Pagination hint */}
+            {hasMoreMeetings && !hasActiveFilters && (
+              <span className="ml-auto text-xs text-gray-400">
+                Showing first 50 meetings
+              </span>
+            )}
           </div>
         </div>
 
@@ -588,6 +615,27 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Load all meetings button — shown when initial 50-meeting batch may be truncated */}
+        {hasMoreMeetings && (
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={loadAllMeetings}
+              disabled={loadingAll}
+              data-testid="load-all-meetings-btn"
+              className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors disabled:opacity-50"
+            >
+              {loadingAll ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  Loading all meetings…
+                </>
+              ) : (
+                "Load all meetings"
+              )}
+            </button>
           </div>
         )}
 

@@ -9,6 +9,7 @@ import os  # noqa: E402
 import logging  # noqa: E402
 
 import database  # noqa: E402
+from routers.dashboard import router as dashboard_router  # noqa: E402
 from routers.auth import router as auth_router  # noqa: E402
 from routers.meetings import router as meetings_router  # noqa: E402
 from routers.recording import router as recording_router  # noqa: E402
@@ -128,6 +129,7 @@ app.add_middleware(
 )
 
 api_router = APIRouter(prefix="/api")
+api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(meetings_router, prefix="/meetings", tags=["meetings"])
 api_router.include_router(recording_router, prefix="/recording", tags=["recording"])

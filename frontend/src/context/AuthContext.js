@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
-import { clearCache } from "@/utils/apiCache";
+import { clearCache, cachedGet } from "@/utils/apiCache";
 
 const AuthContext = createContext(null);
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
@@ -90,6 +90,12 @@ export function AuthProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const _prewarmDashboard = () => {
+    // Fire-and-forget: start fetching dashboard data before the user lands on it.
+    // The result is stored in apiCache so Dashboard renders instantly on mount.
+    cachedGet(`${API}/dashboard`).catch(() => {});
+  };
+
   const login = async (email, password) => {
     const { data } = await axios.post(`${API}/auth/login`, { email, password });
     if (data.requires_mfa) return data; // MFA pending — caller handles OTP flow
@@ -99,6 +105,7 @@ export function AuthProvider({ children }) {
     try {
       const { data: profile } = await axios.get(`${API}/auth/me`);
       setUser(profile);
+      _prewarmDashboard();
       return profile;
     } catch {
       return data;
@@ -111,6 +118,7 @@ export function AuthProvider({ children }) {
     try {
       const { data: profile } = await axios.get(`${API}/auth/me`);
       setUser(profile);
+      _prewarmDashboard();
     } catch {
       // Keep login data as fallback
     }

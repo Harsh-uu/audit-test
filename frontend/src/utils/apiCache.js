@@ -11,6 +11,7 @@ const _cache = new Map();
 // would otherwise match first (e.g. /schedules/meeting-types before /schedules/).
 const TTL_MAP = {
   "/auth/me":                    60_000,   // 1 min
+  "/dashboard":                  30_000,   // 30 s — combined dashboard endpoint
   "/org/branding":              300_000,   // 5 min
   "/org/structure":              60_000,   // 1 min
   "/admin/users":                30_000,   // 30 s

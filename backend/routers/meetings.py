@@ -1,6 +1,6 @@
 import json
 import uuid
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -159,7 +159,15 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
 
 
 @router.get("/")
-async def list_meetings(current_user=Depends(get_current_user)):
+async def list_meetings(
+    limit: int = Query(500, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    current_user=Depends(get_current_user),
+):
+    return await _list_meetings_data(current_user, limit=limit, offset=offset)
+
+
+async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int = 0) -> list:
     role = current_user["role"]
     if role == "super_admin":
         return []
@@ -183,8 +191,8 @@ async def list_meetings(current_user=Depends(get_current_user)):
                           SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with,'[]'::jsonb)) s
                           WHERE s->>'user_id' = $1::text
                       )
-                   ORDER BY created_at DESC LIMIT 500""",
-                user_id,
+                   ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
+                user_id, limit, offset,
             )
         return [_parse_meeting_row(dict(r)) for r in rows]
 
@@ -194,14 +202,16 @@ async def list_meetings(current_user=Depends(get_current_user)):
     async with database.with_org(org_id) as conn:
         if role == "admin":
             rows = await conn.fetch(
-                f"SELECT {_LIST_COLS} FROM meetings ORDER BY created_at DESC LIMIT 500"
+                f"SELECT {_LIST_COLS} FROM meetings ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                limit, offset,
             )
 
         elif role == "manager":
             if scope["level"] == "org":
                 # Org-level manager sees every meeting in the org
                 rows = await conn.fetch(
-                    f"SELECT {_LIST_COLS} FROM meetings ORDER BY created_at DESC LIMIT 500"
+                    f"SELECT {_LIST_COLS} FROM meetings ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                    limit, offset,
                 )
             else:
                 # Scoped manager — get current team/setting members
@@ -221,8 +231,8 @@ async def list_meetings(current_user=Depends(get_current_user)):
                               SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
                               WHERE a->>'user_id' = ANY($1)
                           )
-                       ORDER BY created_at DESC LIMIT 500""",
-                    all_scoped_str,
+                       ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
+                    all_scoped_str, limit, offset,
                 )
                 result = []
                 scoped_staff_ids_str = {str(uid) for uid in scoped_staff_ids}
@@ -252,8 +262,8 @@ async def list_meetings(current_user=Depends(get_current_user)):
                           SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with,'[]'::jsonb)) s
                           WHERE s->>'user_id' = $1::text
                       )
-                   ORDER BY created_at DESC LIMIT 500""",
-                user_id,
+                   ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
+                user_id, limit, offset,
             )
 
     return [_parse_meeting_row(dict(r)) for r in rows]
