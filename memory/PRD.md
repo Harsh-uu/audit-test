@@ -345,6 +345,9 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ### P0 Meeting Load Fix Verified (Aug 2026, Session 11)
 - **`operator does not exist: text = uuid` fix confirmed**: `meetings.py` line 314 `$1::uuid[]` cast changed to `$1::text[]` (users.id is TEXT not UUID type). End-to-end verified: `POST /api/meetings/` then `GET /api/meetings/{id}` returns 200 with correct data. Manager account password (Manager123!) confirmed and MFA bypass approach documented in test_credentials.md.
 
+### Preview: Production Build (Aug 2026, Session 12)
+- **Root cause of 90-second blink permanently fixed**: Switched Preview environment from `vite dev` (HMR WebSocket, K8s ingress kills at 90 s → `location.reload()`) to `vite build && vite preview` (static file server, zero WebSocket, zero HMR). `package.json` `start` script updated; `vite.config.mjs` `preview` block added (`host`, `port`, `strictPort`, `allowedHosts: true`). Build completes in ~4.5 s on supervisor restart. Preview now mirrors production (`1two.one`) exactly. Option A (suppress reload shim) was rejected in favour of this permanent, clean fix.
+
 ### HMR WebSocket Keepalive Fix (Aug 2026, Session 11)
 - **Root cause of "52 requests per blink"**: Vite's HMR WebSocket uses `server.hmr.timeout` as its **ping interval** (default 30 s). The K8s ingress times out idle WebSockets at ≤30 s. When the WS drops, Vite's client (`client.mjs:962`) calls `waitForSuccessfulPing()` (which succeeds immediately since the server is still up), then unconditionally calls `location.reload()`. This is why a full page reload (52 requests) happened on a fixed cadence. Fix: set `server.hmr.timeout: 5000` in `vite.config.mjs`. Confirmed: `const hmrTimeout = 5000` injected into served `@vite/client`. 3-minute monitoring: zero new log lines, zero errors, PID stable.
 
