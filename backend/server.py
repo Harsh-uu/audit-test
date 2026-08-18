@@ -145,22 +145,39 @@ api_router.include_router(prep_router, tags=["prep"])
 app.include_router(api_router)
 
 
-# ── Global exception handler ─────────────────────────────────────────────────
-# Returns the real exception message in the 500 detail so production errors
-# can be diagnosed from the Network tab without needing server log access.
+# ── Global unhandled-exception logger ────────────────────────────────────────
+# Catches only true unexpected errors (NOT HTTPException — those are handled by
+# FastAPI's built-in handler). Returns the real error type + message so 500
+# responses are visible in the Network tab without needing server log access.
 from fastapi import Request as _Req
 from fastapi.responses import JSONResponse as _JSONResponse
+from fastapi.exceptions import HTTPException as _HTTPEx, RequestValidationError as _ValErr
+from fastapi.exception_handlers import (
+    http_exception_handler as _http_exc_handler,
+    request_validation_exception_handler as _val_exc_handler,
+)
 import traceback as _tb
 
 
+@app.exception_handler(_HTTPEx)
+async def _passthrough_http(request: _Req, exc: _HTTPEx):
+    """Re-delegate to FastAPI's default HTTP exception handler unchanged."""
+    return await _http_exc_handler(request, exc)
+
+
+@app.exception_handler(_ValErr)
+async def _passthrough_val(request: _Req, exc: _ValErr):
+    return await _val_exc_handler(request, exc)
+
+
 @app.exception_handler(Exception)
-async def _global_500(request: _Req, exc: Exception):
-    error_str = str(exc)
+async def _unhandled_500(request: _Req, exc: Exception):
     tb_str = _tb.format_exc()
-    logger.error("Unhandled exception on %s %s:\n%s", request.method, request.url.path, tb_str)
+    logger.error("Unhandled %s on %s %s:\n%s",
+                 type(exc).__name__, request.method, request.url.path, tb_str)
     return _JSONResponse(
         status_code=500,
-        content={"detail": f"{type(exc).__name__}: {error_str}"},
+        content={"detail": f"{type(exc).__name__}: {exc}"},
     )
 
 
