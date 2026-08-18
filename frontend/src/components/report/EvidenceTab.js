@@ -590,7 +590,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
               </div>
             ))}
             {learningNeeds.length === 0 && !addingLN && (
-              <p className="text-sm text-gray-400 py-2 text-center">No learning needs identified — add one or they will appear after re-analysis</p>
+              <p className="text-sm text-gray-400 py-2 text-center">No learning needs identified automatically — use + Add to record one manually</p>
             )}
           </div>
 
