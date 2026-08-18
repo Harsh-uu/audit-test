@@ -209,6 +209,44 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
     if not org_id:
         return []
 
+    # ── Attendees / shared-reviewers — bypass RLS, explicit ownership check ──
+    # Security: user can only see meetings where their user_id appears in the
+    # attendees or shared_with array OR they created the meeting.
+    # org_id is added as an explicit SQL filter for defence-in-depth.
+    # We intentionally avoid with_org() / RLS here because any org_id mismatch
+    # (invited user, null race, legacy account) silently hides valid meetings.
+    if role not in ("admin", "manager"):
+        async with database.with_admin() as conn:
+            rows = await conn.fetch(
+                f"""SELECT {_LIST_COLS} FROM meetings
+                   WHERE org_id = $2
+                   AND (
+                       created_by = $1
+                       OR EXISTS (
+                           SELECT 1 FROM jsonb_array_elements(
+                               CASE
+                                   WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees
+                                   WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='object' AND attendees != '{{}}'::jsonb THEN jsonb_build_array(attendees)
+                                   ELSE '[]'::jsonb
+                               END
+                           ) a WHERE a->>'user_id' = $1::text
+                       )
+                       OR EXISTS (
+                           SELECT 1 FROM jsonb_array_elements(
+                               CASE
+                                   WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with
+                                   WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='object' AND shared_with != '{{}}'::jsonb THEN jsonb_build_array(shared_with)
+                                   ELSE '[]'::jsonb
+                               END
+                           ) s WHERE s->>'user_id' = $1::text
+                       )
+                   )
+                   ORDER BY created_at DESC LIMIT $3 OFFSET $4""",
+                user_id, org_id, limit, offset,
+            )
+        return [_parse_meeting_row(dict(r)) for r in rows]
+
+    # ── Admins and Managers — use RLS via with_org ────────────────────────────
     async with database.with_org(org_id) as conn:
         if role == "admin":
             rows = await conn.fetch(
@@ -266,30 +304,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                 return result
 
         else:
-            rows = await conn.fetch(
-                f"""SELECT {_LIST_COLS} FROM meetings
-                   WHERE created_by=$1
-                      OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(
-                              CASE
-                                  WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees
-                                  WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='object' AND attendees != '{{}}'::jsonb THEN jsonb_build_array(attendees)
-                                  ELSE '[]'::jsonb
-                              END
-                          ) a WHERE a->>'user_id' = $1::text
-                      )
-                      OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(
-                              CASE
-                                  WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with
-                                  WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='object' AND shared_with != '{{}}'::jsonb THEN jsonb_build_array(shared_with)
-                                  ELSE '[]'::jsonb
-                              END
-                          ) s WHERE s->>'user_id' = $1::text
-                      )
-                   ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
-                user_id, limit, offset,
-            )
+            rows = []  # safety fallback; all non-admin/manager roles are handled above
 
     return [_parse_meeting_row(dict(r)) for r in rows]
 
