@@ -25,6 +25,11 @@ export default function AdminLibrary() {
   const { getAuthConfig, API, user } = useAuth();
   const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
+
+  // Jurisdiction-aware tab labels
+  const jurisdiction = user?.org_jurisdiction || "england";
+  const regLabel      = { wales: "CIW", scotland: "Care Inspectorate", northern_ireland: "RQIA" }[jurisdiction] || "CQC";
+  const certLabel     = { wales: "AWIF / SCW", scotland: "SSSC", northern_ireland: "NISCC" }[jurisdiction] || "Care Certificate";
   const [tab, setTab] = useState("cqc");
   const [standards, setStandards] = useState([]);
   const [users, setUsers] = useState([]);
@@ -240,11 +245,11 @@ export default function AdminLibrary() {
         <div className="border-b border-gray-200 mb-6">
           <TabBtn active={tab === "cqc"} onClick={() => setTab("cqc")}>
             <Shield className="inline w-3.5 h-3.5 mr-1.5" />
-            CQC ({cqcStandards.length})
+            {regLabel} ({cqcStandards.length})
           </TabBtn>
           <TabBtn active={tab === "care_cert"} onClick={() => setTab("care_cert")}>
             <Award className="inline w-3.5 h-3.5 mr-1.5" />
-            Care Certificate ({ccStandards.length})
+            {certLabel} ({ccStandards.length})
           </TabBtn>
           <TabBtn active={tab === "documents"} onClick={() => setTab("documents")}>
             <BookOpen className="inline w-3.5 h-3.5 mr-1.5" />

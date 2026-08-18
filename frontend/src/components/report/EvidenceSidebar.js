@@ -9,7 +9,7 @@ import {
 function getJurisdictionLabels(jurisdiction) {
   switch (jurisdiction) {
     case "wales":
-      return { regHeader: "CIW / AWIF Regulations", certHeader: "AWIF / SCW Standards", regBadge: "CIW" };
+      return { regHeader: "CIW Regulations", certHeader: "AWIF / SCW Standards", regBadge: "CIW" };
     case "scotland":
       return { regHeader: "Care Inspectorate Standards", certHeader: "SSSC Code Standards", regBadge: "CI" };
     case "northern_ireland":
