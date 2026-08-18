@@ -87,7 +87,7 @@ function MatrixView({ matrix, ccStandards = [], onCellClick }) {
 
   const tabs = [
     { key: "cqc",      label: "CQC",             icon: Shield, color: "text-purple-600" },
-    { key: "care_cert",label: "Care Certificate", icon: Award,  color: "text-blue-600"  },
+    { key: "care_cert",label: "Induction", icon: Award,  color: "text-blue-600"  },
     { key: "custom",   label: "Organisational",   icon: FileText, color: "text-teal-600" },
   ];
 
@@ -409,7 +409,7 @@ function ThemesView({ themes }) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             { key: "cqc",       label: "CQC Regulations",      icon: Shield, color: "text-purple-600" },
-            { key: "care_cert", label: "Care Certificate",      icon: Award,  color: "text-blue-600"  },
+            { key: "care_cert", label: "Induction",             icon: Award,  color: "text-blue-600"  },
             { key: "custom",    label: "Organisational",        icon: FileText, color: "text-teal-600" },
           ].map(({ key, label, icon: Icon, color }) => (
             <div key={key} className="bg-white border border-gray-200 rounded-lg p-4" data-testid={`gap-section-${key}`}>
@@ -1018,7 +1018,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
 
   const EMPTY_MSG = {
     actions:        "No outstanding actions — great!",
-    risks:          "No risks recorded yet",
+    risks:          "No attention items recorded yet",
     learning_needs: "No learning needs identified yet",
     achievements:   "No achievements recorded yet",
   };
@@ -1028,7 +1028,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     learning_needs: [{ v: "all", l: "All statuses" }, { v: "outstanding", l: "Outstanding" }, { v: "addressed", l: "Addressed" }],
     achievements:   [],
   };
-  const SEARCH_PH = { actions: "Search actions…", risks: "Search risks…", learning_needs: "Search learning needs…", achievements: "Search achievements…" };
+  const SEARCH_PH = { actions: "Search actions…", risks: "Search attention items…", learning_needs: "Search learning needs…", achievements: "Search achievements…" };
 
   return (
     <div>
@@ -1258,7 +1258,7 @@ export default function TeamInsights() {
   const exportMatrixCSV = () => {
     if (!data?.matrix) return;
     const lines = ["Staff Member,Framework,Standard Ref,Standard Name,Status,Coverage"];
-    const frameworkLabel = { cqc: "CQC", care_cert: "Care Certificate", custom: "Organisational" };
+    const frameworkLabel = { cqc: "CQC", care_cert: "Induction", custom: "Organisational" };
 
     ["cqc", "care_cert", "custom"].forEach(key => {
       const section = data.matrix[key];
@@ -1299,7 +1299,7 @@ export default function TeamInsights() {
     { key: "themes",         label: "Standards Coverage", icon: TrendingUp,    accent: null },
     { key: "achievements",   label: "Achievements",       icon: Award,         accent: "#059669" },
     { key: "learning_needs", label: "Learning Needs",     icon: BookOpen,      accent: "#0D9488" },
-    { key: "risks",          label: "Risks",              icon: AlertTriangle, accent: "#DC2626" },
+    { key: "risks",          label: "Attention",          icon: AlertTriangle, accent: "#DC2626" },
     { key: "actions",        label: "Actions",            icon: ClipboardList, accent: "#D97706" },
   ];
 

@@ -316,7 +316,7 @@ export default function CareCertPrep() {
   if (loading) {
     return (
       <Layout>
-        <div className="p-6 md:p-8" aria-busy="true" aria-label="Loading Care Certificate">
+        <div className="p-6 md:p-8" aria-busy="true" aria-label="Loading Induction Standards">
 
           {/* Header — blue icon + title/subtitle + staff picker + export button */}
           <div className="flex items-start gap-3 mb-6">
@@ -380,8 +380,8 @@ export default function CareCertPrep() {
       <Layout>
         <div className="p-8 text-center text-gray-400">
           <AlertCircle className="w-8 h-8 mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium text-gray-500">No Care Certificate evidence yet</p>
-          <p className="text-xs text-gray-400 mt-1">Coverage will appear once meetings with Care Certificate evidence are signed off</p>
+          <p className="text-sm font-medium text-gray-500">No Induction evidence yet</p>
+          <p className="text-xs text-gray-400 mt-1">Coverage will appear once meetings with Induction evidence are signed off</p>
           <button onClick={() => navigate("/")} className="mt-3 text-xs text-[#1E3A8A] hover:underline">Back to dashboard →</button>
         </div>
       </Layout>
@@ -414,7 +414,7 @@ export default function CareCertPrep() {
             <Award className="w-4 h-4 text-blue-600" />
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-semibold text-gray-900 font-display">Care Certificate</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 font-display">Induction</h1>
             <p className="text-sm text-gray-500 mt-0.5">Evidence coverage across {totalStaff} staff member{totalStaff !== 1 ? "s" : ""}</p>
           </div>
           <div className="flex items-center gap-2">
