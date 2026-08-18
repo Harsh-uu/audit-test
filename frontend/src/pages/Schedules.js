@@ -147,10 +147,10 @@ export default function Schedules() {
         cachedGet(`${API}/admin/users`, getAuthConfig()),
         cachedGet(`${API}/org/structure`, getAuthConfig()),
       ]);
-      setMeetingTypes(typesRes.data);
-      setSchedules(schedRes.data);
-      setAllUsers(usersRes.data);
-      setOrgStructure(structRes.data);
+      setMeetingTypes(typesRes.data  || []);
+      setSchedules(schedRes.data     || []);
+      setAllUsers(usersRes.data      || []);
+      setOrgStructure(structRes.data || { settings: [], unassigned_users: [] });
     } catch (err) {
       flash("Failed to load schedules", true);
     } finally {
@@ -261,7 +261,7 @@ export default function Schedules() {
     const staffRoles = ["attendee", "manager", "shared_reviewer"];
     let users = allUsers.filter(u => staffRoles.includes(u.role));
     if (bulkForm.scope === "team" && bulkForm.team_id) {
-      const teams = orgStructure.settings.flatMap(s => s.teams || []);
+      const teams = (orgStructure.settings || []).flatMap(s => s.teams || []);
       const team = teams.find(t => t.id === bulkForm.team_id);
       const memberIds = new Set((team?.members || []).map(m => m.id));
       users = users.filter(u => memberIds.has(u.id));
@@ -314,7 +314,7 @@ export default function Schedules() {
     schedulesByStaff[s.staff_user_id].push(s);
   }
 
-  const allTeams = orgStructure.settings.flatMap(s => (s.teams || []).map(t => ({ ...t, setting_name: s.name })));
+      const allTeams = (orgStructure.settings || []).flatMap(s => (s.teams || []).map(t => ({ ...t, setting_name: s.name })));
   const overdueCount = schedules.filter(s => s.is_overdue).length;
   const dueThisMonthCount = schedules.filter(s => {
     if (s.is_overdue) return false;

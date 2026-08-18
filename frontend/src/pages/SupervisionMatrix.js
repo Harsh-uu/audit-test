@@ -103,7 +103,7 @@ export default function SupervisionMatrix() {
   const fetchSchedules = useCallback(async () => {
     try {
       const { data } = await cachedGet(`${API}/schedules/`, getAuthConfig());
-      setSchedules(data);
+      setSchedules(data || []);
     } catch {
       // silently fail — schedules may not exist yet
     }

@@ -4,8 +4,8 @@ import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/sonner";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Loader2 } from "lucide-react";
 
 // Auth/public pages — loaded eagerly so login is instant
 import Login from "@/pages/Login";
@@ -54,6 +54,7 @@ function App() {
     <AuthProvider>
       <TooltipProvider delayDuration={300}>
       <BrowserRouter>
+        <RouteErrorBoundary>
         <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -82,6 +83,7 @@ function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         </Suspense>
+        </RouteErrorBoundary>
       </BrowserRouter>
       </TooltipProvider>
       <Toaster richColors position="top-right" />
