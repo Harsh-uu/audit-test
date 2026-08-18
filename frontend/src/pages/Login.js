@@ -68,7 +68,7 @@ export default function Login() {
         mfa_session: mfaState.mfa_session,
         code: otpCode.trim(),
       });
-      completeLogin(data);
+      await completeLogin(data);
       navigate(data.role === "super_admin" ? "/super-admin" : "/dashboard");
     } catch (err) {
       setError(formatError(err.response?.data?.detail) || err.message);

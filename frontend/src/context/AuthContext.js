@@ -13,6 +13,10 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined = loading
   const isRefreshing = useRef(false);
   const refreshQueue = useRef([]); // pending requests waiting for refresh
+  // Guard: while logging in, interceptor must NOT boot the user out on a failed refresh.
+  // The post-login /auth/me is best-effort profile enrichment — a transient failure
+  // should never send the user back to the login page.
+  const isLoggingIn = useRef(false);
 
   // Silent token refresh — cookie sent automatically; no explicit token needed
   const silentRefresh = async () => {
@@ -62,7 +66,10 @@ export function AuthProvider({ children }) {
             isRefreshing.current = false;
             refreshQueue.current.forEach(p => p.reject());
             refreshQueue.current = [];
-            setUser(null);
+            // Don't clear user if a login is actively in progress — the post-login
+            // /auth/me is a best-effort call; a transient failure must not log out
+            // a user who just successfully authenticated.
+            if (!isLoggingIn.current) setUser(null);
             return Promise.reject(err);
           }
         }
@@ -102,6 +109,7 @@ export function AuthProvider({ children }) {
     const { data } = await axios.post(`${API}/auth/login`, { email, password });
     if (data.requires_mfa) return data; // MFA pending — caller handles OTP flow
     // P3b: server sets HttpOnly cookies; no localStorage writes needed
+    isLoggingIn.current = true;
     setUser(data);
     // Fetch full profile (includes org_branding, org_name) via cookie
     try {
@@ -111,11 +119,14 @@ export function AuthProvider({ children }) {
       return profile;
     } catch {
       return data;
+    } finally {
+      isLoggingIn.current = false;
     }
   };
 
   const completeLogin = async (data) => {
     // P3b: server set cookies during verify-mfa; just update state
+    isLoggingIn.current = true;
     setUser(data);
     try {
       const { data: profile } = await axios.get(`${API}/auth/me`);
@@ -123,6 +134,8 @@ export function AuthProvider({ children }) {
       _prewarmDashboard();
     } catch {
       // Keep login data as fallback
+    } finally {
+      isLoggingIn.current = false;
     }
   };
 
