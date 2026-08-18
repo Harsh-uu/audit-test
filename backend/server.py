@@ -145,6 +145,25 @@ api_router.include_router(prep_router, tags=["prep"])
 app.include_router(api_router)
 
 
+# ── Global exception handler ─────────────────────────────────────────────────
+# Returns the real exception message in the 500 detail so production errors
+# can be diagnosed from the Network tab without needing server log access.
+from fastapi import Request as _Req
+from fastapi.responses import JSONResponse as _JSONResponse
+import traceback as _tb
+
+
+@app.exception_handler(Exception)
+async def _global_500(request: _Req, exc: Exception):
+    error_str = str(exc)
+    tb_str = _tb.format_exc()
+    logger.error("Unhandled exception on %s %s:\n%s", request.method, request.url.path, tb_str)
+    return _JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {error_str}"},
+    )
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "Supervision 2.0"}
