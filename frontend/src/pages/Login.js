@@ -43,7 +43,7 @@ export default function Login() {
         }
         navigate(userData.role === "super_admin" ? "/super-admin" : "/dashboard");
       } else if (mode === "forgot") {
-        const res = await fetch(`${API}/api/auth/forgot-password`, {
+        const res = await fetch(`${API}/auth/forgot-password`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: form.email }),
@@ -64,7 +64,7 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await axios.post(`${API}/api/auth/verify-mfa`, {
+      const { data } = await axios.post(`${API}/auth/verify-mfa`, {
         mfa_session: mfaState.mfa_session,
         code: otpCode.trim(),
       });
