@@ -439,7 +439,7 @@ export default function RecordingScreen() {
       try { await silentRefresh(); } catch {}
       await axios.post(`${API}/processing/${meetingId}/upload`, blob, {
         headers: {
-          "Content-Type": "application/octet-stream",
+          "Content-Type": "audio/webm",
         },
         onUploadProgress: (e) => {
           if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));
