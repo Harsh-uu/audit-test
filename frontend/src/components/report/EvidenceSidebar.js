@@ -406,7 +406,6 @@ export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, c
             {analysis.care_cert_mappings.map(m => (
               <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="care_cert" onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
             ))}
-            <CareCertDrillDown mappings={analysis.care_cert_mappings} />
           </div>
         )}
 
