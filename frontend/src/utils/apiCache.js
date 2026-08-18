@@ -33,6 +33,18 @@ const MIN_ITEMS_MAP = {
   "/admin/standards": 10,   // should always have CQC + Care Cert (47 + 16 minimum)
 };
 
+// Build a cache key that includes serialised query params so that
+// cachedGet("/admin/standards", { params: { type: "care_cert" } }) and
+// cachedGet("/admin/standards") never collide in the same cache entry.
+function _cacheKey(url, config = {}) {
+  const params = config.params;
+  if (params && Object.keys(params).length > 0) {
+    const qs = new URLSearchParams(params).toString();
+    return `${url}?${qs}`;
+  }
+  return url;
+}
+
 function _ttl(url) {
   const path = url.replace(/^https?:\/\/[^/]+/, "");
   for (const [pattern, ttl] of Object.entries(TTL_MAP)) {
@@ -54,11 +66,13 @@ function _minItems(url) {
  * Falls back to a live request when no TTL is configured for the URL.
  * Never caches a response whose array length falls below MIN_ITEMS_MAP threshold
  * (guards against caching transient empty responses during server restarts).
+ * Cache key includes serialised query params to prevent cross-request collisions.
  */
 export async function cachedGet(url, config = {}) {
   const ttl = _ttl(url);
+  const key = _cacheKey(url, config);
   if (ttl) {
-    const hit = _cache.get(url);
+    const hit = _cache.get(key);
     if (hit && Date.now() - hit.ts < ttl) return hit.res;
   }
   const res = await axios.get(url, config);
@@ -67,9 +81,9 @@ export async function cachedGet(url, config = {}) {
     const count = Array.isArray(res.data) ? res.data.length : null;
     if (min > 0 && count !== null && count < min) {
       // Transient empty/short response — skip cache so next call retries live
-      console.warn(`[cache] Skipping cache for ${url}: got ${count} items, expected ≥${min}`);
+      console.warn(`[cache] Skipping cache for ${key}: got ${count} items, expected ≥${min}`);
     } else {
-      _cache.set(url, { res, ts: Date.now() });
+      _cache.set(key, { res, ts: Date.now() });
     }
   }
   return res;
