@@ -11,7 +11,24 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      // Serve index.html with no-store headers so browsers never cache the HTML
+      // shell. Hashed JS/CSS assets keep their default long-lived cache headers.
+      {
+        name: "no-cache-html",
+        configurePreviewServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (req.url === "/" || req.url?.split("?")[0].endsWith(".html")) {
+              res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+              res.setHeader("Pragma", "no-cache");
+              res.setHeader("Expires", "0");
+            }
+            next();
+          });
+        },
+      },
+    ],
 
     resolve: {
       alias: { "@": path.resolve(__dirname, "./src") },

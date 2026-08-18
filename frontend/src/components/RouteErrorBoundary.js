@@ -1,10 +1,25 @@
 import React from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
+// Matches "Failed to fetch dynamically imported module" and related errors
+// thrown when a code-split chunk 404s after a redeploy.
+const isChunkError = (err) =>
+  err?.message?.includes("Failed to fetch dynamically imported module") ||
+  err?.message?.includes("Loading CSS chunk") ||
+  err?.message?.includes("Importing a module script failed") ||
+  err?.name === "ChunkLoadError";
+
+const CHUNK_RELOAD_KEY = "__boundary_chunk_reloaded";
+
 /**
  * Catches render errors inside lazy-loaded route components.
- * In production, React swallows uncaught render errors silently (blank page).
- * This boundary shows a user-friendly message and a one-click reload instead.
+ *
+ * Stale chunk after redeploy → auto-reload once (sessionStorage flag prevents
+ * loops). Returns null while reloading — never renders an imported component
+ * that might be missing from the old bundle.
+ *
+ * Any other render error → user-friendly card built entirely with
+ * React.createElement so the card itself can never throw a ReferenceError.
  */
 export class RouteErrorBoundary extends React.Component {
   constructor(props) {
@@ -17,38 +32,90 @@ export class RouteErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    // Log to console so it's visible in DevTools even in production
-    console.error("[RouteErrorBoundary] Render error:", error, info?.componentStack);
+    if (isChunkError(error)) {
+      if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+        sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+        window.location.reload();
+      }
+    } else {
+      console.error("[RouteErrorBoundary] Render error:", error, info?.componentStack);
+    }
+  }
+
+  componentDidUpdate() {
+    // Clear flag after a successful render so future chunk errors can also auto-recover.
+    if (!this.state.error) {
+      sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+    }
   }
 
   render() {
-    if (this.state.error) {
-      return (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-          <div className="max-w-md w-full text-center space-y-4">
-            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6 text-red-600" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900 font-display">Something went wrong</h2>
-            <p className="text-sm text-gray-500">
-              This page ran into an unexpected error. Refreshing usually fixes it.
-            </p>
-            {process.env.NODE_ENV !== "production" && (
-              <pre className="text-left text-xs bg-gray-100 rounded-lg p-3 overflow-auto max-h-40 text-red-700">
-                {this.state.error?.message}
-              </pre>
-            )}
-            <button
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1E3A8A] text-white text-sm font-medium rounded-lg hover:bg-[#1E40AF] transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Reload page
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
+    const { error } = this.state;
+    if (!error) return this.props.children;
+
+    // Chunk error — reload is already triggered; return null (brief white flash)
+    // rather than any JSX that might reference missing exports in the old bundle.
+    if (isChunkError(error)) return null;
+
+    // All other render errors — built with React.createElement to guarantee
+    // the boundary card never itself throws a ReferenceError.
+    return React.createElement(
+      "div",
+      {
+        style: {
+          minHeight: "100vh", display: "flex", alignItems: "center",
+          justifyContent: "center", padding: 24, background: "#f9fafb",
+        },
+      },
+      React.createElement(
+        "div",
+        { style: { maxWidth: 448, width: "100%", textAlign: "center" } },
+        React.createElement(
+          "div",
+          {
+            style: {
+              width: 48, height: 48, borderRadius: "50%", background: "#fee2e2",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 16px",
+            },
+          },
+          React.createElement(AlertTriangle, { style: { width: 24, height: 24, color: "#dc2626" } })
+        ),
+        React.createElement(
+          "h2",
+          { style: { fontSize: 18, fontWeight: 600, color: "#111827", marginBottom: 8 } },
+          "Something went wrong"
+        ),
+        React.createElement(
+          "p",
+          { style: { fontSize: 14, color: "#6b7280", marginBottom: 20 } },
+          "This page ran into an unexpected error. Refreshing usually fixes it."
+        ),
+        process.env.NODE_ENV !== "production" &&
+          React.createElement(
+            "pre",
+            {
+              style: {
+                textAlign: "left", fontSize: 11, background: "#f3f4f6", borderRadius: 8,
+                padding: 12, overflow: "auto", maxHeight: 160, color: "#b91c1c", marginBottom: 16,
+              },
+            },
+            error?.message
+          ),
+        React.createElement(
+          "button",
+          {
+            onClick: () => window.location.reload(),
+            style: {
+              display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "8px 16px", background: "#1E3A8A", color: "#fff",
+              fontSize: 14, fontWeight: 500, borderRadius: 8, border: "none", cursor: "pointer",
+            },
+          },
+          React.createElement(RefreshCw, { style: { width: 14, height: 14 } }),
+          " Reload page"
+        )
+      )
+    );
   }
 }
