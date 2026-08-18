@@ -1,17 +1,22 @@
-@import url('https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
-
 * {
   box-sizing: border-box;
 }
 
 body {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 400;
   background-color: #F8F9FA;
   color: #0F172A;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Work Sans', sans-serif;
+h1, h2 {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+}
+
+h3, h4, h5, h6 {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 600;
 }
 
 .recording-pulse {
