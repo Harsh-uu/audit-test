@@ -434,7 +434,11 @@ async def upload_audio(
             meeting_id, org_id, _size_mb,
         )
 
-    content_type = request.headers.get("content-type", "audio/webm").split(";")[0].strip()
+    # Normalise to audio/webm regardless of what the browser sends (browsers often
+    # send application/octet-stream or video/webm for MediaRecorder blobs).
+    _raw_ct = request.headers.get("content-type", "audio/webm").split(";")[0].strip().lower()
+    _AUDIO_TYPES = {"audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-m4a"}
+    content_type = _raw_ct if _raw_ct in _AUDIO_TYPES else "audio/webm"
     file_ext = "webm"
 
     storage_path = f"{meeting_id}/audio_{uuid.uuid4()}.{file_ext}"
