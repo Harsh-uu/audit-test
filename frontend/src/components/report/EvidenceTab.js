@@ -300,16 +300,25 @@ export const EvidenceTab = React.memo(function EvidenceTab({
       onAnalysisChange?.({ ...analysis, learning_needs: updated });
       setLnMessage("Saved");
       setTimeout(() => setLnMessage(""), 2000);
-    } catch { setLnMessage("Error saving"); setTimeout(() => setLnMessage(""), 3000); }
-    finally { setLnSaving(false); }
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err?.message || "Unknown error";
+      console.error("Learning needs save failed:", err?.response?.status, detail);
+      setLnMessage(`Error saving — ${detail}`);
+      setTimeout(() => setLnMessage(""), 6000);
+      return false;
+    } finally { setLnSaving(false); }
+    return true;
   };
 
   const addLN = async () => {
     if (!newLN.text.trim()) return;
     const updated = [...learningNeeds, { id: `ln_${Date.now()}`, text: newLN.text.trim(), assigned_to: newLN.assigned_to.trim() || null, due_date: newLN.due_date.trim() || null, completed: false }];
-    setAddingLN(false);
-    setNewLN({ text: "", assigned_to: "", due_date: "" });
-    await saveLearningNeeds(updated);
+    // Save first — only close the form if it succeeds so data isn't lost on failure
+    const ok = await saveLearningNeeds(updated);
+    if (ok) {
+      setAddingLN(false);
+      setNewLN({ text: "", assigned_to: "", due_date: "" });
+    }
   };
 
   const removeLN = async (idx) => {
@@ -608,7 +617,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addLN(); } }}
               />
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <input type="text" value={newLN.assigned_to} onChange={e => setNewLN(n => ({ ...n, assigned_to: e.target.value }))} placeholder="Assigned to (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid="new-ln-assigned" />
+                <input type="text" value={newLN.assigned_to} onChange={e => setNewLN(n => ({ ...n, assigned_to: e.target.value }))} placeholder="Assigned to — anyone (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid="new-ln-assigned" />
                 <input type="text" value={newLN.due_date} onChange={e => setNewLN(n => ({ ...n, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid="new-ln-due" />
               </div>
               <div className="flex gap-2 items-center">
