@@ -38,6 +38,16 @@ export default defineConfig(({ mode }) => {
         },
 
         workbox: {
+          // Activate the new SW immediately on install (no waiting for all
+          // tabs to close) and claim all open clients right away.
+          // This prevents the stale-chunk crash: old index.html references
+          // old chunk hashes that no longer exist on the server after a
+          // redeploy → MIME-type error → React crash → bounces to login.
+          // With skipWaiting + clientsClaim the new SW takes over instantly
+          // and all open pages receive the new index.html + new chunk hashes.
+          skipWaiting: true,
+          clientsClaim: true,
+
           // ── Precache: every hashed build asset ─────────────────────────────
           // Content-hashed filenames mean these are safe to cache forever;
           // a new deploy produces new hashes → SW auto-updates → stale cache

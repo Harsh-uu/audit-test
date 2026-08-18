@@ -17,6 +17,10 @@ export function AuthProvider({ children }) {
   // The post-login /auth/me is best-effort profile enrichment — a transient failure
   // should never send the user back to the login page.
   const isLoggingIn = useRef(false);
+  // Grace period: after login completes, suppress setUser(null) for 10 seconds.
+  // Covers prewarm requests (_prewarmDashboard) that are not awaited and complete
+  // after isLoggingIn is cleared — without this they can race and bounce the user.
+  const loginGracePeriodEnd = useRef(0);
 
   // Silent token refresh — cookie sent automatically; no explicit token needed
   const silentRefresh = async () => {
@@ -66,10 +70,11 @@ export function AuthProvider({ children }) {
             isRefreshing.current = false;
             refreshQueue.current.forEach(p => p.reject());
             refreshQueue.current = [];
-            // Don't clear user if a login is actively in progress — the post-login
-            // /auth/me is a best-effort call; a transient failure must not log out
-            // a user who just successfully authenticated.
-            if (!isLoggingIn.current) setUser(null);
+            // Don't clear user if a login is actively in progress OR within the
+            // 10-second post-login grace window (covers unawaited prewarm requests
+            // that can complete after isLoggingIn is cleared).
+            const withinGrace = Date.now() < loginGracePeriodEnd.current;
+            if (!isLoggingIn.current && !withinGrace) setUser(null);
             return Promise.reject(err);
           }
         }
@@ -121,6 +126,9 @@ export function AuthProvider({ children }) {
       return data;
     } finally {
       isLoggingIn.current = false;
+      // 10-second grace window: any in-flight requests started during login
+      // (e.g. unawaited prewarm calls) cannot trigger setUser(null).
+      loginGracePeriodEnd.current = Date.now() + 10_000;
     }
   };
 
@@ -136,6 +144,7 @@ export function AuthProvider({ children }) {
       // Keep login data as fallback
     } finally {
       isLoggingIn.current = false;
+      loginGracePeriodEnd.current = Date.now() + 10_000;
     }
   };
 

@@ -35,7 +35,15 @@ export class RouteErrorBoundary extends React.Component {
     if (isChunkError(error)) {
       if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
         sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
-        window.location.reload();
+        // Nuke ALL SW caches so stale chunks (old content-hashes) are purged.
+        // Without this, the old Workbox precache still has the outdated files
+        // and the reload would hit the same stale-chunk 404 again.
+        if ("caches" in window) {
+          caches.keys().then(names => Promise.all(names.map(n => caches.delete(n))))
+            .finally(() => window.location.reload());
+        } else {
+          window.location.reload();
+        }
       }
     } else {
       console.error("[RouteErrorBoundary] Render error:", error, info?.componentStack);
