@@ -7,7 +7,7 @@ import logging
 import os
 from deps import get_current_user
 from utils.supabase_storage import put_audio, get_audio
-from utils.ai import analyze_meeting, diarize_transcript, transcribe_with_assemblyai, map_speaker_numbers_to_names
+from utils.ai import analyze_meeting, diarize_transcript, transcribe_with_assemblyai, map_speaker_numbers_to_names, generate_meeting_summary
 from utils.job_worker import enqueue_job
 import database
 from routers.admin import _stats_cache as _admin_stats_cache
@@ -263,10 +263,12 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
         results = await asyncio.gather(
             analyze_meeting(timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template, jurisdiction=effective_jurisdiction),
             diarize_coro,
+            generate_meeting_summary(timestamped_plain),   # runs concurrently — zero added latency
             return_exceptions=True,
         )
         analysis_result = results[0]
         speaker_text = results[1]
+        dedicated_summary = results[2]
 
         if isinstance(analysis_result, Exception):
             raise analysis_result
@@ -279,6 +281,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                     "UPDATE transcripts SET speaker_text=$1 WHERE id=$2",
                     speaker_text, transcript_id,
                 )
+
+        # Replace the compliance analyst's summary (produced as a side-effect of evidence
+        # extraction) with the dedicated summariser's output, which focuses entirely on
+        # writing a clear, specific, human narrative. Falls back to the original if the
+        # dedicated call fails.
+        if dedicated_summary and not isinstance(dedicated_summary, Exception) and str(dedicated_summary).strip():
+            analysis_result["summary"] = str(dedicated_summary).strip()
 
         cqc_kq_map = {s["reference"]: s.get("key_questions") or [] for s in cqc_standards}
         for item in analysis_result.get("cqc_mappings", []):

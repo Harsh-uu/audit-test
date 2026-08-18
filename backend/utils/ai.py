@@ -667,11 +667,15 @@ Only include criteria with actual evidence. Return empty mappings array if nothi
 SUMMARY_ONLY_PROMPT = _PROMPT_INJECTION_GUARD + """You are a meeting summarizer for UK adult social care supervision sessions.
 Generate a structured meeting summary in EXACTLY this format — three sections separated by blank lines:
 
-Section 1: Two sentences that introduce the session (who was involved, what type of meeting, its main purpose or context).
+Section 1: Two sentences that introduce the session. Name both participants and their roles (e.g. "the home manager", "a care worker"). Describe what kind of meeting it was and what it set out to cover.
 
-Section 2: 4 to 6 bullet points covering the key topics and discussion points, each starting with "- ".
+Section 2: 5 to 6 bullet points — each a concise, specific sentence covering one key topic or discussion point. Be concrete:
+- Use participants' actual names.
+- Include specific details from the transcript: names of residents or service users mentioned, names of colleagues mentioned, specific qualifications, specific incidents or events discussed, specific emotional details (e.g. "feeling 'not in a good place'", "low on and off for a couple of months").
+- Do NOT generalise to abstract categories (e.g. NOT "discussed absences" — instead "Three recent absences were explored: a stomach bug, emotional exhaustion, and feeling overwhelmed").
+- Capture the human context, not just the topic headings.
 
-Section 3: Two sentences that frame the essential outcomes, overall themes, or agreed next steps from the session.
+Section 3: Two sentences that frame the concrete agreed outcomes and next steps — what will actually happen, who will do what, and by when if mentioned.
 
 Output plain text only. Use a blank line (\\n\\n) to separate each of the three sections. Do not use any markdown headers or JSON."""
 
