@@ -3,7 +3,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
-  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText,
+  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText, ArrowUp,
 } from "lucide-react";
 
 // ── Severity config ──────────────────────────────────────────────────────────
@@ -770,6 +770,18 @@ export const EvidenceTab = React.memo(function EvidenceTab({
           {actionMessage}
         </div>
       )}
+
+      {/* Back to top */}
+      <div className="flex justify-end pt-1 pb-2">
+        <button
+          onClick={() => document.getElementById("section-summary")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 transition-colors"
+          data-testid="back-to-top-btn"
+        >
+          <ArrowUp className="w-3 h-3" />
+          Back to top
+        </button>
+      </div>
     </div>
   );
 });
