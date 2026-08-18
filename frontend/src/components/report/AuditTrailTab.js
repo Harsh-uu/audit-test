@@ -1,5 +1,6 @@
 import React from "react";
-import { History, Loader2, AlertTriangle } from "lucide-react";
+import { History, AlertTriangle } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const AUDIT_EVENT_CONFIG = {
   meeting_created:   { color: "bg-blue-100 text-blue-700", dot: "bg-blue-400" },
@@ -57,12 +58,28 @@ export function AuditTrailTab({ auditLoading, auditTrail, fetchAuditTrail }) {
         </div>
         <button onClick={fetchAuditTrail} className="text-xs text-[#1E3A8A] hover:underline" data-testid="refresh-audit-btn">Refresh</button>
       </div>
+
       {auditLoading && (
-        <div className="flex items-center justify-center py-10 text-gray-400">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          <span className="text-sm">Loading audit trail…</span>
+        <div className="relative" aria-busy="true" aria-label="Loading audit trail">
+          <div className="absolute left-3 top-0 bottom-0 w-px bg-gray-200" />
+          <div className="space-y-4 pl-8">
+            {[72, 56, 80, 64, 48].map((pillW, i) => (
+              <div key={i} className="relative">
+                {/* timeline dot */}
+                <div className="absolute -left-5 w-2.5 h-2.5 rounded-full border-2 border-white bg-gray-200" style={{ top: "0.35rem" }} />
+                <div className="border border-gray-200 rounded-lg p-3 bg-white shadow-sm space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Skeleton className="h-5 rounded-full" style={{ width: pillW }} />
+                    <Skeleton className="h-3.5 w-24 rounded" />
+                  </div>
+                  <Skeleton className="h-3.5 w-32 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
       {!auditLoading && auditTrail?.length === 0 && (
         <p className="text-sm text-gray-400 text-center py-8">No audit events yet</p>
       )}
