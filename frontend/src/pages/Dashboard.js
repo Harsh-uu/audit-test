@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
-import { cachedGet } from "@/utils/apiCache";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import Layout from "@/components/Layout";
@@ -147,7 +147,8 @@ export default function Dashboard() {
     try {
       const { data } = await axios.get(`${API}/meetings/`, getAuthConfig());
       setMeetings(data);
-      setHasMoreMeetings(false); // full list loaded
+      // Full list is now loaded — no more "Load all" needed
+      setHasMoreMeetings(false);
     } catch (err) {
       console.error("Failed to refresh meetings", err.message);
     }
@@ -234,6 +235,8 @@ export default function Dashboard() {
     try {
       await axios.delete(`${API}/meetings/${meetingId}`, getAuthConfig());
       setMeetings(prev => prev.filter(m => m.id !== meetingId));
+      // Bust the dashboard cache so navigating back re-fetches a fresh list
+      invalidateCache("/dashboard");
     } catch (err) {
       alert(err.response?.data?.detail || "Delete failed");
     } finally {

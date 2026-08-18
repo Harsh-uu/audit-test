@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { cachedGet } from "@/utils/apiCache";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -107,6 +107,8 @@ export default function NewMeeting() {
         ...form,
         title: titlePreview,
       }, getAuthConfig());
+      // Bust the dashboard cache so the new meeting appears immediately on return
+      invalidateCache("/dashboard");
       navigate(`/meetings/${data.id}/prepare?from=new`);
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to create meeting");

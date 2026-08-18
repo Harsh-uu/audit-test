@@ -23,7 +23,8 @@ from routers.admin import _jlist
 
 router = APIRouter()
 
-_DASHBOARD_LIMIT = 50  # initial meetings batch; frontend shows "Load all" if count == 50
+_DASHBOARD_LIMIT = 50  # initial meetings batch; fetch limit+1 to detect "has more"
+_PROBE_LIMIT = _DASHBOARD_LIMIT + 1  # fetch one extra to know whether to show "Load all"
 
 
 @router.get("/")
@@ -108,16 +109,28 @@ async def get_dashboard(current_user=Depends(get_current_user)):
                 settings.append(s)
         return {"settings": settings, "unassigned_users": []}
 
-    meetings, due, action_stats, org_structure = await asyncio.gather(
-        _list_meetings_data(current_user, limit=_DASHBOARD_LIMIT, offset=0),
+    results = await asyncio.gather(
+        _list_meetings_data(current_user, limit=_PROBE_LIMIT, offset=0),
         fetch_due(),
         fetch_action_stats(),
         fetch_structure(),
+        return_exceptions=True,
     )
+
+    # Unpack — failed sub-queries degrade gracefully instead of blanking the whole page
+    _defaults = [[], [], None, None]
+    meetings_raw, due, action_stats, org_structure = [
+        r if not isinstance(r, Exception) else default
+        for r, default in zip(results, _defaults)
+    ]
+
+    # Probe result: if we got _PROBE_LIMIT rows there are more beyond the first 50
+    has_more = len(meetings_raw) == _PROBE_LIMIT
+    meetings = meetings_raw[:_DASHBOARD_LIMIT]
 
     return {
         "meetings": meetings,
-        "has_more_meetings": len(meetings) == _DASHBOARD_LIMIT,
+        "has_more_meetings": has_more,
         "due_schedules": due,
         "action_stats": action_stats,
         "org_structure": org_structure,
