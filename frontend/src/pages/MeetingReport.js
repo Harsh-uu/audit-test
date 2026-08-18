@@ -812,10 +812,10 @@ export default function MeetingReport() {
 
         {/* Content */}
         {!stageCfg && analysis && (
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
+          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
             {/* Left: tabs */}
-            <div className="lg:col-span-7 border-r border-gray-200 flex flex-col overflow-hidden">
-              <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-4 overflow-x-auto scrollbar-hide">
+            <div className="lg:col-span-7 border-r border-gray-200 flex flex-col overflow-hidden min-h-0">
+              <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 overflow-x-auto scrollbar-hide flex-shrink-0">
                 <button onClick={() => setActiveTab("evidence")} className={tabBtnCls("evidence")} data-testid="overview-tab">Overview</button>
                 <button onClick={() => setActiveTab("transcript")} className={tabBtnCls("transcript")}>Transcript</button>
                 <button onClick={() => setActiveTab("comments")} className={tabBtnCls("comments")} data-testid="comments-tab">
@@ -826,7 +826,7 @@ export default function MeetingReport() {
                 <button onClick={() => setActiveTab("prep")} className={tabBtnCls("prep")} data-testid="prep-tab">Prep Agenda</button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 min-h-0 overflow-y-auto p-6">
                 {activeTab === "evidence" && (
                   <EvidenceTab
                     meeting={meeting}
@@ -924,7 +924,7 @@ export default function MeetingReport() {
               canRescan={canEditSpeakers && !!meeting?.transcript_id && !isLocked}
               onRescanEvidence={rescanEvidence}
               onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setHighlightKey(k => k + 1); setActiveTab("transcript"); }}
-              className="hidden lg:block lg:col-span-5 bg-[#F8F9FA] overflow-y-auto"
+              className="hidden lg:block lg:col-span-5 bg-[#F8F9FA] overflow-y-auto min-h-0"
             />
           </div>
         )}
