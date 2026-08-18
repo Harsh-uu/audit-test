@@ -3,6 +3,7 @@ import { FileText, Users, Loader2, ArrowLeftRight, Scissors, ChevronUp, ChevronD
 import axios from "axios";
 import { toast } from "sonner";
 import { anonymiseTranscript } from "@/utils/anonymise";
+import { useAuth } from "@/context/AuthContext";
 
 /** Strip leading/trailing curly quotes and truncate for searching */
 function cleanExcerpt(excerpt) {
@@ -353,6 +354,7 @@ function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDis
 
 // ── Main component ───────────────────────────────────────────────────────────
 export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "", highlightKey = 0, onFindReplace }) {
+  const { API, getAuthConfig } = useAuth();
   const [viewMode, setViewMode] = useState("full");
 
   // ── Speaker editing state ─────────────────────────────────────────────────
@@ -392,6 +394,37 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
   const [splitPopup, setSplitPopup] = useState(null);
   // { turnIndex, selStart, selEnd, selectedText, top, left }
 
+  // ── Lazy full-text loading ────────────────────────────────────────────────
+  // The main GET /meetings/{id} strips `transcript.text` (~50 KB) when
+  // speaker_text is present. We fetch it on demand when the user switches to
+  // the Full Text view.
+  const [lazyRawText, setLazyRawText] = useState(null);   // null = not yet fetched
+  const [rawTextLoading, setRawTextLoading] = useState(false);
+
+  const fetchFullText = useCallback(async () => {
+    if (rawTextLoading || lazyRawText !== null) return;
+    setRawTextLoading(true);
+    try {
+      const { data } = await axios.get(
+        `${API}/meetings/${meeting.id}/transcript-text`,
+        getAuthConfig()
+      );
+      setLazyRawText(data.text || "");
+    } catch {
+      setLazyRawText("");   // prevent repeated retries
+      toast.error("Could not load full transcript text.");
+    } finally {
+      setRawTextLoading(false);
+    }
+  }, [meeting.id, rawTextLoading, lazyRawText]); // eslint-disable-line
+
+  // Trigger lazy fetch when the user switches to Full Text and text isn't inlined
+  useEffect(() => {
+    if (viewMode === "full" && !meeting.transcript?.text && lazyRawText === null) {
+      fetchFullText();
+    }
+  }, [viewMode, meeting.transcript?.text, lazyRawText]); // eslint-disable-line
+
   const hasSpeakerText = Boolean(meeting.transcript?.speaker_text);
   const originalTurns = useMemo(
     () => parseSpeakerText(meeting.transcript?.speaker_text || ""),
@@ -429,8 +462,12 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     return localTurns.findIndex(t => resolveExcerptQuery(t.text, highlightExcerpt) !== "");
   }, [highlightExcerpt, localTurns]);
 
-  // For raw text mode — declared here so all hooks below can reference it
-  const rawParas = useMemo(() => formatTranscript(meeting.transcript?.text || ""), [meeting.transcript?.text]);
+  // For raw text mode — uses lazy-loaded text as fallback when the main response
+  // stripped it (speaker_text present). Declared here so hooks below can reference it.
+  const rawParas = useMemo(
+    () => formatTranscript(meeting.transcript?.text || lazyRawText || ""),
+    [meeting.transcript?.text, lazyRawText]
+  );
 
   // What actually matched — may be a shorter word-prefix if the full excerpt wasn't verbatim.
   // Used to drive the yellow highlight so it renders on the right substring.
@@ -930,7 +967,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     });
   }, [editingTurnIndex]);
 
-  const raw = anonymiseTranscript(meeting.transcript?.text, meeting.attendees || []);
+  const raw = anonymiseTranscript(meeting.transcript?.text || lazyRawText, meeting.attendees || []);
   const wordCount = raw ? raw.trim().split(/\s+/).filter(Boolean).length : 0;
   const readMins = Math.ceil(wordCount / 150);
 
@@ -950,7 +987,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
         </div>
 
         {/* Find & Replace button — always visible when transcript exists */}
-        {(meeting.transcript?.text || meeting.transcript?.speaker_text) && (canAnonymise || canEditSpeakers) && (
+        {(meeting.transcript?.text || lazyRawText || meeting.transcript?.speaker_text) && (canAnonymise || canEditSpeakers) && (
           <button
             onClick={() => setFindReplaceOpen(v => !v)}
             className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-medium transition-colors ${
@@ -1104,7 +1141,12 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
           </div>
         )}
 
-        {(!raw && !hasSpeakerText) ? (
+        {viewMode === "full" && rawTextLoading ? (
+          <div className="flex items-center justify-center gap-2.5 py-12 text-sm text-gray-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading full transcript…
+          </div>
+        ) : (!raw && !hasSpeakerText) ? (
           <p className="p-5 text-sm text-gray-400 italic">Transcript not available.</p>
         ) : viewMode === "speaker" && hasSpeakerText ? (
           <>

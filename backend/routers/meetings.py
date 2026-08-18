@@ -285,6 +285,10 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
                 tr = dict(t_row)
                 tr["safety_warnings"] = _ensure_list(tr.get("safety_warnings"))
                 tr["speaker_colors"] = _ensure_dict(tr.get("speaker_colors"))
+                # speaker_text is the diarised view; raw text is ~50 KB and
+                # lazy-loaded on demand via GET /{id}/transcript-text.
+                if tr.get("speaker_text"):
+                    tr.pop("text", None)
                 meeting["transcript"] = tr
 
         # Attach analysis
@@ -389,3 +393,47 @@ async def delete_meeting(meeting_id: str, current_user=Depends(get_current_user)
         for table in ["transcripts", "analyses", "audio_files", "reviewer_comments", "review_edits", "audit_logs"]:
             await conn.execute(f"DELETE FROM {table} WHERE meeting_id = $1", meeting_id)
     return {"message": "Meeting deleted"}
+
+
+
+@router.get("/{meeting_id}/transcript-text")
+async def get_transcript_text(meeting_id: str, current_user=Depends(get_current_user)):
+    """Lazy-load endpoint: returns only the raw transcript text for the Full Text view.
+    The main GET /{id} strips this field when speaker_text is present to save ~50 KB."""
+    org_id = current_user.get("org_id", "")
+    user_id = current_user.get("id", "")
+
+    async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow("SELECT * FROM meetings WHERE id = $1", meeting_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        meeting = _parse_meeting_row(dict(row))
+
+        # Access check (mirrors get_meeting)
+        if current_user["role"] not in ["admin", "manager", "super_admin"]:
+            attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
+            shared_with = meeting["shared_with"]
+            is_shared = any(isinstance(s, dict) and s.get("user_id") == user_id for s in shared_with)
+            if user_id not in attendee_ids and not is_shared and user_id != meeting.get("created_by", ""):
+                raise HTTPException(status_code=404, detail="Not found")
+
+        if not meeting.get("transcript_id"):
+            raise HTTPException(status_code=404, detail="No transcript")
+
+        t_row = await conn.fetchrow(
+            "SELECT text FROM transcripts WHERE id = $1",
+            meeting["transcript_id"],
+        )
+
+    if not t_row or not t_row["text"]:
+        raise HTTPException(status_code=404, detail="Transcript text not available")
+
+    text = t_row["text"]
+
+    # Apply PII redactions for non-privileged users (same as main meeting endpoint)
+    from routers.review import _apply_redactions_to_text, _has_privileged_access
+    redactions = meeting.get("pii_redactions") or []
+    if redactions and not _has_privileged_access(meeting, user_id):
+        text = _apply_redactions_to_text(text, redactions)
+
+    return {"text": text}
