@@ -389,7 +389,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
             <button
               key={id}
               onClick={() => scrollToSection(id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${cls}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors bg-white ${cls}`}
               data-testid={`jump-${id}`}
             >
               <Icon className="w-3 h-3" />
