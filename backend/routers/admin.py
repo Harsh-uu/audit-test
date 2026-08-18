@@ -2135,3 +2135,129 @@ async def fix_user_org_by_email(data: FixOrgRequest, email: str, current_user=De
         await conn.execute("UPDATE users SET org_id=$1 WHERE id=$2", target_org, u["id"])
 
     return {"message": f"User org_id set to {target_org} ({org_row['name']})", "user_id": str(u["id"])}
+
+
+# ── Meeting repair endpoints ───────────────────────────────────────────────────
+
+@router.get("/meetings/{meeting_id}/debug-attendees")
+async def debug_meeting_attendees(meeting_id: str, current_user=Depends(get_current_user)):
+    """Admin/Super Admin: return raw attendees/shared_with JSONB and user info for a meeting.
+    Used to diagnose why a specific user can't see a meeting on their dashboard.
+    """
+    if current_user["role"] not in ("admin", "super_admin"):
+        raise HTTPException(403, "Admin only")
+
+    async with database.with_admin() as conn:
+        row = await conn.fetchrow(
+            """SELECT id, title, status, created_by, sign_off_manager_id,
+                      attendees, shared_with,
+                      jsonb_typeof(attendees) AS attendees_typeof,
+                      jsonb_typeof(shared_with) AS shared_with_typeof
+               FROM meetings WHERE id=$1""",
+            meeting_id,
+        )
+        if not row:
+            raise HTTPException(404, "Meeting not found")
+
+        m = dict(row)
+        # Enrich created_by name
+        creator = await conn.fetchrow("SELECT name, email FROM users WHERE id=$1", m["created_by"])
+        m["created_by_info"] = dict(creator) if creator else None
+
+        # Parse attendees safely
+        raw_attendees = m.pop("attendees")
+        raw_shared = m.pop("shared_with")
+        if isinstance(raw_attendees, str):
+            try:
+                raw_attendees = json.loads(raw_attendees)
+            except Exception:
+                raw_attendees = raw_attendees
+        if isinstance(raw_shared, str):
+            try:
+                raw_shared = json.loads(raw_shared)
+            except Exception:
+                raw_shared = raw_shared
+
+        return {
+            "meeting_id": meeting_id,
+            "title": m["title"],
+            "status": m["status"],
+            "created_by": m["created_by"],
+            "created_by_info": m["created_by_info"],
+            "sign_off_manager_id": m["sign_off_manager_id"],
+            "attendees_raw": raw_attendees,
+            "attendees_typeof": m["attendees_typeof"],
+            "shared_with_raw": raw_shared,
+            "shared_with_typeof": m["shared_with_typeof"],
+        }
+
+
+class AddAttendeeRequest(BaseModel):
+    user_email: str
+
+
+@router.post("/meetings/{meeting_id}/add-attendee")
+async def repair_add_attendee(meeting_id: str, data: AddAttendeeRequest, current_user=Depends(get_current_user)):
+    """Admin/Super Admin: add a user to a meeting's attendees array.
+    Used to repair meetings where the attendees JSONB was empty/corrupt.
+    Safe to call multiple times — will not add a duplicate.
+    """
+    if current_user["role"] not in ("admin", "super_admin"):
+        raise HTTPException(403, "Admin only")
+
+    async with database.with_admin() as conn:
+        # Find the user
+        user_row = await conn.fetchrow(
+            "SELECT id, name, email, role FROM users WHERE LOWER(email)=LOWER($1)",
+            data.user_email,
+        )
+        if not user_row:
+            raise HTTPException(404, f"User not found: {data.user_email}")
+
+        # Find the meeting
+        mtg_row = await conn.fetchrow(
+            "SELECT id, attendees FROM meetings WHERE id=$1", meeting_id
+        )
+        if not mtg_row:
+            raise HTTPException(404, "Meeting not found")
+
+        uid = str(user_row["id"])
+        raw = mtg_row["attendees"]
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                raw = []
+        existing: list = raw if isinstance(raw, list) else []
+
+        # De-duplicate: don't add if already present
+        if any(str(a.get("user_id", "")) == uid for a in existing if isinstance(a, dict)):
+            return {
+                "message": "User is already an attendee — no change made",
+                "user_id": uid,
+                "attendees": existing,
+            }
+
+        new_attendee = {
+            "user_id": uid,
+            "name": user_row["name"],
+            "email": user_row["email"],
+            "role": user_row["role"],
+            "present": True,
+            "reviewed": False,
+            "reviewed_at": None,
+        }
+        existing.append(new_attendee)
+
+        await conn.execute(
+            "UPDATE meetings SET attendees=$1::jsonb, updated_at=$2 WHERE id=$3",
+            json.dumps(existing),
+            datetime.now(timezone.utc).isoformat(),
+            meeting_id,
+        )
+
+    return {
+        "message": f"Added {user_row['name']} ({data.user_email}) to meeting attendees",
+        "user_id": uid,
+        "attendees": existing,
+    }
