@@ -1107,23 +1107,38 @@ async def get_registers(
         mtg_date = str(r.get("date", ""))[:10]
         sign_off_mgr_id = str(r.get("sign_off_manager_id") or "")
 
-        # Identify non-manager staff in this meeting
+        # Identify non-manager staff in this meeting.
+        # staff_in_meeting: all attendees (used for actions/risks/LNs which
+        #   can be assigned to any participant).
+        # supervisee_staff: only role='attendee' entries (used for achievements
+        #   which apply exclusively to the supervisee, not the conducting manager).
         staff_in_meeting = []
+        supervisee_staff = []
         for att in _jlist(r.get("attendees")):
             if not isinstance(att, dict):
                 continue
             uid = str(att.get("user_id", ""))
-            if uid in staff_id_set and uid != sign_off_mgr_id:
-                staff_in_meeting.append({
-                    "id": uid,
-                    "name": staff_id_to_name.get(uid, att.get("name", "Unknown")),
-                })
+            if uid not in staff_id_set or uid == sign_off_mgr_id:
+                continue
+            person = {
+                "id": uid,
+                "name": staff_id_to_name.get(uid, att.get("name", "Unknown")),
+            }
+            staff_in_meeting.append(person)
+            if att.get("role") == "attendee":
+                supervisee_staff.append(person)
 
         if not staff_in_meeting:
             continue
 
         staff_names = ", ".join(s["name"] for s in staff_in_meeting)
         staff_ids_list = [s["id"] for s in staff_in_meeting]
+
+        # For achievements: use only supervisees; fall back to full staff list
+        # only if no pure-attendee is found (edge case: attendee-only meetings).
+        ach_staff = supervisee_staff if supervisee_staff else staff_in_meeting
+        ach_names = ", ".join(s["name"] for s in ach_staff)
+        ach_ids = [s["id"] for s in ach_staff]
 
         for action in _jlist(r.get("actions")):
             if not isinstance(action, dict):
@@ -1188,8 +1203,8 @@ async def get_registers(
             achs_out.append({
                 "id": ach.get("id", ""),
                 "text": text,
-                "staff_names": staff_names,
-                "staff_ids": staff_ids_list,
+                "staff_names": ach_names,
+                "staff_ids": ach_ids,
                 "meeting_title": mtg_title,
                 "meeting_date": mtg_date,
                 "meeting_id": mtg_id,
