@@ -1420,45 +1420,7 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
     org_id = current_user.get("org_id", "")
     _logger.info(f"[AUDIT] start meeting={meeting_id} org={org_id!r}")
 
-    try:
-        async with database.with_org(org_id) as conn:
-            m_row = await conn.fetchrow(
-                "SELECT id, org_id, title, created_at, created_by_name, "
-                "transcript_id, analysis_id "
-                "FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
-            )
-    except Exception as e:
-        _logger.error(f"[AUDIT] meeting fetch FAILED meeting={meeting_id}: {e}")
-        return {"events": []}
-    if not m_row:
-        _logger.warning(f"[AUDIT] meeting NOT FOUND id={meeting_id} org={org_id!r}")
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = dict(m_row)
-    _logger.info(f"[AUDIT] meeting ok created_at={meeting.get('created_at')!r} tid={meeting.get('transcript_id')!r} aid={meeting.get('analysis_id')!r}")
-
-    # Fetch JSONB columns separately so any codec issue doesn't kill the whole trail
-    try:
-        async with database.with_org(org_id) as conn:
-            jrow = await conn.fetchrow(
-                "SELECT recording_events, attendees, sign_off_record "
-                "FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
-            )
-        if jrow:
-            meeting["recording_events"] = jrow["recording_events"]
-            meeting["attendees"]        = jrow["attendees"]
-            meeting["sign_off_record"]  = jrow["sign_off_record"]
-    except Exception as e:
-        _logger.warning(f"[AUDIT] JSONB column fetch failed meeting={meeting_id}: {e}")
-        meeting["recording_events"] = None
-        meeting["attendees"]        = None
-        meeting["sign_off_record"]  = None
-    events = []
-
-    if meeting.get("created_at"):
-        events.append({"type": "meeting_created", "label": "Meeting created",
-                       "actor": meeting.get("created_by_name", "Unknown"),
-                       "timestamp": meeting["created_at"], "detail": meeting.get("title", "")})
-
+    # ── Helpers (defined once, used in the assembly step below) ─────────────
     def _jlist(val):
         if val is None: return []
         if isinstance(val, str):
@@ -1473,8 +1435,6 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
             except Exception: return {}
         return val if isinstance(val, dict) else {}
 
-    # Flatten recording_events from any nesting produced by asyncpg/RLS:
-    # production can return [dict], [str-of-dict], [str-of-array], [[dict]], etc.
     def _normalize_rec_events(raw):
         result = []
         for item in _jlist(raw):
@@ -1483,27 +1443,96 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
             elif isinstance(item, str):
                 try:
                     parsed = json.loads(item)
-                    if isinstance(parsed, dict):
-                        result.append(parsed)
-                    elif isinstance(parsed, list):
-                        result.extend(e for e in parsed if isinstance(e, dict))
-                except Exception:
-                    pass
+                    if isinstance(parsed, dict): result.append(parsed)
+                    elif isinstance(parsed, list): result.extend(e for e in parsed if isinstance(e, dict))
+                except Exception: pass
             elif isinstance(item, list):
                 result.extend(e for e in item if isinstance(e, dict))
         return result
 
-    rec_events = _normalize_rec_events(meeting.get("recording_events"))
-    rec_user_ids = list({ev.get("user_id") for ev in rec_events if ev.get("user_id")})
-    rec_users = {}
-    for uid in rec_user_ids:
-        try:
-            async with database.with_org(org_id) as conn:
-                u_row = await conn.fetchrow("SELECT id, name FROM users WHERE id=$1", uid)
-            if u_row:
-                rec_users[uid] = u_row["name"]
-        except Exception:
-            pass
+    # ── ALL database work in ONE connection = one RLS round-trip ─────────────
+    # Previously this opened 8+ separate connections (one per query), each
+    # requiring a Supabase RLS context setup (~500 ms each → 4-8 s total).
+    # Now: one connection, all queries run sequentially on it.
+    try:
+        async with database.with_org(org_id) as conn:
+            # 1. Meeting row — all columns in one query (was two separate queries)
+            m_row = await conn.fetchrow(
+                "SELECT id, org_id, title, created_at, created_by_name, "
+                "transcript_id, analysis_id, recording_events, attendees, sign_off_record "
+                "FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+            )
+            if not m_row:
+                _logger.warning(f"[AUDIT] meeting NOT FOUND id={meeting_id} org={org_id!r}")
+                raise HTTPException(status_code=404, detail="Meeting not found")
+            meeting = dict(m_row)
+            _logger.info(f"[AUDIT] meeting ok tid={meeting.get('transcript_id')!r} aid={meeting.get('analysis_id')!r}")
+
+            # 2. Transcript timestamp
+            t_row = None
+            if meeting.get("transcript_id"):
+                t_row = await conn.fetchrow("SELECT created_at FROM transcripts WHERE id=$1", meeting["transcript_id"])
+
+            # 3. Analysis timestamp
+            a_row = None
+            if meeting.get("analysis_id"):
+                a_row = await conn.fetchrow("SELECT created_at FROM analyses WHERE id=$1", meeting["analysis_id"])
+
+            # 4. Batch user lookup for recording events — was N+1, now 1 query
+            rec_events = _normalize_rec_events(meeting.get("recording_events"))
+            rec_user_ids = list({ev.get("user_id") for ev in rec_events if ev.get("user_id")})
+            rec_users = {}
+            if rec_user_ids:
+                try:
+                    user_rows = await conn.fetch(
+                        "SELECT id, name FROM users WHERE id = ANY($1::text[])", rec_user_ids
+                    )
+                    rec_users = {r["id"]: r["name"] for r in user_rows}
+                except Exception:
+                    pass
+
+            # 5. Review edits
+            try:
+                edit_rows = await conn.fetch(
+                    "SELECT action, timestamp, user_name, detail FROM review_edits "
+                    "WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id
+                )
+            except Exception:
+                edit_rows = []
+
+            # 6. Comments
+            try:
+                comment_rows = await conn.fetch(
+                    "SELECT text, user_name, created_at FROM reviewer_comments "
+                    "WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id
+                )
+            except Exception:
+                comment_rows = []
+
+            # 7. Audit logs
+            try:
+                log_rows = await conn.fetch(
+                    "SELECT action, timestamp, user_name, detail FROM audit_logs "
+                    "WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id
+                )
+                _logger.info(f"[AUDIT] audit_logs rows={len(log_rows)} meeting={meeting_id}")
+            except Exception as e:
+                _logger.warning(f"[AUDIT] audit_logs fetch FAILED meeting={meeting_id}: {e}")
+                log_rows = []
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        _logger.error(f"[AUDIT] DB fetch FAILED meeting={meeting_id}: {e}")
+        return {"events": []}
+
+    # ── Assemble events in memory (no more DB calls below this line) ─────────
+    events = []
+
+    if meeting.get("created_at"):
+        events.append({"type": "meeting_created", "label": "Meeting created",
+                       "actor": meeting.get("created_by_name", "Unknown"),
+                       "timestamp": meeting["created_at"], "detail": meeting.get("title", "")})
 
     label_map_rec = {"notice_acknowledged": "Recording notice acknowledged", "started": "Recording started",
                      "paused": "Recording paused", "resumed": "Recording resumed", "stopped": "Recording stopped"}
@@ -1513,45 +1542,25 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
         events.append({"type": f"recording_{ev_type}", "label": label_map_rec.get(ev_type, f"Recording {ev_type}"),
                        "actor": actor, "timestamp": ev.get("timestamp", ""), "detail": None})
 
-    if meeting.get("transcript_id"):
-        try:
-            async with database.with_org(org_id) as conn:
-                t_row = await conn.fetchrow("SELECT created_at FROM transcripts WHERE id=$1", meeting["transcript_id"])
-            if t_row and t_row["created_at"]:
-                events.append({"type": "transcribed", "label": "Audio transcribed", "actor": "1two.one",
-                               "timestamp": t_row["created_at"], "detail": None})
-        except Exception:
-            pass
+    if t_row and t_row["created_at"]:
+        events.append({"type": "transcribed", "label": "Audio transcribed", "actor": "1two.one",
+                       "timestamp": t_row["created_at"], "detail": None})
 
-    if meeting.get("analysis_id"):
-        try:
-            async with database.with_org(org_id) as conn:
-                a_row = await conn.fetchrow("SELECT created_at FROM analyses WHERE id=$1", meeting["analysis_id"])
-            if a_row and a_row["created_at"]:
-                events.append({"type": "analyzed", "label": "AI analysis completed", "actor": "1two.one",
-                               "timestamp": a_row["created_at"], "detail": None})
-        except Exception:
-            pass
+    if a_row and a_row["created_at"]:
+        events.append({"type": "analyzed", "label": "AI analysis completed", "actor": "1two.one",
+                       "timestamp": a_row["created_at"], "detail": None})
 
     label_map_edit = {"summary": "Summary edited", "actions": "Action items updated",
                       "evidence": "Evidence item updated", "transcript_anonymise": "Transcript anonymised (manual)",
                       "evidence_rescan": "Evidence re-scanned", "post_signoff_evidence_edit": "Evidence edited after sign-off",
                       "risk": "Risk item updated", "action_completion": "Action item updated",
                       "summary_regenerated": "Summary regenerated (AI)"}
-    try:
-        async with database.with_org(org_id) as conn:
-            edit_rows = await conn.fetch(
-                "SELECT * FROM review_edits WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id,
-            )
-        for edit in edit_rows:
-            edit = dict(edit)
-            edit_type = edit.get("action", "unknown")
-            is_post_signoff = edit_type == "post_signoff_evidence_edit"
-            events.append({"type": f"edit_{edit_type}", "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
-                           "actor": edit.get("user_name", "Unknown"), "timestamp": edit.get("timestamp", ""),
-                           "detail": edit.get("detail"), "flagged": is_post_signoff})
-    except Exception:
-        pass
+    for edit in edit_rows:
+        edit = dict(edit)
+        edit_type = edit.get("action", "unknown")
+        events.append({"type": f"edit_{edit_type}", "label": label_map_edit.get(edit_type, f"'{edit_type}' edited"),
+                       "actor": edit.get("user_name", "Unknown"), "timestamp": edit.get("timestamp", ""),
+                       "detail": edit.get("detail"), "flagged": edit_type == "post_signoff_evidence_edit"})
 
     for a in _jlist(meeting.get("attendees")):
         if a.get("reviewed") and a.get("reviewed_at"):
@@ -1564,16 +1573,11 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
                        "actor": sign_off.get("signed_by_name", "Unknown"),
                        "timestamp": sign_off.get("signed_at", ""), "detail": None})
 
-    try:
-        async with database.with_org(org_id) as conn:
-            c_rows = await conn.fetch("SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id)
-        for c in c_rows:
-            c = dict(c)
-            text = c.get("text", "")
-            events.append({"type": "comment_added", "label": "Comment added", "actor": c.get("user_name", "Unknown"),
-                           "timestamp": c.get("created_at", ""), "detail": text[:100] + ("…" if len(text) > 100 else "")})
-    except Exception:
-        pass
+    for c in comment_rows:
+        c = dict(c)
+        text = c.get("text", "")
+        events.append({"type": "comment_added", "label": "Comment added", "actor": c.get("user_name", "Unknown"),
+                       "timestamp": c.get("created_at", ""), "detail": text[:100] + ("…" if len(text) > 100 else "")})
 
     label_map_audit = {"speaker_correction": "Speaker labels edited", "transcript_text_edited": "Transcript text edited",
                        "speaker_reset": "Speaker labels reset to raw transcript",
@@ -1592,18 +1596,12 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
                        "action_status_changed": "Action item updated",
                        "learning_need_status_changed": "Learning need updated",
                        "achievement_acknowledged": "Achievement acknowledged"}
-    try:
-        async with database.with_org(org_id) as conn:
-            log_rows = await conn.fetch("SELECT * FROM audit_logs WHERE meeting_id=$1 ORDER BY timestamp ASC", meeting_id)
-        _logger.info(f"[AUDIT] audit_logs rows={len(log_rows)} meeting={meeting_id}")
-        for log in log_rows:
-            log = dict(log)
-            action = log.get("action", "unknown")
-            events.append({"type": action, "label": label_map_audit.get(action, action.replace("_", " ").title()),
-                           "actor": log.get("user_name", "System"), "timestamp": log.get("timestamp", ""),
-                           "detail": log.get("detail")})
-    except Exception as e:
-        _logger.warning(f"[AUDIT] audit_logs fetch FAILED meeting={meeting_id}: {e}")
+    for log in log_rows:
+        log = dict(log)
+        action = log.get("action", "unknown")
+        events.append({"type": action, "label": label_map_audit.get(action, action.replace("_", " ").title()),
+                       "actor": log.get("user_name", "System"), "timestamp": log.get("timestamp", ""),
+                       "detail": log.get("detail")})
 
     if (meeting.get("audio_deletion_status") == "deleted") and meeting.get("audio_deleted_at"):
         events.append({"type": "audio_deleted", "label": "Raw audio deleted (GDPR)", "actor": "System",
