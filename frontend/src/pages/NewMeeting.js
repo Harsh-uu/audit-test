@@ -4,7 +4,21 @@ import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, Sparkles, ChevronRight } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, Sparkles, ChevronRight, HelpCircle } from "lucide-react";
+
+function InfoTooltip({ children, side = "top" }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help inline-block ml-1 align-middle flex-shrink-0" />
+      </TooltipTrigger>
+      <TooltipContent side={side} className="max-w-xs text-left leading-relaxed">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 // Return current local time in datetime-local format (YYYY-MM-DDTHH:mm)
 function avatarColor(name = "") {
@@ -146,7 +160,20 @@ export default function NewMeeting() {
           <div className="w-full md:w-80 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 bg-gray-50 flex flex-col p-5 gap-5 md:overflow-y-auto">
 
             <div>
-              <label htmlFor="meeting-type" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Meeting Type</label>
+              <label htmlFor="meeting-type" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center">
+                Meeting Type
+                <InfoTooltip side="right">
+                  <p className="font-semibold mb-1">How type affects AI analysis:</p>
+                  <ul className="space-y-0.5 text-xs">
+                    <li><span className="font-medium">Supervision</span> — full CQC / Care Certificate evidence mapping</li>
+                    <li><span className="font-medium">Appraisal</span> — performance evidence, CC alignment</li>
+                    <li><span className="font-medium">Observation</span> — practice observation, competency mapping</li>
+                    <li><span className="font-medium">Team Meeting</span> — actions extracted, no individual mapping</li>
+                    <li><span className="font-medium">Competency Review</span> — skills &amp; Care Certificate focus</li>
+                    <li><span className="font-medium">Other</span> — actions only</li>
+                  </ul>
+                </InfoTooltip>
+              </label>
               <select
                 id="meeting-type"
                 name="meeting_type"
@@ -196,8 +223,11 @@ export default function NewMeeting() {
             </div>
 
             <div>
-              <label htmlFor="meeting-manager" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              <label htmlFor="meeting-manager" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center">
                 <UserCheck className="inline w-3 h-3 mr-1 text-gray-400" />Sign-off Manager
+                <InfoTooltip side="right">
+                  The manager accountable for reviewing this supervision record and applying their sign-off. Only managers added as attendees appear here — tick a manager on the right to enable this field.
+                </InfoTooltip>
               </label>
               <select
                 id="meeting-manager"

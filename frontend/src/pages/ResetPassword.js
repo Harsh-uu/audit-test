@@ -1,6 +1,31 @@
 import React, { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, CheckCircle, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+
+const PW_REQS = [
+  "At least 10 characters",
+  "One uppercase letter (A–Z)",
+  "One lowercase letter (a–z)",
+  "One number (0–9)",
+  "One special character (!@#$…)",
+];
+
+function PwTooltip() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help inline-block ml-1 align-middle" />
+      </TooltipTrigger>
+      <TooltipContent side="right" className="max-w-xs text-left">
+        <p className="font-semibold mb-1.5">Password requirements:</p>
+        <ul className="space-y-0.5 text-xs">
+          {PW_REQS.map(r => <li key={r} className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-current flex-shrink-0" />{r}</li>)}
+        </ul>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -95,7 +120,9 @@ export default function ResetPassword() {
           {!done && (
             <form onSubmit={handle} className="space-y-4">
               <div>
-                <label htmlFor="reset-new-password" className="block text-sm font-medium text-gray-700 mb-1">New password</label>
+                <label htmlFor="reset-new-password" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                  New password <PwTooltip />
+                </label>
                 <div className="relative">
                   <input
                     id="reset-new-password"

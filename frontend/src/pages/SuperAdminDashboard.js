@@ -3,7 +3,33 @@ import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy, Pencil, Trash2, Check } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy, Pencil, Trash2, Check, HelpCircle } from "lucide-react";
+
+const ROLE_DESCRIPTIONS = {
+  manager:         "Creates meetings, signs off supervision records, views all staff in their team scope.",
+  admin:           "Full org access — manage users, standards library, exports, and org settings.",
+  attendee:        "Records meetings and marks their own copy as reviewed.",
+  shared_reviewer: "View-only access to meetings explicitly shared with them. Cannot edit or sign off.",
+};
+
+function RoleInfoTooltip() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help inline-block ml-1 align-middle" />
+      </TooltipTrigger>
+      <TooltipContent side="right" className="max-w-xs text-left">
+        <p className="font-semibold mb-1.5">Role permissions:</p>
+        <ul className="space-y-1.5 text-xs">
+          {Object.entries(ROLE_DESCRIPTIONS).map(([role, desc]) => (
+            <li key={role}><span className="font-medium">{ROLE_LABELS[role] || role}</span> — {desc}</li>
+          ))}
+        </ul>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
@@ -756,7 +782,7 @@ export default function SuperAdminDashboard() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="create-user-role" className="block text-xs font-medium text-gray-700 mb-1">Role</label>
+                  <label htmlFor="create-user-role" className="block text-xs font-medium text-gray-700 mb-1 flex items-center">Role <RoleInfoTooltip /></label>
                   <select
                     id="create-user-role"
                     name="role"

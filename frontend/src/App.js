@@ -4,6 +4,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Loader2 } from "lucide-react";
 
 // Auth/public pages — loaded eagerly so login is instant
@@ -51,6 +52,7 @@ function RootRedirect() {
 function App() {
   return (
     <AuthProvider>
+      <TooltipProvider delayDuration={300}>
       <BrowserRouter>
         <Suspense fallback={<PageLoader />}>
         <Routes>
@@ -81,6 +83,7 @@ function App() {
         </Routes>
         </Suspense>
       </BrowserRouter>
+      </TooltipProvider>
       <Toaster richColors position="top-right" />
     </AuthProvider>
   );

@@ -345,6 +345,10 @@ Supervision 2.0 is a web-based compliance evidence platform for UK care provider
 ### P0 Meeting Load Fix Verified (Aug 2026, Session 11)
 - **`operator does not exist: text = uuid` fix confirmed**: `meetings.py` line 314 `$1::uuid[]` cast changed to `$1::text[]` (users.id is TEXT not UUID type). End-to-end verified: `POST /api/meetings/` then `GET /api/meetings/{id}` returns 200 with correct data. Manager account password (Manager123!) confirmed and MFA bypass approach documented in test_credentials.md.
 
+### Form Accessibility + Tooltips (Aug 2026, Session 12)
+- **Form field audit complete**: Added `id`, `name`, `htmlFor`, and `autoComplete` attributes across 8 files (Login, AcceptInvite, ResetPassword, SetPassword, ChangePasswordModal, NewMeeting, UsersTab, SuperAdminDashboard). All labels now semantically linked to their inputs — fixes DevTools Issues warnings and enables password manager autofill.
+- **Tooltip system added**: `TooltipProvider` added to App.js root. Info-icon (`HelpCircle`) tooltips added to: Meeting Type (AI analysis description per type), Sign-off Manager (explains attendee requirement), Password fields on ResetPassword & AcceptInvite (5-point requirements checklist), Role selector on UsersTab & SuperAdminDashboard (per-role permission descriptions).
+
 ### Preview: Production Build (Aug 2026, Session 12)
 - **Root cause of 90-second blink permanently fixed**: Switched Preview environment from `vite dev` (HMR WebSocket, K8s ingress kills at 90 s → `location.reload()`) to `vite build && vite preview` (static file server, zero WebSocket, zero HMR). `package.json` `start` script updated; `vite.config.mjs` `preview` block added (`host`, `port`, `strictPort`, `allowedHosts: true`). Build completes in ~4.5 s on supervisor restart. Preview now mirrors production (`1two.one`) exactly. Option A (suppress reload shim) was rejected in favour of this permanent, clean fix.
 

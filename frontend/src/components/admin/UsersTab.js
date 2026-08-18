@@ -1,5 +1,31 @@
 import React, { useState } from "react";
-import { UserPlus, TrendingUp, Pencil, Check, X, KeyRound, ChevronDown } from "lucide-react";
+import { UserPlus, TrendingUp, Pencil, Check, X, KeyRound, ChevronDown, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+
+const ROLE_DESCRIPTIONS = {
+  attendee:        "Records meetings and marks their own copy as reviewed.",
+  manager:         "Creates meetings, signs off supervision records, views all staff in their team scope.",
+  shared_reviewer: "View-only access to meetings explicitly shared with them. Cannot edit or sign off.",
+  admin:           "Full org access — manage users, standards library, exports, and org settings.",
+};
+
+function RoleInfoTooltip() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help inline-block ml-1 align-middle" />
+      </TooltipTrigger>
+      <TooltipContent side="right" className="max-w-xs text-left">
+        <p className="font-semibold mb-1.5">Role permissions:</p>
+        <ul className="space-y-1.5 text-xs">
+          {Object.entries(ROLE_DESCRIPTIONS).map(([role, desc]) => (
+            <li key={role}><span className="font-medium capitalize">{role === "attendee" ? "Care Worker" : role === "shared_reviewer" ? "Shared Reviewer" : role.charAt(0).toUpperCase() + role.slice(1)}</span> — {desc}</li>
+          ))}
+        </ul>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const ROLES = [
   { value: "attendee", label: "Care Worker / Attendee" },
@@ -79,7 +105,7 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
               <input id="new-user-email" name="email" type="email" value={newUser.email} onChange={e => setNewUser(u => ({ ...u, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-user-email" autoComplete="email" />
             </div>
             <div>
-              <label htmlFor="new-user-role" className="block text-xs font-medium text-gray-600 mb-1">Role</label>
+              <label htmlFor="new-user-role" className="block text-xs font-medium text-gray-600 mb-1 flex items-center">Role <RoleInfoTooltip /></label>
               <select id="new-user-role" name="role" value={newUser.role} onChange={e => setNewUser(u => ({ ...u, role: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid="new-user-role">
                 {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
@@ -137,7 +163,7 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
                       />
                     </div>
                     <div>
-                      <label htmlFor={`edit-role-${u.id}`} className="block text-xs font-medium text-gray-500 mb-1">Role</label>
+                      <label htmlFor={`edit-role-${u.id}`} className="block text-xs font-medium text-gray-500 mb-1 flex items-center">Role <RoleInfoTooltip /></label>
                       <select
                         id={`edit-role-${u.id}`}
                         name="role"
