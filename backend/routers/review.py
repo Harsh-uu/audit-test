@@ -1945,7 +1945,7 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
     risks = analysis.get("risks") or []
     if risks:
         story.append(Spacer(1, 4*mm))
-        story.append(section_header("Risks & Concerns", bg=colors.HexColor("#7F1D1D")))
+        story.append(section_header("Areas for Attention", bg=colors.HexColor("#7F1D1D")))
         story.append(Spacer(1, 2*mm))
         for r in risks:
             sev = r.get("severity", "").upper()

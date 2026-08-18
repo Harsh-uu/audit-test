@@ -49,6 +49,50 @@ def _safe_custom_prompt(text: str) -> str:
     return "\n".join(safe_lines).strip()
 
 
+# UK language: replacements applied to all AI-generated free text so that
+# American/inappropriate terms never appear in the final output.
+_UK_REPLACEMENTS = [
+    # "pastoral" in any capitalisation → context-appropriate UK equivalent
+    (r'\bpastoral follow[\s-]?up\b', "informal welfare follow-up"),
+    (r'\bpastoral check[\s-]?in\b',  "welfare check-in"),
+    (r'\bpastoral support\b',         "wellbeing support"),
+    (r'\bpastoral care\b',            "welfare support"),
+    (r'\bpastoral\b',                 "welfare"),  # catch-all fallback
+]
+
+import re as _re_mod
+_UK_COMPILED = [(_re_mod.compile(p, _re_mod.IGNORECASE), r) for p, r in _UK_REPLACEMENTS]
+
+
+def _apply_uk_language(text: str) -> str:
+    """Replace US/inappropriate terms with UK adult-social-care equivalents."""
+    if not text:
+        return text
+    for pattern, replacement in _UK_COMPILED:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def _sanitise_analysis(data: dict) -> dict:
+    """
+    Walk the analysis dict and apply UK language rules to all free-text fields.
+    Called after every AI analysis response before returning to the caller.
+    """
+    if not isinstance(data, dict):
+        return data
+
+    def _clean(v):
+        if isinstance(v, str):
+            return _apply_uk_language(v)
+        if isinstance(v, list):
+            return [_clean(item) for item in v]
+        if isinstance(v, dict):
+            return {k: _clean(vv) for k, vv in v.items()}
+        return v
+
+    return {k: _clean(v) for k, v in data.items()}
+
+
 async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360) -> str:
     """Single-shot OpenAI chat completion — direct to OpenAI, no proxy."""
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -271,7 +315,7 @@ Rules:
   (b) Hedging about their own response or decision not to act: "I probably should have...", "I suppose I could have...", "I wasn't sure if I needed to...", "I thought about it but...", "it might have been worth reporting"
   (c) Rationalised inaction — describing a decision not to report, escalate, or record something, accompanied by language that minimises or explains away the significance of that decision
   (d) Dismissing their own welfare when context suggests otherwise: "I'm fine really", "I can manage", "it's not that bad" — especially if repeated or contradicted by other signals in the session
-  Generate a risk at medium severity with label "Minimising language — further investigation needed". The risk text should name what was being minimised or dismissed (e.g. "Supervisee used minimising language when describing [the incident / their decision not to report / their wellbeing] — it is not yet clear whether the full significance of this was recognised. The manager should probe further before closing this point."). Suggested resolutions: follow-up questions at next supervision or sooner, consider whether a formal record or incident report is required, flag pattern to safeguarding lead if a safeguarding matter was involved. Flag these as risks regardless of whether an action was already agreed in the meeting. Specific patterns to watch for: expressing tiredness, exhaustion, or fatigue (especially if mentioned more than once — repetition is itself a signal of severity); describing feeling overwhelmed, stressed, or unable to cope; expressing general emotional distress or low mood about their work. IMPORTANT DISTINCTION: a worker saying "I felt bad for not doing X" or "I should have reported that" is NOT a wellbeing signal — that is guilt about a specific action gap and belongs in the action gap risks category. A wellbeing signal is about the person's general personal state (e.g. "I'm really tired", "I've been struggling lately", "I don't feel myself"), NOT about remorse over a specific professional incident. When multiple genuine wellbeing signals appear across the same meeting, generate a single consolidated risk describing the overall pattern rather than individual entries per mention. Use severity "high" if the worker appears distressed or repeats the concern three or more times; "medium" for one or two mentions. Risk text example: "Worker expressed repeated tiredness across the session — potential welfare concern requiring pastoral follow-up." Suggested resolutions should include: pastoral follow-up before next supervision, EAP signposting if not already offered, workload review, and a manager note to monitor.
+  Generate a risk at medium severity with label "Minimising language — further investigation needed". The risk text should name what was being minimised or dismissed (e.g. "Supervisee used minimising language when describing [the incident / their decision not to report / their wellbeing] — it is not yet clear whether the full significance of this was recognised. The manager should probe further before closing this point."). Suggested resolutions: follow-up questions at next supervision or sooner, consider whether a formal record or incident report is required, flag pattern to safeguarding lead if a safeguarding matter was involved. Flag these as risks regardless of whether an action was already agreed in the meeting. Specific patterns to watch for: expressing tiredness, exhaustion, or fatigue (especially if mentioned more than once — repetition is itself a signal of severity); describing feeling overwhelmed, stressed, or unable to cope; expressing general emotional distress or low mood about their work. IMPORTANT DISTINCTION: a worker saying "I felt bad for not doing X" or "I should have reported that" is NOT a wellbeing signal — that is guilt about a specific action gap and belongs in the action gap risks category. A wellbeing signal is about the person's general personal state (e.g. "I'm really tired", "I've been struggling lately", "I don't feel myself"), NOT about remorse over a specific professional incident. When multiple genuine wellbeing signals appear across the same meeting, generate a single consolidated risk describing the overall pattern rather than individual entries per mention. Use severity "high" if the worker appears distressed or repeats the concern three or more times; "medium" for one or two mentions. Risk text example: "Worker expressed repeated tiredness across the session — potential welfare concern requiring an informal welfare check-in." Suggested resolutions should include: an informal follow-up before next supervision, EAP signposting if not already offered, workload review, and a manager note to monitor. LANGUAGE RULE — NEVER use the word "pastoral" in any risk text or suggested resolution. Instead use: "informal follow-up", "welfare check-in", "wellbeing support", or "informal welfare conversation". The word "pastoral" is not used in UK adult social care.
 - For ACTIONS: additionally, when a risk arises from a worker's insufficient response (missed escalation, not recording a concern, not following a protocol), always generate a paired training action item assigned to the supervisor — not just an action on the concern itself. This ensures supervision gaps are captured, not just clinical risks.
 |- For RISKS — CONCERNING COMMUNICATION PATTERNS: Beyond explicit content risks, also detect the following patterns in HOW the worker communicates. These are clinically significant even when no explicit concern is raised — they indicate the supervisory relationship may not be functioning as a genuine safe-disclosure space, or that something is being managed rather than surfaced. Flag each as a separate risk entry. Use the prefix "Communication pattern — " in the risk text. Default severity: medium (upgrade to high if the pattern repeats or clusters with others in the same session).
 
@@ -847,7 +891,7 @@ Rules:
 - If no custom standards provided, return custom_mappings as an empty array []
 - Generate unique IDs for each item (e.g. "cqc_1", "cc_1", "custom_1")
 - For RISKS: also detect MINIMISING OR DISMISSIVE LANGUAGE — when the supervisee downplays, dismisses, or hedges about a concern, incident, or their own actions. Flag patterns such as: "it was nothing / probably not important / I didn't think it was a big deal / I suppose I should have / I probably should have reported it". This may indicate rationalised inaction, a concern being normalised, or a safeguarding matter not being recognised as significant. Generate a medium severity risk: "Minimising language — further investigation needed", describing what was minimised. Suggested resolutions: follow-up questions, consider whether formal recording or escalation is required.
-- For RISKS: also detect SUPERVISEE WELLBEING SIGNALS — expressions from the person being supervised that suggest they may be struggling with their own health, wellbeing, or self-perception. Flag tiredness (especially if repeated), stress, feeling overwhelmed, or inability to cope as medium/high risks. IMPORTANT DISTINCTION: "I felt bad for not doing X" is guilt about an action gap, NOT a wellbeing signal — keep those separate. A wellbeing signal is about the worker's general personal state, not remorse about a specific incident. When multiple genuine wellbeing signals appear across the session, generate a single consolidated risk describing the overall pattern. Suggested resolutions should include pastoral follow-up, EAP signposting, workload review, and a note to monitor."""
+- For RISKS: also detect SUPERVISEE WELLBEING SIGNALS — expressions from the person being supervised that suggest they may be struggling with their own health, wellbeing, or self-perception. Flag tiredness (especially if repeated), stress, feeling overwhelmed, or inability to cope as medium/high risks. IMPORTANT DISTINCTION: "I felt bad for not doing X" is guilt about an action gap, NOT a wellbeing signal — keep those separate. A wellbeing signal is about the worker's general personal state, not remorse about a specific incident. When multiple genuine wellbeing signals appear across the session, generate a single consolidated risk describing the overall pattern. Suggested resolutions should include an informal welfare follow-up, EAP signposting, workload review, and a note to monitor. LANGUAGE RULE — NEVER use the word "pastoral" anywhere. Use "informal follow-up", "welfare check-in", "wellbeing support", or "informal welfare conversation" instead."""
 
 
 async def analyze_doc_for_evidence(
@@ -1474,7 +1518,7 @@ Provide your analysis as JSON. Only map regulations/standards where there is act
         result = json.loads(text)
         if "custom_mappings" not in result:
             result["custom_mappings"] = []
-        return result
+        return _sanitise_analysis(result)
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse AI response: {e}\nResponse: {full_response[:500]}")
         return {
@@ -1591,7 +1635,7 @@ MANDATORY RULES — VIOLATION OF ANY RULE MAKES THE OUTPUT USELESS:
 8. BONUS INSIGHT — After all standard sections, add one extra section with section_id "bonus":
    - Reason deeply through ALL context: documents, previous meetings, outstanding actions, focus topic.
    - Find ONE question that does NOT fit neatly into any standard section but is genuinely valuable — something a less attentive manager would miss entirely.
-   - This could be: a pattern across multiple documents, a risk hiding in plain sight, a development opportunity the supervisee hasn't named, a pastoral concern suggested by the tone of previous notes, or an unexpected connection between pieces of context.
+   - This could be: a pattern across multiple documents, a risk hiding in plain sight, a development opportunity the supervisee hasn't named, a welfare concern suggested by the tone of previous notes, or an unexpected connection between pieces of context.
    - Label this section exactly: "We thought you might also want to ask this"
    - Generate exactly 1 question. It should be the most insightful, surprising, or revealing question on the page.
    - If you genuinely find nothing from context, still include the section with a thoughtful forward-looking question.
@@ -1749,10 +1793,11 @@ Find the transcript excerpt evidencing this risk and provide resolution suggesti
             if m:
                 full_response = m.group(1).strip()
         data = json.loads(full_response)
-        return {
+        result = {
             "transcript_excerpt": data.get("transcript_excerpt", ""),
             "suggested_resolutions": data.get("suggested_resolutions", []),
         }
+        return _sanitise_analysis(result)
     except Exception as exc:
         logger.error(f"Risk suggestions failed: {exc}")
         return {"transcript_excerpt": "", "suggested_resolutions": []}

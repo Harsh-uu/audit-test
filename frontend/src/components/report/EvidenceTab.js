@@ -150,7 +150,7 @@ function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit
     <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm" id="section-risks">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900 text-sm font-display flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-500" /> Risks &amp; Concerns
+          <AlertTriangle className="w-4 h-4 text-amber-500" /> Areas for Attention
         </h3>
         <span className="text-xs text-gray-400">{open.length} open · {resolved.length} resolved</span>
       </div>
@@ -377,7 +377,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
     { id: "section-achievements", label: "Achievements", Icon: Star,         show: hasAchievements, cls: "text-emerald-700 hover:bg-emerald-50 border-emerald-200", count: analysis?.achievements?.length },
     { id: "section-actions",      label: "Actions",      Icon: CheckSquare,  show: hasActions,      cls: "text-[#1E3A8A] hover:bg-blue-50 border-blue-200",    count: analysis?.actions?.length || null },
     { id: "section-learning",     label: "Learning",     Icon: BookOpen,     show: hasLearning,     cls: "text-teal-700 hover:bg-teal-50 border-teal-200",      count: learningNeeds.length || null },
-    { id: "section-risks",        label: "Risks",        Icon: AlertTriangle,show: hasRisks,        cls: "text-amber-700 hover:bg-amber-50 border-amber-200",   count: analysis?.risks?.length },
+    { id: "section-risks", label: "Areas for Attention", Icon: AlertTriangle, show: hasRisks, cls: "text-amber-700 hover:bg-amber-50 border-amber-200", count: analysis?.risks?.length },
   ].filter(l => l.show);
 
   return (
