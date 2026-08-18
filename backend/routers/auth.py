@@ -482,9 +482,9 @@ async def refresh_token(request: Request, response: Response):
         user_id = user["id"]
         new_access = create_access_token(user_id, user["email"])
         new_refresh = create_refresh_token(user_id, db_pwd_ts)
-        # P3b: rotate both cookies on every refresh
+        # P3b: rotate both cookies on every refresh; tokens stay in HttpOnly cookies only
         _set_auth_cookies(response, new_access, new_refresh)
-        return {"access_token": new_access, "refresh_token": new_refresh, "message": "Token refreshed"}
+        return {"message": "Token refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 

@@ -280,13 +280,25 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Meeting not found")
         meeting = _parse_meeting_row(dict(row))
 
-        # Access check for non-admin/manager
+        # Access check: attendees and shared_with reviewers can read their own meetings.
         if current_user["role"] not in ["admin", "manager", "super_admin"]:
             attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
             shared_with = meeting["shared_with"]
             is_shared_with_user = any(isinstance(s, dict) and s.get("user_id") == user_id for s in shared_with)
             if user_id not in attendee_ids and not is_shared_with_user and user_id != meeting.get("created_by", ""):
                 raise HTTPException(status_code=404, detail="Meeting not found")
+
+        # SEC-002: scoped managers (team/setting level) may only read meetings
+        # where at least one participant is within their assigned scope.
+        elif current_user["role"] == "manager":
+            scope = get_manager_scope(current_user)
+            if scope["level"] != "org":
+                scoped_ids_list = await get_scoped_staff_ids(conn, org_id, scope)
+                scoped_str = {str(sid) for sid in (scoped_ids_list or [])} | {str(user_id)}
+                attendee_ids = {a.get("user_id", "") for a in meeting["attendees"]}
+                creator = str(meeting.get("created_by", ""))
+                if not (attendee_ids & scoped_str) and creator not in scoped_str:
+                    raise HTTPException(status_code=404, detail="Meeting not found")
 
         # Attach transcript
         if meeting.get("transcript_id"):

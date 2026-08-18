@@ -3801,23 +3801,27 @@ _KNOWN_WEAK_PASSWORDS = {
 
 async def seed_super_admin():
     """Create the super admin account (idempotent).
-    SEC-002: Warns loudly if the default/weak password is detected.
+    SEC-001: Refuses to create a new super-admin with a known-weak password.
+    If the account already exists, emits a CRITICAL log but does not abort
+    (avoids breaking a running production deployment on every restart).
     """
     from routers.auth import hash_password
     email = os.environ.get("SUPER_ADMIN_EMAIL", "superadmin@1two.one")
     password = os.environ.get("SUPER_ADMIN_PASSWORD", "SuperAdmin123!")
 
-    # SEC-002: Reject weak/default passwords at startup
-    if password in _KNOWN_WEAK_PASSWORDS or len(password) < 12:
-        logger.critical(
-            "SECURITY WARNING: SUPER_ADMIN_PASSWORD is a known-weak or default value. "
-            "Set a strong password (≥12 characters, mixed case, numbers and symbols) "
-            "in the SUPER_ADMIN_PASSWORD environment variable and restart the service."
-        )
+    is_weak = password in _KNOWN_WEAK_PASSWORDS or len(password) < 12
 
     async with database.with_admin() as conn:
         existing = await conn.fetchrow("SELECT id, role FROM users WHERE email = $1", email)
         if existing is None:
+            # Hard block: refuse to seed a super-admin with a known-weak password.
+            if is_weak:
+                raise SystemExit(
+                    "\n\n"
+                    "FATAL: SUPER_ADMIN_PASSWORD is a known-weak or default value.\n"
+                    "Set a strong password (≥12 chars, mixed case, numbers, symbols)\n"
+                    "in the SUPER_ADMIN_PASSWORD environment variable and restart.\n"
+                )
             await conn.execute(
                 """INSERT INTO users (id, email, password_hash, name, role, is_active, created_at)
                    VALUES ($1,$2,$3,$4,$5,$6,$7)""",
@@ -3826,8 +3830,15 @@ async def seed_super_admin():
                 datetime.now(timezone.utc).isoformat(),
             )
             logger.info(f"Super admin seeded: {email}")
-        elif existing["role"] != "super_admin":
-            await conn.execute("UPDATE users SET role = 'super_admin' WHERE email = $1", email)
+        else:
+            # Account already exists — warn loudly but keep running.
+            if is_weak:
+                logger.critical(
+                    "SECURITY WARNING: SUPER_ADMIN_PASSWORD is a known-weak or default value. "
+                    "Set a strong unique password in SUPER_ADMIN_PASSWORD and restart the service."
+                )
+            if existing["role"] != "super_admin":
+                await conn.execute("UPDATE users SET role = 'super_admin' WHERE email = $1", email)
             logger.info(f"Updated {email} to super_admin role")
 
 
