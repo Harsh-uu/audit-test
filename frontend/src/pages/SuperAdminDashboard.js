@@ -31,7 +31,7 @@ function RoleInfoTooltip() {
   );
 }
 
-const API = process.env.REACT_APP_BACKEND_URL + "/api";
+const API = "/api";
 
 const ROLE_OPTIONS = ["manager", "admin", "attendee", "shared_reviewer"];
 const ROLE_LABELS = { manager: "Manager", admin: "Admin", attendee: "Staff", shared_reviewer: "Shared Reviewer" };

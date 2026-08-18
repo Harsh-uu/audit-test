@@ -28,7 +28,7 @@ function PwTooltip() {
   );
 }
 
-const API = process.env.REACT_APP_BACKEND_URL + "/api";
+const API = "/api";
 
 export default function AcceptInvite() {
   const navigate = useNavigate();

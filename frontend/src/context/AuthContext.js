@@ -3,7 +3,10 @@ import axios from "axios";
 import { clearCache, cachedGet } from "@/utils/apiCache";
 
 const AuthContext = createContext(null);
-const API = process.env.REACT_APP_BACKEND_URL + "/api";
+// Use a relative base path so this works on ANY domain (preview, production,
+// custom domain). An absolute REACT_APP_BACKEND_URL baked at build-time would
+// be the PREVIEW origin, making production cookies cross-site → all 401s.
+const API = "/api";
 
 // P3b: withCredentials=true sends HttpOnly cookies on every request.
 // Tokens no longer stored in localStorage — cookies are set by the server.

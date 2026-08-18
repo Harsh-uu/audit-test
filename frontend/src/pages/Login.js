@@ -4,7 +4,8 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { Eye, EyeOff, AlertCircle, CheckCircle, ShieldCheck, Mail } from "lucide-react";
 
-const API = process.env.REACT_APP_BACKEND_URL;
+// Relative path: works on preview AND production without cross-origin cookie issues.
+const API = "/api";
 
 function formatError(detail) {
   if (!detail) return "Something went wrong. Please try again.";

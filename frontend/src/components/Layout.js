@@ -48,7 +48,7 @@ export default function Layout({ children }) {
 
   const orgPrimary = user?.org_branding?.primary_color || "#1E3A8A";
   const orgLogoUrl = user?.org_branding?.has_logo && user?.org_id
-    ? `${process.env.REACT_APP_BACKEND_URL}/api/org/branding/logo/${user.org_id}`
+    ? `/api/org/branding/logo/${user.org_id}`
     : null;
 
   const handleLogout = async () => {

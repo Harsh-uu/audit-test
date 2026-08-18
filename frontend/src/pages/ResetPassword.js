@@ -27,7 +27,7 @@ function PwTooltip() {
   );
 }
 
-const API = process.env.REACT_APP_BACKEND_URL;
+const API = "/api";
 
 export default function ResetPassword() {
   const [params] = useSearchParams();
