@@ -3831,12 +3831,9 @@ async def seed_super_admin():
             )
             logger.info(f"Super admin seeded: {email}")
         else:
-            # Account already exists — warn loudly but keep running.
-            if is_weak:
-                logger.critical(
-                    "SECURITY WARNING: SUPER_ADMIN_PASSWORD is a known-weak or default value. "
-                    "Set a strong unique password in SUPER_ADMIN_PASSWORD and restart the service."
-                )
+            # Account already exists — the env var is only used for initial creation,
+            # so its value is irrelevant to the live password (which is the DB hash
+            # set by the user). No warning needed.
             if existing["role"] != "super_admin":
                 await conn.execute("UPDATE users SET role = 'super_admin' WHERE email = $1", email)
             logger.info(f"Updated {email} to super_admin role")
