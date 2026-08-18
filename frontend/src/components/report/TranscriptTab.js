@@ -1104,7 +1104,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
           </div>
         )}
 
-        {!raw ? (
+        {(!raw && !hasSpeakerText) ? (
           <p className="p-5 text-sm text-gray-400 italic">Transcript not available.</p>
         ) : viewMode === "speaker" && hasSpeakerText ? (
           <>

@@ -285,10 +285,6 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
                 tr = dict(t_row)
                 tr["safety_warnings"] = _ensure_list(tr.get("safety_warnings"))
                 tr["speaker_colors"] = _ensure_dict(tr.get("speaker_colors"))
-                # speaker_text is the diarised view rendered in the UI; raw text is ~50 KB
-                # and only needed for find-replace (its own endpoint fetches it separately).
-                if tr.get("speaker_text"):
-                    tr.pop("text", None)
                 meeting["transcript"] = tr
 
         # Attach analysis
