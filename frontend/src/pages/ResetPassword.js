@@ -95,15 +95,18 @@ export default function ResetPassword() {
           {!done && (
             <form onSubmit={handle} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New password</label>
+                <label htmlFor="reset-new-password" className="block text-sm font-medium text-gray-700 mb-1">New password</label>
                 <div className="relative">
                   <input
+                    id="reset-new-password"
+                    name="new-password"
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="At least 8 characters"
                     required
                     minLength={8}
+                    autoComplete="new-password"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                     data-testid="reset-password-input"
                   />
@@ -113,13 +116,16 @@ export default function ResetPassword() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+                <label htmlFor="reset-confirm-password" className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
                 <input
+                  id="reset-confirm-password"
+                  name="confirm-password"
                   type={showPassword ? "text" : "password"}
                   value={confirm}
                   onChange={e => setConfirm(e.target.value)}
                   placeholder="Repeat your password"
                   required
+                  autoComplete="new-password"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                   data-testid="reset-confirm-input"
                 />

@@ -69,13 +69,16 @@ export default function SetPassword() {
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-4">
           {/* Current password */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Current / temporary password</label>
+            <label htmlFor="set-current-password" className="block text-xs font-medium text-gray-600 mb-1">Current / temporary password</label>
             <div className="relative">
               <input
+                id="set-current-password"
+                name="current-password"
                 type={showCurrent ? "text" : "password"}
                 value={current}
                 onChange={e => setCurrent(e.target.value)}
                 required
+                autoComplete="current-password"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20 focus:border-[#1E3A8A]"
                 placeholder="Enter current password"
                 data-testid="current-password-input"
@@ -88,13 +91,16 @@ export default function SetPassword() {
 
           {/* New password */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">New password</label>
+            <label htmlFor="set-new-password" className="block text-xs font-medium text-gray-600 mb-1">New password</label>
             <div className="relative">
               <input
+                id="set-new-password"
+                name="new-password"
                 type={showNext ? "text" : "password"}
                 value={next}
                 onChange={e => setNext(e.target.value)}
                 required
+                autoComplete="new-password"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20 focus:border-[#1E3A8A]"
                 placeholder="Choose a strong password"
                 data-testid="new-password-input"
@@ -118,13 +124,16 @@ export default function SetPassword() {
 
           {/* Confirm */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Confirm new password</label>
+            <label htmlFor="set-confirm-password" className="block text-xs font-medium text-gray-600 mb-1">Confirm new password</label>
             <div className="relative">
               <input
+                id="set-confirm-password"
+                name="confirm-password"
                 type={showConfirm ? "text" : "password"}
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
                 required
+                autoComplete="new-password"
                 className={`w-full border rounded-lg px-3 py-2.5 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20 focus:border-[#1E3A8A] ${
                   confirm && !matching ? "border-red-300" : "border-gray-200"
                 }`}

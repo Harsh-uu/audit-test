@@ -148,11 +148,14 @@ export default function AcceptInvite() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Your name</label>
+                  <label htmlFor="invite-name" className="block text-xs font-semibold text-gray-600 mb-1.5">Your name</label>
                   <input
+                    id="invite-name"
+                    name="name"
                     data-testid="invite-name-input"
                     type="text"
                     required
+                    autoComplete="name"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
@@ -161,12 +164,15 @@ export default function AcceptInvite() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Password</label>
+                  <label htmlFor="invite-password" className="block text-xs font-semibold text-gray-600 mb-1.5">Password</label>
                   <div className="relative">
                     <input
+                      id="invite-password"
+                      name="password"
                       data-testid="invite-password-input"
                       type={showPw ? "text" : "password"}
                       required
+                      autoComplete="new-password"
                       value={form.password}
                       onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
@@ -183,11 +189,14 @@ export default function AcceptInvite() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Confirm password</label>
+                  <label htmlFor="invite-confirm" className="block text-xs font-semibold text-gray-600 mb-1.5">Confirm password</label>
                   <input
+                    id="invite-confirm"
+                    name="confirm-password"
                     data-testid="invite-confirm-input"
                     type="password"
                     required
+                    autoComplete="new-password"
                     value={form.confirm}
                     onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"

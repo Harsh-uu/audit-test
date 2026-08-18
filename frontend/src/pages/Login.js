@@ -121,8 +121,10 @@ export default function Login() {
 
             <form onSubmit={handleMfaVerify} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Verification code</label>
+                <label htmlFor="mfa-code" className="block text-sm font-medium text-gray-700 mb-1">Verification code</label>
                 <input
+                  id="mfa-code"
+                  name="otp"
                   type="text"
                   inputMode="numeric"
                   autoComplete="one-time-code"
@@ -223,13 +225,16 @@ export default function Login() {
 
           <form onSubmit={handle} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+              <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
               <input
+                id="login-email"
+                name="email"
                 type="email"
                 value={form.email}
                 onChange={e => setForm(f => ({...f, email: e.target.value}))}
                 placeholder="you@organisation.com"
                 required
+                autoComplete="email"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
                 data-testid="login-email-input"
               />
@@ -238,7 +243,7 @@ export default function Login() {
             {mode !== "forgot" && (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-medium text-gray-700">Password</label>
+                  <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">Password</label>
                   {mode === "login" && (
                     <button
                       type="button"
@@ -252,11 +257,14 @@ export default function Login() {
                 </div>
                 <div className="relative">
                   <input
+                    id="login-password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
                     value={form.password}
                     onChange={e => setForm(f => ({...f, password: e.target.value}))}
                     placeholder="••••••••"
                     required
+                    autoComplete="current-password"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
                     data-testid="login-password-input"
                   />

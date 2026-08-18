@@ -531,8 +531,10 @@ export default function SuperAdminDashboard() {
               )}
               <form onSubmit={handleCreateOrg} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Organisation Name</label>
+                  <label htmlFor="create-org-name" className="block text-sm font-medium text-gray-700 mb-1">Organisation Name</label>
                   <input
+                    id="create-org-name"
+                    name="org_name"
                     data-testid="org-name-input"
                     type="text"
                     required
@@ -544,8 +546,10 @@ export default function SuperAdminDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Jurisdiction</label>
+                  <label htmlFor="create-org-jurisdiction" className="block text-sm font-medium text-gray-700 mb-1">Jurisdiction</label>
                   <select
+                    id="create-org-jurisdiction"
+                    name="jurisdiction"
                     data-testid="org-jurisdiction-select"
                     value={orgForm.jurisdiction}
                     onChange={e => setOrgForm(f => ({ ...f, jurisdiction: e.target.value }))}
@@ -562,8 +566,10 @@ export default function SuperAdminDashboard() {
                 </div>
                 {orgForm.jurisdiction === "northern_ireland" && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                    <label htmlFor="create-org-service-type" className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
                     <select
+                      id="create-org-service-type"
+                      name="service_type"
                       data-testid="org-service-type-select"
                       value={orgForm.service_type}
                       onChange={e => setOrgForm(f => ({ ...f, service_type: e.target.value }))}
@@ -616,8 +622,10 @@ export default function SuperAdminDashboard() {
               {error && <p className="mb-3 text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
               <form onSubmit={handleEditOrg} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Organisation Name</label>
+                  <label htmlFor="edit-org-name" className="block text-sm font-medium text-gray-700 mb-1">Organisation Name</label>
                   <input
+                    id="edit-org-name"
+                    name="org_name"
                     data-testid="edit-org-name-input"
                     type="text"
                     required
@@ -628,8 +636,10 @@ export default function SuperAdminDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Jurisdiction</label>
+                  <label htmlFor="edit-org-jurisdiction" className="block text-sm font-medium text-gray-700 mb-1">Jurisdiction</label>
                   <select
+                    id="edit-org-jurisdiction"
+                    name="jurisdiction"
                     data-testid="edit-org-jurisdiction-select"
                     value={editOrgForm.jurisdiction}
                     onChange={e => setEditOrgForm(f => ({ ...f, jurisdiction: e.target.value }))}
@@ -646,8 +656,10 @@ export default function SuperAdminDashboard() {
                 </div>
                 {editOrgForm.jurisdiction === "northern_ireland" && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                    <label htmlFor="edit-org-service-type" className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
                     <select
+                      id="edit-org-service-type"
+                      name="service_type"
                       data-testid="edit-org-service-type-select"
                       value={editOrgForm.service_type}
                       onChange={e => setEditOrgForm(f => ({ ...f, service_type: e.target.value }))}
@@ -699,8 +711,10 @@ export default function SuperAdminDashboard() {
               )}
               <form onSubmit={handleCreateUser} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
+                  <label htmlFor="create-user-name" className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
                   <input
+                    id="create-user-name"
+                    name="name"
                     data-testid="user-name-input"
                     type="text"
                     required
@@ -712,11 +726,14 @@ export default function SuperAdminDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+                  <label htmlFor="create-user-email" className="block text-xs font-medium text-gray-700 mb-1">Email</label>
                   <input
+                    id="create-user-email"
+                    name="email"
                     data-testid="user-email-input"
                     type="email"
                     required
+                    autoComplete="email"
                     value={userForm.email}
                     onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))}
                     placeholder="jane@example.com"
@@ -724,11 +741,14 @@ export default function SuperAdminDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
+                  <label htmlFor="create-user-password" className="block text-xs font-medium text-gray-700 mb-1">Password</label>
                   <input
+                    id="create-user-password"
+                    name="password"
                     data-testid="user-password-input"
                     type="password"
                     required
+                    autoComplete="new-password"
                     value={userForm.password}
                     onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))}
                     placeholder="Min. 8 characters"
@@ -736,8 +756,10 @@ export default function SuperAdminDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
+                  <label htmlFor="create-user-role" className="block text-xs font-medium text-gray-700 mb-1">Role</label>
                   <select
+                    id="create-user-role"
+                    name="role"
                     data-testid="user-role-select"
                     value={userForm.role}
                     onChange={e => setUserForm(f => ({ ...f, role: e.target.value }))}
@@ -829,12 +851,15 @@ export default function SuperAdminDashboard() {
                 <form onSubmit={handleInviteAdmin} className="space-y-3">
                   {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
+                    <label htmlFor="invite-admin-name" className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
                     <input
+                      id="invite-admin-name"
+                      name="name"
                       data-testid="invite-name-input"
                       type="text"
                       required
                       autoFocus
+                      autoComplete="name"
                       value={inviteForm.name}
                       onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
                       placeholder="Jane Smith"
@@ -842,11 +867,14 @@ export default function SuperAdminDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+                    <label htmlFor="invite-admin-email" className="block text-xs font-medium text-gray-700 mb-1">Email</label>
                     <input
+                      id="invite-admin-email"
+                      name="email"
                       data-testid="invite-email-input"
                       type="email"
                       required
+                      autoComplete="email"
                       value={inviteForm.email}
                       onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
                       placeholder="admin@organisation.com"

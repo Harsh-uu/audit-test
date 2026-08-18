@@ -71,22 +71,22 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
           <h4 className="font-medium text-gray-900 mb-4">New User</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Full name</label>
-              <input value={newUser.name} onChange={e => setNewUser(u => ({ ...u, name: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-user-name" />
+              <label htmlFor="new-user-name" className="block text-xs font-medium text-gray-600 mb-1">Full name</label>
+              <input id="new-user-name" name="name" value={newUser.name} onChange={e => setNewUser(u => ({ ...u, name: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-user-name" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-              <input type="email" value={newUser.email} onChange={e => setNewUser(u => ({ ...u, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-user-email" />
+              <label htmlFor="new-user-email" className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+              <input id="new-user-email" name="email" type="email" value={newUser.email} onChange={e => setNewUser(u => ({ ...u, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-user-email" autoComplete="email" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
-              <select value={newUser.role} onChange={e => setNewUser(u => ({ ...u, role: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid="new-user-role">
+              <label htmlFor="new-user-role" className="block text-xs font-medium text-gray-600 mb-1">Role</label>
+              <select id="new-user-role" name="role" value={newUser.role} onChange={e => setNewUser(u => ({ ...u, role: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid="new-user-role">
                 {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Password</label>
-              <input type="password" value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-user-password" />
+              <label htmlFor="new-user-password" className="block text-xs font-medium text-gray-600 mb-1">Password</label>
+              <input id="new-user-password" name="password" type="password" value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]" data-testid="new-user-password" autoComplete="new-password" />
             </div>
           </div>
           <div className="flex gap-2 mt-4">
@@ -114,8 +114,10 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
                 <td colSpan={6} className="px-4 py-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Full name</label>
+                      <label htmlFor={`edit-name-${u.id}`} className="block text-xs font-medium text-gray-500 mb-1">Full name</label>
                       <input
+                        id={`edit-name-${u.id}`}
+                        name="name"
                         value={editForm.name}
                         onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                         className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
@@ -123,8 +125,10 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Email address</label>
+                      <label htmlFor={`edit-email-${u.id}`} className="block text-xs font-medium text-gray-500 mb-1">Email address</label>
                       <input
+                        id={`edit-email-${u.id}`}
+                        name="email"
                         type="email"
                         value={editForm.email}
                         onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
@@ -133,8 +137,10 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Role</label>
+                      <label htmlFor={`edit-role-${u.id}`} className="block text-xs font-medium text-gray-500 mb-1">Role</label>
                       <select
+                        id={`edit-role-${u.id}`}
+                        name="role"
                         value={editForm.role}
                         onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}
                         className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
@@ -171,12 +177,15 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
                     </button>
                     {showPwdReset && (
                       <div className="mt-2 max-w-xs">
-                        <label className="block text-xs font-medium text-gray-500 mb-1">New password</label>
+                        <label htmlFor={`reset-pwd-${u.id}`} className="block text-xs font-medium text-gray-500 mb-1">New password</label>
                         <input
+                          id={`reset-pwd-${u.id}`}
+                          name="new-password"
                           type="password"
                           value={newPassword}
                           onChange={e => setNewPassword(e.target.value)}
                           placeholder="Min. 8 characters"
+                          autoComplete="new-password"
                           className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                           data-testid="new-password-input"
                         />
