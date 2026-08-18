@@ -1,4 +1,5 @@
 import React, { lazy, Suspense } from "react";
+import { Loader2 } from "lucide-react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";

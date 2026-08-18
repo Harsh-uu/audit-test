@@ -368,32 +368,41 @@ def _check_transcript_safety(plain_text: str, transcript) -> list[str]:
     Returns a list of warning strings if the transcript contains
     repetition hallucination patterns (looping phrases — classic ASR failure).
     AssemblyAI content_safety is disabled; we rely only on hallucination detection.
+
+    Detection thresholds are intentionally conservative to avoid false positives
+    on natural speech patterns (e.g. "yeah yeah", "I see", affirmations repeated
+    across a long meeting). Only flag when the pattern is clearly pathological.
     """
     import re
     warnings = []
 
     # --- Repetition / hallucination detector ---
-    # Split into sentences and check for excessive repetition
+    # Split into sentences and check for excessive repetition.
+    # Minimum length of 20 chars prevents short filler phrases ("I see", "okay",
+    # "yeah that's right") from triggering a false positive.
+    # Threshold of 5 occurrences is required because benign substantive sentences
+    # can legitimately recur several times in a long supervision session.
     if plain_text:
-        sentences = [s.strip() for s in re.split(r'[.!?]', plain_text) if len(s.strip()) > 5]
-        if len(sentences) >= 4:
+        sentences = [s.strip() for s in re.split(r'[.!?]', plain_text) if len(s.strip()) > 20]
+        if len(sentences) >= 6:
             from collections import Counter
             counts = Counter(s.lower() for s in sentences)
             most_common_text, most_common_count = counts.most_common(1)[0]
-            # If any single sentence appears 3+ times in a row it's very likely a hallucination
-            if most_common_count >= 3:
+            if most_common_count >= 5:
                 warnings.append(
                     f"Possible hallucination detected: the phrase \"{most_common_text[:80]}\" "
                     f"appears {most_common_count} times — please review before sharing."
                 )
 
-        # Check for consecutive repeated short phrases (tighter looping pattern)
+        # Check for consecutive repeated short phrases (tighter looping pattern).
+        # Requires 4 identical consecutive 6-word chunks (not 3) to avoid flagging
+        # repeated discourse markers or brief affirmations in natural conversation.
         words = plain_text.lower().split()
         if len(words) >= 10:
             chunk_size = 6
             chunks = [" ".join(words[i:i+chunk_size]) for i in range(0, len(words) - chunk_size, chunk_size)]
-            for i in range(len(chunks) - 2):
-                if chunks[i] == chunks[i+1] == chunks[i+2]:
+            for i in range(len(chunks) - 3):
+                if chunks[i] == chunks[i+1] == chunks[i+2] == chunks[i+3]:
                     warnings.append(
                         f"Looping repetition detected near: \"{chunks[i][:80]}\" — likely an AI hallucination."
                     )

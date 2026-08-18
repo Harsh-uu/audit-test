@@ -914,7 +914,7 @@ export default function RecordingScreen() {
               <div className="text-center mb-8">
                 <div className="w-12 h-12 border-[3px] border-[#1E3A8A] border-t-transparent rounded-full spin mx-auto mb-4"></div>
                 <h2 className="text-xl font-bold text-gray-900 font-display">Processing your recording</h2>
-                <p className="text-sm text-gray-500 mt-1">This page will update automatically — you can safely leave and come back</p>
+                <p className="text-sm text-gray-500 mt-1">Do not close or refresh this page whilst processing the meeting</p>
               </div>
 
               {processingError && (

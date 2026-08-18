@@ -863,17 +863,29 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
         )
     prev_text = existing_t["speaker_text"] if existing_t else ""
 
-    # Parse turns properly — strips [MM:SS] prefix before comparing
+    # Parse turns properly — strips [MM:SS] prefix before comparing.
+    # Continuation lines (no speaker colon) are appended to the previous turn
+    # so this matches the frontend parseSpeakerText() behaviour and avoids
+    # false-positive "text edited" audit entries when GPT-4o wraps long turns.
     def _parse_turns(s):
         turns = []
         for ln in (s or "").strip().split("\n"):
             ln = ln.strip()
             if not ln:
                 continue
-            ln = re.sub(r'^\[\d{1,2}:\d{2}\]\s*', '', ln)  # strip timestamp prefix
+            ln = re.sub(r'^\[\d{1,3}:\d{2}\]\s*', '', ln)  # strip [MM:SS] or [MMM:SS]
             if ':' in ln:
                 spk, body = ln.split(':', 1)
-                turns.append((spk.strip(), body.strip()))
+                # Treat as a new turn only when the speaker label is ≤50 chars,
+                # matching the frontend's ^([^:]{1,50}): regex constraint.
+                if len(spk.strip()) <= 50:
+                    turns.append((spk.strip(), body.strip()))
+                elif turns:
+                    # Colon is inside the body (e.g. "He said: come back")
+                    turns[-1] = (turns[-1][0], (turns[-1][1] + " " + ln).strip())
+            elif turns:
+                # Continuation line — append to the previous turn's body
+                turns[-1] = (turns[-1][0], (turns[-1][1] + " " + ln).strip())
         return turns
 
     prev_turns = _parse_turns(prev_text) if prev_text else []
