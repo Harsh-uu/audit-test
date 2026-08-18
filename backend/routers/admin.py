@@ -2015,7 +2015,7 @@ async def debug_user_by_email(email: str, current_user=Depends(get_current_user)
         meeting_count = await conn.fetchrow(
             """SELECT COUNT(*) as cnt FROM meetings
                WHERE EXISTS (
-                   SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                   SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END) a
                    WHERE a->>'user_id' = $1
                )""",
             str(u["id"]),
@@ -2060,7 +2060,7 @@ async def debug_user(user_id: str, current_user=Depends(get_current_user)):
         meeting_count = await conn.fetchrow(
             """SELECT COUNT(*) as cnt FROM meetings
                WHERE EXISTS (
-                   SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                   SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END) a
                    WHERE a->>'user_id' = $1
                )""",
             str(u["id"]),

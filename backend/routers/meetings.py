@@ -184,11 +184,11 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                 f"""SELECT {_LIST_COLS} FROM meetings
                    WHERE created_by=$1
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                          SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END) a
                           WHERE a->>'user_id' = $1::text
                       )
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with,'[]'::jsonb)) s
+                          SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with ELSE '[]'::jsonb END) s
                           WHERE s->>'user_id' = $1::text
                       )
                    ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
@@ -228,7 +228,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                        WHERE created_by::text = ANY($1)
                           OR sign_off_manager_id::text = ANY($1)
                           OR EXISTS (
-                              SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                              SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END) a
                               WHERE a->>'user_id' = ANY($1)
                           )
                        ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
@@ -255,11 +255,11 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                 f"""SELECT {_LIST_COLS} FROM meetings
                    WHERE created_by=$1
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(COALESCE(attendees,'[]'::jsonb)) a
+                          SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END) a
                           WHERE a->>'user_id' = $1::text
                       )
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(COALESCE(shared_with,'[]'::jsonb)) s
+                          SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with ELSE '[]'::jsonb END) s
                           WHERE s->>'user_id' = $1::text
                       )
                    ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
