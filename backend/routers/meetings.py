@@ -184,12 +184,22 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                 f"""SELECT {_LIST_COLS} FROM meetings
                    WHERE created_by=$1
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END) a
-                          WHERE a->>'user_id' = $1::text
+                          SELECT 1 FROM jsonb_array_elements(
+                              CASE
+                                  WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees
+                                  WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='object' AND attendees != '{{}}'::jsonb THEN jsonb_build_array(attendees)
+                                  ELSE '[]'::jsonb
+                              END
+                          ) a WHERE a->>'user_id' = $1::text
                       )
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with ELSE '[]'::jsonb END) s
-                          WHERE s->>'user_id' = $1::text
+                          SELECT 1 FROM jsonb_array_elements(
+                              CASE
+                                  WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with
+                                  WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='object' AND shared_with != '{{}}'::jsonb THEN jsonb_build_array(shared_with)
+                                  ELSE '[]'::jsonb
+                              END
+                          ) s WHERE s->>'user_id' = $1::text
                       )
                    ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
                 user_id, limit, offset,
@@ -228,8 +238,13 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                        WHERE created_by::text = ANY($1)
                           OR sign_off_manager_id::text = ANY($1)
                           OR EXISTS (
-                              SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END) a
-                              WHERE a->>'user_id' = ANY($1)
+                              SELECT 1 FROM jsonb_array_elements(
+                                  CASE
+                                      WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees
+                                      WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='object' AND attendees != '{{}}'::jsonb THEN jsonb_build_array(attendees)
+                                      ELSE '[]'::jsonb
+                                  END
+                              ) a WHERE a->>'user_id' = ANY($1)
                           )
                        ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
                     all_scoped_str, limit, offset,
@@ -255,12 +270,22 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                 f"""SELECT {_LIST_COLS} FROM meetings
                    WHERE created_by=$1
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END) a
-                          WHERE a->>'user_id' = $1::text
+                          SELECT 1 FROM jsonb_array_elements(
+                              CASE
+                                  WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees
+                                  WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='object' AND attendees != '{{}}'::jsonb THEN jsonb_build_array(attendees)
+                                  ELSE '[]'::jsonb
+                              END
+                          ) a WHERE a->>'user_id' = $1::text
                       )
                       OR EXISTS (
-                          SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with ELSE '[]'::jsonb END) s
-                          WHERE s->>'user_id' = $1::text
+                          SELECT 1 FROM jsonb_array_elements(
+                              CASE
+                                  WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with
+                                  WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='object' AND shared_with != '{{}}'::jsonb THEN jsonb_build_array(shared_with)
+                                  ELSE '[]'::jsonb
+                              END
+                          ) s WHERE s->>'user_id' = $1::text
                       )
                    ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
                 user_id, limit, offset,
