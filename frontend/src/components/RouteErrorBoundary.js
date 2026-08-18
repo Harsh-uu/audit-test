@@ -53,9 +53,27 @@ export class RouteErrorBoundary extends React.Component {
     const { error } = this.state;
     if (!error) return this.props.children;
 
-    // Chunk error — reload is already triggered; return null (brief white flash)
-    // rather than any JSX that might reference missing exports in the old bundle.
-    if (isChunkError(error)) return null;
+    // Chunk error — show a spinner while the auto-reload fires rather than a blank screen
+    if (isChunkError(error)) {
+      return React.createElement(
+        "div",
+        {
+          style: {
+            minHeight: "100vh", display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", background: "#f9fafb", gap: 12,
+          },
+        },
+        React.createElement("div", {
+          style: {
+            width: 36, height: 36,
+            border: "3px solid #e5e7eb", borderTopColor: "#1E3A8A",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          },
+        }),
+        React.createElement("p", { style: { fontSize: 13, color: "#9ca3af" } }, "Loading…")
+      );
+    }
 
     // All other render errors — built with React.createElement to guarantee
     // the boundary card never itself throws a ReferenceError.

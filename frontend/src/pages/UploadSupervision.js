@@ -28,7 +28,7 @@ const STATUS_CONFIG = {
   failed:      { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50 border-red-200", label: "Failed" },
 };
 
-function UploadCard({ upload, onDelete, navigate }) {
+function UploadCard({ upload, onDelete, navigate, regLabel, certLabel }) {
   const cfg = STATUS_CONFIG[upload.status] || STATUS_CONFIG.processing;
   const Icon = cfg.icon;
   const cqcCount = upload.cqc_mappings?.length || 0;
@@ -61,12 +61,12 @@ function UploadCard({ upload, onDelete, navigate }) {
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {cqcCount > 0 && (
               <span className="text-xs bg-purple-50 text-purple-700 border border-purple-100 rounded-full px-2 py-0.5">
-                {cqcCount} CQC
+                {cqcCount} {regLabel}
               </span>
             )}
             {ccCount > 0 && (
               <span className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5">
-                {ccCount} Care Cert
+                {ccCount} {certLabel}
               </span>
             )}
             {customCount > 0 && (
@@ -104,8 +104,18 @@ function UploadCard({ upload, onDelete, navigate }) {
 }
 
 export default function UploadSupervision() {
-  const { getAuthConfig, API } = useAuth();
+  const { getAuthConfig, API, user } = useAuth();
   const navigate = useNavigate();
+
+  // Jurisdiction-aware label for the page description
+  const jurisdiction = user?.org_jurisdiction || "england";
+  const evidenceLabel = {
+    wales:            "CIW and AWIF / SCW",
+    scotland:         "Care Inspectorate and SSSC",
+    northern_ireland: "RQIA and NISCC",
+  }[jurisdiction] || "CQC and Care Certificate";
+  const regBadge  = { wales: "CIW", scotland: "CI", northern_ireland: "RQIA" }[jurisdiction] || "CQC";
+  const certBadge = { wales: "AWIF/SCW", scotland: "SSSC", northern_ireland: "NISCC" }[jurisdiction] || "Care Cert";
 
   const [staffList, setStaffList] = useState([]);
   const [uploads, setUploads] = useState([]);
@@ -235,7 +245,7 @@ export default function UploadSupervision() {
             <h1 className="text-2xl font-semibold text-gray-900 font-display">Import Supervision Document</h1>
           </div>
           <p className="text-sm text-gray-500 ml-11">
-            Upload any document for a staff member — supervision records, job descriptions, feedback, observations and more — to scan for CQC and Care Certificate evidence.
+            Upload any document for a staff member — supervision records, job descriptions, feedback, observations and more — to scan for {evidenceLabel} evidence.
           </p>
         </div>
 
@@ -423,6 +433,8 @@ export default function UploadSupervision() {
                     upload={u}
                     onDelete={handleDelete}
                     navigate={navigate}
+                    regLabel={regBadge}
+                    certLabel={certBadge}
                   />
                 ))}
               </div>
