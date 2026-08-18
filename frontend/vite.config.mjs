@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { fileURLToPath } from "url";
+import { VitePWA } from "vite-plugin-pwa";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -13,16 +14,123 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+
+      // ── Service Worker / PWA ──────────────────────────────────────────────
+      // generateSW mode: Workbox writes the SW automatically from these rules.
+      // autoUpdate: the SW silently installs updates; no "refresh needed" prompt.
+      VitePWA({
+        registerType: "autoUpdate",
+        strategies: "generateSW",
+        injectRegister: "auto",
+
+        // Manifest — minimal, enough for "Add to Home Screen" on mobile devices
+        manifest: {
+          name: "1two Supervision",
+          short_name: "1two",
+          start_url: "/",
+          display: "standalone",
+          background_color: "#ffffff",
+          theme_color: "#1E3A8A",
+          icons: [
+            { src: "/favicon.ico", sizes: "any", type: "image/x-icon" },
+          ],
+        },
+
+        workbox: {
+          // ── Precache: every hashed build asset ─────────────────────────────
+          // Content-hashed filenames mean these are safe to cache forever;
+          // a new deploy produces new hashes → SW auto-updates → stale cache
+          // is discarded. Use separate patterns (brace expansion unsupported
+          // in this version of workbox-build's glob engine).
+          globPatterns: [
+            "**/*.js",
+            "**/*.css",
+            "**/*.html",
+            "**/*.ico",
+            "**/*.png",
+            "**/*.svg",
+            "**/*.woff",
+            "**/*.woff2",
+          ],
+          globIgnores: ["**/node_modules/**", "**/workbox-*.js", "**/sw.js"],
+
+          // index.html: navigate to it from SW cache (offline shell),
+          // but exclude /api routes from the navigation fallback so they
+          // always go to the network.
+          navigateFallback: "/index.html",
+          navigateFallbackDenylist: [/^\/api\//],
+
+          // SW file itself must never be cached (browsers enforce this
+          // natively; belt-and-suspenders via Cache-Control below).
+          // autoUpdate keeps max size manageable.
+
+          runtimeCaching: [
+            // ── NetworkOnly: auth + recording + processing ──────────────────
+            // These MUST always hit the network — never serve stale auth
+            // tokens or stale meeting processing state.
+            {
+              urlPattern: /\/api\/(auth|recording|processing|jobs)\//,
+              handler: "NetworkOnly",
+            },
+
+            // ── StaleWhileRevalidate: stable reference data ─────────────────
+            // Standards library and org structure change at most once a day.
+            // Serve the cached copy instantly, refresh silently in background.
+            {
+              urlPattern: /\/api\/(admin\/standards|org\/structure)/,
+              handler: "StaleWhileRevalidate",
+              options: {
+                cacheName: "api-stable",
+                expiration: { maxEntries: 20, maxAgeSeconds: 3600 }, // 1 hour
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+
+            // ── NetworkFirst: live meeting data ─────────────────────────────
+            // Always try the network; fall back to cache if offline so
+            // previously loaded meeting reports remain readable.
+            // 4-second timeout keeps the UI responsive on poor connections.
+            {
+              urlPattern: /\/api\/(meetings|review)\//,
+              handler: "NetworkFirst",
+              options: {
+                cacheName: "api-meetings",
+                networkTimeoutSeconds: 4,
+                expiration: { maxEntries: 50, maxAgeSeconds: 300 }, // 5 min
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+
+            // ── CacheFirst: Google Fonts + any CDN assets ───────────────────
+            {
+              urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "google-fonts",
+                expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+          ],
+        },
+      }),
+
       // Serve index.html with no-store headers so browsers never cache the HTML
       // shell. Hashed JS/CSS assets keep their default long-lived cache headers.
+      // The SW file itself is excluded — browsers handle SW caching natively.
       {
         name: "no-cache-html",
         configurePreviewServer(server) {
           server.middlewares.use((req, res, next) => {
-            if (req.url === "/" || req.url?.split("?")[0].endsWith(".html")) {
+            const url = req.url?.split("?")[0] ?? "";
+            if (url === "/" || url.endsWith(".html")) {
               res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
               res.setHeader("Pragma", "no-cache");
               res.setHeader("Expires", "0");
+            } else if (url === "/sw.js" || url.startsWith("/workbox-")) {
+              // SW update check: no-cache (conditional GET) not no-store,
+              // so the browser fetches a fresh copy on every navigation.
+              res.setHeader("Cache-Control", "no-cache");
             }
             next();
           });
