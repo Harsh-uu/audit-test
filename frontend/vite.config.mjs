@@ -242,6 +242,30 @@ export default defineConfig(({ mode }) => {
       outDir: "build",
       sourcemap: false,
       chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            // Core React runtime — tiny, cached on first load, never changes
+            if (
+              id.includes("/react/") ||
+              id.includes("/react-dom/") ||
+              id.includes("/react-router") ||
+              id.includes("/scheduler/")
+            ) return "vendor-react";
+            // Radix UI primitives — large but stable; split so it never re-downloads
+            if (id.includes("@radix-ui/")) return "vendor-radix";
+            // Data-fetching layer
+            if (id.includes("@tanstack/") || id.includes("/axios/")) return "vendor-query";
+            // Charts — only loads on pages that render a chart
+            if (
+              id.includes("/recharts/") ||
+              id.includes("/d3-") ||
+              id.includes("d3/")
+            ) return "vendor-charts";
+          },
+        },
+      },
     },
   };
 });
