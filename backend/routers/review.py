@@ -177,22 +177,17 @@ async def delete_audio_after_grace(meeting_id: str):
 
 # ── Review data ───────────────────────────────────────────────────────────────
 
-@router.get("/{meeting_id}")
-async def get_review_data(meeting_id: str, current_user=Depends(get_current_user)):
-    org_id = current_user.get("org_id", "")
-    async with database.with_org(org_id) as conn:
-        row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = _parse_meeting_row(dict(row))
-
+async def _check_meeting_access(meeting: dict, current_user: dict, org_id: str):
+    """Raise 404 if current_user is not entitled to view this meeting.
+    Shared by get_review_data, export-pdf, export-transcript and the audit
+    trail — every endpoint that returns meeting content must call this."""
     user_id = current_user.get("id", "")
     role = current_user.get("role")
 
     if role not in ["admin", "manager"]:
         # Non-privileged: must be attendee, creator, or shared reviewer
-        attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
-        shared_with = meeting["shared_with"]
+        attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
+        shared_with = meeting.get("shared_with", [])
         if (user_id not in attendee_ids
                 and not any(s.get("user_id") == user_id for s in shared_with if isinstance(s, dict))
                 and user_id != meeting.get("created_by", "")):
@@ -204,10 +199,24 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
         if mgr_scope["level"] != "org":
             async with database.with_org(org_id) as _conn:
                 scoped_ids = await get_scoped_staff_ids(_conn, org_id, mgr_scope) or []
-            attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
+            attendee_ids = [a.get("user_id", "") for a in meeting.get("attendees", [])]
             if (user_id != meeting.get("created_by", "")
                     and not any(aid in scoped_ids for aid in attendee_ids)):
                 raise HTTPException(status_code=404, detail="Meeting not found")
+
+
+@router.get("/{meeting_id}")
+async def get_review_data(meeting_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting = _parse_meeting_row(dict(row))
+
+    user_id = current_user.get("id", "")
+
+    await _check_meeting_access(meeting, current_user, org_id)
 
     if meeting.get("transcript_id"):
         try:
@@ -1388,15 +1397,12 @@ async def get_comments(meeting_id: str, current_user=Depends(get_current_user)):
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    # Non-admin/manager callers must be an attendee, creator, or shared reviewer
-    user_id = current_user.get("id", "")
-    if current_user.get("role") not in ["admin", "manager"]:
-        attendee_ids = [a.get("user_id", "") for a in _ensure_list(m_row["attendees"])]
-        shared_with_list = _ensure_list(m_row["shared_with"])
-        if (user_id not in attendee_ids
-                and not any(s.get("user_id") == user_id for s in shared_with_list if isinstance(s, dict))
-                and user_id != (m_row.get("created_by") or "")):
-            raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting_for_check = {
+        "attendees": _ensure_list(m_row["attendees"]),
+        "shared_with": _ensure_list(m_row["shared_with"]),
+        "created_by": m_row["created_by"],
+    }
+    await _check_meeting_access(meeting_for_check, current_user, org_id)
 
     async with database.with_org(org_id) as conn:
         rows = await conn.fetch("SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id)
@@ -1411,6 +1417,8 @@ async def get_audit_trail(meeting_id: str, current_user=Depends(get_current_user
     _logger = _log.getLogger(__name__)
     try:
         return await _audit_trail_inner(meeting_id, current_user, _logger)
+    except HTTPException:
+        raise
     except Exception as _top_err:
         _logger.error(f"[AUDIT] UNHANDLED 500 meeting={meeting_id}: {_top_err}\n{_tb.format_exc()}")
         return {"events": []}
@@ -1458,7 +1466,7 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
         async with database.with_org(org_id) as conn:
             # 1. Meeting row — all columns in one query (was two separate queries)
             m_row = await conn.fetchrow(
-                "SELECT id, org_id, title, created_at, created_by_name, "
+                "SELECT id, org_id, title, created_at, created_by_name, created_by, shared_with, "
                 "transcript_id, analysis_id, recording_events, attendees, sign_off_record "
                 "FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
             )
@@ -1466,6 +1474,10 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
                 _logger.warning(f"[AUDIT] meeting NOT FOUND id={meeting_id} org={org_id!r}")
                 raise HTTPException(status_code=404, detail="Meeting not found")
             meeting = dict(m_row)
+            await _check_meeting_access(
+                {**meeting, "attendees": _jlist(meeting.get("attendees")), "shared_with": _jlist(meeting.get("shared_with"))},
+                current_user, org_id,
+            )
             _logger.info(f"[AUDIT] meeting ok tid={meeting.get('transcript_id')!r} aid={meeting.get('analysis_id')!r}")
 
             # 2. Transcript timestamp
@@ -1649,9 +1661,16 @@ async def send_email_report(meeting_id: str, data: EmailRequest, background_task
         )
 
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT title, date, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT title, date, status, attendees, shared_with, created_by FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
+    await _check_meeting_access(
+        {"attendees": _ensure_list(m_row["attendees"]), "shared_with": _ensure_list(m_row["shared_with"]), "created_by": m_row["created_by"]},
+        current_user, org_id,
+    )
     if (m_row["status"] or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="Meeting must be signed off")
 
@@ -1700,6 +1719,7 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = _parse_meeting_row(dict(m_row))
+    await _check_meeting_access(meeting, current_user, org_id)
     if (meeting.get("status") or "") not in ["signed_off", "shared"]:
         raise HTTPException(status_code=400, detail="PDF export is only available for signed-off meetings")
 
@@ -2049,6 +2069,7 @@ async def export_transcript(meeting_id: str, current_user=Depends(get_current_us
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = _parse_meeting_row(dict(m_row))
+    await _check_meeting_access(meeting, current_user, org_id)
     if (meeting.get("status") or "") != "signed_off":
         raise HTTPException(status_code=400, detail="Transcript export only available for signed-off meetings")
     if not meeting.get("transcript_id"):

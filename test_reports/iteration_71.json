@@ -1,0 +1,27 @@
+{
+  "summary": "Verified SEC-001 IDOR fix on /api/review/{id}/export-pdf, /export-transcript and /audit-trail. Wrote pytest suite /app/backend/tests/test_idor_sec001.py (17 tests, all passed). Confirmed: (a) jane@supervision.com (attendee role, same org b00bf04f..., verified NOT attendee/shared_reviewer/creator on meeting 0383953a-9a17-4f7f-9924-ed5ec30b42b6) gets 404 'Meeting not found' on all 3 endpoints plus the main GET /api/review/{id} — including audit-trail, proving the new `except HTTPException: raise` stops the catch-all from returning a fake 200 {events: []}; (b) unauthenticated requests get 401/403; (c) legitimate attendee user@supervision.com gets 200 with a real %PDF payload, transcript payload and non-empty audit events; (d) manager@supervision.com (MFA via DB override) gets 200 on all 3 + main review endpoint, and 404 for a non-existent meeting id. Frontend smoke test as manager: report page loads, overflow menu -> Export PDF downloads supervision_report_0b42b6.pdf, Export Transcript downloads transcript_0b42b6.pdf, Audit Trail tab renders full event timeline. No regressions found.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_idor_sec001.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Optional hardening: GET /api/review/{id}/comments still uses its own inline check (attendee/creator/shared only) and skips the SEC-003 branch/team-scoped-manager restriction — a branch-scoped manager can read reviewer comments (possible PII) for out-of-scope meetings. Replace with _check_meeting_access for consistency.",
+    "Optional hardening: POST /api/review/{id}/send-email only checks role in (manager, admin) and never calls _check_meeting_access — a branch/team-scoped manager can trigger a branded email containing an out-of-scope meeting title + report link.",
+    "Add data-testid to the report header overflow ('...') menu button and its Export PDF / Export Transcript items — tests currently have to rely on lucide svg class selectors."
+  ],
+  "critical_code_review_comments": [
+    "review.py get_review_data: after the refactor `role = current_user.get('role')` (line ~218) is now dead code — only user_id is still used. Remove to avoid confusion.",
+    "_check_meeting_access correctly opens its own with_org connection for the manager-scope branch; note it is called inside the audit-trail single-connection block (line 1481) so it nests a second connection for scoped managers only — acceptable but worth noting for latency."
+  ],
+  "updated_files": ["/app/backend/tests/test_idor_sec001.py"],
+  "success_rate": { "backend": "100% (17/17)", "frontend": "100% (3/3 smoke flows)" },
+  "seed_data_creation": "None — used existing meeting 0383953a-9a17-4f7f-9924-ed5ec30b42b6 and existing accounts. No data mutated except transient mfa_code override for manager login.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "jane@supervision.com/Jane123! (attendee, not on meeting), user@supervision.com/Staff123! (attendee on meeting), manager@supervision.com/Manager123! (MFA via /app/backend/tests/get_tokens.py)",
+  "context_for_next_testing_agent": "Reusable IDOR regression suite at /app/backend/tests/test_idor_sec001.py — includes precondition assertions that jane is same-org but not entitled, so it fails loudly if seed data changes. Frontend export buttons live behind the '...' ellipsis menu in the report header (selector: button:has(svg.lucide-ellipsis)); no data-testid there yet.",
+  "rca_of_the_issue": "Original defect: export-pdf/export-transcript/audit-trail only filtered by org_id, so any authenticated org member could enumerate meeting ids and pull signed-off PDFs/transcripts/audit trails containing safeguarding + health PII. Fix (shared _check_meeting_access + `except HTTPException: raise` in get_audit_trail) is verified effective: all three now return 404 for non-entitled users while attendee/manager paths remain 200."
+}
