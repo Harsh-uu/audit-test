@@ -720,6 +720,14 @@ async def create_schema():
                 SET {col} = (({col}) #>> '{{}}')::jsonb
                 WHERE jsonb_typeof({col}) = 'string'
             """)
+        # Fix analyses JSONB columns (all may be double-encoded strings)
+        for col in ("cqc_mappings", "care_cert_mappings", "custom_mappings",
+                    "actions", "risks", "learning_needs", "achievements"):
+            await conn.execute(f"""
+                UPDATE analyses
+                SET {col} = (({col}) #>> '{{}}')::jsonb
+                WHERE jsonb_typeof({col}) = 'string'
+            """)
         logger.info("Schema created/verified successfully")
     finally:
         await conn.close()

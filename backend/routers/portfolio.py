@@ -131,7 +131,9 @@ async def _build_portfolio_data(user_id: str, org_id: str):
         mdate = mtg.get("date", "")
         mid = mtg["id"]
 
-        for m in (ana.get("cqc_mappings") or []):
+        for m in _safe_jsonb(ana.get("cqc_mappings")):
+            if not isinstance(m, dict):
+                continue
             key = m.get("regulation_ref", "—")
             if key not in cqc_agg:
                 cqc_agg[key] = {
@@ -154,7 +156,9 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                 e["latest_excerpt"] = m["transcript_excerpt"][:200]
                 e["source_meeting_id"] = mid
 
-        for m in (ana.get("care_cert_mappings") or []):
+        for m in _safe_jsonb(ana.get("care_cert_mappings")):
+            if not isinstance(m, dict):
+                continue
             key = m.get("standard_ref", "—") + "::" + m.get("outcome_ref", "")
             if key not in care_cert_agg:
                 care_cert_agg[key] = {
@@ -178,7 +182,9 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                 e["latest_excerpt"] = m["transcript_excerpt"][:200]
                 e["source_meeting_id"] = mid
 
-        for m in (ana.get("custom_mappings") or []):
+        for m in _safe_jsonb(ana.get("custom_mappings")):
+            if not isinstance(m, dict):
+                continue
             key = m.get("document_id", "") + "::" + m.get("criterion_ref", "—")
             if key not in custom_agg:
                 custom_agg[key] = {
@@ -212,9 +218,9 @@ async def _build_portfolio_data(user_id: str, org_id: str):
             "date": mtg.get("date", ""),
             "status": mtg.get("status", ""),
             "sign_off_manager_name": mtg.get("sign_off_manager_name", ""),
-            "cqc_count": len(ana.get("cqc_mappings") or []),
-            "care_cert_count": len(ana.get("care_cert_mappings") or []),
-            "custom_count": len(ana.get("custom_mappings") or []),
+            "cqc_count": len(_safe_jsonb(ana.get("cqc_mappings"))),
+            "care_cert_count": len(_safe_jsonb(ana.get("care_cert_mappings"))),
+            "custom_count": len(_safe_jsonb(ana.get("custom_mappings"))),
         })
 
     cqc_summary = sorted(cqc_agg.values(), key=lambda x: -x["evidence_count"])
