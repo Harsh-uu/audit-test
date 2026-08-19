@@ -1,0 +1,45 @@
+{
+  "summary": "Verified the seed_super_admin() SystemExit fix and full login/startup regression on PREVIEW. (1) Code review of /app/backend/utils/seed.py confirms NO 'SystemExit' or 'sys.exit' anywhere in the file; the fresh-DB + weak-password branch now logs logger.critical(...) and returns. (2) Direct simulation test (pytest) calls seed_super_admin() with SUPER_ADMIN_EMAIL=TEST_nonexistent_sa_iter77@example.com + weak default password against the real DB: no SystemExit raised and NO user row created (correct refuse-but-don't-crash behaviour). (3) sudo supervisorctl restart backend -> backend RUNNING, logs show pool ready -> 'Schema verified' -> all standards seeds idempotent-skipped -> 'Updated superadmin@1two.one to super_admin role' -> 'Seeding complete' -> standards cache warmed (239) -> storage init -> 'Application startup complete'. No traceback/exit. GET /api/health = 200 {status: ok} in 0.33s before and after restart. (4) API login flows: manager@supervision.com -> requires_mfa + mfa_session -> verify-mfa -> access cookie + /auth/me 200 role=manager; superadmin@1two.one same flow -> role=super_admin; user@supervision.com (no MFA) -> direct cookie login; wrong password -> 401. (5) Live browser e2e on preview: staff login reached /dashboard in 2.7s with data rendered; manager login showed the 2FA 'Check your email' screen in ~4s, wrong code correctly showed 'Invalid code', correct code signed in to /dashboard in 2.1s. No login latency anywhere near the 20s threshold. (6) Regression: /app/backend/tests/test_idor_sec001.py 17/17 PASSED. New suite test_login_startup_iter77.py 9/9 PASSED. Note: hit a pre-existing IP rate limit (429, 20 attempts/15min) mid-run; cleared via tests/clear_rate_limit.py as advised, then all green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/dashboard (no trailing slash)", "issue": "FastAPI trailing-slash redirect returns 307 with Location: http://evidence-link-4.preview.emergentagent.com/api/dashboard/ (scheme downgraded to http because uvicorn/app is not proxy-header/root-scheme aware). In the browser this is blocked by the app's own CSP (connect-src 'self' https:) and surfaces as a console CSP error + 403. Harmless today because Dashboard.js uses the slashed URL, but any future call without a trailing slash will silently fail behind Cloudflare/HTTPS. Fix by running uvicorn with --proxy-headers / forwarded-allow-ips or setting redirect_slashes handling explicitly."},
+      {"endpoint": "startup event (server.py ~178)", "issue": "seed_all()/create_schema()/warm_standards() are still called with no try/except in @app.on_event('startup'). The specific SystemExit is gone, but any other unexpected exception in seeding (e.g. a transient DB error) will still abort startup and reproduce the same 'Cloudflare cannot parse response' crash-loop symptom. Recommend wrapping seeding in try/except with logger.exception so the API still boots."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AuthContext.js:111", "issue": "Prefetch calls cachedGet(`${API}/dashboard`) without a trailing slash, triggering the http:// 307 redirect that CSP blocks (console error + 403 on every login). Add the trailing slash.", "selector": "n/a (network)", "priority": "LOW"},
+      {"component": "MFA screen (Login 2FA step)", "issue": "Subtitle reads 'We sent a 6-digit code to' with no email/masked address after 'to' — truncated/missing interpolation.", "selector": "text=We sent a 6-digit code to", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_login_startup_iter77.py",
+    "/app/test_reports/pytest/iter77_login.xml",
+    "/app/test_reports/pytest/iter77_idor.xml"
+  ],
+  "action_items": [
+    "Optional hardening: wrap seed_all() in try/except inside the startup event so no seeding failure can ever take the API offline again.",
+    "Fix AuthContext.js:111 `${API}/dashboard` -> `${API}/dashboard/` (removes the CSP-blocked http redirect on every login).",
+    "Consider enabling uvicorn --proxy-headers so 307 slash redirects keep the https scheme behind Cloudflare.",
+    "Cosmetic: MFA screen shows 'We sent a 6-digit code to' with no address."
+  ],
+  "critical_code_review_comments": [
+    "seed_super_admin() fix verified sound: is_weak computed once, fresh-DB+weak -> logger.critical + return (no row created, no exit); fresh-DB+strong -> INSERT; existing row -> role fix-up only, env password never re-applied. Idempotent and non-fatal on every path.",
+    "grep confirms zero 'SystemExit'/'sys.exit' remaining in /app/backend/utils/seed.py.",
+    "Remaining single point of failure is the unguarded startup sequence itself, not this function."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_login_startup_iter77.py (new)",
+    "/app/backend/tests/set_mfa_code.py (new test helper: sets a user's mfa_code to 123456 for UI MFA automation)"
+  ],
+  "success_rate": {"backend": "100% (26/26: 9 login/startup + 17 IDOR)", "frontend": "100% of login flows tested"},
+  "seed_data_creation": "None persisted. The crash-path simulation intentionally created no row (verified absent). Cleared the login_attempts table once to clear a 429 IP rate limit.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "manager@supervision.com / Manager123! (MFA), superadmin@1two.one / SuperAdmin123! (MFA), user@supervision.com / Staff123! (no MFA). For UI MFA: run `python3 /app/backend/tests/set_mfa_code.py <email>` after the OTP screen appears, then type 123456.",
+  "context_for_next_testing_agent": "Backend startup + login are healthy post-fix. Reusable: /app/backend/tests/test_login_startup_iter77.py (health, 401 for unauthed /auth/me, seed crash-path simulation, manager/superadmin MFA login, staff login, bad password, /meetings/ authed fetch). New helper set_mfa_code.py makes browser MFA testing easy. If you hit 429 'Too many login attempts', run `python3 /app/backend/tests/clear_rate_limit.py` (limit is 20 per IP / 15 min and CI IP is shared). Beware: asserting `'_id' not in json.dumps(body)` gives false positives because payloads contain org_id/team_id — assert on '\"_id\"' instead.",
+  "rca_of_the_issue": "Original defect: seed_super_admin() raised SystemExit on any environment where the super_admin row was absent while SUPER_ADMIN_PASSWORD was the weak default, and it runs unguarded in the FastAPI startup event — killing the process on every boot, so Cloudflare saw an empty/malformed origin response and no user could log in. Fix (logger.critical + return) verified by source inspection and by directly invoking seed_super_admin() under the exact failing condition: it now logs and skips, creating no row and raising nothing. Backend restart confirmed a clean startup ('Seeding complete', 'Application startup complete') and all login paths work end-to-end."
+}

@@ -276,6 +276,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
         return {
             "requires_mfa": True,
             "mfa_session": mfa_session,
+            "email": user["email"],
         }
 
     access_token = create_access_token(user_id, user["email"])

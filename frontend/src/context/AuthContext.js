@@ -108,7 +108,7 @@ export function AuthProvider({ children }) {
   const _prewarmDashboard = () => {
     // Fire-and-forget: start fetching dashboard data before the user lands on it.
     // The result is stored in apiCache so Dashboard renders instantly on mount.
-    cachedGet(`${API}/dashboard`).catch(() => {});
+    cachedGet(`${API}/dashboard/`).catch(() => {});
     // Pre-warm the users list used by New Meeting — attendee checkboxes render instantly.
     cachedGet(`${API}/admin/users?ignore_scope=true`).catch(() => {});
   };

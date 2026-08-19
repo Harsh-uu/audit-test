@@ -3802,8 +3802,11 @@ _KNOWN_WEAK_PASSWORDS = {
 async def seed_super_admin():
     """Create the super admin account (idempotent).
     SEC-001: Refuses to create a new super-admin with a known-weak password.
-    If the account already exists, emits a CRITICAL log but does not abort
-    (avoids breaking a running production deployment on every restart).
+    Never aborts the whole app on this — a bootstrapping/config issue must not
+    take down the entire backend (crash-looping here blocks ALL logins, not
+    just super-admin). If the account already exists, emits a CRITICAL log
+    but does not abort (avoids breaking a running production deployment on
+    every restart).
     """
     from routers.auth import hash_password
     email = os.environ.get("SUPER_ADMIN_EMAIL", "superadmin@1two.one")
@@ -3814,14 +3817,19 @@ async def seed_super_admin():
     async with database.with_admin() as conn:
         existing = await conn.fetchrow("SELECT id, role FROM users WHERE email = $1", email)
         if existing is None:
-            # Hard block: refuse to seed a super-admin with a known-weak password.
+            # Refuse to seed a super-admin with a known-weak password, but do NOT
+            # crash the process — that would take the entire app offline for every
+            # user, not just block super-admin creation. Log critically and skip;
+            # a real super-admin can be seeded later once a strong password is set.
             if is_weak:
-                raise SystemExit(
-                    "\n\n"
-                    "FATAL: SUPER_ADMIN_PASSWORD is a known-weak or default value.\n"
-                    "Set a strong password (≥12 chars, mixed case, numbers, symbols)\n"
-                    "in the SUPER_ADMIN_PASSWORD environment variable and restart.\n"
+                logger.critical(
+                    "SUPER_ADMIN_PASSWORD is a known-weak or default value — "
+                    "skipping super-admin seeding. Set a strong password "
+                    "(>=12 chars, mixed case, numbers, symbols) in the "
+                    "SUPER_ADMIN_PASSWORD environment variable and restart to "
+                    "create the super-admin account."
                 )
+                return
             await conn.execute(
                 """INSERT INTO users (id, email, password_hash, name, role, is_active, created_at)
                    VALUES ($1,$2,$3,$4,$5,$6,$7)""",

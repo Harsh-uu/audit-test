@@ -193,8 +193,13 @@ async def startup():
     await create_schema()
     logger.info("Schema verified")
 
-    await seed_all()
-    logger.info("Seeding complete")
+    try:
+        await seed_all()
+        logger.info("Seeding complete")
+    except Exception:
+        # Never let a seeding hiccup (transient DB error, bad env value, etc.)
+        # take the whole API offline — that blocks ALL logins, not just seeding.
+        logger.exception("seed_all() failed — continuing startup without it")
 
     async with database.with_admin() as conn:
         await warm_standards(conn)
