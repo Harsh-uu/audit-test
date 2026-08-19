@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
+import json
 import logging
 
 from deps import get_current_user, get_manager_scope, get_scoped_staff_ids
@@ -8,6 +9,24 @@ from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _safe_jsonb(value, default=None):
+    """Unwrap double-encoded JSONB string values returned by asyncpg.
+    asyncpg returns JSONB 'string' type columns as Python str — parse them back.
+    """
+    if default is None:
+        default = []
+    if value is None:
+        return default
+    if isinstance(value, (list, dict)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return default
+    return default
 
 
 async def _build_portfolio_data(user_id: str, org_id: str):
@@ -55,7 +74,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
         user_data["setting_name"] = None
 
     # Signed-off meetings where this user is an attendee (supervisee, not supervisor)
-    async with database.with_org(org_id) as conn:
+    async with database.with_admin() as conn:
         meetings_rows = await conn.fetch(
             """SELECT * FROM meetings
                WHERE org_id = $1
@@ -64,8 +83,11 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                  AND (sign_off_manager_id IS NULL OR sign_off_manager_id != $2)
                  AND EXISTS (
                      SELECT 1 FROM jsonb_array_elements(
-                         CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
-                              THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END
+                         CASE
+                             WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'  THEN COALESCE(attendees,'[]'::jsonb)
+                             WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'string' THEN (attendees #>> '{}')::jsonb
+                             ELSE '[]'::jsonb
+                         END
                      ) elem
                      WHERE elem->>'user_id' = $2
                  )
@@ -93,7 +115,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
             continue
         adoc = analyses_map.get(aid)
         if adoc:
-            redactions = meeting.get("pii_redactions") or []
+            redactions = _safe_jsonb(meeting.get("pii_redactions"), default=[])
             if redactions:
                 adoc = _apply_redactions_deep(dict(adoc), redactions)
             raw_meetings.append({"meeting": meeting, "analysis": adoc})

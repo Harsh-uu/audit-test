@@ -713,6 +713,13 @@ async def create_schema():
             WHERE shared_with IS NOT NULL
               AND jsonb_typeof(shared_with) IN ('object', 'string')
         """)
+        # Fix other JSONB array columns that may also be double-encoded
+        for col in ("pii_redactions", "recording_events", "paused_periods"):
+            await conn.execute(f"""
+                UPDATE meetings
+                SET {col} = (({col}) #>> '{{}}')::jsonb
+                WHERE jsonb_typeof({col}) = 'string'
+            """)
         logger.info("Schema created/verified successfully")
     finally:
         await conn.close()
