@@ -5,6 +5,7 @@ import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UkDatePicker } from "@/components/ui/uk-date-picker";
 import {
   Grid3x3, TrendingUp, AlertTriangle, ClipboardList, Shield, Award,
   FileText, Users, RefreshCw, ChevronRight, Building2, Check, X, Download,
@@ -1349,21 +1350,17 @@ export default function TeamInsights() {
             {/* Date range filters */}
             <div className="flex items-center gap-1.5 border-l border-gray-200 pl-2 ml-1" data-testid="date-range-filter">
               <span className="text-xs text-gray-400 whitespace-nowrap">From</span>
-              <input
-                type="date"
+              <UkDatePicker
                 value={dateFrom}
-                onChange={e => setDateFrom(e.target.value)}
-                className="px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                data-testid="insights-date-from"
+                onChange={setDateFrom}
+                testId="insights-date-from"
               />
               <span className="text-xs text-gray-400">to</span>
-              <input
-                type="date"
+              <UkDatePicker
                 value={dateTo}
-                onChange={e => setDateTo(e.target.value)}
-                min={dateFrom || undefined}
-                className="px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                data-testid="insights-date-to"
+                onChange={setDateTo}
+                minDate={dateFrom ? new Date(dateFrom) : undefined}
+                testId="insights-date-to"
               />
               {(dateFrom || dateTo) && (
                 <button
