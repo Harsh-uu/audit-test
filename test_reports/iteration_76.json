@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend-only verification of the Layout.js double-scrollbar fix. Tested 13 regular-user pages (Dashboard, New Meeting, My Portfolio, Meeting Report, Supervision Matrix, Team Themes, Inspection, Induction/Care Cert, Organisation, Schedules, Standards Library, Import Supervision, Settings) at 1920x1080, 1440x800/900 and 375x800, plus /super-admin. DOM instrumentation confirmed main.scrollHeight === main.clientHeight on EVERY page (main is overflow-hidden flex column) and at most ONE vertical scroll region per page. Footer ('(c) 2026 Supervision2 ... Company no. 16789096 ... ICO reg. ZC215901') was visible and fully in-viewport on all pages. Meeting Report (rich meeting 2f1cc088) verified across all 6 tabs: single scroll region (Overview 1587px, Transcript 4839px, Compliance 3762px overflow) with main never scrolling; org-colour header bar and tab row remained sticky at top=57/118 after scrolling the inner container to bottom; 'Back to top' still works. Team Themes verified after full data load: main 848===848, no vertical scroll, matrix has its own overflow-x-auto (1643px) - no clipping. Super admin dashboard OK (desktop + mobile). Mobile 375x800: single scroll region, no horizontal page overflow, hamburger (mobile-menu-btn) opens sidebar-mobile correctly. Regression smoke: password login (user@supervision.com) -> /dashboard OK; New Meeting create -> /prepare page loaded OK (test meeting deleted after); 'Create Action from Risk' from Areas for Attention Detail opens the New Action form without crashing. No error boundaries or JS exceptions seen. Two minor residual layout issues found, both caused by pages using viewport-height math that no longer accounts for the now-reserved 41px footer.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "NewMeeting.js:121", "issue": "Primary CTA 'Create & Prepare' is clipped ~17px behind the footer on page load; inner wrapper scrolls exactly 37px to reveal it. Cause: the page root uses style={{minHeight: 'calc(100vh - 56px)'}} which no longer accounts for the footer's 41px now that main reserves space for it. Use h-full / min-h-0 (or calc(100vh - 97px)) instead.", "selector": "[data-testid=\"create-meeting-btn\"]", "priority": "MEDIUM"},
+      {"component": "SuperAdminDashboard.js:265", "issue": "Root div uses 'min-h-screen' (100vh) inside a container that is 100vh - 41px, producing a pointless 41px scroll (105px on 375px mobile) on an otherwise empty page. Change to min-h-full.", "selector": "main > div.flex-1.min-h-0.overflow-y-auto", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Team Themes (From/to date filters) and New Meeting (Date & Time)", "issues": ["Native browser date/datetime inputs (mm/dd/yyyy, US format) used instead of a shadcn calendar component - inconsistent with the rest of the UI and wrong locale for a UK product. Pre-existing, not caused by this change."]},
+      {"screen": "New Meeting (scrolled state)", "issues": ["Page title 'New Meeting' scrolls under the org colour bar and is half-clipped because the header is not sticky inside the new scroll wrapper - cosmetic only."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "NewMeeting.js:121 - replace minHeight: 'calc(100vh - 56px)' with a flex/h-full based height so the 'Create & Prepare' button is not clipped by the footer.",
+    "SuperAdminDashboard.js:265 - change min-h-screen to min-h-full to remove the residual 41px scroll.",
+    "Optional: audit other hardcoded viewport math (StaffPortfolio.js:540 maxHeight calc(100vh - 160px), EvidenceSidebar.js:319 maxHeight calc(100vh - 80px)) - neither caused a visible defect in testing, but they are now 41px optimistic.",
+    "Test-data note: superadmin@1two.one password hash was stale (login returned 401); I reset it with tests/reset_test_pw.py to SuperAdmin123! - credentials file is now accurate again."
+  ],
+  "critical_code_review_comments": [
+    "Layout.js fix is structurally correct: main = 'flex-1 min-h-0 flex flex-col overflow-hidden' with children in 'flex-1 min-h-0 overflow-y-auto' and footer 'flex-shrink-0'. Verified in both branches (super_admin ~line 119 and regular ~line 417).",
+    "No code in the app targets document.querySelector('main') or attaches scroll/IntersectionObserver listeners to main, so no scroll-to-top / infinite-scroll feature was broken by the change (only getElementById(...).scrollIntoView in EvidenceTab/TranscriptTab, which work inside the new wrapper).",
+    "Remaining risk pattern is pages hardcoding 100vh math; prefer h-full/min-h-0 within the new flex chain."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested", "frontend": "95%"},
+  "seed_data_creation": "Created one meeting via UI (7e2b1525-44e6-473b-ab00-399f50f321d0) for the create-meeting smoke test and deleted it afterwards (API returned 200). Reset superadmin@1two.one password hash to the documented value.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com / Admin123! (MFA off), user@supervision.com / Staff123!, superadmin@1two.one / SuperAdmin123! (hash re-set today). Cookie injection via /app/backend/tests/get_tokens.py works well for Playwright.",
+  "context_for_next_testing_agent": "Layout double-scrollbar fix is verified good across all pages/roles/viewports. Use get_tokens.py + context.add_cookies for auth (domain evidence-link-4.preview.emergentagent.com). Useful DOM probe: compare main.scrollHeight vs clientHeight and enumerate elements with computed overflowY auto/scroll to count scroll regions. Rich Meeting Report fixture: 2f1cc088-0687-48b9-9f40-1dabb5285640. Remember frontend has NO hot reload - after code changes run 'sudo supervisorctl restart frontend' and wait ~30s before re-testing.",
+  "rca_of_the_issue": "Original double scrollbar came from footer living inside the same overflow-y-auto main as h-full pages; the fix reserves footer space outside the scroll container. The two residual issues are the mirror image of the same root cause: pages that compute their height from 100vh (NewMeeting minHeight calc(100vh - 56px), SuperAdminDashboard min-h-screen) are now 41px taller than their container, producing a small forced scroll and, on New Meeting, a partially clipped primary CTA."
+}

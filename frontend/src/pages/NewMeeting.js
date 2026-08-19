@@ -118,7 +118,7 @@ export default function NewMeeting() {
 
   return (
     <Layout>
-      <div className="h-full flex flex-col fade-in" style={{ minHeight: "calc(100vh - 56px)" }}>
+      <div className="h-full flex flex-col fade-in">
 
         {/* ── Top bar: title + step indicator ──────────────────────────────── */}
         <div className="px-6 pt-6 pb-4 border-b border-gray-100 bg-white">
