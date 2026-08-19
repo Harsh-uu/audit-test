@@ -4,6 +4,7 @@ import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
+import { UkDatePicker } from "@/components/ui/uk-date-picker";
 import {
   Calendar, Plus, Trash2, Edit2, Check, X, AlertCircle,
   CheckCircle, Users, ChevronDown, ChevronRight, Zap, Clock,
@@ -580,12 +581,11 @@ export default function Schedules() {
                                   </div>
                                   <div>
                                     <label className="text-[10px] text-gray-500 block mb-1">Start date</label>
-                                    <input
-                                      type="date"
+                                    <UkDatePicker
                                       value={editingSchedule.start_date}
-                                      onChange={e => setEditingSchedule(es => ({ ...es, start_date: e.target.value }))}
+                                      onChange={(d) => setEditingSchedule(es => ({ ...es, start_date: d }))}
                                       className={inputCls}
-                                      data-testid={`edit-start-date-${s.id}`}
+                                      testId={`edit-start-date-${s.id}`}
                                     />
                                   </div>
                                 </div>
@@ -612,7 +612,7 @@ export default function Schedules() {
                             <FreqSelector value={scheduleForm.frequency} onChange={v => setScheduleForm(f => ({ ...f, frequency: v }))} className={selectCls} testId="schedule-freq-select" />
                             <div>
                               <label className="text-[10px] text-gray-500 block mb-1">Start date</label>
-                              <input type="date" value={scheduleForm.start_date} onChange={e => setScheduleForm(f => ({ ...f, start_date: e.target.value }))} className={inputCls} data-testid="schedule-start-date" />
+                              <UkDatePicker value={scheduleForm.start_date} onChange={(d) => setScheduleForm(f => ({ ...f, start_date: d }))} className={inputCls} testId="schedule-start-date" />
                             </div>
                             {scheduleError && <p className="text-xs text-red-600">{scheduleError}</p>}
                             <div className="flex gap-2">
@@ -661,7 +661,7 @@ export default function Schedules() {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Start Date *</label>
-                  <input type="date" value={bulkForm.start_date} onChange={e => setBulkForm(f => ({ ...f, start_date: e.target.value }))} className={inputCls} data-testid="bulk-start-date" />
+                  <UkDatePicker value={bulkForm.start_date} onChange={(d) => setBulkForm(f => ({ ...f, start_date: d }))} className={inputCls} testId="bulk-start-date" />
                 </div>
 
                 <div>

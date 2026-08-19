@@ -1,5 +1,6 @@
 import React from "react";
 import { Download, Calendar, Users, Loader2, X } from "lucide-react";
+import { UkDatePicker } from "@/components/ui/uk-date-picker";
 
 export function TranscriptExportTab({
   users,
@@ -33,9 +34,9 @@ export function TranscriptExportTab({
             Date Range (optional)
           </label>
           <div className="flex items-center gap-3">
-            <input type="date" value={exportDateFrom} onChange={e => setExportDateFrom(e.target.value)} className="text-sm border border-gray-200 rounded-md px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]" data-testid="tx-export-date-from" />
+            <UkDatePicker value={exportDateFrom} onChange={setExportDateFrom} className="text-sm px-3 py-1.5" testId="tx-export-date-from" />
             <span className="text-gray-400 text-sm">to</span>
-            <input type="date" value={exportDateTo} onChange={e => setExportDateTo(e.target.value)} className="text-sm border border-gray-200 rounded-md px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]" data-testid="tx-export-date-to" />
+            <UkDatePicker value={exportDateTo} onChange={setExportDateTo} minDate={exportDateFrom ? new Date(exportDateFrom) : undefined} className="text-sm px-3 py-1.5" testId="tx-export-date-to" />
             {(exportDateFrom || exportDateTo) && (
               <button onClick={() => { setExportDateFrom(""); setExportDateTo(""); }} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>
             )}

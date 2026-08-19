@@ -1,5 +1,6 @@
 import React from "react";
 import { Download, Calendar, Users, Filter, Loader2, X } from "lucide-react";
+import { UkDatePicker } from "@/components/ui/uk-date-picker";
 
 export function ExportTab({
   users,
@@ -33,20 +34,19 @@ export function ExportTab({
             Date Range (optional)
           </label>
           <div className="flex items-center gap-3">
-            <input
-              type="date"
+            <UkDatePicker
               value={exportDateFrom}
-              onChange={e => setExportDateFrom(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
-              data-testid="export-date-from"
+              onChange={setExportDateFrom}
+              className="px-3 py-2 text-sm"
+              testId="export-date-from"
             />
             <span className="text-gray-400 text-sm">to</span>
-            <input
-              type="date"
+            <UkDatePicker
               value={exportDateTo}
-              onChange={e => setExportDateTo(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
-              data-testid="export-date-to"
+              onChange={setExportDateTo}
+              minDate={exportDateFrom ? new Date(exportDateFrom) : undefined}
+              className="px-3 py-2 text-sm"
+              testId="export-date-to"
             />
             {(exportDateFrom || exportDateTo) && (
               <button onClick={() => { setExportDateFrom(""); setExportDateTo(""); }} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>

@@ -4,6 +4,7 @@ import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UkDatePicker } from "@/components/ui/uk-date-picker";
 import Layout from "@/components/Layout";
 import { Plus, Search, Clock, CheckCircle, Mic, FileText, AlertCircle, Users, ChevronRight, ChevronDown, Loader2, ArrowUpDown, X, Calendar, Building2, Trash2, ShieldCheck, Sparkles, Archive, ClipboardList } from "lucide-react";
 
@@ -413,21 +414,19 @@ export default function Dashboard() {
           {showDateFilter && (
             <div className="flex flex-wrap gap-2 items-center p-3 bg-gray-50 border border-gray-200 rounded-md" data-testid="date-range-picker">
               <label className="text-xs font-medium text-gray-500 whitespace-nowrap">From</label>
-              <input
-                type="date"
+              <UkDatePicker
                 value={dateFrom}
-                onChange={e => setDateFrom(e.target.value)}
-                className="flex-1 min-w-0 max-w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
-                data-testid="date-from-input"
+                onChange={setDateFrom}
+                className="flex-1 min-w-0 max-w-full px-2 py-1.5 text-sm"
+                testId="date-from-input"
               />
               <label className="text-xs font-medium text-gray-500">To</label>
-              <input
-                type="date"
+              <UkDatePicker
                 value={dateTo}
-                onChange={e => setDateTo(e.target.value)}
-                min={dateFrom}
-                className="flex-1 min-w-0 max-w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
-                data-testid="date-to-input"
+                onChange={setDateTo}
+                minDate={dateFrom ? new Date(dateFrom) : undefined}
+                className="flex-1 min-w-0 max-w-full px-2 py-1.5 text-sm"
+                testId="date-to-input"
               />
               {(dateFrom || dateTo) && (
                 <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs text-gray-400 hover:text-gray-600">
