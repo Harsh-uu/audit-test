@@ -721,13 +721,25 @@ async def create_schema():
                 WHERE jsonb_typeof({col}) = 'string'
             """)
         # Fix analyses JSONB columns (all may be double-encoded strings)
-        for col in ("cqc_mappings", "care_cert_mappings", "custom_mappings",
-                    "actions", "risks", "learning_needs", "achievements"):
-            await conn.execute(f"""
-                UPDATE analyses
-                SET {col} = (({col}) #>> '{{}}')::jsonb
-                WHERE jsonb_typeof({col}) = 'string'
-            """)
+        await conn.execute("""
+            UPDATE analyses
+            SET
+                cqc_mappings       = CASE WHEN jsonb_typeof(cqc_mappings)       = 'string' THEN (cqc_mappings       #>> '{}')::jsonb ELSE cqc_mappings       END,
+                care_cert_mappings = CASE WHEN jsonb_typeof(care_cert_mappings) = 'string' THEN (care_cert_mappings #>> '{}')::jsonb ELSE care_cert_mappings END,
+                custom_mappings    = CASE WHEN jsonb_typeof(custom_mappings)    = 'string' THEN (custom_mappings    #>> '{}')::jsonb ELSE custom_mappings    END,
+                actions            = CASE WHEN jsonb_typeof(actions)            = 'string' THEN (actions            #>> '{}')::jsonb ELSE actions            END,
+                risks              = CASE WHEN jsonb_typeof(risks)              = 'string' THEN (risks              #>> '{}')::jsonb ELSE risks              END,
+                learning_needs     = CASE WHEN jsonb_typeof(learning_needs)     = 'string' THEN (learning_needs     #>> '{}')::jsonb ELSE learning_needs     END,
+                achievements       = CASE WHEN jsonb_typeof(achievements)       = 'string' THEN (achievements       #>> '{}')::jsonb ELSE achievements       END
+            WHERE
+                jsonb_typeof(cqc_mappings)       = 'string'
+             OR jsonb_typeof(care_cert_mappings) = 'string'
+             OR jsonb_typeof(custom_mappings)    = 'string'
+             OR jsonb_typeof(actions)            = 'string'
+             OR jsonb_typeof(risks)              = 'string'
+             OR jsonb_typeof(learning_needs)     = 'string'
+             OR jsonb_typeof(achievements)       = 'string'
+        """)
         logger.info("Schema created/verified successfully")
     finally:
         await conn.close()
