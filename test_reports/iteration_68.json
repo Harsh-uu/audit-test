@@ -1,0 +1,57 @@
+{
+  "summary": "Frontend-only regression/UX test of the Meeting Report redesign (merged header title, tabs-only layout, tab reorder + badges, single contextual primary action + ••• more-menu). Tested as manager@supervision.com (cookie injection via get_tokens.py) and user@supervision.com across 390/1400/1920px, on meetings in in_review (partial + full review), reviewed, and signed_off states. 10 of the 10 requested scenarios executed; 9 fully pass. One real UI defect found (mobile header title not clamped -> org colour bar grows to 130-190px and crowds the user menu). Two pre-existing non-redesign issues also documented (dashboard 307->http CSP failure, mark-reviewed double-JSON-encoding of meetings.attendees).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/review/{id}/mark-reviewed", "issue": "Writes attendees double-JSON-encoded. database.py registers a jsonb type codec (encoder=json.dumps), so review.py:597-600 passing json.dumps(attendees) with $1::jsonb stores a JSON *string* scalar instead of an array (verified in DB for meeting 0f38f385: attendees = '\"[{\\\"name\\\"...}]\"'). GET /api/review/{id} still recovers via _ensure_list, but raw SQL jsonb paths (e.g. routers/processing.py:75 jsonb_typeof(...)='array' check) silently take the fallback branch. Fix: pass the list itself (codec encodes) or drop the codec for this write."},
+      {"endpoint": "GET /api/dashboard", "issue": "Frontend calls ${API}/dashboard (no trailing slash); FastAPI 307-redirects to http://<host>/api/dashboard/ (scheme downgraded behind ingress), which the page CSP (connect-src 'self' https:) blocks -> console error 'Dashboard load failed Network Error' and a permanently skeletal dashboard on some loads. Fix: call /api/dashboard/ from Dashboard.js:128 (or add redirect_slashes handling)."},
+      {"endpoint": "ingress", "issue": "Intermittent 502 from the public URL while localhost:8001 returns 200 (2 occurrences during this run) — required retry logic in tests. Environment flakiness, not app code."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Layout.js headerCenter / MeetingReport meetingHeaderCenter", "issue": "At 390px the centre section is only ~86px wide (org name + user menu consume the row), so the meeting title wraps far beyond the approved 2 lines: 'TEST_PII Flow Supervision' -> 3 lines (75px), 'Supervision with Demo Manager & Sarah Thompson' -> 5 lines (131px), a 165-char title -> ~24 lines (450px) blowing the org bar up and visually colliding with the user avatar. Add line-clamp-2 to the title and hide/truncate the org name below sm so the title has room.", "selector": "[data-testid=\"meeting-header-title\"]", "priority": "HIGH"},
+      {"component": "EvidenceTab Achievements card", "issue": "Achievements says '1 noted' but the listed item renders as an empty row (star icon, no text) for both manager and attendee on all tested meetings — likely a missing field mapping in the achievement item render.", "selector": "Achievements card row", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Meeting Report (1920px)", "issues": ["Compliance/tab content is constrained to max-w-5xl and centred while the tab row starts at px-6, so the Compliance tab (which replaced the sidebar) leaves a large empty band on the right and looks left-misaligned against the tab row — spec asked for full-width Compliance."]},
+      {"screen": "Meeting Report top bar", "issues": ["Meeting date is duplicated: shown in the org colour header centre AND in the white top bar next to the status pill.", "'You reviewed this' confirmation is hidden below md, so mobile reviewers get no confirmation after Mark Reviewed disappears."]},
+      {"screen": "Meeting Report (signed off)", "issues": ["Compliance tab still shows Accept / Reject / Flag action buttons and the summary Regenerate/Edit affordances are hidden but evidence actions are not, on a signed-off (locked) report — inconsistent locking (pre-existing, out of redesign scope)."]},
+      {"screen": "Team Themes", "issues": ["Native browser date inputs (mm/dd/yyyy US format) instead of the shadcn calendar component, in a UK-jurisdiction app (pre-existing)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/list_review_meetings.py",
+    "/app/backend/tests/set_review_state.py",
+    "/app/backend/tests/mark_pii_reviewed.py",
+    "/app/backend/tests/set_rescan_status.py",
+    "/app/backend/tests/set_title.py"
+  ],
+  "action_items": [
+    "Add line-clamp-2 to the header meeting title and hide/shorten the org name below sm so the org colour bar stays one/two lines at 390px (currently 130-450px tall).",
+    "Fix empty Achievements list item rendering in EvidenceTab.",
+    "Optional: make tab content (esp. Compliance) full width at >=1600px, or align the max-w container with the tab row.",
+    "Backend hygiene: stop double-JSON-encoding attendees in review.py mark_reviewed (jsonb codec already dumps); consider a one-off repair of rows already stored as JSON strings.",
+    "Fix Dashboard.js ${API}/dashboard -> /dashboard/ to avoid the 307->http CSP-blocked redirect."
+  ],
+  "critical_code_review_comments": [
+    "MeetingReport.js is 1174 lines and still embeds PrepAgendaTab inline — split into components/report/* for maintainability.",
+    "Sign Off is disabled purely on status==='in_review'; the tooltip is correct but there is no visible list of who still needs to review next to the button (only inside the confirm modal).",
+    "review.py mark_reviewed: json.dumps(attendees) + $1::jsonb double-encodes because database.py registers a jsonb codec with encoder=json.dumps — audit all other json.dumps+::jsonb writes for the same defect."
+  ],
+  "updated_files": [
+    "/app/backend/tests/list_review_meetings.py",
+    "/app/backend/tests/set_review_state.py",
+    "/app/backend/tests/mark_pii_reviewed.py",
+    "/app/backend/tests/set_rescan_status.py",
+    "/app/backend/tests/set_title.py"
+  ],
+  "success_rate": {"backend": "not tested (frontend-only request)", "frontend": "90% (9/10 scenarios pass; mobile header clamping fails)"},
+  "seed_data_creation": "Reused existing TEST_PII meetings. State changes made: 0f38f385-7c85-428e-923c-d7c365659192 -> attendee+manager reviewed, pii_review_status=reviewed, then SIGNED OFF via UI (now signed_off); 680d8ecb-c9f2-4f3f-bdd0-1937fbc60791 -> in_review with manager reviewed / attendee unreviewed, pii reviewed; 2 comments (TEST_REDESIGN comment 1/2) added to 0383953a-9a17-4f7f-9924-ed5ec30b42b6; rescan_status on 0383953a toggled to processing then reset to NULL; title of 0f38f385 temporarily lengthened then restored.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "manager@supervision.com / Manager123! (MFA bypass via /app/backend/tests/get_tokens.py), user@supervision.com / Staff123!",
+  "context_for_next_testing_agent": "Verified PASS: (1) org bar shows org name + pencil left, meeting title+date centred single-line (truncate) at 1400/1920, user menu right, all one row; (2) /dashboard and /admin/team have NO org-bar-center-content (headerCenter optional) and are unaffected; (3) tab order Overview, Transcript, Compliance, Comments, Prep Agenda, Audit Trail with no sidebar at 1400/1920; (4) Comments tab numeric badge = comment count, no numeric badge on other tabs; Compliance shows pulsing 'Processing' badge only when rescan_status='processing'; (5) attendee in_review: only Mark Reviewed, no •••; after clicking, attendees refresh live within ~5s -> button disappears + 'You reviewed this' appears (no reload needed, stale-attendee fix holds; allow up to 5s before asserting); (6) manager in_review w/ unreviewed attendee: Sign Off visible+disabled with correct tooltip, no •••; all reviewed -> Sign Off enabled; sign-off via confirm modal -> 'Send to Attendees' + ••• appear immediately; (7) ••• menu order/testids correct, Export PDF (5.4KB) and Export Transcript both download, each closes the menu, Share with team + Send to Attendees modals open and populate; (8) PII redaction '[Service User A]' present in Transcript tab and original 'her son Peter' absent; (9) attendee never sees ••• at any stage. Use retries on page load: the public ingress intermittently returns 502.",
+  "rca_of_the_issue": "Mobile header overflow: Layout.js renders headerCenter in a flex-1 min-w-0 div between a non-shrinking org-name block and the user menu; MeetingReport's title uses 'sm:truncate' only, so below the sm breakpoint there is no truncation or line clamp. With ~86px of available centre width at 390px the title wraps once per word, growing the org colour bar to 130-450px tall and crowding the avatar. Fix = line-clamp-2 on the title element plus hiding the org-name label (or the header title) below sm."
+}

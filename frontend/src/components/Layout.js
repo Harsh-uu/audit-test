@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 
-export default function Layout({ children }) {
+export default function Layout({ children, headerCenter }) {
   const { user, logout, getAuthConfig, updateOrgName, API } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -317,37 +317,48 @@ export default function Layout({ children }) {
 
         {/* ── Org name banner (all pages) ─────────────────────────────────── */}
         <div className="px-6 py-2.5 flex items-center gap-3 flex-shrink-0" style={{ backgroundColor: orgPrimary }} data-testid="org-name-bar">
-          <Building2 className="w-4 h-4 text-white/60 flex-shrink-0" />
-          {editingOrgName ? (
-            <>
-              <input
-                autoFocus
-                value={orgNameDraft}
-                onChange={e => setOrgNameDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") saveOrgName(); if (e.key === "Escape") setEditingOrgName(false); }}
-                className="bg-white/10 border border-white/40 rounded px-2.5 py-0.5 text-white text-sm font-semibold focus:outline-none focus:bg-white/20 min-w-0 w-48"
-                data-testid="org-name-input"
-              />
-              <button onClick={saveOrgName} disabled={savingOrgName} className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-50" data-testid="org-name-save">
-                {savingOrgName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-              </button>
-              <button onClick={() => setEditingOrgName(false)} className="p-1 rounded hover:bg-white/10 text-white/70 hover:text-white" data-testid="org-name-cancel">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="text-sm font-semibold text-white">{user?.org_name || "Organisation"}</span>
-              {canManage && (
-                <button onClick={() => { setEditingOrgName(true); setOrgNameDraft(user?.org_name || ""); }} className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors" data-testid="org-name-edit" title="Rename organisation">
-                  <Pencil className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <Building2 className="w-4 h-4 text-white/60 flex-shrink-0" />
+            {editingOrgName ? (
+              <>
+                <input
+                  autoFocus
+                  value={orgNameDraft}
+                  onChange={e => setOrgNameDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveOrgName(); if (e.key === "Escape") setEditingOrgName(false); }}
+                  className="bg-white/10 border border-white/40 rounded px-2.5 py-0.5 text-white text-sm font-semibold focus:outline-none focus:bg-white/20 min-w-0 w-48"
+                  data-testid="org-name-input"
+                />
+                <button onClick={saveOrgName} disabled={savingOrgName} className="p-1 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-50" data-testid="org-name-save">
+                  {savingOrgName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                 </button>
-              )}
-            </>
+                <button onClick={() => setEditingOrgName(false)} className="p-1 rounded hover:bg-white/10 text-white/70 hover:text-white" data-testid="org-name-cancel">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-semibold text-white whitespace-nowrap max-w-[90px] sm:max-w-none truncate">{user?.org_name || "Organisation"}</span>
+                {canManage && (
+                  <button onClick={() => { setEditingOrgName(true); setOrgNameDraft(user?.org_name || ""); }} className="hidden sm:inline-flex p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors" data-testid="org-name-edit" title="Rename organisation">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ── Page-specific centre content (e.g. meeting title) — grows to
+               fill the space between org name and user menu; only wraps or
+               truncates when the viewport actually forces it ─────────────── */}
+          {headerCenter && (
+            <div className="flex-1 min-w-0 text-center px-2 sm:px-3" data-testid="org-bar-center-content">
+              {headerCenter}
+            </div>
           )}
 
           {/* ── User menu (top right) ──────────────────────────────────────── */}
-          <div className="ml-auto relative" ref={userMenuRef}>
+          <div className="ml-auto flex-shrink-0 relative" ref={userMenuRef}>
             <button
               onClick={() => setShowUserMenu(v => !v)}
               className="flex items-center gap-2 px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors group"

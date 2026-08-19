@@ -1,0 +1,31 @@
+{
+  "summary": "Targeted fix-verification pass after iteration_68. All 7 requested items verified. Backend: new pytest file /app/backend/tests/test_fixes_iter69.py (5/5 pass) confirms POST /api/review/{id}/mark-reviewed now stores meetings.attendees as a real jsonb array (jsonb_typeof='array', reviewed flag queryable via jsonb_array_elements) and GET /api/dashboard/ returns 200 with no redirect (the no-slash variant still 307s, which the frontend now avoids). Frontend (Playwright, manager cookie injection + attendee UI login): mobile header clamped, org name truncated, pencil hidden, single date, 'You reviewed this' visible at 390/768/1920, tab row and content column both at left=568 width=1024 (max-w-5xl), dashboard loads 3/3 with zero console errors. No new defects found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Meeting Report (390px)", "issues": ["Cosmetic only: the tab row is horizontally scrollable at 390px so 'Comments/Prep Agenda/Audit Trail' are clipped off-screen with no visual scroll affordance (no fade/chevron). Not a regression, scrolling works."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_fixes_iter69.py", "/app/test_reports/pytest/iter69_results.xml"],
+  "action_items": [
+    "Rebuild the frontend production bundle at some point: the app is being served from /app/frontend/build (not the CRA dev server), so source-only edits are not picked up. My added data-testid=\"you-reviewed-this\" in MeetingReport.js:651 is in source but NOT in the served bundle (locator count 0 while the text renders). Verified by visible text instead."
+  ],
+  "critical_code_review_comments": [
+    "review.py mark_reviewed is fixed, but audit remaining `json.dumps(x)` + `$n::jsonb` writes elsewhere (the asyncpg jsonb codec in database.py already serialises) — same double-encoding class of bug. Also consider a one-off repair UPDATE for rows already stored as JSON string scalars (jsonb_typeof(attendees)='string'), since raw jsonb SQL paths such as routers/processing.py:75 silently take the fallback branch for them.",
+    "MeetingReport.js is still ~1173 lines with PrepAgendaTab inline — split into components/report/*.",
+    "'You reviewed this' had no data-testid; added one (source only, needs rebuild)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_fixes_iter69.py",
+    "/app/frontend/src/pages/MeetingReport.js (added data-testid=\"you-reviewed-this\" only)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (7/7 fix items verified)"},
+  "seed_data_creation": "No new meetings. State changes: 680d8ecb-c9f2-4f3f-bdd0-1937fbc60791 attendee reset to unreviewed then marked reviewed via API -> meeting is now status 'reviewed' with both attendees reviewed (jsonb array). Title of 0383953a-9a17-4f7f-9924-ed5ec30b42b6 temporarily set to a 190-char string for clamp testing and restored to 'TEST_PII Flow Supervision'. login_attempts table cleared (manager MFA verify limiter had tripped, 429).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "manager@supervision.com / Manager123! (tokens via /app/backend/tests/get_tokens.py after /app/backend/tests/clear_rate_limit.py); user@supervision.com / Staff123!",
+  "context_for_next_testing_agent": "Measured evidence for the iteration_69 fixes at 390px on /meetings/0383953a-.../report as manager: title element webkitLineClamp=2, height 37.5px (2 x 18.75px lines) for BOTH the short title and a 190-char title (scrollHeight 338 -> clamped), org-name-bar height 76px (was 130-450px), org name span clipped to 90px ('Test Comp...', scrollWidth 104 > clientWidth 90), org-name-edit pencil present in DOM but display:none (hidden sm:inline-flex), no overlap between title box (x162..280) and user-menu box (x300). At 1400px title collapses to 1 line (18.75px) and bar to 57px. Date renders once only: header block shows '19 Aug 2026 - Test Room' and the white top bar row next to the status pill contains only 'Signed Off'. 'You reviewed this' visible at 390/768/1920 for attendee on a reviewed meeting (use get_by_text, NOT the new testid, until the frontend bundle is rebuilt). At 1920 both .max-w-5xl containers (tab row and content) report left=568 width=1024 -> aligned. Tab order confirmed Overview/Transcript/Compliance/Comments(badge 2)/Prep Agenda/Audit Trail; signed-off meeting shows exactly one primary action (Send to Attendees) + one ... menu; no in-report right/left compliance sidebar (the global app nav sidebar IS still present at 1920 and collapsible, which is expected). /dashboard loaded 3x with 0 console errors and stats 14/3/2. Known-harmless: Achievements shows an empty row on OLD seeded meetings (bad legacy test fixture data, per main agent - do not re-flag). Public ingress was stable this run (no 502s).",
+  "rca_of_the_issue": "N/A - all previously reported defects confirmed fixed. Only observation: frontend is served from a prebuilt bundle in /app/frontend/build, so newly added source-only attributes (data-testid) do not appear until a rebuild."
+}

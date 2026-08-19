@@ -596,7 +596,7 @@ async def mark_reviewed(meeting_id: str, current_user=Depends(get_current_user))
 
         await conn.execute(
             "UPDATE meetings SET attendees=$1::jsonb, status=$2, updated_at=$3 WHERE id=$4",
-            json.dumps(attendees), new_status, now, meeting_id,
+            attendees, new_status, now, meeting_id,
         )
 
     _admin_stats_cache.pop(org_id, None)

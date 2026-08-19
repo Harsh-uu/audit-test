@@ -125,7 +125,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Initial load: single combined endpoint (1 round-trip instead of 4)
-    cachedGet(`${API}/dashboard`, getAuthConfig())
+    cachedGet(`${API}/dashboard/`, getAuthConfig())
       .then(r => {
         const d = r.data;
         setMeetings(d.meetings || []);

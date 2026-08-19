@@ -75,7 +75,7 @@ async def main():
                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10)""",
                 aid, mid, m["org_id"],
                 "Supervision covered medication refusal, a safeguarding body-map referral and training needs.",
-                json.dumps([{"text": "Correctly escalated a safeguarding concern"}]),
+                json.dumps([{"description": "Correctly escalated a safeguarding concern"}]),
                 json.dumps([{"text": "Book dementia awareness refresher", "owner": "Manager", "due_date": "2026-08-01", "status": "open"}]),
                 json.dumps([{"text": "Moving and handling refresher due"}]),
                 json.dumps([{"text": "Repeated medication refusal", "severity": "medium"}]),

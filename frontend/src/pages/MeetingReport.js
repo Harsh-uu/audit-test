@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader2, Shield, Send, RefreshCw, Lock, Info, Share2,
+  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader2, Shield, Send, RefreshCw, MoreHorizontal, Info, Share2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EvidenceTab } from "@/components/report/EvidenceTab";
@@ -85,10 +85,19 @@ export default function MeetingReport() {
   const [showSignOffConfirm, setShowSignOffConfirm] = useState(false);
   const [speakersDirty, setSpeakersDirty] = useState(false);
   const [piiGateDone, setPiiGateDone] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef(null);
   const rescanInitiated = useRef(false);
   const [warningDismissed, setWarningDismissed] = useState(
     () => !!localStorage.getItem(`tw_dismissed_${meetingId}`)
   );
+
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const handler = (e) => { if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) setShowMoreMenu(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showMoreMenu]);
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
   const isRescanning = meeting?.rescan_status === "processing";
@@ -528,6 +537,17 @@ export default function MeetingReport() {
 
   if (!meeting) return <Layout><div className="p-8 text-center text-gray-500">Meeting not found</div></Layout>;
 
+  // ── Header-bar title (rendered centred inside Layout's org colour bar) ───
+  const meetingHeaderCenter = (
+    <div className="min-w-0" data-testid="meeting-header-title">
+      <div className="text-white font-semibold text-[15px] leading-tight line-clamp-2 sm:line-clamp-1">{meeting.title}</div>
+      <div className="text-white/70 text-[11px] mt-0.5 truncate">
+        {new Date(meeting.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+        {meeting.location ? ` · ${meeting.location}` : ""}
+      </div>
+    </div>
+  );
+
   // ── PII confidentiality gate ─────────────────────────────────────────
   // Shown to managers/admins as soon as the transcript is ready (status
   // reaches "analyzing") rather than waiting for compliance mapping to
@@ -542,7 +562,7 @@ export default function MeetingReport() {
 
   if (shouldShowPIIGate) {
     return (
-      <Layout>
+      <Layout headerCenter={meetingHeaderCenter}>
         <PIIReviewGate
           meetingId={meetingId}
           onComplete={async () => {
@@ -559,10 +579,42 @@ export default function MeetingReport() {
   const stageCfg = PROCESSING_STAGES[meeting.status];
   const analysis = meeting.analysis;
 
-  const tabBtnCls = (t) => `flex-shrink-0 text-sm font-medium pb-1 border-b-2 transition-colors ${activeTab === t ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"}`;
+  const tabBtnCls = (t) => `flex-shrink-0 inline-flex items-center gap-1.5 text-sm font-medium py-3 border-b-2 transition-colors ${activeTab === t ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"}`;
+
+  // ── Single contextual primary action — changes as the meeting moves
+  // through its lifecycle, so only one call-to-action button is ever shown.
+  let primaryAction = null;
+  if (canReview && !hasReviewed) {
+    primaryAction = (
+      <button onClick={markReviewed} disabled={submitting} className="flex items-center gap-2 bg-[#059669] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60" data-testid="mark-reviewed-btn">
+        <CheckCircle className="w-4 h-4" />
+        <span className="hidden sm:inline">Mark Reviewed</span>
+      </button>
+    );
+  } else if (canSignOff && !isSignedOff && !isProcessing && analysis) {
+    primaryAction = (
+      <button
+        onClick={() => setShowSignOffConfirm(true)}
+        disabled={submitting || isInReview}
+        title={isInReview ? "All attendees must mark the session as reviewed before sign-off can be triggered" : "Sign off this session"}
+        className="flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        data-testid="sign-off-btn"
+      >
+        <Shield className="w-4 h-4" />
+        <span className="hidden sm:inline">Sign Off</span>
+      </button>
+    );
+  } else if (canSignOff && isSignedOff) {
+    primaryAction = (
+      <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn">
+        <Send className="w-4 h-4" />
+        <span className="hidden sm:inline">Send to Attendees</span>
+      </button>
+    );
+  }
 
   return (
-    <Layout>
+    <Layout headerCenter={meetingHeaderCenter}>
       <div className="flex flex-col h-full">
         {/* Safety warning banner — shown when transcript has AI hallucination or content flags */}
         {meeting.transcript_has_warnings && !warningDismissed && (
@@ -587,101 +639,53 @@ export default function MeetingReport() {
           </div>
         )}
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-20 gap-2">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate("/dashboard")} className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-sm">
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20 gap-2">
+          <div className="flex items-center gap-3 min-w-0 flex-wrap">
+            <button onClick={() => navigate("/dashboard")} className="text-gray-500 hover:text-gray-700 flex-shrink-0" data-testid="back-to-dashboard-btn">
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <div>
-              <h1 className="text-base font-semibold text-gray-900 leading-tight font-display">{meeting.title}</h1>
-              <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
-                <span>{new Date(meeting.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
-                {meeting.location && <span>{meeting.location}</span>}
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium border text-xs ${isSignedOff ? "bg-emerald-100 text-emerald-800 border-emerald-200" : canReview ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-blue-100 text-blue-700 border-blue-200"}`}>
-                  {meeting.status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {canReview && !hasReviewed && (
-              <button onClick={markReviewed} disabled={submitting} className="flex items-center gap-2 bg-[#059669] text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60" data-testid="mark-reviewed-btn">
-                <CheckCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">Mark Reviewed</span>
-              </button>
-            )}
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium border text-xs flex-shrink-0 ${isSignedOff ? "bg-emerald-100 text-emerald-800 border-emerald-200" : canReview ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-blue-100 text-blue-700 border-blue-200"}`} data-testid="meeting-status-pill">
+              {meeting.status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+            </span>
             {hasReviewed && canReview && (
-              <span className="hidden sm:flex items-center gap-1.5 text-emerald-600 text-sm font-medium">
-                <CheckCircle className="w-4 h-4" /> You reviewed this
+              <span className="flex items-center gap-1.5 text-emerald-600 text-xs font-medium flex-shrink-0" data-testid="you-reviewed-this">
+                <CheckCircle className="w-3.5 h-3.5" /> You reviewed this
               </span>
             )}
-            {canSignOff && !isSignedOff && !isProcessing && analysis && (
-              <button
-                onClick={() => setShowSignOffConfirm(true)}
-                disabled={submitting || isInReview}
-                title={isInReview ? "All attendees must mark the session as reviewed before sign-off can be triggered" : "Sign off this session"}
-                className="flex items-center gap-2 bg-[#1E3A8A] text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                data-testid="sign-off-btn"
-              >
-                <Shield className="w-4 h-4" />
-                <span className="hidden sm:inline">Sign Off</span>
-              </button>
-            )}
-            {canSignOff && (
-              <div className="flex items-center gap-2">
-                {isSignedOff ? (
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-sm">
-                      <button onClick={exportPdf} disabled={exportingPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60 rounded-l-md" data-testid="export-pdf-btn" title="Export PDF">
-                        <FileText className="w-4 h-4 text-gray-500" />
-                        <span className="hidden sm:inline">{exportingPdf ? "Generating…" : "Export PDF"}</span>
-                      </button>
-                      <div className="hidden sm:flex border-l border-gray-200 px-2 py-2 items-center gap-1.5">
-                        <input type="checkbox" id="include-transcript" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
-                        <label htmlFor="include-transcript" className="text-xs text-gray-500 cursor-pointer select-none">+ Full text</label>
-                      </div>
-                    </div>
-                    <button
-                      onClick={exportTranscript}
-                      disabled={exportingTranscript}
-                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-60"
-                      data-testid="export-transcript-btn"
-                      title="Download transcript only"
-                    >
-                      <FileText className="w-4 h-4 text-gray-500" />
-                      <span className="hidden sm:inline">{exportingTranscript ? "Generating…" : "Transcript"}</span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {primaryAction}
+            {canSignOff && isSignedOff && (
+              <div className="relative" ref={moreMenuRef}>
+                <button
+                  onClick={() => setShowMoreMenu(v => !v)}
+                  className="w-9 h-9 flex items-center justify-center border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50 transition-colors"
+                  data-testid="more-actions-btn"
+                  title="More actions"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+                {showMoreMenu && (
+                  <div className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-30 overflow-hidden py-1.5" data-testid="more-actions-menu">
+                    <label className="flex items-center gap-2 px-3.5 py-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                      <input type="checkbox" checked={includeTranscript} onChange={e => setIncludeTranscript(e.target.checked)} className="w-3.5 h-3.5 accent-[#1E3A8A]" data-testid="include-transcript-toggle" />
+                      Include full transcript in PDF
+                    </label>
+                    <button onClick={() => { exportPdf(); setShowMoreMenu(false); }} disabled={exportingPdf} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60" data-testid="export-pdf-btn">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      {exportingPdf ? "Generating…" : "Export PDF"}
+                    </button>
+                    <button onClick={() => { exportTranscript(); setShowMoreMenu(false); }} disabled={exportingTranscript} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60" data-testid="export-transcript-btn">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      {exportingTranscript ? "Generating…" : "Export Transcript"}
+                    </button>
+                    <div className="border-t border-gray-100 my-1"></div>
+                    <button onClick={() => { setShowMoreMenu(false); setShowShareModal(true); }} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-indigo-700 hover:bg-indigo-50 transition-colors" data-testid="share-report-btn">
+                      <Share2 className="w-4 h-4 text-indigo-400" />
+                      {meeting?.shared_with?.length ? `Shared (${meeting.shared_with.length})` : "Share with team"}
                     </button>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => toast.info("Sign off the meeting first to unlock PDF export and email sharing.")}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-400 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50 transition-colors"
-                    data-testid="export-pdf-locked-btn"
-                    title="Sign off required to export"
-                  >
-                    <Lock className="w-4 h-4" />
-                    <span className="hidden sm:inline">Export PDF</span>
-                  </button>
-                )}
-                {isSignedOff && (
-                  <button onClick={() => setShowEmailModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors" data-testid="send-report-btn">
-                    <Send className="w-4 h-4" />
-                    <span className="hidden sm:inline">Send to Attendees</span>
-                  </button>
-                )}
-                {isSignedOff && canSignOff && (
-                  <button
-                    onClick={() => setShowShareModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-indigo-700 bg-white border border-indigo-200 rounded-md shadow-sm hover:bg-indigo-50 transition-colors"
-                    data-testid="share-report-btn"
-                    title="Share with other team members"
-                  >
-                    <Share2 className="w-4 h-4" />
-                    <span className="hidden sm:inline">
-                      {meeting?.shared_with?.length ? `Shared (${meeting.shared_with.length})` : "Share"}
-                    </span>
-                  </button>
                 )}
               </div>
             )}
@@ -813,23 +817,34 @@ export default function MeetingReport() {
           </div>
         )}
 
-        {/* Content */}
+        {/* Content — single column, tabs only (no permanent sidebar) at every viewport width */}
         {!stageCfg && analysis && (
-          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
-            {/* Left: tabs */}
-            <div className="lg:col-span-7 border-r border-gray-200 flex flex-col overflow-hidden min-h-0">
-              <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 overflow-x-auto scrollbar-hide flex-shrink-0">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 flex-shrink-0">
+              <div className="max-w-5xl mx-auto px-6 flex items-center gap-6 overflow-x-auto scrollbar-hide">
                 <button onClick={() => setActiveTab("evidence")} className={tabBtnCls("evidence")} data-testid="overview-tab">Overview</button>
-                <button onClick={() => setActiveTab("transcript")} className={tabBtnCls("transcript")}>Transcript</button>
-                <button onClick={() => setActiveTab("comments")} className={tabBtnCls("comments")} data-testid="comments-tab">
-                  Comments {meeting.comments?.length > 0 && `(${meeting.comments.length})`}
+                <button onClick={() => setActiveTab("transcript")} className={tabBtnCls("transcript")} data-testid="transcript-tab">Transcript</button>
+                <button onClick={() => setActiveTab("compliance")} className={tabBtnCls("compliance")} data-testid="compliance-tab">
+                  Compliance
+                  {isRescanning && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>Processing
+                    </span>
+                  )}
                 </button>
-                <button onClick={() => setActiveTab("audit")} className={tabBtnCls("audit")} data-testid="audit-trail-tab">Audit Trail</button>
-                <button onClick={() => setActiveTab("compliance")} className={`${tabBtnCls("compliance")} lg:hidden`} data-testid="compliance-tab">Compliance</button>
+                <button onClick={() => setActiveTab("comments")} className={tabBtnCls("comments")} data-testid="comments-tab">
+                  Comments
+                  {meeting.comments?.length > 0 && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">{meeting.comments.length}</span>
+                  )}
+                </button>
                 <button onClick={() => setActiveTab("prep")} className={tabBtnCls("prep")} data-testid="prep-tab">Prep Agenda</button>
+                <button onClick={() => setActiveTab("audit")} className={tabBtnCls("audit")} data-testid="audit-trail-tab">Audit Trail</button>
               </div>
+            </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto p-6">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="max-w-5xl mx-auto p-6 w-full">
                 {activeTab === "evidence" && (
                   <EvidenceTab
                     meeting={meeting}
@@ -882,22 +897,6 @@ export default function MeetingReport() {
                     }))}
                   />
                 </div>
-                {activeTab === "comments" && (
-                  <CommentsTab
-                    meeting={meeting}
-                    canAddComment={canAddComment}
-                    newComment={newComment}
-                    setNewComment={setNewComment}
-                    addComment={addComment}
-                  />
-                )}
-                {activeTab === "audit" && (
-                  <AuditTrailTab
-                    auditLoading={auditLoading}
-                    auditTrail={auditTrail}
-                    fetchAuditTrail={fetchAuditTrail}
-                  />
-                )}
                 {activeTab === "compliance" && (
                   <div className="-m-6">
                     <EvidenceSidebar
@@ -913,22 +912,27 @@ export default function MeetingReport() {
                     />
                   </div>
                 )}
+                {activeTab === "comments" && (
+                  <CommentsTab
+                    meeting={meeting}
+                    canAddComment={canAddComment}
+                    newComment={newComment}
+                    setNewComment={setNewComment}
+                    addComment={addComment}
+                  />
+                )}
                 {activeTab === "prep" && (
                   <PrepAgendaTab meetingId={meetingId} API={API} getAuthConfig={getAuthConfig} role={user?.role} navigate={navigate} />
                 )}
+                {activeTab === "audit" && (
+                  <AuditTrailTab
+                    auditLoading={auditLoading}
+                    auditTrail={auditTrail}
+                    fetchAuditTrail={fetchAuditTrail}
+                  />
+                )}
               </div>
             </div>
-
-            <EvidenceSidebar
-              analysis={analysis}
-              canReview={canReview}
-              updateEvidence={updateEvidence}
-              isLocked={isLocked}
-              canRescan={canEditSpeakers && !!meeting?.transcript_id && !isLocked}
-              onRescanEvidence={rescanEvidence}
-              onShowInTranscript={(excerpt) => { setHighlightExcerpt(excerpt); setHighlightKey(k => k + 1); setActiveTab("transcript"); }}
-              className="hidden lg:block lg:col-span-5 bg-[#F8F9FA] overflow-y-auto min-h-0"
-            />
           </div>
         )}
 

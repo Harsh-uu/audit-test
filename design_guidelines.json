@@ -1,123 +1,114 @@
 {
-  "theme": "light",
-  "design_context": "SaaS / Internal Tool (Professional Care Management)",
-  "emotional_tone": "Professional, efficient, accessible, and trustworthy",
+  "design_context": "SaaS Dashboard - Healthcare Compliance (UK)",
+  "ux_rationale_and_blueprint": {
+    "header_hierarchy": "Move the primary meeting title ('Supervision with...') into the center of the global organization color bar. This ensures the subject of the page is immediately recognizable at the highest hierarchy level without consuming content space. The global header will now feature: [Org Name/Brand] (Left) | [Meeting Title] (Center) | [User Actions/Avatar] (Right).",
+    "standard_view_layout": "Default to a focused, distraction-free reading layout. The persistent 'Compliance Evidence' right-hand sidebar is eliminated. Instead, compliance data is exclusively housed within the 'Compliance' tab (matching the previous narrow-viewport behavior). This dramatically speeds up initial page render, reduces cognitive overload, and allows complex AI evidence mapping to process asynchronously in the background.",
+    "team_themes_alignment": "Adopt the established 'Team Themes' visual architecture to ensure cross-platform familiarity. This includes: a subtle colored accent border at the top of the page container, secondary page metadata (dates, attendees, status pills) positioned top-left, contextual actions top-right, and a tabbed navigation row featuring count-badge pills (e.g., 'Actions 3' in amber, 'Achievements 2' in green)."
+  },
+  "action_menu_options": {
+    "context": "Post-signoff button bloat must be resolved. Choose one of the following architectural patterns for implementation:",
+    "options": [
+      {
+        "name": "Option A: Primary Action + Omni-Dropdown (Recommended)",
+        "description": "Maintain only ONE primary visible action button based on the workflow state (e.g., 'Sign Off' pre-completion, 'Share' post-completion). All utility actions (Export PDF, Export Transcript, Send to Attendees) are nested inside a standard 'More Actions' (...) dropdown menu.",
+        "pros": "Exceptionally clean interface; infinitely scalable for future features; matches established B2B SaaS conventions.",
+        "cons": "Adds an extra click for secondary exports."
+      },
+      {
+        "name": "Option B: The Split-Button (Segmented Control)",
+        "description": "A single composite element where the left side is the primary 1-click action ('Share'), and the right side is a chevron that opens an overlay menu for secondary exports. The '+ Full text' toggle becomes a checkbox within this export menu.",
+        "pros": "Keeps the primary action immediate while safely stowing secondary noise.",
+        "cons": "Slightly more complex interaction model; can feel visually heavy."
+      },
+      {
+        "name": "Option C: The Contextual Action Pill (Floating)",
+        "description": "Remove action buttons from the top header entirely. Once the meeting is signed off, a subtle, pill-shaped 'Action Bar' floats at the bottom-center of the viewport containing icon-buttons for Share, PDF, Email, etc.",
+        "pros": "Leaves the header immaculately clean; high 'Godly' aesthetic appeal; keeps tools close to the user's cursor while reading.",
+        "cons": "Deviates from standard enterprise patterns; risks overlapping footer content on smaller screens."
+      }
+    ]
+  },
   "typography": {
-    "headings": "Work Sans",
-    "body": "IBM Plex Sans",
-    "rules": {
-      "hierarchy": "Clear text size hierarchy. H1 max text-3xl for internal tools. Tight tracking on headings.",
-      "readability": "High contrast text. No text smaller than text-sm for critical data.",
-      "banned": "Do not use Inter, Roboto, Open Sans, or Lato for headings."
-    }
+    "headings": {
+      "family": "Manrope",
+      "weights": ["600", "800"],
+      "usage": "Utilize for page titles, empty states, and tab active states to project structural authority and calm trust. NEVER use Inter."
+    },
+    "body": {
+      "family": "IBM Plex Sans",
+      "weights": ["400", "500"],
+      "usage": "Use for dense transcript logs, compliance mapping tables, and UI controls. Provides maximum legibility for clinical reading."
+    },
+    "rules": [
+      "Use 'tracking-tight' for headers above text-2xl.",
+      "Transcript lines must use 'leading-relaxed' to ensure comfortable continuous reading.",
+      "Metadata and overlines must be 'text-xs uppercase tracking-widest text-muted-foreground'."
+    ]
   },
   "colors": {
-    "primary": "#1E3A8A",
-    "primary_hover": "#172B66",
-    "background": "#F8FAFC",
-    "surface": "#FFFFFF",
-    "border": "#E2E8F0",
-    "text_primary": "#0F172A",
-    "text_secondary": "#64748B",
-    "success": "#16A34A",
-    "error": "#DC2626"
+    "archetype": "Swiss & High-Contrast (Functional & Clinical)",
+    "primary": "Inherited from the Organization's brand setting (e.g., Navy or Green). Used strictly for the Global Top Bar, primary CTA button, and active tab indicator.",
+    "background": "Stark White (#FFFFFF) for the main content card, 2% Cool Gray (#F8F9FA) for the outer app background to create structural contrast.",
+    "accents": {
+      "success": "Teal/Green for 'Achievements' or 'Mapped' pills.",
+      "warning": "Amber/Orange for 'Actions' or 'Attention' pills.",
+      "processing": "Subtle Indigo/Blue for background loading states."
+    },
+    "rules": [
+      "Never use pure black; tint text to `#1A1C20` (Dark Slate).",
+      "Avoid large swaths of brand color inside the page body to prevent eye strain during long reading sessions."
+    ]
   },
-  "visual_enhancers": {
-    "surfaces": "Flat Solid surfaces only. NO glassmorphism. Health/care apps require solid, opaque backgrounds for optimal data legibility.",
-    "borders": "1px solid #E2E8F0 (slate-200) for structural elements.",
-    "radius": "Subtle roundness, maximum 8px (rounded-lg).",
-    "shadows": "Minimal. Use shadow-sm for cards to distinguish from the background."
+  "visual enhancers": {
+    "surfaces": "Use 'Grid Borders' (The Technical Look) for the compliance cards to expose the structural framework of the mapping.",
+    "dividers": "1px solid borders tinted with 5% of the brand hue (e.g., border-border/60).",
+    "badges": "Pill shaped (`rounded-full`) with a soft background tint and a crisp, dark foreground text (e.g., `bg-green-100 text-green-900`)."
+  },
+  "component name": [
+    "GlobalOrgHeader",
+    "MeetingPageHeader",
+    "ActionOmniMenu",
+    "StatusBadge",
+    "TabNavigationWithBadges",
+    "TranscriptReader",
+    "ComplianceMappingCard"
+  ],
+  "grids": {
+    "base": "grid-cols-1 md:grid-cols-12",
+    "header": "grid-cols-3 alignment (Logo left, Title center, Actions right).",
+    "content": "Single column dominating col-span-12, constrained by a max-width wrapper (`max-w-5xl`) to prevent overly long reading lines."
   },
   "layouts": {
-    "global_wrapper": "Assuming the app lives in a layout with a left sidebar (~220px fixed). The content area is ~1200px max-width, center aligned with generous horizontal padding.",
-    "header": "Clean top area with breadcrumbs or 'Back to Dashboard' link top right."
+    "structure": "Mobile-first, stacked. The Global Nav sits fixed top. The main container utilizes generous padding (`p-6` or `p-8`). The standard view features no sidebars, strictly top-to-bottom reading flow.",
+    "alignment": "Strictly optical left-alignment for all transcript and compliance text."
   },
-  "concepts": {
-    "Concept_A_Two_Panel_Split": {
-      "strategy": "High-context dual pane. Reduces scrolling by decoupling the attendee list from the form inputs.",
-      "structure": {
-        "container": "h-[calc(100vh-8rem)] flex gap-8",
-        "left_panel": "w-[40%] flex flex-col gap-6 sticky top-0 h-full",
-        "right_panel": "w-[60%] overflow-y-auto pr-2 flex flex-col gap-3",
-        "title_preview": "Spans full width above the split panes."
-      },
-      "left_panel_elements": [
-        "Meeting Type (Select/Dropdown)",
-        "Date & Time (Date picker)",
-        "Location (Input)",
-        "Sign-off Manager (Select/Dropdown)",
-        "Create & Prepare (Primary Button - sticky at bottom or inline after inputs)"
-      ],
-      "right_panel_elements": [
-        "Attendees List: Custom row components with Checkbox, Avatar, Name, Role, Email. 100% width rows."
-      ]
-    },
-    "Concept_B_Compact_Single_Screen": {
-      "strategy": "Density and efficiency. Power-user mode where everything fits without scrolling.",
-      "structure": {
-        "container": "flex flex-col gap-8 max-w-5xl mx-auto",
-        "top_row": "grid grid-cols-3 gap-6",
-        "middle_section": "grid grid-cols-2 gap-4 mt-2",
-        "bottom_row": "flex justify-between items-end mt-6 pt-6 border-t border-slate-200"
-      },
-      "top_row_elements": [
-        "Meeting Type",
-        "Date & Time",
-        "Location"
-      ],
-      "middle_section_elements": [
-        "Attendees represented as compact pill/chip components (Checkbox, Avatar Initial, Name). 2-column layout to fit 8-15 items cleanly in small vertical space."
-      ],
-      "bottom_row_elements": [
-        "Left side: Sign-off Manager dropdown (width ~300px)",
-        "Right side: Create & Prepare primary button"
-      ]
-    }
+  "motion": {
+    "tabs": "Framer Motion layout transition (`layoutId='activeTab'`) for the colored underline indicator.",
+    "loading": "While compliance is processing asynchronously, the badge on the 'Compliance' tab pulses softly (`animate-pulse`) with a 'Processing...' label.",
+    "interactions": "Buttons have a slight scale down (`active:scale-95`) and hover background transition."
   },
-  "components_needed": [
-    {
-      "name": "Button",
-      "style": "Primary: bg-[#1E3A8A] text-white hover:bg-[#172B66] rounded-md px-6 py-2 transition-colors. Secondary: bg-white border border-slate-300 text-slate-700."
-    },
-    {
-      "name": "Select / Dropdown",
-      "style": "White background, solid border-slate-200. Fully opaque dropdown menu."
-    },
-    {
-      "name": "Input",
-      "style": "Standard clinical input. h-10, border-slate-200, focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A]."
-    },
-    {
-      "name": "Checkbox",
-      "style": "Square, borders, checked state uses #1E3A8A."
-    },
-    {
-      "name": "AttendeeRow (Concept A)",
-      "style": "Flex row, items-center gap-4, p-3 border border-slate-200 rounded-lg bg-white hover:border-[#1E3A8A] transition-colors. Includes avatar, name, role, email."
-    },
-    {
-      "name": "AttendeePill (Concept B)",
-      "style": "Flex row, items-center gap-3, p-2 border border-slate-200 rounded-md bg-white hover:border-[#1E3A8A] transition-colors. Compact size."
-    }
-  ],
   "accessibility": {
-    "contrast": "Ensure text meets APCA/WCAG AA standards. Dark navy on white is accessible. Grey text must be dark enough (e.g., text-slate-600).",
-    "testing": "All interactive elements MUST include data-testid. E.g., data-testid='create-meeting-button', data-testid='attendee-checkbox-X'.",
-    "focus": "Clear focus rings on inputs and buttons using focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1E3A8A]."
+    "contrast": "Ensure APCA Level AA for all text sizes. Badges must not rely on color alone (include icons or explicit labels).",
+    "focus": "High contrast 2px solid ring (`focus:ring-2 focus:ring-primary focus:ring-offset-2`) on all interactive elements.",
+    "testing": "All elements must have `data-testid` attributes (e.g., `data-testid=\"meeting-tab-compliance\"`)."
   },
-  "instructions_to_main_agent": {
-    "action": "Implement the two design concepts in the React frontend.",
-    "routing_strategy": "Since the user wants to see BOTH concepts, implement a toggle or tab at the very top of the page (e.g., 'View Concept A' | 'View Concept B') that switches between the two layout components, OR create two distinct routes. A tabbed toggle is preferred for easy comparison.",
-    "tech_stack": "React, Tailwind CSS, raw HTML elements, and shadcn-inspired components.",
-    "visual_rules": "Strict adherence to the #1E3A8A navy color. DO NOT add emojis, gradients, or decorative illustrations. Keep it clinical and highly professional.",
-    "mock_data": "Hardcode an array of 8-12 realistic attendee objects (name, role, email, avatar initals) to populate both layouts."
+  "media": {
+    "usage": "Zero decorative media. The interface is purely data and text driven. Only system icons (Lucide/Phosphor) are permitted."
   },
+  "3d libraries": null,
+  "image urls": [],
+  "instructions_to_main_agent": [
+    "Construct the Global Org Header with the meeting title centered. DO NOT use transparent backgrounds for the header.",
+    "Implement 'Option A: Primary Action + Omni-Dropdown' for the actions menu. The top right should only have 'Sign Off' (if pending) or 'Share' (if complete), plus a '...' dropdown for exports.",
+    "Implement the 'Team Themes' style page header: thin colored border top, title and tags left, tabs below.",
+    "Ensure the right-hand compliance sidebar is COMPLETELY removed from the standard wide-viewport template. It must exist only within the 'Compliance' tab.",
+    "Use Manrope for headings and IBM Plex Sans for body text. Do not default to Tailwind's Sans (Inter)."
+  ],
   "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
-    "You tend to converge toward generic outputs. Avoid this. Build distinct, polished UI with precise spacing.",
-    "Do NOT apply universal transition (e.g. transition: all). Add transitions to specific properties (colors, opacity, transform).",
-    "Never center-align the main app container in standard text apps; respect left-aligned natural reading flow.",
-    "Ensure standard HTML semantics. Use pure functional shadcn components or custom HTML+Tailwind for complex grids.",
-    "DO NOT use transparent backgrounds for dropdowns or modals.",
-    "Always apply focus, hover, and active states. Interactive elements must react visually."
+    "Do not apply `transition: all` to avoid breaking transforms.",
+    "Do not globally center text in `.App` container; default to left-aligned.",
+    "Ensure generous spacing (`p-6` or `p-8` minimum inside content cards).",
+    "Apply `data-testid` to all interactive buttons, tabs, and form elements.",
+    "Never use generic AI emojis (e.g., 🤖) for system icons. Use crisp SVG libraries like Phosphor or Lucide."
   ]
 }
