@@ -317,7 +317,7 @@ async def update_actions(meeting_id: str, data: UpdateActionsRequest, current_us
     async with database.with_org(org_id) as conn:
         await conn.execute(
             "UPDATE analyses SET actions=$1::jsonb, last_edited_at=$2, last_edited_by=$3 WHERE id=$4",
-            json.dumps(data.actions), now, current_user["id"], analysis_id,
+            data.actions, now, current_user["id"], analysis_id,
         )
         n = len(data.actions)
         completed_count = sum(1 for a in data.actions if a.get("completed"))
@@ -345,7 +345,7 @@ async def update_learning_needs(meeting_id: str, data: dict, current_user=Depend
     async with database.with_org(org_id) as conn:
         await conn.execute(
             "UPDATE analyses SET learning_needs=$1::jsonb, last_edited_at=$2, last_edited_by=$3 WHERE id=$4",
-            json.dumps(learning_needs), now, current_user["id"], analysis_id,
+            learning_needs, now, current_user["id"], analysis_id,
         )
         n = len(learning_needs)
         await _log_edit(conn, meeting_id, org_id, "learning_needs", current_user["id"], current_user.get("name", ""),
@@ -417,7 +417,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
             idx = 3
             for field, val in update_cols.items():
                 set_parts.append(f"{field}=${idx}::jsonb")
-                values.append(json.dumps(val))
+                values.append(val)
                 idx += 1
             values.append(analysis_id)
             await conn.execute(
@@ -500,7 +500,7 @@ async def update_risk(meeting_id: str, risk_id: str, data: UpdateRiskRequest, cu
         raise HTTPException(status_code=404, detail="Risk not found")
 
     async with database.with_org(org_id) as conn:
-        await conn.execute("UPDATE analyses SET risks=$1::jsonb WHERE id=$2", json.dumps(risks), a_row["id"])
+        await conn.execute("UPDATE analyses SET risks=$1::jsonb WHERE id=$2", risks, a_row["id"])
         detail_parts = []
         if data.is_resolved is not None:
             resolved_risk = next((r for r in risks if r.get("id") == risk_id), {})
@@ -563,7 +563,7 @@ async def get_risk_suggestions(meeting_id: str, risk_id: str, current_user=Depen
             risks[i]["suggested_resolutions"] = result.get("suggested_resolutions", [])
             break
     async with database.with_org(org_id) as conn:
-        await conn.execute("UPDATE analyses SET risks=$1::jsonb WHERE id=$2", json.dumps(risks), m_row["analysis_id"])
+        await conn.execute("UPDATE analyses SET risks=$1::jsonb WHERE id=$2", risks, m_row["analysis_id"])
     return result
 
 
@@ -649,7 +649,7 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_u
             """UPDATE meetings SET status='signed_off', sign_off_record=$1::jsonb,
                audio_deletion_status='grace_period', audio_grace_period_started_at=$2, updated_at=$2
                WHERE id=$3""",
-            json.dumps(sign_off_record), now, meeting_id,
+            sign_off_record, now, meeting_id,
         )
 
     _admin_stats_cache.pop(org_id, None)
@@ -688,7 +688,7 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
         raise HTTPException(status_code=404, detail="Action not found")
 
     async with database.with_org(org_id) as conn:
-        await conn.execute("UPDATE analyses SET actions=$1::jsonb WHERE id=$2", json.dumps(actions), a_row["id"])
+        await conn.execute("UPDATE analyses SET actions=$1::jsonb WHERE id=$2", actions, a_row["id"])
         action_label = (matched_action.get("text") or matched_action.get("action") or "")[:80]
         status = "Completed" if completed else "Re-opened"
         rolled_note = " (carried-over action)" if matched_action.get("is_rolled_over") else ""
@@ -732,7 +732,7 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
                         async with database.with_org(org_id) as conn:
                             await conn.execute(
                                 "UPDATE analyses SET actions=$1::jsonb WHERE id=$2",
-                                json.dumps(src_actions), src_analysis["id"],
+                                src_actions, src_analysis["id"],
                             )
             except Exception as e:
                 logger.warning(f"Could not propagate action completion to source meeting {source_meeting_id}: {e}")
@@ -928,7 +928,7 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
 
     if data.speaker_colors is not None:
         set_parts.append(f"speaker_colors=${idx}::jsonb")
-        values.append(json.dumps(data.speaker_colors))
+        values.append(data.speaker_colors)
         idx += 1
 
     if existing_t and existing_t["speaker_text"]:
@@ -1183,16 +1183,16 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
                    cqc_mappings=$1::jsonb, care_cert_mappings=$2::jsonb, custom_mappings=$3::jsonb,
                    last_edited_at=$4, last_edited_by=$5, rescanned_at=$4, rescanned_by_name=$6
                    WHERE id=$7""",
-                json.dumps(merged_cqc),
-                json.dumps(merged_cc),
-                json.dumps(merged_cu),
+                merged_cqc,
+                merged_cc,
+                merged_cu,
                 now, user_id, user_name, analysis_id,
             )
             # Also update achievements from the fresh analysis (safe — falls through gracefully if column absent)
             try:
                 await conn.execute(
                     "UPDATE analyses SET achievements=$1::jsonb WHERE id=$2",
-                    json.dumps(analysis_result.get("achievements", [])), analysis_id,
+                    analysis_result.get("achievements", []), analysis_id,
                 )
             except Exception as _ach_err:
                 logger.warning(f"achievements rescan update skipped: {_ach_err}")
@@ -1339,7 +1339,7 @@ async def share_meeting(meeting_id: str, data: ShareRequest, current_user=Depend
     async with database.with_org(org_id) as conn:
         await conn.execute(
             "UPDATE meetings SET status='shared', shared_with=$1::jsonb, updated_at=$2 WHERE id=$3",
-            json.dumps(shared_with), now, meeting_id,
+            shared_with, now, meeting_id,
         )
         await _audit(conn, meeting_id, org_id, "meeting_shared", current_user.get("id", ""), current_user.get("name", ""),
                      f"Report shared with: {', '.join(e['name'] for e in added)}" if added else "No new users added")

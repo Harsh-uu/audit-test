@@ -720,6 +720,24 @@ async def create_schema():
                 SET {col} = (({col}) #>> '{{}}')::jsonb
                 WHERE jsonb_typeof({col}) = 'string'
             """)
+        await conn.execute("""
+            UPDATE meetings
+            SET sign_off_record = (sign_off_record #>> '{}')::jsonb
+            WHERE sign_off_record IS NOT NULL AND jsonb_typeof(sign_off_record) = 'string'
+        """)
+        await conn.execute("""
+            UPDATE transcripts
+            SET speaker_colors = (speaker_colors #>> '{}')::jsonb
+            WHERE jsonb_typeof(speaker_colors) = 'string'
+        """)
+        await conn.execute("""
+            UPDATE standards_entries
+            SET
+                keywords      = CASE WHEN jsonb_typeof(keywords)      = 'string' THEN (keywords      #>> '{}')::jsonb ELSE keywords      END,
+                sub_outcomes  = CASE WHEN jsonb_typeof(sub_outcomes)  = 'string' THEN (sub_outcomes  #>> '{}')::jsonb ELSE sub_outcomes  END,
+                key_questions = CASE WHEN jsonb_typeof(key_questions) = 'string' THEN (key_questions #>> '{}')::jsonb ELSE key_questions END
+            WHERE jsonb_typeof(keywords)='string' OR jsonb_typeof(sub_outcomes)='string' OR jsonb_typeof(key_questions)='string'
+        """)
         # Fix analyses JSONB columns (all may be double-encoded strings)
         await conn.execute("""
             UPDATE analyses

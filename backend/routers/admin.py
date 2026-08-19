@@ -292,7 +292,7 @@ async def create_standard(data: CreateStandardRequest, current_user=Depends(get_
                is_active, is_system, org_id, created_at, created_by)
                VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12)""",
             std_id, data.type, data.reference, data.name, data.description,
-            json.dumps(data.keywords), data.source or "", True, False, org_id, now, current_user["id"],
+            data.keywords, data.source or "", True, False, org_id, now, current_user["id"],
         )
     return {"id": std_id, "type": data.type, "reference": data.reference, "name": data.name,
             "description": data.description, "org_id": org_id}
@@ -389,7 +389,7 @@ async def parse_document_background(doc_id: str, file_data: bytes, filename: str
             await conn.execute(
                 """UPDATE standards_documents SET parse_status='parsed', extracted_text=$1,
                    document_summary=$2, extracted_criteria=$3::jsonb, criteria_count=$4, parsed_at=$5 WHERE id=$6""",
-                text[:5000], doc_summary, json.dumps(criteria), len(criteria),
+                text[:5000], doc_summary, criteria, len(criteria),
                 datetime.now(timezone.utc).isoformat(), doc_id,
             )
         logger.info(f"Document {doc_id} parsed: {len(criteria)} criteria extracted")
@@ -459,7 +459,7 @@ async def rescan_meetings_background(doc_id: str, org_id: str):
                 async with database.with_org(org_id) as conn:
                     await conn.execute(
                         "UPDATE analyses SET custom_mappings=$1::jsonb WHERE id=$2",
-                        json.dumps(custom_mappings + new_mappings), row["analysis_id"],
+                        custom_mappings + new_mappings, row["analysis_id"],
                     )
                 updated += 1
         logger.info(f"Auto-rescan complete: {updated} meeting(s) updated for doc '{doc.get('label', doc_id)}'")
@@ -502,7 +502,7 @@ async def save_template(request: Request, current_user=Depends(get_current_user)
         await conn.execute(
             """INSERT INTO settings (id, org_id, data) VALUES ($1,$2,$3::jsonb)
                ON CONFLICT (id) DO UPDATE SET data=$3::jsonb""",
-            key, org_id, json.dumps(payload),
+            key, org_id, payload,
         )
     return {"message": "Template saved", "steps": data.get("steps", [])}
 
@@ -1265,7 +1265,7 @@ async def toggle_register_action(meeting_id: str, action_id: str, data: dict, cu
         if not updated:
             raise HTTPException(404, "Action not found")
         await conn.execute(
-            "UPDATE analyses SET actions=$1::jsonb WHERE id=$2", json.dumps(actions), a_row["id"]
+            "UPDATE analyses SET actions=$1::jsonb WHERE id=$2", actions, a_row["id"]
         )
         action_text = next((a.get("text","") for a in actions if a.get("id") == action_id), action_id)
         status_label = "completed" if completed else "re-opened"
@@ -1309,7 +1309,7 @@ async def toggle_register_ln(meeting_id: str, ln_id: str, data: dict, current_us
         if not updated:
             raise HTTPException(404, "Learning need not found")
         await conn.execute(
-            "UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2", json.dumps(lns), a_row["id"]
+            "UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2", lns, a_row["id"]
         )
         ln_text = next((ln.get("text","") for ln in lns if ln.get("id") == ln_id), ln_id)
         status_label = "completed" if completed else "re-opened"
@@ -1350,7 +1350,7 @@ async def toggle_register_achievement(meeting_id: str, ach_id: str, data: dict, 
         if not updated:
             raise HTTPException(404, "Achievement not found")
         await conn.execute(
-            "UPDATE analyses SET achievements=$1::jsonb WHERE id=$2", json.dumps(achs), a_row["id"]
+            "UPDATE analyses SET achievements=$1::jsonb WHERE id=$2", achs, a_row["id"]
         )
         ach_text = next((a.get("text","") for a in achs if a.get("id") == ach_id), ach_id)
         status_label = "acknowledged" if acknowledged else "un-acknowledged"
@@ -2251,7 +2251,7 @@ async def repair_add_attendee(meeting_id: str, data: AddAttendeeRequest, current
 
         await conn.execute(
             "UPDATE meetings SET attendees=$1::jsonb, updated_at=$2 WHERE id=$3",
-            json.dumps(existing),
+            existing,
             datetime.now(timezone.utc).isoformat(),
             meeting_id,
         )

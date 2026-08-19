@@ -423,7 +423,7 @@ async def update_branding(data: BrandingUpdate, current_user=Depends(get_current
             branding["logo_path"] = None
         await conn.execute(
             "UPDATE organisations SET branding=$1::jsonb, updated_at=$2 WHERE id=$3",
-            json.dumps(branding), datetime.now(timezone.utc).isoformat(), org_id,
+            branding, datetime.now(timezone.utc).isoformat(), org_id,
         )
     return {"message": "Branding updated"}
 
@@ -461,7 +461,7 @@ async def upload_logo(file: UploadFile = File(...), current_user=Depends(get_cur
         branding["logo_path"] = path
         await conn.execute(
             "UPDATE organisations SET branding=$1::jsonb, updated_at=$2 WHERE id=$3",
-            json.dumps(branding), datetime.now(timezone.utc).isoformat(), org_id,
+            branding, datetime.now(timezone.utc).isoformat(), org_id,
         )
     return {"logo_path": path, "has_logo": True}
 

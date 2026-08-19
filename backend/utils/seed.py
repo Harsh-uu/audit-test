@@ -173,8 +173,8 @@ async def _insert_standards_entries(conn, entries: list, jurisdiction: str):
                VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16)
                ON CONFLICT (id) DO NOTHING""",
             e["id"], None, e["type"], e["reference"], e["name"], e["description"],
-            json.dumps(e["keywords"]), json.dumps(e["sub_outcomes"]),
-            json.dumps(e["key_questions"]), e.get("quality_statement", False), e["source"],
+            e["keywords"], e["sub_outcomes"],
+            e["key_questions"], e.get("quality_statement", False), e["source"],
             e.get("is_active", True), True, jurisdiction, e.get("service_type"), e["created_at"],
         )
 
@@ -2144,7 +2144,7 @@ async def seed_welsh_standards():
                     kq = json.loads(row["key_questions"]) if isinstance(row["key_questions"], str) else (row["key_questions"] or [])
                     await conn.execute(
                         "UPDATE standards_entries SET keywords=$1, sub_outcomes=$2, key_questions=$3 WHERE id=$4",
-                        json.dumps(kw), json.dumps(so), json.dumps(kq), row["id"],
+                        kw, so, kq, row["id"],
                     )
                 logger.info("AWIF Wales JSONB repair complete")
             logger.info(f"AWIF/SCW standards already seeded ({awif_count} AWIF + {scw_count} SCW entries) — skipping")

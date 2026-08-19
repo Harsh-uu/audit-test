@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="20" time="148.074" timestamp="2026-08-19T18:11:06.436096+00:00" hostname="agent-env-19eb5302-6d50-4ca4-893f-b60aad246a39"><testcase classname="tests.test_jsonb_fix_iter74.TestLearningNeeds" name="test_add_learning_need_persists_as_jsonb_array" time="21.324" /><testcase classname="tests.test_jsonb_fix_iter74.TestLearningNeeds" name="test_toggle_learning_need_via_team_insights" time="13.837" /><testcase classname="tests.test_jsonb_fix_iter74.TestActions" name="test_add_and_remove_action" time="15.073" /><testcase classname="tests.test_jsonb_fix_iter74.TestActions" name="test_toggle_action_on_report" time="9.746" /><testcase classname="tests.test_jsonb_fix_iter74.TestActions" name="test_toggle_action_via_team_insights" time="9.004" /><testcase classname="tests.test_jsonb_fix_iter74.TestRisks" name="test_update_risk_resolve_and_notes" time="9.875" /><testcase classname="tests.test_jsonb_fix_iter74.TestEvidenceMappings" name="test_update_mapping[cqc_mappings]" time="9.267" /><testcase classname="tests.test_jsonb_fix_iter74.TestEvidenceMappings" name="test_update_mapping[care_cert_mappings]" time="8.945" /><testcase classname="tests.test_jsonb_fix_iter74.TestAchievements" name="test_toggle_achievement_via_team_insights" time="8.457" /><testcase classname="tests.test_jsonb_fix_iter74.TestReviewLifecycle" name="test_mark_reviewed_signoff_share" time="16.705" /><testcase classname="tests.test_jsonb_fix_iter74.TestCaseloadBan" name="test_apply_uk_language_replaces_caseload" time="1.125" /><testcase classname="tests.test_jsonb_fix_iter74.TestCaseloadBan" name="test_caseload_banned_in_system_prompts" time="0.001" /><testcase classname="tests.test_jsonb_fix_iter74.TestCaseloadBan" name="test_no_caseload_in_stored_analyses" time="1.093" /><testcase classname="tests.test_jsonb_fix_iter74.TestNoDoubleEncodedJsonb" name="test_no_string_typed_jsonb[analyses-cols0]" time="2.388" /><testcase classname="tests.test_jsonb_fix_iter74.TestNoDoubleEncodedJsonb" name="test_no_string_typed_jsonb[meetings-cols1]" time="2.144" /><testcase classname="tests.test_jsonb_fix_iter74.TestNoDoubleEncodedJsonb" name="test_no_string_typed_jsonb[transcripts-cols2]" time="1.091" /><testcase classname="tests.test_jsonb_fix_iter74.TestNoDoubleEncodedJsonb" name="test_no_string_typed_jsonb[organisations-cols3]" time="1.108" /><testcase classname="tests.test_jsonb_fix_iter74.TestNoDoubleEncodedJsonb" name="test_no_string_typed_jsonb[standards_entries-cols4]" time="1.082"><failure message="AssertionError: standards_entries: double-encoded jsonb rows -&gt; {'keywords': 109}&#10;assert not {'keywords': 109}">self = &lt;test_jsonb_fix_iter74.TestNoDoubleEncodedJsonb object at 0xfd4d0804ad90&gt;
+table = 'standards_entries', cols = ['keywords']
+
+    @pytest.mark.parametrize("table,cols", CHECKS)
+    def test_no_string_typed_jsonb(self, table, cols):
+        async def q(conn):
+            bad = {}
+            for c in cols:
+                n = await conn.fetchval(
+                    f"SELECT count(*) FROM {table} WHERE {c} IS NOT NULL AND jsonb_typeof({c})='string'")
+                if n:
+                    bad[c] = n
+            return bad
+        bad = _db(q)
+&gt;       assert not bad, f"{table}: double-encoded jsonb rows -&gt; {bad}"
+E       AssertionError: standards_entries: double-encoded jsonb rows -&gt; {'keywords': 109}
+E       assert not {'keywords': 109}
+
+tests/test_jsonb_fix_iter74.py:426: AssertionError</failure></testcase><testcase classname="tests.test_jsonb_fix_iter74.TestSpeakerText" name="test_update_speaker_colors" time="8.907" /><testcase classname="tests.test_jsonb_fix_iter74.TestRiskSuggestions" name="test_risk_suggestions_writes_valid_jsonb" time="6.708" /></testsuite></testsuites>

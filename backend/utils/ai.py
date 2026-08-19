@@ -75,6 +75,14 @@ _UK_REPLACEMENTS = [
     (r'\b([a-zA-Z]{3,})yzed\b',      r'\1ysed'),
     (r'\b([a-zA-Z]{3,})yzes\b',      r'\1yses'),
     (r'\b([a-zA-Z]{3,})yze\b',       r'\1yse'),
+
+    # "caseload" is not used in UK adult social care — safety-net fallback if the
+    # model ignores the prompt instruction. "workload" is the grammatically safe
+    # default (works in every sentence position); the prompt itself instructs the
+    # model to prefer "people we support" wherever the context is about the
+    # individuals supported rather than the volume of work.
+    (r'\bcaseloads\b', "workloads"),
+    (r'\bcaseload\b',  "workload"),
 ]
 
 import re as _re_mod
@@ -347,6 +355,7 @@ Rules:
   (g) PERSONAL CIRCUMSTANCES DISCLOSURE WITH CONFIRMED WORK IMPACT — when a worker discloses a personal life stressor (relationship breakdown, marriage difficulties, bereavement, family crisis, health problems, financial hardship, housing instability, or any named personal difficulty) AND any of the following additional elements are present: (1) the worker explicitly confirms — even minimally or reluctantly — that it is affecting their work, performance, or conduct ("yeah, probably a bit", "it's been on my mind", "I think it explains…"); (2) the worker describes a specific behavioural change at work that they attribute to the personal stressor ("shorter with people", "less patient than usual", "finding it hard to concentrate", "not at my best"); (3) the worker retroactively links the personal stressor to a previously mentioned workplace incident or conduct concern ("I think that probably explains why I…", "looking back, it was probably because…"). This pattern requires a welfare risk flag even if the worker minimises the impact or asserts they are managing. The minimising does not cancel the admission — it is itself a signal that the worker is aware of the impact but suppressing its significance. Risk text: "Worker disclosed [specific personal stressor] and confirmed — albeit tentatively — that it is affecting [specific aspect of conduct or work]. The worker's minimising language ('I do my best not to let it', 'probably a bit', 'I try not to let it show') does not cancel the admission; it indicates awareness of the impact combined with reluctance to fully acknowledge it. The manager should follow up informally before the next supervision to check in, signpost to EAP or support services, and monitor for further behavioural signals." Severity: medium by default; high if the worker names a specific safeguarding-relevant incident they attribute to their personal state, or if the disclosure involves acute crisis (bereavement, acute health diagnosis, domestic situation). Suggested resolutions: informal welfare follow-up before next supervision; signpost EAP or occupational health; explore whether workload adjustment or temporary additional support is appropriate; note in supervision record; consider whether any retrospective incidents require formal review in light of this disclosure.
   Generate a risk at medium severity with label "Minimising language — further investigation needed". The risk text should name what was being minimised or dismissed (e.g. "Supervisee used minimising language when describing [the incident / their decision not to report / their wellbeing] — it is not yet clear whether the full significance of this was recognised. The manager should probe further before closing this point."). Suggested resolutions: follow-up questions at next supervision or sooner, consider whether a formal record or incident report is required, flag pattern to safeguarding lead if a safeguarding matter was involved. Flag these as risks regardless of whether an action was already agreed in the meeting. Specific patterns to watch for: expressing tiredness, exhaustion, or fatigue (especially if mentioned more than once — repetition is itself a signal of severity); describing feeling overwhelmed, stressed, or unable to cope; expressing general emotional distress or low mood about their work. IMPORTANT DISTINCTION: a worker saying "I felt bad for not doing X" or "I should have reported that" is NOT a wellbeing signal — that is guilt about a specific action gap and belongs in the action gap risks category. A wellbeing signal is about the person's general personal state (e.g. "I'm really tired", "I've been struggling lately", "I don't feel myself"), NOT about remorse over a specific professional incident. When multiple genuine wellbeing signals appear across the same meeting, generate a single consolidated risk describing the overall pattern rather than individual entries per mention. Use severity "high" if the worker appears distressed or repeats the concern three or more times; "medium" for one or two mentions. Risk text example: "Worker expressed repeated tiredness across the session — potential welfare concern requiring an informal welfare check-in." Suggested resolutions should include: an informal follow-up before next supervision, EAP signposting if not already offered, workload review, and a manager note to monitor. LANGUAGE RULE — NEVER use the word "pastoral" in any risk text or suggested resolution. Instead use: "informal follow-up", "welfare check-in", "wellbeing support", or "informal welfare conversation". The word "pastoral" is not used in UK adult social care.
 - For ACTIONS: additionally, when a risk arises from a worker's insufficient response (missed escalation, not recording a concern, not following a protocol), always generate a paired training action item assigned to the supervisor — not just an action on the concern itself. This ensures supervision gaps are captured, not just clinical risks.
+- LANGUAGE RULE — NEVER use the word "caseload" anywhere in the output (summary, achievements, actions, learning_needs, risks, or any mapping field). It is not used in UK adult social care. Prefer "people we support" whenever referring to the individuals a worker supports (e.g. "reviewing his caseload" → "reviewing the people he supports"; "her caseload includes several complex needs" → "the people she supports include several with complex needs"). Use "workload" only when referring to the volume, pressure, or amount of work itself, not the people (e.g. "her caseload is too high" → "her workload is too high"). Choose whichever reads naturally in context — "people we support" is the default, "workload" the exception for volume/pressure references.
 
 - DUAL-FRAMING PRINCIPLE — apply throughout all risk detection: A worker can be simultaneously right about a concern and wrong in how they handled it. These are not the same finding and must never be collapsed into one. When both are present:
   – Record the underlying concern on its own merits, at its own severity.
@@ -704,7 +713,8 @@ async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
 Evidence includes described practice ("I always do X"), explained reasoning ("I did it because..."), manager-confirmed observations, and identified learning needs. You do NOT require the criterion to be named explicitly — map based on what participants describe doing or understanding.
 Return valid JSON only:
 {"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "likely_evidence|possible_evidence"}]}
-Only include criteria with actual evidence. Return empty mappings array if nothing found."""
+Only include criteria with actual evidence. Return empty mappings array if nothing found.
+LANGUAGE RULE — NEVER use the word "caseload" anywhere. It is not used in UK adult social care. Prefer "people we support" whenever referring to the individuals a worker supports; use "workload" only when referring to the volume or pressure of work itself, not the people."""
 
     chat = await _openai_chat("o4-mini", system, f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\n<transcript>\n{transcript_text[:5000]}\n</transcript>", reasoning_effort="high")
     full = chat
@@ -716,6 +726,9 @@ Only include criteria with actual evidence. Return empty mappings array if nothi
         mappings = result.get("mappings", [])
         for m in mappings:
             m.setdefault("status", "pending")
+            for k in ("evidence_summary", "transcript_excerpt", "document_name", "criterion_name"):
+                if isinstance(m.get(k), str):
+                    m[k] = _apply_uk_language(m[k])
         return mappings
     except Exception as e:
         logger.error(f"analyze_custom_only parse error: {e}")
@@ -734,6 +747,8 @@ Section 2: 5 to 6 bullet points — each a concise, specific sentence covering o
 - Capture the human context, not just the topic headings.
 
 Section 3: Two sentences that frame the concrete agreed outcomes and next steps — what will actually happen, who will do what, and by when if mentioned.
+
+LANGUAGE RULE — NEVER use the word "caseload" anywhere. It is not used in UK adult social care. Prefer "people we support" whenever referring to the individuals a worker supports; use "workload" only when referring to the volume or pressure of work itself, not the people.
 
 Output plain text only. Use a blank line (\\n\\n) to separate each of the three sections. Do not use any markdown headers or JSON."""
 
@@ -873,7 +888,8 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
 async def generate_meeting_summary(transcript_text: str) -> str:
     """Re-generate just the meeting summary in the new structured format."""
     user_prompt = f"Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
-    return await _openai_chat("o4-mini", SUMMARY_ONLY_PROMPT, user_prompt, reasoning_effort="medium")
+    result = await _openai_chat("o4-mini", SUMMARY_ONLY_PROMPT, user_prompt, reasoning_effort="medium")
+    return _apply_uk_language(result)
 
 
 DOC_EVIDENCE_SYSTEM_PROMPT = _PROMPT_INJECTION_GUARD + """You are a compliance evidence specialist for UK adult social care providers.
@@ -953,7 +969,8 @@ Rules:
 - If no custom standards provided, return custom_mappings as an empty array []
 - Generate unique IDs for each item (e.g. "cqc_1", "cc_1", "custom_1")
 - For RISKS: also detect MINIMISING OR DISMISSIVE LANGUAGE — when the supervisee downplays, dismisses, or hedges about a concern, incident, or their own actions. Flag patterns such as: "it was nothing / probably not important / I didn't think it was a big deal / I suppose I should have / I probably should have reported it". This may indicate rationalised inaction, a concern being normalised, or a safeguarding matter not being recognised as significant. Generate a medium severity risk: "Minimising language — further investigation needed", describing what was minimised. Suggested resolutions: follow-up questions, consider whether formal recording or escalation is required.
-- For RISKS: also detect SUPERVISEE WELLBEING SIGNALS — expressions from the person being supervised that suggest they may be struggling with their own health, wellbeing, or self-perception. Flag tiredness (especially if repeated), stress, feeling overwhelmed, or inability to cope as medium/high risks. IMPORTANT DISTINCTION: "I felt bad for not doing X" is guilt about an action gap, NOT a wellbeing signal — keep those separate. A wellbeing signal is about the worker's general personal state, not remorse about a specific incident. When multiple genuine wellbeing signals appear across the session, generate a single consolidated risk describing the overall pattern. Suggested resolutions should include an informal welfare follow-up, EAP signposting, workload review, and a note to monitor. LANGUAGE RULE — NEVER use the word "pastoral" anywhere. Use "informal follow-up", "welfare check-in", "wellbeing support", or "informal welfare conversation" instead."""
+- For RISKS: also detect SUPERVISEE WELLBEING SIGNALS — expressions from the person being supervised that suggest they may be struggling with their own health, wellbeing, or self-perception. Flag tiredness (especially if repeated), stress, feeling overwhelmed, or inability to cope as medium/high risks. IMPORTANT DISTINCTION: "I felt bad for not doing X" is guilt about an action gap, NOT a wellbeing signal — keep those separate. A wellbeing signal is about the worker's general personal state, not remorse about a specific incident. When multiple genuine wellbeing signals appear across the session, generate a single consolidated risk describing the overall pattern. Suggested resolutions should include an informal welfare follow-up, EAP signposting, workload review, and a note to monitor. LANGUAGE RULE — NEVER use the word "pastoral" anywhere. Use "informal follow-up", "welfare check-in", "wellbeing support", or "informal welfare conversation" instead.
+- LANGUAGE RULE — NEVER use the word "caseload" anywhere in the output. It is not used in UK adult social care. Prefer "people we support" whenever referring to the individuals a worker supports; use "workload" only when referring to the volume or pressure of work itself, not the people. Choose whichever reads naturally in context."""
 
 
 async def analyze_doc_for_evidence(
@@ -1037,7 +1054,7 @@ Provide your analysis as JSON only. Only map regulations/standards where there i
         result.setdefault("cqc_mappings", [])
         result.setdefault("care_cert_mappings", [])
         result.setdefault("custom_mappings", [])
-        return result
+        return _sanitise_analysis(result)
     except json.JSONDecodeError as exc:
         logger.error("Failed to parse doc evidence response: %s\nResponse: %s", exc, full_response[:500])
         return {"cqc_mappings": [], "care_cert_mappings": [], "custom_mappings": []}

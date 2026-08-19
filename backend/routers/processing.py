@@ -166,7 +166,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 """INSERT INTO transcripts (id, meeting_id, org_id, text, safety_warnings, created_at)
                    VALUES ($1,$2,$3,$4,$5::jsonb,$6)""",
                 transcript_id, meeting_id, meeting_org_id,
-                transcript_text, json.dumps(transcript_warnings), now,
+                transcript_text, transcript_warnings, now,
             )
             await conn.execute(
                 """UPDATE meetings SET transcript_id=$1, status='analyzing', updated_at=$2,
@@ -323,31 +323,31 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9)""",
                 analysis_id, meeting_id, meeting_org_id,
                 analysis_result.get("summary", ""),
-                json.dumps(analysis_result.get("actions", [])),
-                json.dumps(analysis_result.get("risks", [])),
-                json.dumps(analysis_result.get("cqc_mappings", [])),
-                json.dumps(analysis_result.get("care_cert_mappings", [])),
+                analysis_result.get("actions", []),
+                analysis_result.get("risks", []),
+                analysis_result.get("cqc_mappings", []),
+                analysis_result.get("care_cert_mappings", []),
                 now,
             )
             # Optional UPDATE for columns added after initial schema — safe to fail
             try:
                 await conn.execute(
                     "UPDATE analyses SET custom_mappings=$1::jsonb WHERE id=$2",
-                    json.dumps(analysis_result.get("custom_mappings", [])), analysis_id,
+                    analysis_result.get("custom_mappings", []), analysis_id,
                 )
             except Exception as _col_err:
                 logger.warning(f"custom_mappings update skipped (column may not exist yet): {_col_err}")
             try:
                 await conn.execute(
                     "UPDATE analyses SET achievements=$1::jsonb WHERE id=$2",
-                    json.dumps(analysis_result.get("achievements", [])), analysis_id,
+                    analysis_result.get("achievements", []), analysis_id,
                 )
             except Exception as _col_err:
                 logger.warning(f"achievements update skipped (column may not exist yet): {_col_err}")
             try:
                 await conn.execute(
                     "UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2",
-                    json.dumps(analysis_result.get("learning_needs", [])), analysis_id,
+                    analysis_result.get("learning_needs", []), analysis_id,
                 )
             except Exception as _col_err:
                 logger.warning(f"learning_needs update skipped (column may not exist yet): {_col_err}")
@@ -377,7 +377,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                     async with database.with_admin() as conn:
                         await conn.execute(
                             "UPDATE meeting_prep SET coverage_results=$1::jsonb, coverage_checked_at=$2 WHERE meeting_id=$3",
-                            json.dumps(coverage.get("results", {})),
+                            coverage.get("results", {}),
                             coverage.get("checked_at"),
                             meeting_id,
                         )

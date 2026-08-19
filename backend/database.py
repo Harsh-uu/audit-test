@@ -63,6 +63,17 @@ async def with_org(org_id: str):
     *strings* instead of decoded dicts/lists. Every JSONB column read from
     this context MUST be passed through _ensure_list / _ensure_dict / _jlist
     / _jdict (or an equivalent inline json.loads guard) before use.
+
+    !! JSONB WRITE WARNING (applies to with_admin() too — NOT RLS-specific) !!
+    _init_connection registers a jsonb/json type codec with encoder=json.dumps
+    on every pooled connection. NEVER call json.dumps() on a value you are
+    binding to a `$N::jsonb` parameter — the codec serializes it AGAIN,
+    producing a double-encoded JSON string in the column (jsonb_typeof
+    returns 'string' instead of 'array'/'object'). Just pass the raw Python
+    list/dict directly; the codec does the encoding. This also applies to
+    jsonb `||` concat writes (e.g. recording_events || $1::jsonb) — pass a
+    raw list, not json.dumps(list), or individual appended elements end up
+    stringified inside an otherwise-valid array. See /app/CONTRIBUTING.md.
     See /app/CONTRIBUTING.md for the full rule.
     """
     async with pool.acquire() as conn:

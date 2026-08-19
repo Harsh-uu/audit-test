@@ -1,0 +1,52 @@
+{
+  "summary": "Backend-only verification that the JSONB double-encoding fixes applied after iteration_74 make ALL future writes sound. Built two new suites: (1) /app/backend/tests/test_jsonb_iter75.py — 12 live-API tests through the public URL covering recording start/pause/resume(with pause_start)/stop (element-level object checks on recording_events + paused_periods + GET /recording/{id}/events readback), PUT /api/org/branding, POST /api/org/branding/logo, POST /api/admin/standards, PUT /api/admin/template, POST /api/admin/meetings/{id}/add-attendee, and a real admin standards-document upload → AI parse → standards_documents.extracted_criteria; (2) /app/backend/tests/test_pipeline_jsonb_iter75.py — 12 tests that execute the REAL routers.processing.run_transcription_and_analysis() in-process against the real DB with only external AI/storage calls stubbed, asserting jsonb_typeof IMMEDIATELY after processing (no restart, so the repair migration cannot mask a live bug) for transcripts.safety_warnings, analyses.actions/risks/cqc_mappings/care_cert_mappings/custom_mappings/achievements/learning_needs and meeting_prep.coverage_results. ALL 24 new tests pass. Regressions: test_idor_sec001.py 17/17 pass; test_jsonb_fix_iter74.py 19/20 (the single failure is the legacy 109 corrupted standards_entries.keywords rows the user asked NOT to repair); test_remaining_jsonb_iter74.py now 3/3 (was 2 failing) after updating its legacy-data sweep to informational. Backend restarted: seed ran clean, AWIF Wales keywords/sub_outcomes/key_questions remain jsonb_typeof='array' (repair path did not re-corrupt). Also verified `grep json.dumps` finds ZERO remaining occurrences in routers/ and utils/ (except one comment in seed.py).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "standards_entries.keywords (seeded system standards)", "issue": "109 legacy rows still jsonb_typeof='string' — types ci(18), ciw(23), niscc_code(12), niscc_induction(7), rqia_dom(16), rqia_res(15), scw(12), sssc(6). These are NOT disposable meeting test data: they are the seeded reference standards used for Wales/Scotland/NI keyword matching. New writes are correct (POST /admin/standards verified array; utils/seed._insert_standards_entries fixed) but the seed is ON CONFLICT DO NOTHING so these rows will never self-heal in this environment. Runtime survives only because _parse_std_row/_jlist decodes one level. Recommend a one-off idempotent backfill (UPDATE ... SET keywords = keywords #>> '{}' ::jsonb WHERE jsonb_typeof(keywords)='string') for these + any other system-standard jsonb columns."},
+      {"endpoint": "meetings.recording_events (legacy)", "issue": "2 pre-fix rows (c20802af-17e3-4210-b497-13d09c9e67ec, 2f1cc088-0687-48b9-9f40-1dabb5285640) still contain stringified array ELEMENTS. Left as-is per explicit user instruction; noted because jsonb_typeof-based checks cannot detect this class, so any future migration must validate element-level."},
+      {"endpoint": "routers/org.py::update_branding / _jdict", "issue": "Robustness only (no live bug found): _jdict decodes exactly one level, so a triple-encoded value yields a str and `branding[\"primary_color\"]=...` raises TypeError → HTTP 500. I hit this transiently after my own test teardown mistakenly re-encoded the value; a legacy double-encoded value is handled fine (verified by test_put_branding_survives_legacy_double_encoded_value, passing). Consider a while-isinstance(str) loop in _jdict/_jlist for defence in depth."},
+      {"endpoint": "utils/ai.py::analyze_custom_only / analyze_doc_for_evidence", "issue": "Still open from iteration 74 (not re-tested this pass): outputs are not passed through _sanitise_analysis/_apply_uk_language and analyze_custom_only's system prompt has no UK-language ('caseload') rule."},
+      {"endpoint": "POST /api/auth/login (MFA roles)", "issue": "Still slow (login via get_tokens.py takes 8-25s, and hot-reload windows produce transient 502s from the ingress). OTP email send still appears to be on the request path."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_jsonb_iter75.py",
+    "/app/backend/tests/test_pipeline_jsonb_iter75.py",
+    "/app/backend/tests/_iter75_helpers.py",
+    "/app/backend/tests/check_awif_iter75.py",
+    "/app/backend/tests/check_residue_iter75.py",
+    "/app/test_reports/pytest/iter75_live.xml",
+    "/app/test_reports/pytest/iter75_pipeline.xml",
+    "/app/test_reports/pytest/iter75_iter74regression.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (data hygiene, not a write bug): one-off backfill of the 109 double-encoded standards_entries.keywords rows for ci/ciw/niscc_*/rqia_*/scw/sssc — these are system reference standards, not throwaway test data, and the ON CONFLICT DO NOTHING seed will never fix them.",
+    "Add the CI/lint guard suggested in iteration 74 (grep for json.dumps on the same statement as ::jsonb) — the codebase is currently clean (0 hits in routers/ and utils/), so the guard would lock that in.",
+    "Carry over from iteration 74 (still unaddressed): apply _sanitise_analysis()/_apply_uk_language() to analyze_custom_only() and analyze_doc_for_evidence(), and move MFA OTP email off the login request path."
+  ],
+  "critical_code_review_comments": [
+    "Verified fix quality: recording.py now passes raw Python lists to `recording_events || $1::jsonb` / `paused_periods || $2::jsonb`, and every appended element reads back as a real object (asserted after 4 sequential API calls on one meeting), so the `||` element-corruption class is gone for new writes.",
+    "processing.py pipeline verified end-to-end in-process: all 7 analyses jsonb columns + transcripts.safety_warnings are 'array' and meeting_prep.coverage_results is 'object' immediately after run_transcription_and_analysis, with action elements real dicts and generated ids intact. The only stubs were AssemblyAI/LLM/storage calls; every SQL bind ran unmodified.",
+    "Startup seed is idempotent and no longer re-corrupts: AWIF Wales stayed jsonb_typeof='array' across a full supervisorctl restart, and the repair branch is gated on isinstance(str) so it is a no-op once clean.",
+    "review.py (~2257 lines) and admin.py (~2263 lines) still far exceed the 700-line guideline — unchanged since iteration 74.",
+    "_jdict/_jlist single-level decoding is the last soft spot in this bug class; a loop would make every reader immune to any residual multi-encoded row."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_jsonb_iter75.py",
+    "/app/backend/tests/test_pipeline_jsonb_iter75.py",
+    "/app/backend/tests/_iter75_helpers.py",
+    "/app/backend/tests/check_awif_iter75.py",
+    "/app/backend/tests/check_residue_iter75.py",
+    "/app/backend/tests/fix_branding_iter75.py",
+    "/app/backend/tests/test_remaining_jsonb_iter74.py"
+  ],
+  "success_rate": {"backend": "98% (24/24 new tests pass; 17/17 IDOR regression; 19/20 iter74 suite — the 1 failure is the intentionally-unrepaired legacy 109 keyword rows)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "No permanent seed data. Created and deleted two throw-away meetings (TEST_ITER75 recording meeting, TEST_ITER75 pipeline meeting + its transcript/analysis/meeting_prep rows), one TEST_ITER75 custom standard, one TEST_ITER75 standards document, one supervision_template settings row (deleted, did not exist before), and temporary branding writes. Residue check confirms 0 leftovers. NOTE: organisations.branding for Test Company is now {\"primary_color\": \"#123456\"} with jsonb_typeof='object' — it was the double-encoded corrupted value found in iteration 74 before this pass, so this is a net improvement; there is no logo_path (there was none before either).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com / Admin123! via tests/get_tokens.py works. Run these suites serially (-n 0) and clear login_attempts first (tests/clear_rate_limit.py) — get_tokens.py overwrites mfa_code so parallel logins race.",
+  "context_for_next_testing_agent": "Repro commands: cd /app/backend && python3 tests/clear_rate_limit.py && python3 -m pytest tests/test_jsonb_iter75.py -q -n 0 -p no:randomly (~70s, needs backgrounding) and python3 -m pytest tests/test_pipeline_jsonb_iter75.py -q -n 0 (~18s, runs in-process with its own asyncpg pool, no HTTP). _iter75_helpers.db() deliberately registers NO jsonb codec — snapshot/restore uses ::text so it cannot double-encode (my first version DID register the codec and corrupted organisations.branding into a triple-encoded string, repaired with tests/fix_branding_iter75.py --fix; do not re-add the codec). tests/check_awif_iter75.py and tests/check_residue_iter75.py are quick standalone DB probes. Writing files under /app/backend triggers uvicorn hot reload → transient 502s for ~15s; wait before running API suites.",
+  "rca_of_the_issue": "asyncpg's jsonb codec (database._init_connection, encoder=json.dumps) means any json.dumps() before a $N::jsonb bind encodes twice. The developer's follow-up removed every remaining occurrence in routers/ and utils/ (grep now returns 0 code hits), including the `||` concat sites in recording.py where the corruption was element-level and invisible to jsonb_typeof, and the seed.py AWIF repair path that was itself re-encoding. All of those paths are now verified sound for new writes by live API and in-process pipeline tests. The only remaining artefacts are pre-existing corrupted rows (109 standards_entries.keywords + 2 meetings.recording_events + 3 transcripts.safety_warnings-era rows), which the user explicitly declined to repair."
+}

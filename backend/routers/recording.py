@@ -87,7 +87,7 @@ async def start_recording(meeting_id: str, request: Request, current_user=Depend
                        status = 'recording',
                        updated_at = $2
                    WHERE id = $3""",
-                json.dumps([event]), datetime.now(timezone.utc).isoformat(), meeting_id,
+                [event], datetime.now(timezone.utc).isoformat(), meeting_id,
             )
         except Exception as e:
             logger.warning(f"recording_events update failed for start/{meeting_id}: {e}")
@@ -124,7 +124,7 @@ async def pause_recording(meeting_id: str, request: Request, current_user=Depend
                SET recording_events = recording_events || $1::jsonb,
                    updated_at = $2
                WHERE id = $3""",
-            json.dumps([event]), datetime.now(timezone.utc).isoformat(), meeting_id,
+            [event], datetime.now(timezone.utc).isoformat(), meeting_id,
         )
     return {"message": "Recording paused", "timestamp": ts}
 
@@ -161,17 +161,17 @@ async def resume_recording(meeting_id: str, request: Request, current_user=Depen
                            total_paused_duration_seconds = total_paused_duration_seconds + $3,
                            updated_at = $4
                        WHERE id = $5""",
-                    json.dumps([event]), json.dumps([paused_period]), duration, now, meeting_id,
+                    [event], [paused_period], duration, now, meeting_id,
                 )
             except Exception:
                 await conn.execute(
                     "UPDATE meetings SET recording_events = recording_events || $1::jsonb, updated_at=$2 WHERE id=$3",
-                    json.dumps([event]), now, meeting_id,
+                    [event], now, meeting_id,
                 )
         else:
             await conn.execute(
                 "UPDATE meetings SET recording_events = recording_events || $1::jsonb, updated_at=$2 WHERE id=$3",
-                json.dumps([event]), now, meeting_id,
+                [event], now, meeting_id,
             )
     return {"message": "Recording resumed", "timestamp": ts}
 
@@ -200,7 +200,7 @@ async def stop_recording(meeting_id: str, request: Request, current_user=Depends
                        status = 'stopped',
                        updated_at = $2
                    WHERE id = $3""",
-                json.dumps([event]), datetime.now(timezone.utc).isoformat(), meeting_id,
+                [event], datetime.now(timezone.utc).isoformat(), meeting_id,
             )
         except Exception as e:
             logger.warning(f"recording_events update failed for stop/{meeting_id}: {e}")
