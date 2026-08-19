@@ -1,0 +1,55 @@
+{
+  "summary": "iteration_83 backend-only verification of the _ai_chat_json() parse-level retry fix for the iteration_82 HIGH defect (~8% 'Analysis could not be parsed' dead-end). Hammered analyze_meeting() with 40 LIVE Gemini 2.5 Flash runs (24 @ conc 4 + 16 @ conc 4, ~7.5 min total) via new tests/_iter83_hammer.py: 40/40 returned a real analysis (summary 662-1287 chars, 3-9 risks, 11-22 CQC mappings, 3-5 Care Certificate mappings), ZERO 'Analysis could not be parsed' placeholders, ZERO exceptions, ZERO OpenAI calls and ZERO '[Vertex AI]' fallback warnings. Added tests/test_iter83_json_retry.py (14 deterministic tests) which proves the retry and finish_reason logic directly: malformed Gemini body -> single OpenAI retry -> valid analysis (no placeholder); both providers malformed -> placeholder only then; valid Gemini JSON -> no OpenAI call; all 8 call sites confirmed to use _ai_chat_json and no residual '_extract_json(await _ai_chat(...))' pattern; finish_reason STOP returns text while MAX_TOKENS/SAFETY/RECITATION/OTHER and no-candidates raise, and a raised truncation routes through _ai_chat's existing OpenAI fallback BEFORE the JSON parser; a live Gemini call confirms the new check does not false-trigger (finish_reason=STOP). Full regression re-run of test_iter81_vertex_ai.py (40) + test_iter81_api_e2e.py (6) + new file (14) = 60/60 passed in 240s. The previously flaky TestAnalyzeMeeting::test_analysis_served_by_gemini_without_openai_fallback passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "utils/ai.py::_ai_chat_json",
+        "issue": "If Gemini transport-fails, _ai_chat already falls back to OpenAI; if that OpenAI text then fails to parse, _ai_chat_json retries OpenAI a second time with the identical prompt (duplicate cost/latency, same model, no jitter). Consider tracking which provider served the raw text and skipping the retry when it was already OpenAI."
+      },
+      {
+        "endpoint": "utils/ai.py::_ai_chat_json",
+        "issue": "No type/shape validation of the parsed value. If a model returns a JSON list where a dict is expected, analyze_meeting's `result[\"custom_mappings\"] = []` raises TypeError which is NOT caught by the JSONDecodeError handler and would surface as a 500. Cheap hardening: `if not isinstance(parsed, expected_type): treat as parse failure`."
+      },
+      {
+        "endpoint": "utils/ai.py::analyze_meeting parse-failure log",
+        "issue": "Still open from iteration_82: the JSONDecodeError raised by _extract_json always reports 'line 1 column 1 (char 0)' and the log truncates the body to 500 chars, so a genuine double-provider parse failure remains hard to diagnose. Log finish_reason/usage_metadata and the response tail."
+      },
+      {
+        "endpoint": "utils/ai.py",
+        "issue": "File is 1974 lines - still well over the 700-line guideline; provider plumbing (_ai_chat/_ai_chat_json/_gemini_chat/_openai_chat/_extract_json/_vertex_*) should move to utils/ai_client.py."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter83_json_retry.py",
+    "/app/backend/tests/_iter83_hammer.py",
+    "/app/backend/tests/test_iter81_vertex_ai.py",
+    "/app/backend/tests/test_iter81_api_e2e.py",
+    "/app/test_reports/pytest/iter83_regression.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (minor): skip the second OpenAI attempt in _ai_chat_json when the raw text already came from OpenAI.",
+    "OPTIONAL (minor): validate the parsed JSON shape (dict vs list) in _ai_chat_json so a wrong-shape response degrades gracefully instead of raising TypeError.",
+    "OPTIONAL (minor): improve parse-failure logging (finish_reason, usage_metadata, full body at DEBUG).",
+    "LOW: split utils/ai.py (1974 lines)."
+  ],
+  "critical_code_review_comments": [
+    "The fix is correctly placed: _ai_chat_json() wraps _ai_chat() + _extract_json() and retries via _openai_chat on JSONDecodeError only, so transport errors still use the existing Gemini->OpenAI fallback and parse errors now have their own recovery. All 8 JSON call sites verified by source assertion.",
+    "The finish_reason guard uses finish_reason_obj.name (enum-safe) and raises for anything other than STOP, so MAX_TOKENS/SAFETY truncations now hit _ai_chat's fallback instead of being handed to the parser as a partial body. Verified live that normal calls report STOP and do not spuriously raise.",
+    "Caveat on evidence strength: across the 40 live runs Gemini never emitted a malformed body this round, so the live recovery path was not exercised end-to-end with a real bad payload - only with deterministic stubs. At the previously measured ~8% rate, 40 clean runs give ~96% confidence the dead-end is gone; part of the improvement may also come from the finish_reason guard converting formerly-partial responses into a transparent OpenAI fallback."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter83_json_retry.py",
+    "/app/backend/tests/_iter83_hammer.py"
+  ],
+  "success_rate": {"backend": "100% (60/60 pytest; 40/40 live analyze_meeting hammer runs)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None - reused existing seeded meetings via tests/_iter79_login.py MFA bypass in the API e2e suite.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com/Admin123! (MFA bypassed via tests/_iter79_login.py), user@supervision.com/Staff123!",
+  "context_for_next_testing_agent": "Run `python -m pytest tests/test_iter81_vertex_ai.py tests/test_iter81_api_e2e.py tests/test_iter83_json_retry.py -q -p no:randomly -n 0` from /app/backend (~4 min, real LLM calls). For repeated live analyze_meeting stress use `python tests/_iter83_hammer.py <iterations> <concurrency>` from /app/backend (must be run from /app/backend; ~35s per call, 4-way concurrency is safe with no quota errors; writes /tmp/iter83_hammer.json with per-run status, OpenAI call count and captured '[Vertex AI]'/'failed JSON parse' log events). iteration_82's flaky test now passes; no remaining HIGH/critical backend defects in the AI layer.",
+  "flaky_tests": [],
+  "rca_of_the_issue": "iteration_82's dead-end was caused by JSON parsing happening AFTER _ai_chat() returned, so a syntactically bad but HTTP-successful Gemini body bypassed the OpenAI fallback and analyze_meeting's except-JSONDecodeError branch returned a hard-coded empty placeholder. The fix adds a parse-aware layer (_ai_chat_json) that retries the prompt once directly against OpenAI on JSONDecodeError, plus a finish_reason != STOP raise inside _vertex_generate_sync so truncated/blocked candidates fail earlier and use the existing transport-level fallback. Both mechanisms verified: stubbed malformed-Gemini now yields a full analysis instead of the placeholder, and 40 consecutive live runs produced no placeholder (previous rate ~8%, 2/25)."
+}

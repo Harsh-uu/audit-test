@@ -5,6 +5,7 @@ import uuid
 import asyncio
 import subprocess
 import tempfile
+import time
 from openai import AsyncOpenAI
 
 
@@ -102,6 +103,32 @@ def _apply_uk_language(text: str) -> str:
     return text
 
 
+def _extract_json(raw: str):
+    """Robustly parse JSON out of an LLM text response that may include a
+    markdown fence and/or leading/trailing prose (Gemini is more prone to
+    adding a conversational preamble than OpenAI, so this must not assume
+    the response starts with the fence/JSON)."""
+    text = (raw or "").strip()
+    m = _re_mod.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if m:
+        text = m.group(1).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    candidates = []
+    for open_c, close_c in (("{", "}"), ("[", "]")):
+        start, end = text.find(open_c), text.rfind(close_c)
+        if start != -1 and end != -1 and end > start:
+            candidates.append((start, text[start:end + 1]))
+    for _, snippet in sorted(candidates, key=lambda c: c[0]):
+        try:
+            return json.loads(snippet)
+        except json.JSONDecodeError:
+            continue
+    raise json.JSONDecodeError("Could not extract valid JSON from AI response", text, 0)
+
+
 def _sanitise_analysis(data: dict) -> dict:
     """
     Walk the analysis dict and apply UK language rules to all free-text fields.
@@ -140,6 +167,118 @@ async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str
         kwargs["temperature"] = 0.3
     response = await client.chat.completions.create(**kwargs)
     return (response.choices[0].message.content or "").strip()
+
+
+# ── Vertex AI (Gemini) — primary AI provider, UK/EU data residency ────────────
+# Every analysis call goes through Gemini 2.5 Flash on Vertex AI first; on any
+# failure (missing creds, region outage, safety block, timeout) we transparently
+# fall back to the existing OpenAI call so the app never breaks.
+GEMINI_MODEL = "gemini-2.5-flash"
+_vertex_client = None
+_vertex_client_failed_at = None
+_VERTEX_RETRY_AFTER_SECS = 300  # re-attempt client init after a transient failure
+
+
+def _get_vertex_client():
+    """Lazily build and cache the Vertex AI genai Client. Returns None if not configured
+    or if it failed recently (retried again after _VERTEX_RETRY_AFTER_SECS)."""
+    global _vertex_client, _vertex_client_failed_at
+    if _vertex_client is not None:
+        return _vertex_client
+    if _vertex_client_failed_at is not None and (time.time() - _vertex_client_failed_at) < _VERTEX_RETRY_AFTER_SECS:
+        return None
+    project = os.environ.get("GCP_PROJECT_ID")
+    location = os.environ.get("GCP_LOCATION")
+    sa_json = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
+    if not (project and location and sa_json):
+        _vertex_client_failed_at = time.time()
+        return None
+    try:
+        from google import genai
+        from google.oauth2 import service_account
+        sa_info = json.loads(sa_json)
+        credentials = service_account.Credentials.from_service_account_info(
+            sa_info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        _vertex_client = genai.Client(vertexai=True, project=project, location=location, credentials=credentials)
+        _vertex_client_failed_at = None
+        return _vertex_client
+    except Exception as e:
+        logger.error(f"[Vertex AI] Failed to initialise client: {e}")
+        _vertex_client_failed_at = time.time()
+        return None
+
+
+_THINKING_BUDGETS = {"high": 16384, "medium": 4096, None: 0}
+
+
+def _vertex_generate_sync(system: str, user: str, reasoning_effort: str = None):
+    from google.genai import types
+    client = _get_vertex_client()
+    safety_settings = [
+        types.SafetySetting(category=c, threshold="BLOCK_NONE")
+        for c in ("HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_HARASSMENT",
+                  "HARM_CATEGORY_DANGEROUS_CONTENT", "HARM_CATEGORY_SEXUALLY_EXPLICIT")
+    ]
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=user,
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+            temperature=0.3,
+            max_output_tokens=65535,
+            safety_settings=safety_settings,
+            thinking_config=types.ThinkingConfig(thinking_budget=_THINKING_BUDGETS.get(reasoning_effort, 0)),
+        ),
+    )
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        raise ValueError(f"Vertex AI returned no candidates (prompt_feedback={getattr(response, 'prompt_feedback', None)})")
+    finish_reason_obj = getattr(candidates[0], "finish_reason", None)
+    finish_reason = getattr(finish_reason_obj, "name", str(finish_reason_obj))
+    if finish_reason != "STOP":
+        raise ValueError(f"Vertex AI response truncated/blocked (finish_reason={finish_reason})")
+    text = response.text
+    if not text:
+        raise ValueError(f"Vertex AI returned empty text (finish_reason={finish_reason})")
+    return text.strip()
+
+
+async def _gemini_chat(system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360) -> str:
+    client = _get_vertex_client()
+    if client is None:
+        raise ValueError("Vertex AI not configured (missing GCP_PROJECT_ID/GCP_LOCATION/GCP_SERVICE_ACCOUNT_JSON)")
+    return await asyncio.wait_for(asyncio.to_thread(_vertex_generate_sync, system, user, reasoning_effort), timeout=timeout_secs)
+
+
+async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360) -> str:
+    """Primary entry point for every AI text call in this module.
+    Tries Vertex AI Gemini 2.5 Flash first (UK/EU data residency); falls back
+    to OpenAI on any failure so the feature keeps working end-to-end.
+    """
+    try:
+        result = await _gemini_chat(system, user, reasoning_effort, timeout_secs)
+        logger.info(f"[AI] served by gemini-2.5-flash (fallback model would have been {openai_model})")
+        return result
+    except Exception as e:
+        logger.warning(f"[Vertex AI] Gemini call failed ({e}) — falling back to OpenAI {openai_model}")
+        return await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+
+
+async def _ai_chat_json(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360):
+    """Like _ai_chat but guarantees a parsed JSON object/list. Gemini occasionally
+    returns a well-formed HTTP response with an invalid/unterminated JSON body
+    (model-side non-determinism, not a transport error) — _ai_chat's fallback
+    doesn't catch that since parsing happens after it returns. This retries the
+    prompt directly against OpenAI once before giving up, so a single malformed
+    Gemini response never dead-ends into an empty analysis for the user."""
+    raw = await _ai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+    try:
+        return _extract_json(raw)
+    except json.JSONDecodeError:
+        logger.warning(f"[AI] Response failed JSON parse — retrying directly via OpenAI {openai_model}")
+        raw2 = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+        return _extract_json(raw2)
 
 # UK adult social care terminology — fed to Deepgram nova-3-medical keyterm prompting
 # to reduce misrecognitions on domain-specific language (up to 100 terms supported)
@@ -634,7 +773,7 @@ async def map_speaker_numbers_to_names(
     )
 
     try:
-        result = await _openai_chat("gpt-4o", SPEAKER_MAPPING_SYSTEM_PROMPT, user_prompt)
+        result = await _ai_chat("gpt-4o", SPEAKER_MAPPING_SYSTEM_PROMPT, user_prompt)
         return result if result else numbered_speaker_text
     except Exception as e:
         logger.error(f"Speaker name mapping failed: {e}")
@@ -679,7 +818,7 @@ async def diarize_transcript(
     )
 
     try:
-        result = await _openai_chat("gpt-4o", DIARIZATION_SYSTEM_PROMPT, user_prompt)
+        result = await _ai_chat("gpt-4o", DIARIZATION_SYSTEM_PROMPT, user_prompt)
         return result if result else None
     except Exception as e:
         logger.error(f"Speaker diarization failed: {e}")
@@ -691,14 +830,8 @@ async def extract_document_criteria(text: str, doc_name: str) -> dict:
     truncated = text[:8000]  # Stay well within token budget
     user_prompt = f"Document name: {doc_name}\n\n<document>\n{truncated}\n</document>"
 
-    full_response = await _openai_chat("gpt-4o", CRITERIA_EXTRACTION_PROMPT, user_prompt)
-
     try:
-        text_resp = full_response.strip()
-        if text_resp.startswith("```"):
-            lines = text_resp.split("\n")
-            text_resp = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
-        return json.loads(text_resp)
+        return await _ai_chat_json("gpt-4o", CRITERIA_EXTRACTION_PROMPT, user_prompt)
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse criteria extraction response: {e}")
         return {"document_summary": doc_name, "criteria": []}
@@ -720,13 +853,8 @@ Return valid JSON only:
 Only include criteria with actual evidence. Return empty mappings array if nothing found.
 LANGUAGE RULE — NEVER use the word "caseload" anywhere. It is not used in UK adult social care. Prefer "people we support" whenever referring to the individuals a worker supports; use "workload" only when referring to the volume or pressure of work itself, not the people."""
 
-    chat = await _openai_chat("o4-mini", system, f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\n<transcript>\n{transcript_text[:5000]}\n</transcript>", reasoning_effort="high")
-    full = chat
     try:
-        txt = full.strip()
-        if txt.startswith("```"):
-            txt = "\n".join(txt.split("\n")[1:-1])
-        result = json.loads(txt)
+        result = await _ai_chat_json("o4-mini", system, f"Document: {doc_name} (document_id: {doc_id})\nCriteria:\n{criteria_ctx}\n\n<transcript>\n{transcript_text[:5000]}\n</transcript>", reasoning_effort="high")
         mappings = result.get("mappings", [])
         for m in mappings:
             m.setdefault("status", "pending")
@@ -867,13 +995,7 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
             )
 
             try:
-                full_response = await _openai_chat("gpt-4o", PII_SCAN_SYSTEM_PROMPT, user_prompt)
-                text_resp = full_response.strip()
-                if text_resp.startswith("```"):
-                    lines = text_resp.split("\n")
-                    text_resp = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-
-                ai_flags = json.loads(text_resp)
+                ai_flags = await _ai_chat_json("gpt-4o", PII_SCAN_SYSTEM_PROMPT, user_prompt)
                 if isinstance(ai_flags, list):
                     for flag in ai_flags:
                         original = flag.get("original", "").strip()
@@ -892,7 +1014,7 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
 async def generate_meeting_summary(transcript_text: str) -> str:
     """Re-generate just the meeting summary in the new structured format."""
     user_prompt = f"Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
-    result = await _openai_chat("o4-mini", SUMMARY_ONLY_PROMPT, user_prompt, reasoning_effort="medium")
+    result = await _ai_chat("o4-mini", SUMMARY_ONLY_PROMPT, user_prompt, reasoning_effort="medium")
     return _apply_uk_language(result)
 
 
@@ -1047,20 +1169,14 @@ async def analyze_doc_for_evidence(
 
 Provide your analysis as JSON only. Only map regulations/standards where there is actual evidence in the document."""
 
-    full_response = await _openai_chat("o4-mini", DOC_EVIDENCE_SYSTEM_PROMPT, user_prompt, reasoning_effort="high")
-
     try:
-        text_resp = full_response.strip()
-        if text_resp.startswith("```"):
-            lines = text_resp.split("\n")
-            text_resp = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
-        result = json.loads(text_resp)
+        result = await _ai_chat_json("o4-mini", DOC_EVIDENCE_SYSTEM_PROMPT, user_prompt, reasoning_effort="high")
         result.setdefault("cqc_mappings", [])
         result.setdefault("care_cert_mappings", [])
         result.setdefault("custom_mappings", [])
         return _sanitise_analysis(result)
     except json.JSONDecodeError as exc:
-        logger.error("Failed to parse doc evidence response: %s\nResponse: %s", exc, full_response[:500])
+        logger.error("Failed to parse doc evidence response: %s\nResponse: %s", exc, (exc.doc or "")[:500])
         return {"cqc_mappings": [], "care_cert_mappings": [], "custom_mappings": []}
 
 
@@ -1590,20 +1706,14 @@ Map when a worker reflects on their own learning, describes seeking to improve t
 
 Provide your analysis as JSON. Only map regulations/standards where there is actual evidence in the transcript."""
 
-    full_response = await _openai_chat("o4-mini", ANALYSIS_SYSTEM_PROMPT, user_prompt, reasoning_effort="high")
-
-    # Parse JSON from response
+    # Parse JSON from response (retries once directly via OpenAI if the JSON body is malformed)
     try:
-        text = full_response.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
-        result = json.loads(text)
+        result = await _ai_chat_json("o4-mini", ANALYSIS_SYSTEM_PROMPT, user_prompt, reasoning_effort="high")
         if "custom_mappings" not in result:
             result["custom_mappings"] = []
         return _sanitise_analysis(result)
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse AI response: {e}\nResponse: {full_response[:500]}")
+        logger.error(f"Failed to parse AI response: {e}\nResponse: {(e.doc or '')[:500]}")
         return {
             "summary": "Analysis could not be parsed. Please review the transcript manually.",
             "actions": [],
@@ -1763,17 +1873,8 @@ FINAL CHECKS BEFORE GENERATING:
 - The AOB question MUST be grounded in a real theme or concern from the context — identify it now before writing.
 - All questions must be open-ended and behavioural. Generate them now."""
 
-    full_response = await _openai_chat("o4-mini", system_prompt, user_prompt, reasoning_effort="high")
-
-    # Strip markdown fences
-    if "```" in full_response:
-        import re as _re
-        m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", full_response)
-        if m:
-            full_response = m.group(1).strip()
-
     try:
-        data = json.loads(full_response)
+        data = await _ai_chat_json("o4-mini", system_prompt, user_prompt, reasoning_effort="high")
         # Validate / fill IDs
         seen_ids: set = set()
         for section in data.get("sections", []):
@@ -1785,7 +1886,7 @@ FINAL CHECKS BEFORE GENERATING:
                 seen_ids.add(q["id"])
         return {"sections": data.get("sections", []), "gen_status": "done"}
     except (json.JSONDecodeError, KeyError) as exc:
-        logger.error(f"Failed to parse prep questions response: {exc}\nResponse: {full_response[:500]}")
+        logger.error(f"Failed to parse prep questions response: {exc}\nResponse: {(getattr(exc, 'doc', '') or '')[:500]}")
         # Return empty sections so the UI can still add manual questions
         return {
             "sections": [{"section_id": s["id"], "label": s["label"], "questions": []} for s in PREP_SECTIONS],
@@ -1827,15 +1928,7 @@ TRANSCRIPT (first 6000 chars):
 Assess each question's coverage in the transcript. Return JSON only."""
 
     try:
-        full_response = await _openai_chat("gpt-4o", system_prompt, user_prompt)
-
-        if "```" in full_response:
-            import re as _re
-            m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", full_response)
-            if m:
-                full_response = m.group(1).strip()
-
-        data = json.loads(full_response)
+        data = await _ai_chat_json("gpt-4o", system_prompt, user_prompt)
         return {
             "results": data.get("results", {}),
             "checked_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
@@ -1869,13 +1962,7 @@ Transcript:
 Find the transcript excerpt evidencing this risk and provide resolution suggestions."""
 
     try:
-        full_response = await _openai_chat("gpt-4o", system_prompt, user_prompt)
-        if "```" in full_response:
-            import re as _re
-            m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", full_response)
-            if m:
-                full_response = m.group(1).strip()
-        data = json.loads(full_response)
+        data = await _ai_chat_json("gpt-4o", system_prompt, user_prompt)
         result = {
             "transcript_excerpt": data.get("transcript_excerpt", ""),
             "suggested_resolutions": data.get("suggested_resolutions", []),

@@ -1,0 +1,63 @@
+{
+  "summary": "iteration_82 backend-only verification of the Vertex AI Gemini 2.5 Flash hardening round. Re-ran test_iter81_vertex_ai.py (extended from 25 -> 40 tests) and test_iter81_api_e2e.py (6 tests). The iteration_81 failure TestJsonFenceParsing::test_prose_before_fence now PASSES thanks to the shared _extract_json() helper; I also added direct unit tests for _extract_json (7 cases: fenced/bare/prose-before+after/outer-list-vs-braces/fence-without-tag/invalid/empty) - all pass. Verified the recoverable _vertex_client_failed_at latch (5-min TTL, recovers after expiry), the _THINKING_BUDGETS mapping (high=16384, medium=4096, default 0) and its forwarding into _vertex_generate_sync, max_output_tokens=65535, and unquoted GCP_PROJECT_ID/GCP_LOCATION in backend/.env. Backend logs confirm info-level '[AI] served by gemini-2.5-flash (fallback model would have been o4-mini)' entries during the API e2e run, with ZERO '[Vertex AI]' fallback warnings. Two test-code (not app) breakages caused by the new reasoning_effort parameter were fixed in the test file. ONE genuine intermittent defect found: analyze_meeting() occasionally (~8%, 2 failures in ~25 live runs) receives an unterminated/invalid JSON body from Gemini and dead-ends on the 'Analysis could not be parsed' placeholder with NO OpenAI fallback or retry.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "utils/ai.py::analyze_meeting (also all other _extract_json call sites)",
+        "issue": "INTERMITTENT (~8%: 2 fails in ~25 live runs, reproduced twice via pytest TestAnalyzeMeeting::test_analysis_served_by_gemini_without_openai_fallback): Gemini returns a response that begins '```json\\n{\"summary\": ...' but is unterminated/invalid, _extract_json raises JSONDecodeError, and analyze_meeting returns the static placeholder {'summary': 'Analysis could not be parsed...', actions: [], risks: [], all mappings: []}. No retry and no OpenAI fallback is attempted because the parse happens AFTER _ai_chat returns, so the user silently gets an empty analysis. Fix: on JSONDecodeError, retry once (or call _openai_chat directly) before giving up; and raise inside _vertex_generate_sync when finish_reason != STOP (e.g. MAX_TOKENS) so _ai_chat's existing fallback path triggers.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "utils/ai.py::analyze_meeting error log (line ~1706)",
+        "issue": "Parse-failure log truncates the raw response to 500 chars and _extract_json's JSONDecodeError always reports 'line 1 column 1 (char 0)', so the real cause (truncation vs bad escaping vs finish_reason) is undiagnosable from logs. Log finish_reason/usage_metadata and the response tail (or full body at DEBUG)."
+      },
+      {
+        "endpoint": "utils/ai.py::_vertex_generate_sync",
+        "issue": "finish_reason is computed but only used in the empty-text error message; a MAX_TOKENS/SAFETY truncated-but-non-empty response is returned as if successful."
+      },
+      {
+        "endpoint": "utils/ai.py",
+        "issue": "File is 1967 lines - exceeds the 700-line guideline; consider splitting provider plumbing (_ai_chat/_gemini_chat/_openai_chat/_extract_json) into utils/ai_client.py and keeping prompts/features separate."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter81_vertex_ai.py",
+    "/app/backend/tests/test_iter81_api_e2e.py",
+    "/app/test_reports/pytest/iter82_vertex.xml",
+    "/app/test_reports/pytest/iter82_api_e2e.xml",
+    "/app/backend/tests/_iter82_probe.py",
+    "/app/backend/tests/_iter82_probe2.py",
+    "/app/backend/tests/_iter82_probe3.py"
+  ],
+  "action_items": [
+    "HIGH: Make JSON parse failure recoverable in analyze_meeting (retry / explicit OpenAI fallback) instead of returning the empty 'Analysis could not be parsed' placeholder - reproduced ~8% of live runs.",
+    "MEDIUM: Raise in _vertex_generate_sync when candidate finish_reason is not STOP so truncated responses trigger the existing OpenAI fallback.",
+    "MEDIUM: Improve parse-failure logging (finish_reason, usage_metadata, longer/complete response body).",
+    "LOW: Consider splitting utils/ai.py (1967 lines)."
+  ],
+  "critical_code_review_comments": [
+    "_extract_json() itself is now solid: verified fenced, bare, prose-before, prose-after, prose-around-unfenced, fence-without-json-tag, outer-list-vs-inner-braces, invalid and empty inputs. Its weakness is only that callers treat JSONDecodeError as terminal.",
+    "_get_vertex_client() TTL latch behaves correctly: latch set on missing config, suppressed for 300s even after config returns, and recovers once the TTL elapses (verified by monkeypatching the timestamp).",
+    "reasoning_effort -> ThinkingConfig plumbing verified end-to-end; unknown/None efforts safely map to thinking_budget=0. Live calls showed thoughts_token_count 2.3k-5.5k with reasoning_effort='high' and STOP finish reason, total ~20-24k tokens - well inside the 65535 output cap."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter81_vertex_ai.py",
+    "/app/backend/tests/_iter82_probe.py",
+    "/app/backend/tests/_iter82_probe2.py",
+    "/app/backend/tests/_iter82_probe3.py"
+  ],
+  "success_rate": {"backend": "98% (45/46: 39/40 vertex suite + 6/6 api e2e; the single failure is the intermittent Gemini JSON-truncation dead-end)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None - reused existing seeded meetings via tests/_iter79_login.py MFA bypass in the API e2e suite.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com/Admin123! (MFA bypassed via tests/_iter79_login.py), user@supervision.com/Staff123!",
+  "context_for_next_testing_agent": "Run both suites with `python -m pytest tests/test_iter81_vertex_ai.py tests/test_iter81_api_e2e.py -p no:randomly -n 0` from /app/backend (~4 min, real LLM calls; the --count flag is unavailable, pytest-repeat not installed). Test-file fixes made this round: stub/boom signatures now accept reasoning_effort (the new param broke 5 tests as a pure test-code issue), stale aimod._vertex_client_failed -> _vertex_client_failed_at, plus new classes TestExtractJsonHelper, TestVertexClientLatchTtl, TestThinkingBudgets and 2 extra fence cases. The only remaining failure, TestAnalyzeMeeting::test_analysis_served_by_gemini_without_openai_fallback, is FLAKY (~8%) and model-side - re-run several times; probe scripts _iter82_probe*.py capture finish_reason/usage/raw text for diagnosis (they write bad raw payloads to /tmp/iter82_bad_*.txt).",
+  "flaky_tests": [
+    {"test": "tests/test_iter81_vertex_ai.py::TestAnalyzeMeeting::test_analysis_served_by_gemini_without_openai_fallback", "failure_rate": "~8% (2/25 live runs)", "cause": "Gemini returned unterminated/invalid JSON; app has no retry/fallback at the parse layer"}
+  ],
+  "rca_of_the_issue": "iteration_81's test_prose_before_fence failure is genuinely fixed: _extract_json first strips a closed ```json fence via regex, then attempts json.loads, then falls back to outer-bracket extraction preferring the earliest of the '{...}' / '[...]' candidates - so leading/trailing prose and bare JSON all parse. The remaining failure is different: on ~8% of live analyze_meeting calls Gemini emits a fence-opened but never-closed / invalid JSON body. _extract_json correctly raises JSONDecodeError, but analyze_meeting's except-block returns a hard-coded empty analysis placeholder rather than retrying or invoking the OpenAI fallback (the fallback only wraps transport/API errors inside _ai_chat, not parse errors). Instrumented probes (7 consecutive runs) showed finish_reason=STOP, thoughts 2.3k-5.5k tokens, candidates 3.5k-5.5k tokens - well below the 65535 cap - so this is model-side output non-determinism, not a token-limit misconfiguration; it must be handled with a parse-level retry/fallback."
+}
