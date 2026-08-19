@@ -58,6 +58,23 @@ _UK_REPLACEMENTS = [
     (r'\bpastoral support\b',         "wellbeing support"),
     (r'\bpastoral care\b',            "welfare support"),
     (r'\bpastoral\b',                 "welfare"),  # catch-all fallback
+
+    # American -ize/-ization → British -ise/-isation (all inflected forms)
+    # Minimum 3-char stem excludes false positives: "size" (1-char stem),
+    # "prize"/"seize" (2-char stems). Longest suffix forms listed first.
+    # Back-reference \1 preserves the original capitalisation of the stem.
+    (r'\b([a-zA-Z]{3,})izations\b',  r'\1isations'),
+    (r'\b([a-zA-Z]{3,})ization\b',   r'\1isation'),
+    (r'\b([a-zA-Z]{3,})izing\b',     r'\1ising'),
+    (r'\b([a-zA-Z]{3,})ized\b',      r'\1ised'),
+    (r'\b([a-zA-Z]{3,})izes\b',      r'\1ises'),
+    (r'\b([a-zA-Z]{3,})ize\b',       r'\1ise'),
+
+    # American -yze → British -yse (analyze/analyse, paralyze/paralyse, etc.)
+    (r'\b([a-zA-Z]{3,})yzing\b',     r'\1ysing'),
+    (r'\b([a-zA-Z]{3,})yzed\b',      r'\1ysed'),
+    (r'\b([a-zA-Z]{3,})yzes\b',      r'\1yses'),
+    (r'\b([a-zA-Z]{3,})yze\b',       r'\1yse'),
 ]
 
 import re as _re_mod
