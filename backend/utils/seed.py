@@ -3810,9 +3810,11 @@ async def seed_super_admin():
     """
     from routers.auth import hash_password
     email = os.environ.get("SUPER_ADMIN_EMAIL", "superadmin@1two.one")
-    password = os.environ.get("SUPER_ADMIN_PASSWORD", "SuperAdmin123!")
+    # No weak literal as a fallback here on purpose — if SUPER_ADMIN_PASSWORD
+    # isn't set at all, treat it the same as a known-weak password (blocked below).
+    password = os.environ.get("SUPER_ADMIN_PASSWORD", "")
 
-    is_weak = password in _KNOWN_WEAK_PASSWORDS or len(password) < 12
+    is_weak = not password or password in _KNOWN_WEAK_PASSWORDS or len(password) < 12
 
     async with database.with_admin() as conn:
         existing = await conn.fetchrow("SELECT id, role FROM users WHERE email = $1", email)
