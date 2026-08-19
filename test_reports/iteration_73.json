@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only follow-up re-verification of the CRITICAL cross-org portfolio leak fix in routers/portfolio.py::_build_portfolio_data(). Re-ran the iteration_72 suite serially (tests/test_prep_portfolio_iter72.py) -> 17/17 PASSED, including all 3 previously failing TestPortfolioCrossOrg tests. Re-ran the unrelated SEC-001 IDOR suite (tests/test_idor_sec001.py) -> 17/17 PASSED, no collateral damage. Additionally wrote an independent 13-test spot-check suite (tests/test_portfolio_crossorg_iter73.py) that verifies fixture preconditions (org B manager has a REAL, distinct org_id and is org-level scoped so the tenant check is the only gate; Connor's org_id is genuinely NULL), cross-org denial on both GET /api/portfolio/{id} and /export-pdf (for a real-org target AND for the NULL-org target), and no regression in the legitimate paths (same-org portfolio 200 with correct data, same-org PDF 200 with %PDF magic bytes, NULL-org Connor visible to the related org's manager with his signed-off meeting listed, unknown user 404, org B manager still sees its own portfolio). All 13 passed. Verdict: the cross-tenant PII leak is closed and no regression introduced.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/portfolio/{user_id}", "issue": "super_admin role is not in the allowed-role list ([\"admin\",\"manager\"]) so a super_admin viewing another user's portfolio gets 403. Pre-existing, not caused by this fix — confirm whether intended."},
+      {"endpoint": "GET /api/portfolio/{user_id}/export-pdf", "issue": "Cosmetic: `org_id = current_user.get('org_id','')` is assigned twice (lines 309 and 319) in export_portfolio_pdf."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_prep_portfolio_iter72.py",
+    "/app/backend/tests/test_portfolio_crossorg_iter73.py",
+    "/app/test_reports/pytest/iter73_crossorg.xml"
+  ],
+  "action_items": [
+    "No functional fixes required — the cross-org regression is resolved (47/47 tests green across 3 suites).",
+    "Optional cleanup: remove the duplicated org_id assignment in export_portfolio_pdf (portfolio.py:319).",
+    "Optional: decide whether super_admin should be permitted on /api/portfolio/{user_id} (currently 403)."
+  ],
+  "critical_code_review_comments": [
+    "The tenant check in _build_portfolio_data() is correct and ordered before any data query: real-but-different org_id -> deny; NULL org_id -> only allowed when the target appears as an attendee on a meeting inside the caller's org. The meetings sub-query's org_id = effective_org_id filter is reinstated, so the result set is tenant-scoped rather than relying on global id uniqueness.",
+    "Caller-side edge case verified safe: if the CALLER has a null/empty org_id, org_id becomes '' so a real-org target is denied and the NULL-org 'linked meeting' query matches nothing -> deny. No open path.",
+    "This deny-by-default pattern only lives in portfolio.py because it deliberately uses database.with_admin() to bypass RLS. Other routers reviewed (meetings.py get_meeting / transcript endpoints) use database.with_org(), so RLS still provides tenant isolation there. Recommend keeping with_admin() usage on user lookups to an absolute minimum and always pairing it with an explicit tenant assertion."
+  ],
+  "updated_files": ["/app/backend/tests/test_portfolio_crossorg_iter73.py"],
+  "success_rate": {"backend": "100% (47/47: 17 iter72 + 17 SEC-001 IDOR + 13 new cross-org spot-checks)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None — existing seed_iter72.py fixtures (Connor Repro 60613cdc..., Diane/Maria repro meetings, org B manager 99999999-...) were all still present and validated by explicit precondition tests.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run both portfolio suites SERIALLY with -o addopts=\"\" (xdist breaks the shared login/MFA session cache). NOTE: writing any new file under /app/backend/tests/ triggers uvicorn --reload; during my run that reload failed with an asyncpg connect TimeoutError to the external Postgres and the backend EXITED (all API calls returned read-timeouts / 000 for ~10 min) until `sudo supervisorctl restart backend`. If every API test suddenly times out, curl http://localhost:8001/api/health and restart the backend before assuming a code bug. Manager MFA bypass = overwrite users.mfa_code with bcrypt('123456'); helper logic is inlined in both suites.",
+  "rca_of_the_issue": "Original regression: the null-org_id fix replaced the org-scoped user lookup with database.with_admin() 'SELECT * FROM users WHERE id=$1' and dropped the meetings org_id filter, while get_portfolio()'s only authorization gate is role/manager-scope (org-level managers and admins pass it for ANY user_id) — it never compared organisations, so any org's org-level manager could read/PDF-export another tenant's staff portfolio. Fix adds an explicit tenant assertion immediately after the admin lookup plus a genuine-relationship (attendee-on-a-meeting-in-caller's-org) requirement for NULL-org targets, and reinstates org_id = effective_org_id on the meetings query. Verified: org B manager now gets 404 on Diane and on Connor (JSON + PDF), while org A manager still gets 200 with correct data for both."
+}

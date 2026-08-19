@@ -28,6 +28,27 @@ router = APIRouter(prefix="/prep", tags=["prep"])
 logger = logging.getLogger(__name__)
 
 
+def _derive_supervisee_ids(meeting: dict) -> list:
+    """Who is actually being supervised in this meeting — NOT the manager.
+
+    `sign_off_manager_id` is optional and often unset at prep time (it's only
+    reliably populated at/after sign-off), so excluding just that one id is not
+    enough: if the manager is also listed as an attendee (the normal case),
+    they'd wrongly be treated as a "supervisee" too, which then pulls in every
+    OTHER meeting that manager has ever attended — including completely
+    unrelated supervisees' meetings — as prep context. Fall back to the
+    meeting creator (almost always the manager conducting the session) and to
+    each attendee's own account role as extra safety nets.
+    """
+    manager_id = meeting.get("sign_off_manager_id") or meeting.get("created_by")
+    return [
+        a.get("user_id") for a in (meeting.get("attendees") or [])
+        if a.get("user_id")
+        and a.get("user_id") != manager_id
+        and a.get("role") not in ("manager", "admin")
+    ]
+
+
 def _ensure_list(val):
     if isinstance(val, str):
         try:
@@ -191,11 +212,7 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
     meeting = await _get_meeting_guarded(meeting_id, current_user)
     org_id = meeting.get("org_id", "")
 
-    manager_id = meeting.get("sign_off_manager_id")
-    supervisee_ids = [
-        a.get("user_id") for a in (meeting.get("attendees") or [])
-        if a.get("user_id") and a.get("user_id") != manager_id
-    ]
+    supervisee_ids = _derive_supervisee_ids(meeting)
 
     # Safety guard — if no supervisees are set, return no personal documents
     if not supervisee_ids:
@@ -312,7 +329,7 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
         "supervisees": [
             {"user_id": a.get("user_id"), "name": a.get("name")}
             for a in (meeting.get("attendees") or [])
-            if a.get("user_id") != manager_id
+            if a.get("user_id") in supervisee_ids
         ],
         "sources": sources,
         "current_focus_topic": focus_row["text"] if focus_row else None,
@@ -350,15 +367,12 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
         async with database.with_org(org_id) as conn:
             meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
         meeting = dict(meeting_row) if meeting_row else {}
-        manager_id = meeting.get("sign_off_manager_id")
-        _attendees = _ensure_list(meeting.get("attendees"))
-        supervisee_ids = [
-            a.get("user_id") for a in _attendees
-            if a.get("user_id") and a.get("user_id") != manager_id
-        ]
+        meeting["attendees"] = _ensure_list(meeting.get("attendees"))
+        _attendees = meeting["attendees"]
+        supervisee_ids = _derive_supervisee_ids(meeting)
         supervisee_names = [
             a.get("name", "") for a in _attendees
-            if a.get("user_id") and a.get("user_id") != manager_id
+            if a.get("user_id") in supervisee_ids
         ]
         supervisee_name = ", ".join(supervisee_names) if supervisee_names else "the supervisee"
 

@@ -1,0 +1,59 @@
+{
+  "summary": "Backend-only verification of the two reported bugs. New pytest suite /app/backend/tests/test_prep_portfolio_iter72.py (17 tests, 14 passed / 3 failed). BUG 1 (prep cross-supervisee leak) is FIXED and verified on the exclusion/inclusion boundary: GET /api/prep/1f6ba2ef.../context as manager@supervision.com returns exactly one previous_meeting source (d272da8e... 'Supervision with Diane Fletcher (past)'), both Maria Santos meetings (27673540..., 4d646092...) are absent, no 'Maria' string anywhere in labels, and `supervisees` = [Diane Fletcher] only (manager excluded) even though sign_off_manager_id is NULL. Regressions pass: a genuine 2-supervisee group meeting (Diane+Maria, created via POST /api/meetings/) still surfaces all three of their past meetings as context; a manager-only-attendee meeting correctly yields supervisees=[] and zero personal sources. AI path verified too: POST /api/prep/{id}/generate on the Diane meeting completed gen_status=done with non-empty sections and zero 'Maria' references. BUG 2 (portfolio null org_id) is FIXED: GET /api/portfolio/60613cdc... ('Connor Repro', org_id NULL) now returns 200 with user.name='Connor Repro' and full stats/summaries, and a seeded signed-off meeting for Connor is correctly listed (total_meetings=1, last_meeting_date populated) — proving meetings actually render, not just an empty shell. Portfolio regressions pass: Diane's portfolio still shows only her own meeting, unknown user -> 404, unauthenticated -> 401/403, attendee blocked from others' portfolio (403) but allowed on own (200). HOWEVER the portfolio fix introduces a NEW cross-tenant data leak — see backend_issues.critical.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/portfolio/{user_id}",
+        "issue": "CROSS-ORG DATA LEAK (regression from this fix). A manager with org-level scope from a DIFFERENT organisation (seeded test-orgb-manager@example.com, org 3628a11d-36b8-42df-9d46-0479450ee22c) receives HTTP 200 with the full portfolio of an org A staff member (Diane Fletcher 2412f428-...): name, email, role, stats, meeting titles/dates and evidence excerpts. Root cause: _build_portfolio_data() now looks the user up with with_admin() filtered by id only, and get_portfolio()'s authorization does NOT compare the target user's org_id with the caller's — get_manager_scope() returns level='org' for any manager with no team_id/setting_id (and always for admin), so the scoped-ids branch is skipped entirely and there is no remaining tenant predicate anywhere in the path. Before the fix the with_org(org_id) user lookup was the only thing enforcing tenancy. Suggested fix: keep the with_admin id-only lookup but explicitly authorize afterwards, e.g. reject unless user_doc['org_id'] == caller org_id OR (user_doc['org_id'] IS NULL AND the user appears as an attendee on a meeting owned by the caller's org). Also consider back-filling the NULL org_id.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "GET /api/portfolio/{user_id}/export-pdf",
+        "issue": "Same cross-org leak: org B manager gets HTTP 200 and a 2787-byte PDF containing org A staff member's name, email, meeting history and evidence excerpts. export_portfolio_pdf() shares the same _build_portfolio_data() path and the same missing tenant check.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "GET /api/portfolio/{user_id} (null org_id target)",
+        "issue": "Connor Repro (org_id NULL) is now readable by ANY org-level manager/admin in ANY organisation (org B manager got 200). Null-org users are effectively global once the org predicate is removed.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/portfolio/{user_id}",
+        "issue": "The meetings sub-query dropped `org_id = $1` and relies solely on the attendee user_id match. Attendee user_id is globally unique today, but if a user id ever appears in another org's meeting attendees jsonb (data migration, duplicated seed, cross-org guest attendee) that org's meeting titles/evidence would silently appear in the portfolio. Safer: filter `org_id = ANY(<caller org + target user's effective org>)` rather than removing the predicate entirely."
+      },
+      {
+        "endpoint": "POST /api/auth/login, POST /api/auth/verify-mfa",
+        "issue": "Test-infra friction (not a product bug, reported for awareness): the 20-logins-per-IP/15-min limit plus a single mfa_code column per user makes parallel (pytest-xdist) API test suites flaky — MFA verify returns 401 'Code expired' when two workers overwrite the same user's mfa_code. Suite must be run serially with -o addopts=\"\"."
+      }
+    ]
+  },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_prep_portfolio_iter72.py",
+    "/app/backend/tests/seed_iter72.py",
+    "/app/test_reports/pytest/iter72.xml"
+  ],
+  "action_items": [
+    "CRITICAL: add an explicit tenant authorization check in routers/portfolio.py get_portfolio() and export_portfolio_pdf() (or inside _build_portfolio_data) — target user's org_id must equal the caller's org_id, with an explicit allowance only for NULL-org users who are attendees on the caller org's meetings. Currently any org-level manager/admin from any org can read and PDF-export another org's staff portfolio.",
+    "Consider re-adding a bounded org filter to the portfolio meetings sub-query (caller org + target user's effective org) instead of no filter at all.",
+    "Optional: back-fill/repair NULL users.org_id values (root cause of the 'Connor' bug class) so the fallback path is rarely exercised."
+  ],
+  "critical_code_review_comments": [
+    "portfolio.py: the code comment claiming 'the caller has already been authorized to view this specific user_id's portfolio by get_portfolio() above' is not accurate — get_portfolio() only restricts non-org-level managers via get_scoped_staff_ids, and get_manager_scope() returns level='org' for any manager without team_id/setting_id and always for admin, so no tenant check runs at all. Verified empirically (3 failing tests).",
+    "prep.py _derive_supervisee_ids: fix is sound and defence-in-depth (excludes sign_off_manager_id, falls back to created_by, and drops attendees whose attendee-role is manager/admin). Verified it does not over-exclude genuine multi-supervisee group sessions. Only residual edge case: a genuine supervisee whose account role is 'manager' (a manager being supervised by a senior manager) will be silently dropped from their own prep context — worth a follow-up if manager-on-manager supervision is a supported flow.",
+    "prep.py: identical previous-meeting/uploads/standards query logic is duplicated between get_prep_context and _run_generate_prep (~90 lines, differing only in LIMIT and status list) — DRY risk that a future fix gets applied to only one of the two paths (exactly the class of bug just fixed). Extract a shared _load_context_sources() helper."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_prep_portfolio_iter72.py",
+    "/app/backend/tests/seed_iter72.py"
+  ],
+  "success_rate": { "backend": "82% (14/17)", "frontend": "not tested (backend-only request)" },
+  "seed_data_creation": "Via /app/backend/tests/seed_iter72.py (idempotent, `python seed_iter72.py cleanup` to remove): (1) meeting 11111111-2222-3333-4444-555555555555 'TEST_ Supervision with Connor Repro' — signed_off clone of d272da8e... with Connor (60613cdc..., org_id NULL) as attendee, needed to prove portfolio meetings actually render for a null-org user; (2) user test-orgb-manager@example.com / OrgBManager123! (id 99999999-8888-7777-6666-555555555555, role manager, org 3628a11d... 'IDOR Test Org B', no team/setting => org-level scope) for the cross-org boundary test. Both intentionally LEFT IN PLACE so the security regression can be re-verified. Transient mutations: manager/staff mfa_code overrides, login_attempts table cleared, and a meeting_prep row now exists for meeting 1f6ba2ef... from the generate test. Two temporary group-supervision meetings were created via API and deleted in teardown.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "manager@supervision.com/Manager123! (MFA bypass via DB override, see helper in the test file), user@supervision.com/Staff123!, test-orgb-manager@example.com/OrgBManager123! (new, different org, for cross-org tests)",
+  "context_for_next_testing_agent": "Run with: cd /app/backend && python3 -m pytest tests/test_prep_portfolio_iter72.py -v -o addopts=\"\" (MUST be serial — pytest.ini enables xdist and parallel workers break the shared mfa_code + trip the per-IP login rate limit). Suite caches one session per email in _SESSIONS and clears the login_attempts table before each fresh login. Fixtures needed: run tests/seed_iter72.py first if the Connor meeting or org B manager were cleaned up. The 3 currently-failing tests in TestPortfolioCrossOrg are the real security regression, not test bugs — they should flip to pass (403/404) once the tenant check is added to portfolio.py. All 7 BUG-1 prep tests and all 7 BUG-2 portfolio tests pass.",
+  "rca_of_the_issue": "BUG 1: get_prep_context/_run_generate_prep derived 'supervisees' as every attendee except sign_off_manager_id. sign_off_manager_id is only populated at sign-off, so on a newly scheduled meeting it is NULL and the conducting manager (who is listed as an attendee) was treated as a supervisee; the previous-meetings query then matched every meeting that manager had ever attended, exposing other supervisees' summaries/actions as prep context and into the AI prompt. Fix (_derive_supervisee_ids: exclude sign_off_manager_id OR created_by, plus exclude attendees with manager/admin role) verified correct on both the exclusion and the inclusion side. BUG 2: _build_portfolio_data looked the user up with with_org(org_id) requiring id AND org_id, so any user row with a NULL/stale org_id 404'd ('User not found'). Fix (with_admin id-only lookup + effective_org_id fallback) resolves it and portfolio meetings now render — but that same with_org lookup was the ONLY tenant predicate in the whole portfolio path, and get_portfolio()'s role/scope gate does not compare orgs, so removing it opened a cross-org read/PDF-export of another organisation's staff portfolios (reproduced with a real org B manager account)."
+}

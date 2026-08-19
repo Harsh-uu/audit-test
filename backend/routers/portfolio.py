@@ -31,12 +31,47 @@ def _safe_jsonb(value, default=None):
 
 async def _build_portfolio_data(user_id: str, org_id: str):
     """Aggregate evidence data for a single user across all signed-off meetings."""
-    async with database.with_org(org_id) as conn:
-        user_row = await conn.fetchrow("SELECT * FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
+    # Look up by id only (with_admin, no org_id predicate) — a user's own org_id
+    # can be null/stale (the "Connor" null-org_id bug class from invite/repair
+    # flows), which must not 404 their portfolio for the manager viewing it.
+    async with database.with_admin() as conn:
+        user_row = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
     if not user_row:
         return None
 
     user_doc = dict(user_row)
+    target_org_id = user_doc.get("org_id")
+
+    # ── Explicit tenant check (was missing entirely before this fix) ──────────
+    # The null-org_id lookup above deliberately bypasses org_id, so it must be
+    # re-authorized here rather than relying on get_portfolio()'s role/scope
+    # gate — that gate does NOT compare orgs (org-level managers/admins pass it
+    # for ANY user_id). A user with a real, different org_id is always denied.
+    # A user with a NULL org_id (the "Connor" repair case) is only allowed if
+    # they actually appear as an attendee on a meeting inside the caller's org
+    # — proving a genuine supervisory relationship, not just a guessed id.
+    if target_org_id and target_org_id != org_id:
+        return None
+    if not target_org_id:
+        async with database.with_admin() as conn:
+            linked = await conn.fetchval(
+                """SELECT 1 FROM meetings
+                   WHERE org_id = $1
+                     AND EXISTS (
+                         SELECT 1 FROM jsonb_array_elements(
+                             CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
+                                  THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END
+                         ) elem WHERE elem->>'user_id' = $2
+                     )
+                   LIMIT 1""",
+                org_id, user_id,
+            )
+        if not linked:
+            return None
+
+    # Prefer the user's own org_id; fall back to the caller's (e.g. their
+    # manager's) org_id if the user record itself has a null org_id.
+    effective_org_id = target_org_id or org_id
     user_data = {
         "id": user_doc["id"],
         "name": user_doc.get("name", ""),
@@ -49,10 +84,10 @@ async def _build_portfolio_data(user_id: str, org_id: str):
     # Enrich with team/setting names
     if user_data.get("team_id"):
         try:
-            async with database.with_org(org_id) as conn:
+            async with database.with_org(effective_org_id) as conn:
                 team_row = await conn.fetchrow(
                     "SELECT name FROM teams WHERE id = $1 AND org_id = $2",
-                    user_data["team_id"], org_id,
+                    user_data["team_id"], effective_org_id,
                 )
             user_data["team_name"] = team_row["name"] if team_row else None
         except Exception:
@@ -62,10 +97,10 @@ async def _build_portfolio_data(user_id: str, org_id: str):
 
     if user_data.get("setting_id"):
         try:
-            async with database.with_org(org_id) as conn:
+            async with database.with_org(effective_org_id) as conn:
                 setting_row = await conn.fetchrow(
                     "SELECT name FROM org_settings WHERE id = $1 AND org_id = $2",
-                    user_data["setting_id"], org_id,
+                    user_data["setting_id"], effective_org_id,
                 )
             user_data["setting_name"] = setting_row["name"] if setting_row else None
         except Exception:
@@ -73,7 +108,8 @@ async def _build_portfolio_data(user_id: str, org_id: str):
     else:
         user_data["setting_name"] = None
 
-    # Signed-off meetings where this user is an attendee (supervisee, not supervisor)
+    # Signed-off meetings where this user is an attendee (supervisee, not supervisor).
+    # Filtered by effective_org_id (tenant-scoped) AND the attendee user_id match.
     async with database.with_admin() as conn:
         meetings_rows = await conn.fetch(
             """SELECT * FROM meetings
@@ -93,7 +129,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                  )
                ORDER BY date DESC
                LIMIT 500""",
-            org_id, user_id,
+            effective_org_id, user_id,
         )
 
     meetings_list = [dict(r) for r in meetings_rows]
@@ -101,7 +137,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
     analysis_ids = [m["analysis_id"] for m in meetings_list if m.get("analysis_id")]
     analyses_map = {}
     if analysis_ids:
-        async with database.with_org(org_id) as conn:
+        async with database.with_admin() as conn:
             analysis_rows = await conn.fetch(
                 "SELECT * FROM analyses WHERE id = ANY($1::text[])",
                 analysis_ids,
@@ -280,7 +316,6 @@ async def export_portfolio_pdf(user_id: str, current_user=Depends(get_current_us
                 scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
             if user_id not in scoped_ids:
                 raise HTTPException(status_code=403, detail="You can only export portfolios of staff in your scope")
-    org_id = current_user.get("org_id", "")
     data = await _build_portfolio_data(user_id, org_id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
