@@ -692,24 +692,26 @@ async def create_schema():
             "UPDATE meeting_types SET name = 'Supervision' WHERE name = 'Monthly Supervision'"
         )
         # Fix meetings where attendees/shared_with were stored as a JSON object
-        # instead of an array (legacy data bug). Convert single-object attendees
-        # to a one-element array; convert empty {} to [].
+        # instead of an array (legacy data bug). Also un-stringify double-encoded
+        # JSON strings (jsonb_typeof = 'string').
         await conn.execute("""
             UPDATE meetings
             SET attendees = CASE
+                WHEN jsonb_typeof(attendees) = 'string' THEN (attendees #>> '{}')::jsonb
                 WHEN attendees = '{}'::jsonb THEN '[]'::jsonb
                 ELSE jsonb_build_array(attendees)
             END
-            WHERE jsonb_typeof(attendees) = 'object'
+            WHERE jsonb_typeof(attendees) IN ('object', 'string')
         """)
         await conn.execute("""
             UPDATE meetings
             SET shared_with = CASE
+                WHEN jsonb_typeof(shared_with) = 'string' THEN (shared_with #>> '{}')::jsonb
                 WHEN shared_with = '{}'::jsonb THEN '[]'::jsonb
                 ELSE jsonb_build_array(shared_with)
             END
             WHERE shared_with IS NOT NULL
-              AND jsonb_typeof(shared_with) = 'object'
+              AND jsonb_typeof(shared_with) IN ('object', 'string')
         """)
         logger.info("Schema created/verified successfully")
     finally:

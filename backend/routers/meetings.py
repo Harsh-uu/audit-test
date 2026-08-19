@@ -187,6 +187,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                           SELECT 1 FROM jsonb_array_elements(
                               CASE
                                   WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees
+                                  WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='string' THEN (attendees #>> '{{}}')::jsonb
                                   WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='object' AND attendees != '{{}}'::jsonb THEN jsonb_build_array(attendees)
                                   ELSE '[]'::jsonb
                               END
@@ -196,6 +197,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                           SELECT 1 FROM jsonb_array_elements(
                               CASE
                                   WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with
+                                  WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='string' THEN (shared_with #>> '{{}}')::jsonb
                                   WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='object' AND shared_with != '{{}}'::jsonb THEN jsonb_build_array(shared_with)
                                   ELSE '[]'::jsonb
                               END
@@ -226,6 +228,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                            SELECT 1 FROM jsonb_array_elements(
                                CASE
                                    WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees
+                                   WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='string' THEN (attendees #>> '{{}}')::jsonb
                                    WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='object' AND attendees != '{{}}'::jsonb THEN jsonb_build_array(attendees)
                                    ELSE '[]'::jsonb
                                END
@@ -235,6 +238,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                            SELECT 1 FROM jsonb_array_elements(
                                CASE
                                    WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='array' THEN shared_with
+                                   WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='string' THEN (shared_with #>> '{{}}')::jsonb
                                    WHEN jsonb_typeof(COALESCE(shared_with,'null'::jsonb))='object' AND shared_with != '{{}}'::jsonb THEN jsonb_build_array(shared_with)
                                    ELSE '[]'::jsonb
                                END
@@ -279,6 +283,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                               SELECT 1 FROM jsonb_array_elements(
                                   CASE
                                       WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees
+                                      WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='string' THEN (attendees #>> '{{}}')::jsonb
                                       WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='object' AND attendees != '{{}}'::jsonb THEN jsonb_build_array(attendees)
                                       ELSE '[]'::jsonb
                                   END
