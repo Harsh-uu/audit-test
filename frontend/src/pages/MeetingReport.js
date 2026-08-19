@@ -441,61 +441,45 @@ export default function MeetingReport() {
     return (
       <Layout>
         <div className="flex flex-col h-full">
-          {/* Top bar skeleton — mirrors the sticky header */}
-          <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-20 gap-2">
-            <div className="flex items-center gap-4">
+          {/* Top bar skeleton — mirrors the sticky header (title lives in Layout's org-colour bar) */}
+          <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20 gap-2">
+            <div className="flex items-center gap-3">
               <Skeleton className="h-4 w-4 rounded" />
-              <div className="space-y-1.5">
-                <Skeleton className="h-4 w-48" />
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-5 w-20 rounded-full" />
-                </div>
-              </div>
+              <Skeleton className="h-5 w-20 rounded-full" />
             </div>
             <div className="flex items-center gap-2">
               <Skeleton className="h-8 w-28 rounded-md" />
-              <Skeleton className="h-8 w-24 rounded-md" />
+              <Skeleton className="h-8 w-8 rounded-md" />
             </div>
           </div>
-          {/* Two-panel skeleton — mirrors the 7/5 column layout */}
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
-            {/* Left: tab row + content */}
-            <div className="lg:col-span-7 border-r border-gray-200 flex flex-col">
-              <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-6">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-4 w-14" />
-                <Skeleton className="h-4 w-16" />
-              </div>
-              <div className="p-6 space-y-5">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-24 w-full rounded-lg" />
-                <Skeleton className="h-5 w-32" />
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <Skeleton className="h-4 w-4 rounded-full flex-shrink-0 mt-0.5" />
-                    <Skeleton className="h-4 flex-1" />
-                  </div>
-                ))}
-                <Skeleton className="h-5 w-28 mt-2" />
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <Skeleton className="h-4 w-4 rounded-full flex-shrink-0 mt-0.5" />
-                    <Skeleton className="h-4" style={{ width: `${55 + i * 12}%` }} />
-                  </div>
-                ))}
-              </div>
+          {/* Tab row skeleton — mirrors Overview/Transcript/Compliance/Comments/Prep Agenda/Audit Trail */}
+          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 flex-shrink-0">
+            <div className="max-w-5xl mx-auto px-6 flex items-center gap-6 overflow-x-auto">
+              <Skeleton className="h-4 w-16 my-3" />
+              <Skeleton className="h-4 w-20 my-3" />
+              <Skeleton className="h-4 w-20 my-3" />
+              <Skeleton className="h-4 w-20 my-3" />
+              <Skeleton className="h-4 w-24 my-3" />
+              <Skeleton className="h-4 w-20 my-3" />
             </div>
-            {/* Right: compliance panel */}
-            <div className="hidden lg:flex lg:col-span-5 flex-col p-6 gap-4">
-              <Skeleton className="h-5 w-36" />
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="border border-gray-100 rounded-lg p-3 space-y-2">
-                  <Skeleton className="h-3 w-20" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-3 w-3/4" />
+          </div>
+          {/* Single-column content skeleton — no permanent sidebar, matches the current tabbed layout */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="max-w-5xl mx-auto p-6 w-full space-y-5">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-24 w-full rounded-lg" />
+              <Skeleton className="h-5 w-32" />
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <Skeleton className="h-4 w-4 rounded-full flex-shrink-0 mt-0.5" />
+                  <Skeleton className="h-4 flex-1" />
+                </div>
+              ))}
+              <Skeleton className="h-5 w-28 mt-2" />
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <Skeleton className="h-4 w-4 rounded-full flex-shrink-0 mt-0.5" />
+                  <Skeleton className="h-4" style={{ width: `${55 + i * 12}%` }} />
                 </div>
               ))}
             </div>

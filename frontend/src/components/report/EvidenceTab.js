@@ -350,11 +350,13 @@ export const EvidenceTab = React.memo(function EvidenceTab({
   };
 
   const handleCreateActionFromRisk = (risk) => {
-    setNewAction(`[Risk] ${risk.text}`);
+    setNewAction(a => ({ ...a, text: `[Risk] ${risk.text}` }));
     setAddingAction(true);
     // Scroll to actions section
     setTimeout(() => document.getElementById("section-actions")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
-  };  const [regenerating, setRegenerating] = useState(false);
+  };
+
+  const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState("");
 
   const handleRegenerate = async () => {

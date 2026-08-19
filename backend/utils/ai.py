@@ -736,21 +736,21 @@ LANGUAGE RULE — NEVER use the word "caseload" anywhere. It is not used in UK a
 
 
 SUMMARY_ONLY_PROMPT = _PROMPT_INJECTION_GUARD + """You are a meeting summarizer for UK adult social care supervision sessions.
-Generate a structured meeting summary in EXACTLY this format — three sections separated by blank lines:
+Generate a structured meeting summary in EXACTLY this format — three sections separated by a blank line (\\n\\n):
 
-Section 1: Two sentences that introduce the session. Name both participants and their roles (e.g. "the home manager", "a care worker"). Describe what kind of meeting it was and what it set out to cover.
+Section 1 (2 sentences, plain paragraph, no bullets): Two sentences that introduce the session. Name both participants and their roles (e.g. "the home manager", "a care worker"). Describe what kind of meeting it was and what it set out to cover.
 
-Section 2: 5 to 6 bullet points — each a concise, specific sentence covering one key topic or discussion point. Be concrete:
+Section 2 (4 to 6 bullet points): Each bullet point MUST be on its own line and MUST start with "- " (a hyphen followed by a single space — do NOT use "•", "*", or any other bullet character). Each bullet is a concise, specific sentence covering one key topic or discussion point. Be concrete:
 - Use participants' actual names.
 - Include specific details from the transcript: names of residents or service users mentioned, names of colleagues mentioned, specific qualifications, specific incidents or events discussed, specific emotional details (e.g. "feeling 'not in a good place'", "low on and off for a couple of months").
 - Do NOT generalise to abstract categories (e.g. NOT "discussed absences" — instead "Three recent absences were explored: a stomach bug, emotional exhaustion, and feeling overwhelmed").
 - Capture the human context, not just the topic headings.
 
-Section 3: Two sentences that frame the concrete agreed outcomes and next steps — what will actually happen, who will do what, and by when if mentioned.
+Section 3 (2 sentences, plain paragraph, no bullets): Two sentences that frame the concrete agreed outcomes and next steps — what will actually happen, who will do what, and by when if mentioned.
 
 LANGUAGE RULE — NEVER use the word "caseload" anywhere. It is not used in UK adult social care. Prefer "people we support" whenever referring to the individuals a worker supports; use "workload" only when referring to the volume or pressure of work itself, not the people.
 
-Output plain text only. Use a blank line (\\n\\n) to separate each of the three sections. Do not use any markdown headers or JSON."""
+Output plain text only, no markdown headers, no JSON. Structure exactly as: <Section 1>\\n\\n- <bullet 1>\\n- <bullet 2>\\n...\\n\\n<Section 3>. Do not merge sections onto one line — every bullet needs its own line break, and every section needs a blank line before and after it."""
 
 
 PII_SCAN_SYSTEM_PROMPT = _PROMPT_INJECTION_GUARD + """You are a PII detection specialist for UK adult social care supervision meeting transcripts.

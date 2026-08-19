@@ -907,11 +907,18 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
             speaker_renames[p[0]] = n[0]
 
     # Detect turn body text changes
+    def _clip(s, limit=80):
+        """Truncate on a word boundary so audit-log excerpts never cut mid-word."""
+        if len(s) <= limit:
+            return s
+        clipped = s[:limit].rsplit(" ", 1)[0]
+        return (clipped or s[:limit]) + "…"
+
     text_edit_details = []
     for i, (p, n) in enumerate(zip(prev_turns, new_turns)):
         if p[1] != n[1]:
             text_edit_details.append(
-                f"Turn {i+1} ({n[0]}): \"{p[1][:80]}\" \u2192 \"{n[1][:80]}\""
+                f"Turn {i+1} ({n[0]}): \"{_clip(p[1])}\" \u2192 \"{_clip(n[1])}\""
             )
 
     has_speaker_rename = bool(speaker_renames)
