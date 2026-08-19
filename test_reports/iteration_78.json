@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 78 — focused verification of the two new fixes (EvidenceTab optimistic UI, login rate-limit rewrite) plus a core smoke regression. Backend: 10/10 pytest tests pass (new files test_rate_limit_iter78.py, test_review_toggle_iter78.py). Frontend (production build confirmed current — no src file newer than /app/frontend/build): action-item toggle and learning-need toggle both flip in <300ms while the API call is artificially stalled 4s (route interception), both roll back correctly with an error toast on a simulated 500, and both persist correctly after a page reload. Login/dashboard/report/tabs smoke all clean.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login", "issue": "MFA response returns the FULL email address (`\"email\": user[\"email\"]`) and Login.js renders it verbatim on the 'Check your email' screen — no masking (e.g. m****r@supervision.com). Review request expected a masked email on the MFA screen."},
+      {"endpoint": "GET /api/admin/users?ignore_scope=true", "issue": "Frontend calls this on dashboard load for an attendee user, producing a 403 console error on every login (harmless but noisy — should be role-gated client-side)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login / MFA left panel", "issues": ["Footer reads '1two.one © 2025' while the in-app footer reads '© 2026 Supervision2' — inconsistent/stale copyright year and branding"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_rate_limit_iter78.py",
+    "/app/backend/tests/test_review_toggle_iter78.py"
+  ],
+  "action_items": [
+    "Optional: mask the email on the MFA screen (backend should return a masked value, or mask in Login.js) — currently full email is displayed.",
+    "Optional: skip the /api/admin/users call for non-admin roles to remove the 403 console error on dashboard load.",
+    "Optional: fix the '© 2025' footer on the login/MFA page to match the app footer year."
+  ],
+  "critical_code_review_comments": [
+    "utils/rate_limit.py record_failed_attempt() locks when count+1 > max_attempts, but routers/auth.py implements its own INSERT/lockout logic for the per-email counter (locking at count >= 5) instead of reusing record_failed_attempt — two parallel implementations of the same rule. Behaviour verified correct, but consolidating would avoid future drift.",
+    "In auth.py the per-email failure branch sets locked_until on EVERY failure (locked_until = $2) and relies on Step 1's `count >= 5` gate to decide whether the lock applies; a future reader could easily misread this as 'locked after 1 failure'. Consider only setting locked_until once the threshold is crossed.",
+    "EvidenceTab learning-need toggle sends the FULL learning_needs array via PUT (last-write-wins) while actions use a targeted PATCH — concurrent editors could clobber each other's learning-need changes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_rate_limit_iter78.py",
+    "/app/backend/tests/test_review_toggle_iter78.py"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% of tested flows (6/6 assertions on optimistic toggle, rollback, persistence for both actions and learning needs; login/dashboard/report/6-tab smoke clean)"},
+  "seed_data_creation": "No new seed data. Used existing meeting c20802af-17e3-4210-b497-13d09c9e67ec (Test Company, in_review). Toggled action/learning-need completion flags during testing and reset all of them to completed=false at the end (note: action_0 was completed=true before this session and is now false — test-data drift only). login_attempts table cleared before and after tests.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "From /app/memory/test_credentials.md — manager@supervision.com / Manager123! (MFA bypassed via /app/backend/tests/get_tokens.py), user@supervision.com / Staff123!. Both verified working.",
+  "context_for_next_testing_agent": "Frontend is a Vite production build served from /app/frontend/build via `yarn start` (vite build && vite preview) — check `find src -newer build` to confirm freshness before UI testing. Only managers/admins can PATCH /api/review/{id}/actions/{id} or PUT .../learning_needs (attendee gets 403) — use get_tokens.py for manager cookies and inject via page.context.add_cookies. When asserting toggle state in EvidenceTab, note actions use 'bg-emerald-500' when completed (the incomplete class also contains 'emerald-400') and learning needs use 'bg-teal-600' — match on the exact completed class. Optimistic UI was proven by stalling the API with page.route + 4s delay. Rate-limit tests take ~90s (bcrypt) and clear the login_attempts table via fixture.",
+  "rca_of_the_issue": "Both fixes verified working. Optimistic UI: MeetingReport.toggleActionComplete and EvidenceTab.toggleLNComplete now set local state before awaiting axios and revert on catch with a toast. Rate limiting: successful logins DELETE the per-email counter and never call record_failed_attempt; 5 consecutive failures set count>=5 + locked_until, after which even a correct password returns 429 for 15 minutes; a success mid-way resets the counter (verified 3 fails → success → 3 fails → success)."
+}

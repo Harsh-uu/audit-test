@@ -88,7 +88,7 @@ export default function ResetPassword() {
             "Creating a culture of continuous improvement in adult social care."
           </blockquote>
         </div>
-        <p className="text-blue-300 text-sm">1two.one &copy; 2025</p>
+        <p className="text-blue-300 text-sm">1two.one &copy; 2026</p>
       </div>
 
       {/* Right panel */}

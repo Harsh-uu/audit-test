@@ -27,6 +27,18 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
+def _mask_email(email: str) -> str:
+    try:
+        local, domain = email.split("@", 1)
+        if len(local) <= 2:
+            masked = local[0] + "*" * max(len(local) - 1, 1)
+        else:
+            masked = local[0] + "*" * (len(local) - 2) + local[-1]
+        return f"{masked}@{domain}"
+    except Exception:
+        return email
+
+
 def validate_password_strength(password: str):
     errors = []
     if len(password) < 10:
@@ -197,10 +209,13 @@ async def login(data: LoginRequest, request: Request, response: Response):
     email = data.email.lower()
     identifier = email.lower()  # email-only — ingress pod IPs are unreliable in k8s/proxy setups
 
-    # ── IP-wide secondary rate limit (20 per IP / 15 min) ────────────────────
+    # ── IP-wide secondary rate limit (20 FAILED attempts per IP / 15 min) ────
+    # Only counts failed logins (see Step 3 below) — successful logins from a
+    # shared/busy IP must never eat into this budget, or legitimate traffic
+    # gets locked out for no reason.
     # Wrapped in try/except: a rate-limit DB failure must never block login
     # or return an unparseable response to the CDN.
-    from utils.rate_limit import check_rate_limit
+    from utils.rate_limit import check_lockout, record_failed_attempt
     xff = request.headers.get("X-Forwarded-For", "")
     _ip = (
         request.headers.get("X-Real-IP")
@@ -209,11 +224,9 @@ async def login(data: LoginRequest, request: Request, response: Response):
     )
     try:
         async with database.with_admin() as _rl_conn:
-            await check_rate_limit(
+            await check_lockout(
                 _rl_conn,
                 identifier=f"login_ip:{_ip}",
-                max_attempts=20,
-                window_minutes=15,
                 error_detail="Too many login attempts from this location. Please wait 15 minutes before trying again.",
             )
     except HTTPException:
@@ -224,7 +237,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
     # ── Step 1: lockout check ─────────────────────────────────────────────────
     async with database.with_admin() as conn:
         attempts_row = await conn.fetchrow("SELECT count, locked_until FROM login_attempts WHERE identifier = $1", identifier)
-    if attempts_row and attempts_row["count"] >= 3:
+    if attempts_row and attempts_row["count"] >= 5:
         lockout_until = attempts_row.get("locked_until")
         if lockout_until and lockout_until > datetime.now(timezone.utc).isoformat():
             raise HTTPException(status_code=429, detail="Too many failed attempts — your account is temporarily locked. Use the Forgot Password link to reset your access.")
@@ -237,10 +250,34 @@ async def login(data: LoginRequest, request: Request, response: Response):
 
     # ── Step 3: record failed attempt (committed separately so rollback can't undo it)
     if not password_ok:
+        # IP-wide failure counter — only failures count, so shared/busy IPs
+        # with legitimate successful logins are never penalised.
+        try:
+            async with database.with_admin() as _rl_conn:
+                await record_failed_attempt(
+                    _rl_conn,
+                    identifier=f"login_ip:{_ip}",
+                    max_attempts=20,
+                    window_minutes=15,
+                    error_detail="Too many failed login attempts from this location. Please wait 15 minutes before trying again.",
+                )
+        except HTTPException:
+            raise
+        except Exception as _rl_err:
+            logger.warning("IP rate-limit record failed (non-critical): %s", _rl_err)
+
         now = datetime.now(timezone.utc).isoformat()
         locked_until = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
         new_count = 1
         async with database.with_admin() as conn:
+            # Reset a stale counter (no failure in the last 15 min) instead of
+            # accumulating forever — an old mistyped password from last week
+            # shouldn't count toward today's lockout.
+            stale = await conn.fetchrow(
+                "SELECT updated_at FROM login_attempts WHERE identifier = $1", identifier
+            )
+            if stale and stale["updated_at"] and stale["updated_at"] < (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat():
+                await conn.execute("DELETE FROM login_attempts WHERE identifier = $1", identifier)
             result = await conn.fetchrow(
                 """INSERT INTO login_attempts (identifier, count, locked_until, updated_at)
                    VALUES ($1, 1, $2, $3)
@@ -254,9 +291,9 @@ async def login(data: LoginRequest, request: Request, response: Response):
             if result:
                 new_count = result["count"]
         # Raise OUTSIDE the block so the INSERT is committed
-        if new_count >= 3:
-            raise HTTPException(status_code=401, detail="Invalid credentials — your account has been temporarily locked after 3 failed attempts. Use the Forgot Password link below to reset your access.")
-        elif new_count == 2:
+        if new_count >= 5:
+            raise HTTPException(status_code=401, detail="Invalid credentials — your account has been temporarily locked after 5 failed attempts. Use the Forgot Password link below to reset your access.")
+        elif new_count == 4:
             raise HTTPException(status_code=401, detail="Invalid credentials — if you've forgotten your password, use the Forgot Password link below to reset your account.")
         else:
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -276,7 +313,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
         return {
             "requires_mfa": True,
             "mfa_session": mfa_session,
-            "email": user["email"],
+            "email": _mask_email(user["email"]),
         }
 
     access_token = create_access_token(user_id, user["email"])
@@ -306,21 +343,12 @@ async def verify_mfa(data: VerifyMfaRequest, response: Response):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
 
-    # ── Rate limit: 5 attempts per user / 30 min ─────────────────────────────
-    from utils.rate_limit import check_rate_limit
-    try:
-        async with database.with_admin() as _rl_conn:
-            await check_rate_limit(
-                _rl_conn,
-                identifier=f"mfa_uid:{user_id}",
-                max_attempts=5,
-                window_minutes=30,
-                error_detail="Too many verification attempts. Please wait 30 minutes before trying again.",
-            )
-    except HTTPException:
-        raise
-    except Exception as _rl_err:
-        logger.warning("MFA rate-limit check failed (non-critical): %s", _rl_err)
+    # Note: verification attempts are already rate-limited correctly via the
+    # per-user `mfa_code_attempts` DB column below (5 wrong-code attempts locks
+    # out re-requesting a code) — that counter only increments on a WRONG code
+    # and resets to 0 on success. A generic per-request counter used to live
+    # here too, but it counted every call including successful ones, which
+    # could lock a user out purely from normal repeated legitimate logins.
 
     async with database.with_admin() as conn:
         user = await conn.fetchrow("SELECT * FROM users WHERE id=$1", user_id)
@@ -513,9 +541,11 @@ async def forgot_password(data: ForgotPasswordRequest, request: Request):
     )
 
     async with database.with_admin() as conn:
-        # Rate limit: 5 attempts per IP per 15 minutes
-        from utils.rate_limit import check_rate_limit
-        await check_rate_limit(
+        # Rate limit: 5 requests per IP per 15 minutes (every call counts —
+        # this guards against email-sending abuse, not credential brute force,
+        # so unlike login/MFA it's correct to count every request here).
+        from utils.rate_limit import record_failed_attempt
+        await record_failed_attempt(
             conn,
             identifier=f"fp_ip:{ip}",
             max_attempts=5,

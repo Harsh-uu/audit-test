@@ -93,7 +93,7 @@ export default function Login() {
               Your account is protected with an extra layer of security. Enter the code sent to your email to continue.
             </p>
           </div>
-          <p className="text-blue-300 text-sm">1two.one &copy; 2025</p>
+          <p className="text-blue-300 text-sm">1two.one &copy; 2026</p>
         </div>
 
         <div className="flex-1 flex items-center justify-center p-8">
@@ -190,7 +190,7 @@ export default function Login() {
             ))}
           </div>
         </div>
-        <p className="text-blue-300 text-sm">1two.one &copy; 2025</p>
+        <p className="text-blue-300 text-sm">1two.one &copy; 2026</p>
       </div>
 
       {/* Right panel */}

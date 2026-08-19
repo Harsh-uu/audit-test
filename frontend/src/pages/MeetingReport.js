@@ -199,39 +199,42 @@ export default function MeetingReport() {
   const saveActions = async (updatedActions) => {
     try {
       await axios.put(`${API}/review/${meetingId}/actions`, { actions: updatedActions }, getAuthConfig());
-      fetchMeeting();
     } catch (err) { setActionMessage(err.response?.data?.detail || "Failed to save actions"); }
   };
 
   const addAction = async () => {
     if (!newAction.text.trim()) return;
     const current = meeting?.analysis?.actions || [];
-    await saveActions([
+    const updated = [
       ...current,
       { id: `action_manual_${Date.now()}`, text: newAction.text.trim(), assigned_to: newAction.assigned_to.trim() || null, due_date: newAction.due_date.trim() || null },
-    ]);
+    ];
+    // Optimistic: show the new action immediately, persist in the background
+    setMeeting(m => ({ ...m, analysis: { ...m.analysis, actions: updated } }));
     setNewAction({ text: "", assigned_to: "", due_date: "" });
     setAddingAction(false);
+    await saveActions(updated);
   };
 
   const removeAction = async (idx) => {
     const current = meeting?.analysis?.actions || [];
-    await saveActions(current.filter((_, i) => i !== idx));
+    const updated = current.filter((_, i) => i !== idx);
+    setMeeting(m => ({ ...m, analysis: { ...m.analysis, actions: updated } }));
+    await saveActions(updated);
   };
 
   const toggleActionComplete = async (actionId, completed) => {
+    const prevActions = meeting?.analysis?.actions || [];
+    const nextActions = prevActions.map(a =>
+      (a.id === actionId) ? { ...a, completed, completed_at: completed ? new Date().toISOString() : null } : a
+    );
+    // Optimistic: flip the checkbox immediately, sync to the server in the background
+    setMeeting(m => ({ ...m, analysis: { ...m.analysis, actions: nextActions } }));
     try {
       await axios.patch(`${API}/review/${meetingId}/actions/${actionId}`, { completed }, getAuthConfig());
-      setMeeting(m => ({
-        ...m,
-        analysis: {
-          ...m.analysis,
-          actions: (m.analysis?.actions || []).map(a =>
-            (a.id === actionId) ? { ...a, completed, completed_at: completed ? new Date().toISOString() : null } : a
-          ),
-        },
-      }));
     } catch (err) {
+      // Roll back on failure
+      setMeeting(m => ({ ...m, analysis: { ...m.analysis, actions: prevActions } }));
       console.error("Failed to update action", err.message);
       toast.error(err.response?.data?.detail || "Failed to update action");
     }

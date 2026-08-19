@@ -105,12 +105,15 @@ export function AuthProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const _prewarmDashboard = () => {
+  const _prewarmDashboard = (role) => {
     // Fire-and-forget: start fetching dashboard data before the user lands on it.
     // The result is stored in apiCache so Dashboard renders instantly on mount.
     cachedGet(`${API}/dashboard/`).catch(() => {});
     // Pre-warm the users list used by New Meeting — attendee checkboxes render instantly.
-    cachedGet(`${API}/admin/users?ignore_scope=true`).catch(() => {});
+    // Only admin/manager may call this endpoint; skip for other roles to avoid a 403.
+    if (["admin", "manager"].includes(role)) {
+      cachedGet(`${API}/admin/users?ignore_scope=true`).catch(() => {});
+    }
   };
 
   const login = async (email, password) => {
@@ -123,7 +126,7 @@ export function AuthProvider({ children }) {
     try {
       const { data: profile } = await axios.get(`${API}/auth/me`);
       setUser(profile);
-      _prewarmDashboard();
+      _prewarmDashboard(profile.role);
       return profile;
     } catch {
       return data;
@@ -142,7 +145,7 @@ export function AuthProvider({ children }) {
     try {
       const { data: profile } = await axios.get(`${API}/auth/me`);
       setUser(profile);
-      _prewarmDashboard();
+      _prewarmDashboard(profile.role);
     } catch {
       // Keep login data as fallback
     } finally {

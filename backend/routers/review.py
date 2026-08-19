@@ -1614,7 +1614,9 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
                        "recording_resumed": "Recording resumed",
                        "action_status_changed": "Action item updated",
                        "learning_need_status_changed": "Learning need updated",
-                       "achievement_acknowledged": "Achievement acknowledged"}
+                       "achievement_acknowledged": "Achievement acknowledged",
+                       "pdf_exported": "Report PDF exported",
+                       "transcript_exported": "Transcript PDF exported"}
     for log in log_rows:
         log = dict(log)
         action = log.get("action", "unknown")
@@ -1768,6 +1770,9 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
 
     pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text,
                               jurisdiction=org_jurisdiction, service_type=org_service_type)
+    async with database.with_org(org_id) as conn:
+        await _audit(conn, meeting_id, org_id, "pdf_exported", current_user["id"], current_user.get("name", ""),
+                    "Includes transcript" if include_transcript else "Summary only")
     safe_title = "".join(c for c in (meeting.get("title") or "report") if c.isalnum() or c in " _-")
     filename = f"supervision_{safe_title[:40].strip().replace(' ', '_')}.pdf"
     return Response(content=pdf_bytes, media_type="application/pdf",
@@ -1825,6 +1830,15 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
 
     def e(t): return _xe(str(t or ""))
 
+    def fmt_uk(raw, with_time=False):
+        if not raw:
+            return "—"
+        try:
+            d = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            return d.strftime("%d/%m/%Y %H:%M") if with_time else d.strftime("%d/%m/%Y")
+        except Exception:
+            return str(raw)
+
     def section_header(title, bg=NAVY):
         data = [[Paragraph(f'<font color="white"><b>{title}</b></font>', ParagraphStyle("SH", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white))]]
         t = Table(data, colWidths=[170*mm])
@@ -1863,9 +1877,9 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
 
     sign_off = meeting.get("sign_off_record") or {}
     meta_rows = [
-        ["Date", meeting.get("date", "—"), "Status", (meeting.get("status") or "—").replace("_", " ").title()],
+        ["Date", fmt_uk(meeting.get("date")), "Status", (meeting.get("status") or "—").replace("_", " ").title()],
         ["Manager", meeting.get("sign_off_manager_name", "—"), "Signed off by", sign_off.get("signed_by_name", "—")],
-        ["Attendees", ", ".join([a.get("name", "") for a in (meeting.get("attendees") or [])]), "Signed at", sign_off.get("signed_at", "—")[:16] if sign_off.get("signed_at") else "—"],
+        ["Attendees", ", ".join([a.get("name", "") for a in (meeting.get("attendees") or [])]), "Signed at", fmt_uk(sign_off.get("signed_at"), with_time=True)],
     ]
     meta_table = Table(meta_rows, colWidths=[28*mm, 57*mm, 28*mm, 57*mm])
     meta_table.setStyle(TableStyle([
@@ -1929,9 +1943,9 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         for i, a in enumerate(actions, 1):
             completed = a.get("completed", False)
             st = done_style if completed else cell_style
-            tick = "\u2713" if completed else ""
-            action_rows.append([Paragraph(str(i), st), Paragraph(e(a.get("text", "")), st), Paragraph(e(a.get("assigned_to") or "\u2014"), st), Paragraph(e(a.get("due_date") or "\u2014"), st), Paragraph(tick, st)])
-        at = Table(action_rows, colWidths=[8*mm, 93*mm, 38*mm, 24*mm, 7*mm])
+            mark = "\u2713" if completed else "\u2717"
+            action_rows.append([Paragraph(str(i), st), Paragraph(e(a.get("text", "")), st), Paragraph(e(a.get("assigned_to") or "\u2014"), st), Paragraph(e(a.get("due_date") or "\u2014"), st), Paragraph(mark, st)])
+        at = Table(action_rows, colWidths=[8*mm, 88*mm, 36*mm, 22*mm, 16*mm])
         at.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY]),
@@ -1954,9 +1968,9 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         for i, ln in enumerate(learning_needs, 1):
             completed = ln.get("completed", False)
             st = done_style if completed else cell_style
-            tick = "\u2713" if completed else ""
-            ln_rows.append([Paragraph(str(i), st), Paragraph(e(ln.get("text", "")), st), Paragraph(e(ln.get("assigned_to") or "\u2014"), st), Paragraph(e(ln.get("due_date") or "\u2014"), st), Paragraph(tick, st)])
-        lnt = Table(ln_rows, colWidths=[8*mm, 93*mm, 38*mm, 24*mm, 7*mm])
+            mark = "\u2713" if completed else "\u2717"
+            ln_rows.append([Paragraph(str(i), st), Paragraph(e(ln.get("text", "")), st), Paragraph(e(ln.get("assigned_to") or "\u2014"), st), Paragraph(e(ln.get("due_date") or "\u2014"), st), Paragraph(mark, st)])
+        lnt = Table(ln_rows, colWidths=[8*mm, 88*mm, 36*mm, 22*mm, 16*mm])
         lnt.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F766E")), ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY]),
@@ -2028,9 +2042,11 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
                 line = line.strip()
                 if not line:
                     continue
-                m = _re.match(r'^([^:]{1,50}):\s*(.+)', line)
+                ts = _re.match(r'^(\[[\d:]+\]\s*)(.*)', line)
+                prefix, rest = (ts.group(1), ts.group(2)) if ts else ("", line)
+                m = _re.match(r'^([^:]{1,50}):\s*(.+)', rest)
                 if m:
-                    turns.append([m.group(1).strip(), m.group(2).strip()])
+                    turns.append([m.group(1).strip(), (prefix + m.group(2).strip()).strip()])
                 elif turns:
                     turns[-1][1] += " " + line
                 else:
@@ -2097,6 +2113,8 @@ async def export_transcript(meeting_id: str, current_user=Depends(get_current_us
             transcript_text = _apply_redactions_to_text(transcript_text, redactions)
 
     pdf_bytes = _generate_transcript_pdf(meeting, speaker_text, transcript_text)
+    async with database.with_org(org_id) as conn:
+        await _audit(conn, meeting_id, org_id, "transcript_exported", current_user["id"], current_user.get("name", ""), "")
     safe_title = "".join(c for c in (meeting.get("title") or "transcript") if c.isalnum() or c in " _-")
     filename = f"transcript_{safe_title[:40].strip().replace(' ', '_')}.pdf"
     return Response(content=pdf_bytes, media_type="application/pdf",
@@ -2131,6 +2149,15 @@ def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: 
 
     def e(t): return _xe(str(t or ""))
 
+    def fmt_uk(raw, with_time=False):
+        if not raw:
+            return "—"
+        try:
+            d = _dt.fromisoformat(str(raw).replace("Z", "+00:00"))
+            return d.strftime("%d/%m/%Y %H:%M") if with_time else d.strftime("%d/%m/%Y")
+        except Exception:
+            return str(raw)
+
     story = []
     hdr = Table(
         [[Paragraph(e(meeting.get("title", "Meeting")), title_s),
@@ -2146,7 +2173,7 @@ def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: 
         name_s = ParagraphStyle("SN", fontName="Helvetica-Bold", fontSize=13, textColor=NAVY, spaceAfter=2, leading=17)
         story.append(Paragraph(", ".join(supervisees), name_s))
 
-    meta_parts = [f"Date: {e((meeting.get('date') or '')[:10])}", f"Manager: {e(meeting.get('sign_off_manager_name', '—'))}"]
+    meta_parts = [f"Date: {fmt_uk(meeting.get('date'))}", f"Manager: {e(meeting.get('sign_off_manager_name', '—'))}"]
     story.append(Paragraph("  ·  ".join(meta_parts), small_s))
     story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=6))
 
@@ -2159,9 +2186,11 @@ def _generate_transcript_pdf(meeting: dict, speaker_text: str, transcript_text: 
             line = line.strip()
             if not line:
                 continue
-            m = _re.match(r'^([^:]{1,50}):\s*(.+)', line)
+            ts = _re.match(r'^(\[[\d:]+\]\s*)(.*)', line)
+            prefix, rest = (ts.group(1), ts.group(2)) if ts else ("", line)
+            m = _re.match(r'^([^:]{1,50}):\s*(.+)', rest)
             if m:
-                turns.append([m.group(1).strip(), m.group(2).strip()])
+                turns.append([m.group(1).strip(), (prefix + m.group(2).strip()).strip()])
             elif turns:
                 turns[-1][1] += " " + line
             else:

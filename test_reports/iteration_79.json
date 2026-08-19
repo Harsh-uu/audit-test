@@ -1,0 +1,55 @@
+{
+  "summary": "Iteration 79: verified all 8 requested items plus the iteration-78 regressions. Backend pytest suite /app/backend/tests/test_iter79.py: 16/18 passed (2 intentional failures documenting a backend RBAC parity gap). PDF exports verified by extracting text with pypdf (UK dates, Done column, tick/cross, speaker labels with timestamped transcripts injected temporarily then restored). Frontend verified via Playwright with cookie-injected admin/manager sessions: delete-meeting button + org-rename pencil are admin-only, add/remove action from a risk updates instantly and persists. Audit trail now records pdf_exported and transcript_exported (verified via API and in the UI Audit Trail tab). Iteration-78 regressions (EvidenceTab optimistic toggle, auth rate limiting) re-ran green (10/10).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/org/name", "issue": "RBAC parity gap: role check still allows 'manager' although the UI pencil is now admin-only. A manager can rename the organisation via direct API call (returned 200). Tighten to admin (+super_admin) to match intent."},
+      {"endpoint": "DELETE /api/meetings/{id}", "issue": "RBAC parity gap: role check still allows 'manager' although Dashboard delete button is now admin-only. Manager delete returned 200 (meeting was actually deleted). Tighten to admin only."},
+      {"endpoint": "GET /api/review/{id}/export-transcript (standalone transcript PDF header)", "issue": "Header meta line still prints ISO-ish date: 'Date: 2026-08-19 · Manager: Demo Manager'. Main report meta table is correctly DD/MM/YYYY; standalone transcript PDF was not converted to the UK format."},
+      {"endpoint": "utils/ai._apply_uk_language", "issue": "Safeguarding regex replacement is case-insensitive but the replacement is capitalised, so mid-sentence prose is broken: 'a potential safeguarding concern was noted' -> 'a Potential safeguarding was noted' (also drops the noun). Fine for the '[prefix] — description' risk template, risky for free prose (summary/insight fields). Consider anchoring the pattern to line/field start."},
+      {"endpoint": "GET /api/review/{id}/audit-trail", "issue": "Cosmetic: export events set detail == label, so the UI renders 'Report PDF exported' twice (title + quoted detail). Suggest omitting detail or using something informative (e.g. 'includes transcript: yes/no')."},
+      {"endpoint": "GET /api/admin/users?ignore_scope=true (AuthContext prewarm)", "issue": "STILL OPEN from iteration 78: prewarm call in AuthContext.js:113 is not role-gated, causing a 403 console error on dashboard load for attendee users."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login / ResetPassword pages", "issues": ["STILL OPEN from iteration 78: footer reads '1two.one © 2025' (Login.js:96,193; ResetPassword.js:91) while the in-app footer reads '© 2026 Supervision2'."]},
+      {"screen": "Report PDF - Meeting Transcript (Anonymised) section", "issues": ["Observation (pre-existing test data, not a new regression): section is titled 'Anonymised' but for meeting 0f38f385 the transcript still contains raw PII (full names, phone number, street address) because the meeting was never anonymised. Consider suppressing the '(Anonymised)' wording when no anonymisation has run."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter79.py",
+    "/app/backend/tests/_iter79_login.py",
+    "/app/backend/tests/_iter79_ts_check.py",
+    "/app/backend/tests/_iter79_db_safeguarding.py",
+    "/app/test_reports/pytest/iter79.xml"
+  ],
+  "action_items": [
+    "Decide whether backend RBAC should follow the new admin-only UI gating for DELETE /api/meetings/{id} and PATCH /api/org/name (currently managers can still perform both via API).",
+    "Apply UK date formatting to the standalone transcript PDF header (currently 'Date: 2026-08-19').",
+    "Make the safeguarding regex safe for mid-sentence prose (anchor or keep a noun) to avoid 'a Potential safeguarding was noted'.",
+    "Optional cleanups (carried over from iter78): role-gate the admin/users prewarm call, mask email on MFA screen, fix '© 2025' on Login/ResetPassword footers.",
+    "Optional: stop duplicating the audit label in the detail field for export events."
+  ],
+  "critical_code_review_comments": [
+    "review.py transcript turn parser is duplicated verbatim in _generate_pdf() and _generate_transcript_pdf() (~20 lines each) - extract a shared _parse_speaker_turns() helper to prevent the timestamp/speaker-label regression from reappearing in only one of the two paths.",
+    "routers/review.py is very large (>2000 lines); the PDF generation code should move to a utils/pdf.py module."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter79.py (new)",
+    "/app/backend/tests/_iter79_login.py (new)",
+    "/app/backend/tests/_iter79_list.py (new helper)",
+    "/app/backend/tests/_iter79_dump.py (new helper)",
+    "/app/backend/tests/_iter79_ts_check.py (new helper)",
+    "/app/backend/tests/_iter79_db_safeguarding.py (new helper)"
+  ],
+  "success_rate": {"backend": "89% (16/18; the 2 failures are the documented RBAC parity findings)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "Temporary only: an action item 'TEST_iter79 optimistic action from risk' added and removed on meeting 2f1cc088; timestamped speaker_text temporarily injected into meeting 0383953a's transcript and restored to the original value; one throwaway meeting created by the manager RBAC test (deleted by that same test). No residual test data.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com / Admin123!, manager@supervision.com / Manager123! (MFA bypassed via tests/get_tokens.py). NOTE: tests/get_tokens.py-style DB overrides must not reference users.failed_login_attempts / locked_until - those columns do not exist in this schema (lockout is stored elsewhere); /app/backend/tests/_iter79_login.py has the corrected version.",
+  "context_for_next_testing_agent": "Verified in iter79: (1)(2) admin-only delete-meeting + org-rename pencil in UI; (3) _apply_uk_language safeguarding rewrite + no old phrasing in ai.py or any stored analyses.risks; (4) report PDF meta dates DD/MM/YYYY and Signed at DD/MM/YYYY HH:MM, no ISO leakage; (5) 'Done' header renders on one line, incomplete rows show ✗, complete ✓; (6) timestamped lines render speaker name label ('SARAH THOMPSON') with '[00:02] ' moved into the message, in BOTH the report PDF and the standalone transcript PDF; (7) pdf_exported / transcript_exported audit events created on each export and visible in the UI Audit Trail tab; (8) add-action-from-risk and remove-action update instantly and persist across reload. iter78 regressions re-verified (tests/test_rate_limit_iter78.py + tests/test_review_toggle_iter78.py = 10 passed). Useful fixtures: signed-off meeting with transcript 0f38f385-7c85-428e-923c-d7c365659192, in_review meeting 2f1cc088-0687-48b9-9f40-1dabb5285640. Audit-trail events use key 'type' (not 'action').",
+  "rca_of_the_issue": "No new functional defects found in the 8 items. The two pytest failures are deliberate assertions that the server-side role checks in routers/meetings.py:452 and routers/org.py:87 still include 'manager', so the new admin-only UI gating is not enforced at the API layer - a client-side-only restriction."
+}

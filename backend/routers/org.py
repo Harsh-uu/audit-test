@@ -84,7 +84,7 @@ class BrandingUpdate(BaseModel):
 
 @router.patch("/name")
 async def update_org_name(data: OrgNameUpdate, current_user=Depends(get_current_user)):
-    if current_user["role"] not in ["admin", "manager"]:
+    if current_user["role"] not in ["admin", "super_admin"]:
         raise HTTPException(403, "Insufficient permissions")
     name = data.name.strip()
     if not name:

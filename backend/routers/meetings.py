@@ -449,7 +449,7 @@ async def update_manager(meeting_id: str, data: UpdateManagerRequest, current_us
 
 @router.delete("/{meeting_id}")
 async def delete_meeting(meeting_id: str, current_user=Depends(get_current_user)):
-    if current_user["role"] not in ["admin", "manager"]:
+    if current_user["role"] not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:

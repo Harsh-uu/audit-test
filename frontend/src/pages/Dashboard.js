@@ -227,7 +227,7 @@ export default function Dashboard() {
     return () => navigate(`/meetings/${meeting.id}/report`);
   };
 
-  const canDelete = user?.role === "admin" || user?.role === "manager";
+  const canDelete = user?.role === "admin";
 
   const handleDelete = async (e, meetingId) => {
     e.stopPropagation();

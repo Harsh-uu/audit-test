@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
@@ -247,7 +248,7 @@ function AchievementsSection({ achievements }) {
             <span className="mt-0.5 w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
               <Star className="w-2.5 h-2.5 text-emerald-600" fill="currentColor" />
             </span>
-            <p className="text-sm text-gray-800 leading-relaxed">{ach.description}</p>
+            <p className="text-sm text-gray-800 leading-relaxed">{ach.text || ach.description}</p>
           </li>
         ))}
       </ul>
@@ -326,8 +327,20 @@ export const EvidenceTab = React.memo(function EvidenceTab({
   };
 
   const toggleLNComplete = async (idx, completed) => {
+    const prev = learningNeeds;
     const updated = learningNeeds.map((ln, i) => i === idx ? { ...ln, completed } : ln);
-    await saveLearningNeeds(updated);
+    // Optimistic: flip the checkbox immediately, sync to the server in the background
+    setLearningNeeds(updated);
+    onAnalysisChange?.({ ...analysis, learning_needs: updated });
+    try {
+      await axios.put(`${API}/review/${meeting.id}/learning_needs`, { learning_needs: updated }, getAuthConfig());
+    } catch (err) {
+      // Roll back on failure
+      setLearningNeeds(prev);
+      onAnalysisChange?.({ ...analysis, learning_needs: prev });
+      const detail = err?.response?.data?.detail || err?.message || "Unknown error";
+      toast.error(`Failed to update learning need — ${detail}`);
+    }
   };
 
   // Who can approve a reopen request? Listed attendees who are not the requester

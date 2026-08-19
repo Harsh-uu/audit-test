@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 80 verification of 7 fixes + iteration_79 spot-check regression. Backend: created /app/backend/tests/test_iter80.py (13 pytest tests, all passing) covering manager 403 on DELETE /api/meetings/{id} and PATCH /api/org/name, admin success on both, transcript PDF UK 'Date: DD/MM/YYYY' header, dash-anchored safeguarding regex in utils/ai._apply_uk_language (template rewritten, mid-sentence prose untouched), audit-trail export detail text, and masked email on the MFA login response. Frontend (Playwright, prod build on preview URL): Login + ResetPassword footers show '1two.one © 2026' (no 2025), MFA 'Check your email' screen shows masked m******@supervision.com (full address not leaked), staff login makes ZERO /api/admin/users calls and produces no 403 console noise, admin sees delete-meeting buttons + org-rename pencil (editor opens) while staff sees neither, and the Audit Trail tab renders 'Report PDF exported / \"Includes transcript\"' with no duplicated detail. All 7 target items PASS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login (requires_mfa)", "issue": "_mask_email() keeps only the first local-part character (m******@supervision.com). Request example expected first+last char retained ('a****n@supervision.com'). Functionally masked, cosmetic deviation only."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EvidenceTab.js AchievementsSection (line 251)", "issue": "Renders {ach.description} but the API returns achievement objects shaped {text: '...'} (GET /api/review/{id} -> achievements: [{'text': 'Correctly escalated a safeguarding concern'}]). Result: the Achievements card on the report Overview shows an empty row (star icon only) while the header says '1 noted'. Pre-existing, unrelated to iteration 80 fixes.", "selector": "[data-testid=\"achievement-0\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter80.py", "/app/test_reports/pytest/iter80.xml"],
+  "action_items": [
+    "Fix EvidenceTab AchievementsSection to read ach.text (with ach.description fallback) so achievements are not rendered blank.",
+    "Optional: adjust _mask_email() to retain the last local-part character (a****n@domain) to match the requested masking format."
+  ],
+  "critical_code_review_comments": [
+    "utils/ai.py safeguarding lookahead (?=\\s*[—-]) is correct and confirmed non-destructive for prose; no further change needed.",
+    "Historic audit_logs rows created before this fix still hold the duplicated detail text ('Report PDF exported' as detail) and will keep rendering in the Audit Trail UI; consider a one-off data cleanup if the duplicated legacy lines matter."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter80.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "No new seed data. Org name was renamed to TEST_Rename_Org and restored to 'Test Company' within the RBAC test; export actions added new pdf_exported/transcript_exported audit rows on meeting 0f38f385.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com/Admin123!, manager@supervision.com/Manager123! (MFA mandatory - bypass via tests/_iter79_login.py or get_tokens.py), user@supervision.com/Staff123!",
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_iter80.py (pytest, 13 tests, 100% green) as the iteration-80 regression suite; it relies on tests/_iter79_login.py for MFA bypass. Audit-trail assertions intentionally check only the NEWEST pdf_exported/transcript_exported rows because older rows predate the detail-text fix. For UI tests with admin, get cookies via 'python tests/get_tokens.py admin@supervision.com Admin123!' and inject supervision_access/supervision_refresh into the Playwright context. Delete-meeting control lives on Dashboard meeting cards ([data-testid^=delete-meeting-btn-]), not in the report overflow menu. Outstanding: Achievements blank-render bug in EvidenceTab (ach.description vs API 'text').",
+  "rca_of_the_issue": "Achievements blank render: backend serialises achievements as {text: ...} while the React component reads ach.description, so the paragraph renders as an empty string."
+}

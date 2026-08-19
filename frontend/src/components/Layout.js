@@ -341,7 +341,7 @@ export default function Layout({ children, headerCenter }) {
             ) : (
               <>
                 <span className="text-sm font-semibold text-white whitespace-nowrap max-w-[90px] sm:max-w-none truncate">{user?.org_name || "Organisation"}</span>
-                {canManage && (
+                {user?.role === "admin" && (
                   <button onClick={() => { setEditingOrgName(true); setOrgNameDraft(user?.org_name || ""); }} className="hidden sm:inline-flex p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors" data-testid="org-name-edit" title="Rename organisation">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
