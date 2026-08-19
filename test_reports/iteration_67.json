@@ -1,0 +1,42 @@
+{
+  "summary": "Frontend-only retest of the reordered post-recording flow (PII 'Confidentiality Check' gate now shown at status='analyzing'). Scenarios A, B, C, D all executed end-to-end via Playwright with cookie-injected auth (MFA bypassed via get_tokens.py). RESULT: A PASS, B PASS, C PASS, D PASS-with-one-pre-existing-UI-bug. The reorder change itself is working correctly in every tested path; the only defect found is a stale-state bug in markReviewed() that falsely blocks sign-off until a manual page refresh (pre-existing, unrelated to the reorder).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/review/{id}/complete-pii-review", "issue": "pii_redactions is double-JSON-encoded in Postgres (jsonb_typeof = 'string' instead of 'array') because json.dumps() is passed to an asyncpg jsonb param that re-encodes. VERIFIED that all frontend read paths still render redactions correctly (defensive double-decode), so no user-visible impact today — but it is fragile and should be fixed by passing the list directly (or removing the manual json.dumps) in review.py ~line 1288."},
+      {"endpoint": "/api/auth/login", "issue": "IP-wide rate limit is 20 logins/15 min (login_attempts table). Automated test runs trip this quickly and get a 429 that blocks all further test logins. Not a product bug, but noted for test infra — added /app/backend/tests/clear_rate_limit.py to clear it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MeetingReport.js — markReviewed()", "issue": "After clicking 'Mark Reviewed' the handler only patches meeting.status locally (setMeeting({...m, status: data.status})) and never refetches the meeting. meeting.attendees[].reviewed stays stale, so the sign-off confirm modal shows a FALSE warning ('1 attendee has not reviewed: Demo Manager') and signoff-confirm-btn stays DISABLED even though the DB shows both attendees reviewed and status='reviewed'. The manager must hard-refresh the page before sign-off becomes possible. Fix: await fetchMeeting() after a successful mark-reviewed call (or merge the updated attendees returned by the API).", "selector": "[data-testid=\"mark-reviewed-btn\"] -> [data-testid=\"signoff-confirm-btn\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "MeetingReport processing screen", "issues": ["No data-testid=\"unified-processing-screen\" element exists anywhere in MeetingReport.js — only data-testid=\"processing-indicator\". If the review request/spec expects that testid, add it; otherwise update the spec. Not a functional defect."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/clear_rate_limit.py",
+    "/app/backend/tests/seed_pii_flow.py",
+    "/app/backend/tests/get_tokens.py"
+  ],
+  "action_items": [
+    "HIGH: In MeetingReport.js markReviewed(), refetch the meeting (await fetchMeeting()) after the mark-reviewed POST so attendees[].reviewed is fresh — otherwise sign-off is falsely blocked until a manual refresh.",
+    "LOW: Fix the double-JSON-encoding of pii_redactions in /app/backend/routers/review.py complete_pii_review (pass the list, not json.dumps(list), to the ::jsonb param). Reads are defensively handled today so this is not user-visible.",
+    "LOW: Decide whether data-testid=\"unified-processing-screen\" should exist on the 3-step processing screen (currently only processing-indicator)."
+  ],
+  "critical_code_review_comments": [
+    "markReviewed() performs an optimistic local status patch but never reconciles the rest of the server state (attendees). Any UI gated on attendees (sign-off modal) will read stale data. Prefer refetch-after-mutate for anything that gates a downstream action.",
+    "shouldShowPIIGate (MeetingReport.js ~line 530) is correctly guarded: !piiGateDone && pii_review_status !== 'reviewed' && role in (manager, admin) && transcript present && status not in (recording, processing, transcribing, processing_failed). Verified all four branches behave as intended.",
+    "complete-pii-review sets pii_review_status='reviewed' for BOTH apply and skip, so the gate correctly does not reappear on reload after a Skip — verified."
+  ],
+  "updated_files": ["/app/backend/tests/clear_rate_limit.py (new test helper only)"],
+  "success_rate": {"backend": "n/a (frontend-only request)", "frontend": "100% of the 4 requested scenarios passed; 1 pre-existing unrelated HIGH UI bug found"},
+  "seed_data_creation": "No new seed data. Used the 4 pre-seeded meetings. State mutations made during testing: 0f38f385 (Scenario A) now has pii_review_status='reviewed'/pii_skipped=true, an inserted fake analysis and status='in_review' — re-run `python seed_pii_flow.py reset_pii 0f38f385-...` + status reset if Scenario A needs replaying. 0383953a (Scenario D) is now status='signed_off' with both attendees reviewed — needs resetting to in_review before Scenario D can be replayed. 84648972 and 011beb33 are untouched.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "manager@supervision.com / Manager123! (MFA mandatory — use /app/backend/tests/get_tokens.py then inject supervision_access/supervision_refresh cookies). user@supervision.com / Staff123!. Run /app/backend/tests/clear_rate_limit.py first if you hit HTTP 429 'Too many login attempts from this location'.",
+  "context_for_next_testing_agent": "Detailed results. SCENARIO A (PASS): manager opened /meetings/0f38f385.../report while status='analyzing' and analysis_id=NULL -> 'Confidentiality Check' gate with pii-apply-btn + pii-skip-btn rendered. Clicked pii-skip-btn immediately (analysis still NULL) -> screen switched to data-testid='processing-indicator' with steps 1 & 2 marked Complete and step 3 'Mapping Compliance Evidence' active (class contains border-[#1E3A8A], '~30-90 seconds'). NOT blank, gate NOT re-shown (pii-skip-btn count 0). Then ran `seed_pii_flow.py analysis <id>` in the background; the page auto-transitioned to the full report (Meeting Summary, Achievements, Action Items, Compliance Evidence panel, 'In Review' badge) within ~7.5s via the 5s poll, WITHOUT any manual refresh. SCENARIO B (PASS): attendee user@supervision.com on 84648972 -> zero pii-apply-btn/pii-skip-btn, no 'Confidentiality Check' text, static 3-step processing-indicator shown and it stayed that way across 6 x 2s observation cycles (2+ poll cycles). SCENARIO C (PASS): manager on 011beb33 (status='processing_failed') -> no PII gate, 'Processing failed' error screen with retry-processing-btn present. SCENARIO D (PASS with caveat): manager on 0383953a (pii_review_status='reviewed', 4 redactions) -> gate correctly NOT shown. REDACTIONS RENDER CORRECTLY DESPITE THE DOUBLE-JSON-ENCODING: none of 'her son Peter', '07700 900123', 'Mr Ahmed Khan', '42 Rosewood Avenue' appear in the Overview or Transcript tab; all four replacements ('[Service User A]', '[Contact Detail]', '[Service User]', '[Address]') render in the Transcript tab. Sign-off: blocked on first attempt purely due to the stale-attendees UI bug (see ui_bugs); after a page reload the modal showed no unreviewed warning, signoff-confirm-btn was enabled, sign-off succeeded and the badge flipped to 'Signed Off'. PDF export then succeeded: downloaded supervision_report_0b42b6.pdf, 5410 bytes, valid %PDF- header, and a raw byte scan of the PDF found NONE of the 4 original PII strings (exported with '+ Full text' transcript enabled). No JS console errors other than the two expected 401s on the very first pre-auth page load.",
+  "rca_of_the_issue": "Sign-off block RCA: MeetingReport.js markReviewed() does `setMeeting(m => ({...m, status: data.status}))` only. The sign-off confirm modal computes `unreviewed = (meeting?.attendees || []).filter(a => !a.reviewed)` from the same client state, which was never refreshed after the POST, so the just-reviewed attendee still reads reviewed=false. Backend /api/review/{id}/mark-reviewed did persist correctly (verified in Postgres: both attendees reviewed=true, status='reviewed'). Reproduction: as manager on an in_review meeting where all other attendees have reviewed, click mark-reviewed-btn then sign-off-btn -> false 'X attendee has not reviewed' warning + disabled signoff-confirm-btn. Mitigation: refetch the meeting after mark-reviewed (or return the updated attendees array from the endpoint and merge it)."
+}

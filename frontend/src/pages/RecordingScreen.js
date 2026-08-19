@@ -204,7 +204,10 @@ export default function RecordingScreen() {
           clearInterval(poll);
           return;
         }
-        if (!["processing", "transcribing", "analyzing"].includes(data.status)) {
+        // Hand off to the report page as soon as the transcript is ready (status
+        // reaches "analyzing") so the manager can do the confidentiality check
+        // while compliance mapping keeps running in the background.
+        if (!["processing", "transcribing"].includes(data.status)) {
           clearInterval(poll);
           navigate(`/meetings/${meetingId}/report`);
         }

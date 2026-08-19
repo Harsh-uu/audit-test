@@ -1292,7 +1292,7 @@ async def complete_pii_review(meeting_id: str, data: PIIReviewRequest, current_u
                pii_reviewed_by_name=$3, pii_skipped=$4, pii_redactions=$5::jsonb
                WHERE id=$6""",
             now, current_user["id"], current_user.get("name", ""),
-            data.skipped, json.dumps(clean_redactions), meeting_id,
+            data.skipped, clean_redactions, meeting_id,
         )
         action = "pii_review_skipped" if data.skipped else "pii_review_completed"
         detail = "Acknowledged — no changes made" if data.skipped else f"{len(clean_redactions)} redaction(s) applied"

@@ -270,8 +270,9 @@ export default function MeetingReport() {
     try {
       const { data } = await axios.post(`${API}/review/${meetingId}/mark-reviewed`, {}, getAuthConfig());
       toast.success(data.message || "Session marked as reviewed");
-      // Server decides between 'reviewed' and 'in_review' based on all-attendees state
-      setMeeting(m => ({ ...m, status: data.status }));
+      // Refetch so attendees[].reviewed is fresh — otherwise the sign-off
+      // modal reads stale data and falsely blocks sign-off until a reload.
+      await fetchMeeting();
     } catch (err) {
       setMeeting(prev); // revert
       toast.error(err.response?.data?.detail || "Failed to mark reviewed");
@@ -528,14 +529,16 @@ export default function MeetingReport() {
   if (!meeting) return <Layout><div className="p-8 text-center text-gray-500">Meeting not found</div></Layout>;
 
   // ── PII confidentiality gate ─────────────────────────────────────────
-  // Show for managers/admins on first open of a processed meeting
+  // Shown to managers/admins as soon as the transcript is ready (status
+  // reaches "analyzing") rather than waiting for compliance mapping to
+  // finish — so the manager does the confidentiality check while mapping
+  // keeps running in the background.
   const shouldShowPIIGate =
     !piiGateDone &&
     meeting.pii_review_status !== "reviewed" &&
     (user?.role === "manager" || user?.role === "admin") &&
     !!meeting.transcript &&
-    !!meeting.analysis &&
-    !isProcessing;
+    !["recording", "processing", "transcribing", "processing_failed"].includes(meeting.status);
 
   if (shouldShowPIIGate) {
     return (
