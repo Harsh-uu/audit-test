@@ -118,7 +118,7 @@ export default function Layout({ children, headerCenter }) {
             </button>
           </div>
           <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div id="app-scroll-container" className="flex-1 min-h-0 overflow-y-auto">
               {children}
             </div>
             <footer className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400 flex-shrink-0">
@@ -415,7 +415,7 @@ export default function Layout({ children, headerCenter }) {
         </div>
 
         <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div id="app-scroll-container" className="flex-1 min-h-0 overflow-y-auto">
             {children}
           </div>
           <footer className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400 flex-shrink-0">

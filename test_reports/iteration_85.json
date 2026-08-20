@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only retest of the nested-scroll-container reset fix on PREVIEW (evidence-link-4.preview), logged in as admin@supervision.com via cookie injection (tests/get_tokens.py; admin now requires MFA so plain login returns requires_mfa). RESULT: (1) The original user-reported bug is FIXED - MeetingReport's #report-scroll-container resets to scrollTop=0 for ALL 6 tabs including Audit Trail, verified both by programmatic scroll and by REAL mouse-wheel scroll (Compliance scrolled to 3482 -> click Audit Trail -> scrollTop 0, 'Audit Trail' header rendered at top of viewport). Manual scrolling within a tab still works (scrollTop 400 persists). Route-level ScrollToTop spot check passed (app-scroll-container=0, window.scrollY=0 after navigating to /dashboard). (2) StaffPortfolio #evidence-scroll-container reset PASSES (3 meaningful switches with 176-232px prior scroll on Demo User's portfolio; container height temporarily forced to 120px in-test to make the small seeded evidence list scrollable). (3) BLOCKER: TeamInsights (/admin/team) now CRASHES to the route error boundary ('Something went wrong') with 'ReferenceError: matrixTab is not defined' - the new useEffect added at TeamInsights.js:1243-1245 lists matrixTab in its dependency array, but matrixTab state is declared at line 87 inside a DIFFERENT (child) component, not in the TeamInsights component. Test item #3 could not be executed at all; the whole Team Insights/Team Themes page is unusable. git diff confirms this is a regression introduced by this round's uncommitted change.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TeamInsights.js (/admin/team, sidebar 'Team Themes')", "issue": "Page crashes on render: 'ReferenceError: matrixTab is not defined' thrown from the scroll-reset useEffect (line ~1243, deps [tab, matrixTab]). matrixTab/setMatrixTab are declared at line 87 inside the child matrix component, so the identifier is out of scope in TeamInsights -> RouteErrorBoundary shows 'Something went wrong'. Entire page unusable (regression from this round's fix).", "selector": "[data-testid^='main-tab-'] (never renders)", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "FIX CRITICAL: TeamInsights.js - remove matrixTab from the useEffect deps in the TeamInsights component (keep [tab]) and add a separate useEffect on [matrixTab] INSIDE the child component that owns matrixTab (line ~87) doing document.getElementById('insights-scroll-container')?.scrollTo(0,0). Then rebuild and retest /admin/team.",
+    "Add an eslint no-undef / CI build lint gate: this crash is a plain undefined-variable error that shipped into the production bundle without failing the build.",
+    "After fixing, re-run test item #3 (main tabs matrix/themes/achievements/learning_needs/risks/actions + matrix sub-tabs cqc/care_cert/custom scroll reset)."
+  ],
+  "critical_code_review_comments": [
+    "TeamInsights.js:1243-1245 references matrixTab which is scoped to another component - undefined variable at runtime, crashes the page.",
+    "Seed data for portfolios is very thin (most users have 0 evidence items), so the evidence-tab scroll test is only meaningful for Demo User (831bdaef-...); consider seeding a portfolio with a long evidence list for future regression tests."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested", "frontend": "67% (2 of 3 fixed pages verified; TeamInsights blocked by crash)"},
+  "seed_data_creation": "None. Used existing meeting 2f1cc088-0687-48b9-9f40-1dabb5285640 and portfolio of Demo User 831bdaef-14ca-49ed-8fb0-9b8d36bc1ef6.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! - MFA is now enforced; obtain cookies via `cd /app/backend && python3 tests/get_tokens.py admin@supervision.com 'Admin123!'` and inject supervision_access/supervision_refresh with page.context.add_cookies for domain evidence-link-4.preview.emergentagent.com.",
+  "context_for_next_testing_agent": "MeetingReport tab-switch scroll reset (#report-scroll-container) is confirmed WORKING for all 6 tabs incl. Audit Trail (both programmatic and real wheel scroll) - no need to re-verify unless the code changes. StaffPortfolio #evidence-scroll-container confirmed WORKING (force el.style.maxHeight='120px' via page.evaluate to make the short seeded list scrollable). ONLY remaining item: /admin/team (TeamInsights) crashes with 'matrixTab is not defined' - after the fix, load /admin/team, wait ~8s (data loads slowly), then for each [data-testid=main-tab-*] and [data-testid=matrix-tab-*]: set #insights-scroll-container.scrollTop = scrollHeight, click the tab, assert scrollTop <= 5. Note the report page needs ~6s to render (skeleton first) and an initial 401 on /api/auth/me is normal (axios retries with refresh cookie).",
+  "rca_of_the_issue": "This round's fix added `useEffect(() => { document.getElementById('insights-scroll-container')?.scrollTo(0,0); }, [tab, matrixTab])` to the TeamInsights page component, but matrixTab is state of a separate child component (declared at TeamInsights.js:87). At render time the dependency array evaluates the free identifier matrixTab -> ReferenceError -> RouteErrorBoundary. Reproduce: log in as admin, open /admin/team; console shows 'ReferenceError: matrixTab is not defined at ct (assets/TeamInsights-*.js)'. Mitigation: scope the matrixTab reset effect to the child component that owns that state."
+}

@@ -295,6 +295,10 @@ export default function StaffPortfolio() {
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
   useEffect(() => {
+    document.getElementById("evidence-scroll-container")?.scrollTo(0, 0);
+  }, [evidenceTab]);
+
+  useEffect(() => {
     // Embed the param in the URL so the cache key is unique per request type
     cachedGet(`${API}/admin/standards?type=care_cert`, getAuthConfig())
       .then(r => setCcStandards(r.data))
@@ -513,7 +517,7 @@ export default function StaffPortfolio() {
                 ))}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5">
+              <div id="evidence-scroll-container" className="flex-1 overflow-y-auto p-5">
                 {evidenceItems[evidenceTab]?.length === 0 ? (
                   <div className="text-center py-12 text-gray-400">
                     <p className="text-sm">No {tabCfg.find(t => t.key === evidenceTab)?.label} evidence recorded yet</p>

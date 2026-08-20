@@ -146,6 +146,11 @@ export default function MeetingReport() {
     if (activeTab === "audit" && auditTrail === null) fetchAuditTrail();
   }, [activeTab, auditTrail, fetchAuditTrail]);
 
+  useEffect(() => {
+    document.getElementById("report-scroll-container")?.scrollTo(0, 0);
+    document.getElementById("app-scroll-container")?.scrollTo(0, 0);
+  }, [activeTab]);
+
   const saveSummary = async () => {
     const prev = meeting;
     // Optimistic: close editing immediately with the new text
@@ -800,7 +805,7 @@ export default function MeetingReport() {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div id="report-scroll-container" className="flex-1 min-h-0 overflow-y-auto">
               <div className="max-w-5xl mx-auto p-6 w-full">
                 {activeTab === "evidence" && (
                   <EvidenceTab

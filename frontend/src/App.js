@@ -1,6 +1,6 @@
-import React, { lazy, Suspense } from "react";
+import React, { lazy, Suspense, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -50,12 +50,23 @@ function RootRedirect() {
   return <Navigate to="/dashboard" replace />;
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.getElementById("app-scroll-container")?.scrollTo(0, 0);
+    document.getElementById("report-scroll-container")?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 function App() {
   return (
     <AuthProvider>
       <TooltipProvider delayDuration={300}>
       <BrowserRouter>
         <RouteErrorBoundary>
+        <ScrollToTop />
         <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />

@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only verification on PREVIEW (evidence-link-4.preview) as admin@supervision.com via get_tokens.py cookie injection. (1) CRITICAL REGRESSION FIXED: /admin/team (Team Themes) now loads successfully - no RouteErrorBoundary, no 'matrixTab is not defined' pageerror; all 6 main tabs render (main-tab-matrix/themes/achievements/learning_needs/risks/actions) and #insights-scroll-container exists. Code review confirms the matrixTab useEffect is now correctly inside MatrixView (TeamInsights.js:89-91) and the parent effect deps are [tab] only (line 1247-1249). (2) Scroll-reset test item #3 COMPLETED: with the container height forced to 200px so every tab has real overflow, pre-scroll of 270-2080px was applied before each tab click and scrollTop returned to 0 for ALL 6 main tabs; matrix sub-tabs (matrix-tab-cqc/care_cert/custom) also reset scrollTop 459 -> 0 for all 3. (3) Spot-checks pass: MeetingReport /meetings/{id}/report #report-scroll-container reset 1899->0 (Compliance) and 4106->0 (Audit Trail); StaffPortfolio #evidence-scroll-container reset 36->0 on evidence-tab-custom (care_cert had no prior overflow, still 0). No console page errors observed other than the normal initial 401 on /api/auth/me (axios refresh retry).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/team -> Evidence Matrix -> Organisational sub-tab", "issues": ["Column headers for organisational criteria render as bare numbers ('1','2','3') instead of criterion names/short refs, unlike the CQC tab which shows readable labels. Pre-existing, unrelated to this round's fix, but worth fixing for usability."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "No blocking action items - the matrixTab scoping regression is resolved and all three scroll-reset containers verified.",
+    "Optional: add an eslint no-undef / CI lint gate so undefined-variable bugs like iteration_85's cannot ship into the production bundle again.",
+    "Optional (cosmetic): label Organisational matrix columns with criterion names instead of numeric indices."
+  ],
+  "critical_code_review_comments": [
+    "TeamInsights.js: matrixTab scroll-reset effect is correctly colocated with its owning state in MatrixView; parent effect deps=[tab]. Correct React scoping, no further change needed.",
+    "Note for future tests: the report route is /meetings/{id}/report (not /report/{id}); /report/{id} silently redirects to /dashboard."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested", "frontend": "100% (12/12 tab-switch scroll-reset assertions passed across 3 pages; page-crash regression resolved)"},
+  "seed_data_creation": "None. Used existing meeting 2f1cc088-0687-48b9-9f40-1dabb5285640 and Demo User portfolio 831bdaef-14ca-49ed-8fb0-9b8d36bc1ef6.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! - MFA enforced; get cookies via `cd /app/backend && python3 tests/get_tokens.py admin@supervision.com 'Admin123!'` and inject supervision_access/supervision_refresh for domain evidence-link-4.preview.emergentagent.com.",
+  "context_for_next_testing_agent": "All three nested scroll-container reset fixes (#insights-scroll-container on /admin/team incl. matrix sub-tabs, #report-scroll-container on /meetings/{id}/report, #evidence-scroll-container on /portfolio/{userId}) are VERIFIED WORKING as of iteration_86. Seeded content is short, so for meaningful scroll tests force `el.style.height/maxHeight='200px'` via page.evaluate before setting scrollTop=scrollHeight. /admin/team needs ~8-9s to render past its skeleton. Only remaining cosmetic finding: Organisational matrix column headers show numeric indices.",
+  "rca_of_the_issue": "iteration_85's crash was caused by referencing child-scoped state (matrixTab) in a parent component's useEffect dependency array. This round moved that effect into MatrixView (where matrixTab is declared) and reverted the parent effect to deps=[tab], eliminating the ReferenceError. Verified at runtime: page renders, no pageerror events, and both effects fire correctly."
+}

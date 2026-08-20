@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only Playwright test of the scroll-reset fix on PREVIEW (evidence-link-4.preview). Logged in as admin@supervision.com via cookie injection (tests/get_tokens.py). Result: the ROUTE-level fix (ScrollToTop in App.js) WORKS, but the MEETING REPORT TAB-SWITCH fix DOES NOT WORK - the original user-reported bug (Compliance renders mid-page) still reproduces. Root cause: MeetingReport.js renders its OWN nested scrollable div (className 'flex-1 min-h-0 overflow-y-auto', lines 474 and 807) with NO id; that nested div is the actual scrolling element on the report page, while the id='app-scroll-container' div from Layout.js has scrollHeight == clientHeight (not scrollable). So both the MeetingReport activeTab useEffect and ScrollToTop reset a non-scrolling element = no-op on this page.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MeetingReport.js (tab switch scroll reset, ~line 148-151 useEffect + inner scroll div line 807)", "issue": "BUG NOT FIXED. Measured on /meetings/2f1cc088-.../report: scrolled Overview tab to bottom (real scroller scrollTop=1455) then clicked Compliance -> scrollTop stayed 1455 (expected 0). Compliance -> Transcript: scrollTop stayed 3662. Comments/Prep Agenda/Audit Trail appeared to 'pass' only because their content is shorter than the viewport so the container is not scrollable (max=0) - not because of the fix. document.getElementById('app-scroll-container') on the report page reports scrollHeight==clientHeight==802 (not the scroller); the actual scroller is an unnamed nested div 'flex-1 min-h-0 overflow-y-auto' with scrollHeight 4356.", "selector": "[data-testid=\"compliance-tab\"], [data-testid=\"transcript-tab\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_working": [
+    "ScrollToTop (App.js) route-change reset: /meetings/:id/report -> /admin loads at top; /admin scrolled to 1936 -> /dashboard loads at top (scrollTop 0). PASS.",
+    "Direct navigation Dashboard (scrolled 1500) -> report URL loads at top. PASS.",
+    "Regression: normal wheel + programmatic scrolling within a tab/page still works and is not locked or jumpy (verified on Compliance and Transcript tabs, scrollTop advanced 0 -> 1200 via mouse wheel and stayed put)."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Add an id (e.g. id=\"report-scroll-container\") to BOTH nested scroll wrappers in MeetingReport.js (lines 474 and 807) and reset THAT element's scrollTop in the activeTab useEffect, OR make the reset generic: document.querySelectorAll('#app-scroll-container, [data-scroll-container]').forEach(el => el.scrollTo(0,0)) - and also apply the generic reset inside ScrollToTop.",
+    "Safer generic approach: in the activeTab effect, walk up/down from the tab panel and reset every ancestor/descendant with overflow-y auto/scroll, or use tabContentRef.current?.scrollIntoView({block:'start'}) so it works regardless of which div is the scroller.",
+    "Audit other pages for the same nested-scroller pattern (grep 'overflow-y-auto' in /app/frontend/src/pages) - any page with its own inner scroll div will also not be reset by ScrollToTop."
+  ],
+  "critical_code_review_comments": [
+    "Layout.js assigns the SAME id 'app-scroll-container' at lines 121 and 418. Only one renders at a time today, but duplicate ids are fragile - prefer a data attribute ([data-scroll-container]) and querySelectorAll.",
+    "MeetingReport.js is very large (>800 lines) and nests a second scroll container inside the Layout scroll container, causing this class of bug. Consider having only one scroll owner per screen."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested", "frontend": "route-level scroll reset 100% (3/3); meeting-report tab-switch scroll reset 0% (0/2 testable tabs, 4 tabs untestable due to short content)"},
+  "seed_data_creation": "None. Used existing meeting 2f1cc088-0687-48b9-9f40-1dabb5285640 (in_review, has long transcript + compliance list).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! (MFA disabled). Cookies obtained via `python /app/backend/tests/get_tokens.py admin@supervision.com 'Admin123!'` then injected with page.context.add_cookies for domain evidence-link-4.preview.emergentagent.com.",
+  "context_for_next_testing_agent": "To retest: inject cookies, open /meetings/2f1cc088-0687-48b9-9f40-1dabb5285640/report (long content on Overview/Transcript/Compliance). Do NOT assert on #app-scroll-container for the report page - it is not the scroller there. Instead find the deepest scrollable div via page.evaluate scanning for computed overflowY auto/scroll with scrollHeight-clientHeight>40 (exclude nav), set scrollTop=scrollHeight, then click the tab and assert that element's scrollTop <= 5. Only Overview/Transcript/Compliance are long enough to be meaningful tests.",
+  "rca_of_the_issue": "The fix assumed a single scroll container (#app-scroll-container in Layout.js). MeetingReport.js introduces its own nested overflow-y-auto div for the tab-content area, which becomes the effective scrolling element (Layout's container ends up with scrollHeight == clientHeight because of the flex/min-h-0 chain). Resetting #app-scroll-container therefore has no visible effect on the report page, so switching Overview -> Compliance keeps the previous offset and Compliance still renders 'in the middle of the page'."
+}

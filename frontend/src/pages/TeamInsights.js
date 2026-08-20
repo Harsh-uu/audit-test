@@ -86,6 +86,10 @@ function shortRef(ref) {
 function MatrixView({ matrix, ccStandards = [], onCellClick }) {
   const [matrixTab, setMatrixTab] = useState("cqc");
 
+  useEffect(() => {
+    document.getElementById("insights-scroll-container")?.scrollTo(0, 0);
+  }, [matrixTab]);
+
   const tabs = [
     { key: "cqc",      label: "CQC",             icon: Shield, color: "text-purple-600" },
     { key: "care_cert",label: "Induction", icon: Award,  color: "text-blue-600"  },
@@ -1241,6 +1245,10 @@ export default function TeamInsights() {
   }, []);
 
   useEffect(() => {
+    document.getElementById("insights-scroll-container")?.scrollTo(0, 0);
+  }, [tab]);
+
+  useEffect(() => {
     cachedGet(`${API}/admin/standards`, { ...getAuthConfig(), params: { type: "care_cert" } })
       .then(r => setCcStandards(r.data))
       .catch(() => {});
@@ -1434,7 +1442,7 @@ export default function TeamInsights() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div id="insights-scroll-container" className="flex-1 overflow-y-auto p-6">
           {/* Matrix / Themes: require main data */}
           {(tab === "matrix" || tab === "themes") && (
             loading ? (
