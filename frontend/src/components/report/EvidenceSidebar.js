@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import {
-  FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award, RefreshCw, Loader2, AlignLeft,
+  FileText, Check, X, Flag, ChevronDown, ChevronUp, ChevronRight, Edit3, Shield, Award, Loader2, AlignLeft, CheckCheck,
 } from "lucide-react";
 
 // ── Jurisdiction-aware label helper ──────────────────────────────────────────
@@ -294,101 +294,51 @@ function CareCertDrillDown({ mappings }) {
   );
 }
 
-export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, canRescan = false, onRescanEvidence, onShowInTranscript, isLocked = false }) {
+export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAccepting = false }) {
   const { user } = useAuth();
   const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction);
   const totalCount = (analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0);
   const wrapperClass = className !== undefined ? className : "lg:col-span-5 bg-[#F8F9FA] overflow-y-auto";
-  const [rescanning, setRescanning] = useState(false);
-  const [showRescanDialog, setShowRescanDialog] = useState(false);
-  const [rescanPrompt, setRescanPrompt] = useState("");
-
-  const handleRescanWithPrompt = async (prompt) => {
-    if (!onRescanEvidence) return;
-    setShowRescanDialog(false);
-    setRescanning(true);
-    try {
-      await onRescanEvidence(prompt);
-    } finally {
-      setRescanning(false);
-      setRescanPrompt("");
-    }
-  };
 
   return (
     <div className={wrapperClass} style={noMaxHeight ? {} : { maxHeight: "calc(100vh - 80px)" }}>
       <div className="p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-900 font-display">Compliance Evidence</h2>
-          <div className="flex items-center gap-2">
-            {canRescan && (
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-gray-900 font-display">
+            Compliance Evidence <span className="text-gray-400 font-normal">({totalCount})</span>
+          </h2>
+          {canReview && !isLocked && totalCount > 0 && (
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => !rescanning && setShowRescanDialog(v => !v)}
-                disabled={rescanning}
-                data-testid="rescan-evidence-btn"
-                title="Re-scan compliance evidence — optionally with custom guidance"
-                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors disabled:opacity-60"
+                onClick={() => onBulkAccept?.("likely_evidence")}
+                disabled={bulkAccepting}
+                data-testid="accept-all-likely-btn"
+                title="Accept every pending item marked Likely Evidence"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60"
               >
-                {rescanning
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <RefreshCw className="w-3.5 h-3.5" />}
-                {rescanning ? "Re-scanning…" : "Re-scan"}
-              </button>
-            )}
-            <span className="text-xs text-gray-500">{totalCount} items</span>
-          </div>
-        </div>
-
-        {/* Guided re-scan dialog */}
-        {showRescanDialog && !rescanning && (
-          <div
-            className="mb-4 border border-blue-200 rounded-lg bg-blue-50 p-3 shadow-sm"
-            data-testid="rescan-dialog"
-          >
-            <p className="text-xs font-semibold text-blue-800 mb-1.5 flex items-center gap-1.5">
-              <RefreshCw className="w-3 h-3" /> Guide the re-scan (optional)
-            </p>
-            <textarea
-              value={rescanPrompt}
-              onChange={e => setRescanPrompt(e.target.value)}
-              placeholder="e.g. Focus on medication management and manual handling, or look for evidence of Care Certificate Standard 9"
-              className="w-full text-xs px-2.5 py-2 border border-blue-200 rounded-md bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 placeholder-gray-400"
-              rows={3}
-              data-testid="rescan-prompt-input"
-            />
-            <div className="flex items-center gap-2 mt-2">
-              <button
-                onClick={() => handleRescanWithPrompt(rescanPrompt.trim())}
-                disabled={!rescanPrompt.trim()}
-                className="text-xs px-3 py-1.5 bg-[#1E3A8A] text-white rounded-md font-medium hover:bg-[#1E40AF] disabled:opacity-40 transition-colors"
-                data-testid="rescan-with-guidance-btn"
-              >
-                Re-scan with guidance
+                {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                Accept all likely
               </button>
               <button
-                onClick={() => handleRescanWithPrompt("")}
-                className="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md hover:bg-white transition-colors"
-                data-testid="rescan-without-guidance-btn"
+                onClick={() => onBulkAccept?.("possible_evidence")}
+                disabled={bulkAccepting}
+                data-testid="accept-all-possible-btn"
+                title="Accept every pending item marked Possible Evidence"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-60"
               >
-                Re-scan without guidance
-              </button>
-              <button
-                onClick={() => { setShowRescanDialog(false); setRescanPrompt(""); }}
-                className="ml-auto text-xs text-gray-400 hover:text-gray-600"
-                data-testid="rescan-cancel-btn"
-              >
-                Cancel
+                {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                Accept all possible
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {analysis.cqc_mappings?.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <Shield className="w-3.5 h-3.5 text-[#1E3A8A]" />
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{regHeader}</h3>
-              <span className="ml-auto text-xs text-gray-400">{analysis.cqc_mappings.length}</span>
+              <span className="text-xs text-gray-400">({analysis.cqc_mappings.length})</span>
             </div>
             {analysis.cqc_mappings.map(m => (
               <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="cqc" onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
@@ -401,7 +351,7 @@ export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, c
             <div className="flex items-center gap-2 mb-2">
               <Award className="w-3.5 h-3.5 text-emerald-600" />
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{certHeader}</h3>
-              <span className="ml-auto text-xs text-gray-400">{analysis.care_cert_mappings.length}</span>
+              <span className="text-xs text-gray-400">({analysis.care_cert_mappings.length})</span>
             </div>
             {analysis.care_cert_mappings.map(m => (
               <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="care_cert" onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
@@ -414,7 +364,7 @@ export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, c
             <div className="flex items-center gap-2 mb-2">
               <FileText className="w-3.5 h-3.5 text-teal-600" />
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Organisational Standards</h3>
-              <span className="ml-auto text-xs text-gray-400">{analysis.custom_mappings.length}</span>
+              <span className="text-xs text-gray-400">({analysis.custom_mappings.length})</span>
             </div>
             {analysis.custom_mappings.map(m => (
               <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="custom" onShowInTranscript={onShowInTranscript} />

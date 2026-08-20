@@ -1,0 +1,32 @@
+{
+  "summary": "iteration_88 — targeted verification of the two iteration_87 fixes plus light regression. Backend: created /app/backend/tests/test_iter88_fixes.py (19 tests, all pass, run with -n 0) asserting the new Pydantic Literal validation on POST /api/review/{id}/evidence/bulk-action — confidence in {foo,'',needs_review,not_enough_evidence,LIKELY_EVIDENCE,null,123} -> 422; status in {bar,pending,ACCEPTED,'',1} -> 422; all three valid statuses (accepted/rejected/needs_followup) -> 200 with persisted values verified via GET; omitted status defaults to 'accepted'; a 422 request mutates nothing (full before/after status snapshot compared); attendee still gets 403 on both test meetings. Re-ran the iter87 suite: 11 passed / 1 skipped / 0 failed (no regression). Frontend RBAC (HIGH FIX): attendee user@supervision.com ('Demo User') on in_review meeting c20802af-17e3-4210-b497-13d09c9e67ec Compliance tab now renders 17 evidence cards with ZERO action controls — accept-all-likely-btn=0, accept-all-possible-btn=0, per-card accept/reject/flag/edit=0, rescan-evidence-btn=0; a DOM-wide scan for any button whose data-testid matches accept|reject|flag|edit returned []. 'Mark Reviewed' is still shown (intentionally role-agnostic per spec). No regression for privileged roles: admin@supervision.com on 2f1cc088 sees 1 bulk-likely + 1 bulk-possible + 16 accept/16 reject/16 flag + Re-scan; clicking 'Accept all likely' -> toast '5 items accepted' and Accepted badges 2->7, then 'Accept all possible' -> toast '7 items accepted' and badges 7->14, still 14 after a full page reload (persisted). Re-scan dropdown (top bar) opens rescan-dialog with textarea + 'Re-scan with guidance'/'Re-scan without guidance'/'Cancel' and closes on Cancel. manager@supervision.com verified identically (bulk buttons present, 'Accept all likely' -> '5 items accepted', badges 2->7). No console errors other than the expected initial 401 before cookie/refresh handshake.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EvidenceCard (signed_off meeting)", "issue": "Pre-existing LOW from iter87, not part of this round's fix and NOT re-tested here: on a signed_off/locked meeting per-card Accept/Reject/Flag still render (isReviewMode = canReview || isLocked) while the bulk buttons are correctly hidden.", "selector": "[data-testid^=\"accept-evidence-\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter88_fixes.py",
+    "/app/backend/tests/test_iter87_bulk_accept.py",
+    "/app/test_reports/pytest/iter88.xml",
+    "/app/test_reports/pytest/iter88_regress87.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Both fixes are correct and minimal. MeetingReport.js:982 gates only the EvidenceSidebar canReview on role, leaving line 930's canReview role-agnostic as intended.",
+    "Suggestion: the role check `user?.role === 'manager' || user?.role === 'admin'` is duplicated in several places across the report page — extract a `canManageEvidence` memo (or a useRole hook) so future role additions (e.g. shared_reviewer) only need one edit.",
+    "NOTE: attendee user@supervision.com gets 404 on meeting 2f1cc088 (no access) — iter87's RBAC frontend repro must use c20802af-17e3-4210-b497-13d09c9e67ec. Also note POST bulk-action on a meeting the attendee cannot even read returns 403 (role check runs before the access check); harmless but slightly leaks existence — consider ordering access check first.",
+    "MeetingReport.js still ~1090 lines (>700 guideline) — unchanged from iter87."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter88_fixes.py"],
+  "success_rate": {"backend": "100% (30 passed, 1 skipped, 0 failed across iter88 + iter87 suites)", "frontend": "100% (attendee read-only fix confirmed; admin + manager regression, bulk-accept persistence and re-scan dropdown all pass)"},
+  "seed_data_creation": "No new records. Evidence statuses on 2f1cc088-0687-48b9-9f40-1dabb5285640 cycled via tests/_iter87_seed.py and left fully 'pending' / status in_review. Meeting c20802af-17e3-4210-b497-13d09c9e67ec was temporarily set to the 'mix' baseline for the RBAC check and restored afterwards (all 13 cqc_mappings = accepted, 4 care_cert_mappings = pending).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com/Admin123!, manager@supervision.com/Manager123!, user@supervision.com/Staff123!. Browser cookies via `cd /app/backend && python3 tests/get_tokens.py <email> <pw>` then inject supervision_access/supervision_refresh for domain evidence-link-4.preview.emergentagent.com.",
+  "context_for_next_testing_agent": "Both iter87 findings are FIXED and verified. Use tests/test_iter88_fixes.py for bulk-action validation regression and tests/test_iter87_bulk_accept.py for behaviour — BOTH must run with `-n 0` (they share one meeting fixture; xdist races otherwise) and take ~100s each. For attendee/RBAC UI checks use meeting c20802af-17e3-4210-b497-13d09c9e67ec (user@supervision.com IS 'Demo User' and IS an attendee there); user@supervision.com gets 404 on 2f1cc088. Only remaining known LOW: per-card Accept/Reject/Flag still render on signed_off meetings.",
+  "rca_of_the_issue": "n/a — verification round. Fix 1: MeetingReport.js now AND-s canReview with a manager/admin role check on the <EvidenceSidebar> prop, so EvidenceSidebar's bulk buttons and EvidenceCard's isReviewMode are false for attendees. Fix 2: BulkEvidenceActionRequest uses typing.Literal for confidence and status, so FastAPI/Pydantic rejects unknown values with 422 before the handler (and therefore before any DB write) runs."
+}

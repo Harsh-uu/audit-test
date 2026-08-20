@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional, List, Literal
 import asyncio
 import json
 import logging
@@ -79,6 +79,10 @@ class UpdateEvidenceRequest(BaseModel):
     edited_evidence_summary: Optional[str] = Field(None, max_length=2_000)
     notes: Optional[str] = Field(None, max_length=2_000)
     status: Optional[str] = None
+
+class BulkEvidenceActionRequest(BaseModel):
+    confidence: Literal["likely_evidence", "possible_evidence"]
+    status: Literal["accepted", "rejected", "needs_followup"] = "accepted"
 
 class UpdateRiskRequest(BaseModel):
     is_resolved: Optional[bool] = None
@@ -459,6 +463,72 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
                 logger.warning(f"evidence_feedback insert skipped: {_fb_err}")
 
     return {"message": "Evidence updated"}
+
+
+# Legacy confidence values pre-date the likely/possible rename — treat them as
+# "possible" so bulk-accept still works on older analyses.
+_CONFIDENCE_ALIASES = {
+    "likely_evidence": {"likely_evidence"},
+    "possible_evidence": {"possible_evidence", "needs_review", "not_enough_evidence"},
+}
+
+
+@router.post("/{meeting_id}/evidence/bulk-action")
+async def bulk_update_evidence(meeting_id: str, data: BulkEvidenceActionRequest, current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["manager", "admin"]:
+        raise HTTPException(status_code=403, detail="Only managers can edit evidence items")
+    org_id = current_user.get("org_id", "")
+    confidence_set = _CONFIDENCE_ALIASES.get(data.confidence, {data.confidence})
+
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow(
+            "SELECT analysis_id, status FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
+        if not m_row:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        if (m_row["status"] or "") in ["signed_off", "shared"]:
+            raise HTTPException(409, "Report is locked. Cannot bulk-edit evidence after sign-off.")
+        analysis_id = m_row["analysis_id"]
+        if not analysis_id:
+            raise HTTPException(status_code=400, detail="No analysis found")
+
+        a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1 FOR UPDATE", analysis_id)
+        if not a_row:
+            raise HTTPException(status_code=404, detail="Analysis not found")
+        analysis = dict(a_row)
+
+        all_mappings = {}
+        update_cols = {}
+        changed_count = 0
+        for mapping_type in ["cqc_mappings", "care_cert_mappings", "custom_mappings"]:
+            mappings = _ensure_list(analysis.get(mapping_type))
+            changed = False
+            for i, m in enumerate(mappings):
+                if m.get("confidence") in confidence_set and (m.get("status") or "pending") == "pending":
+                    mappings[i]["status"] = data.status
+                    changed = True
+                    changed_count += 1
+            all_mappings[mapping_type] = mappings
+            if changed:
+                update_cols[mapping_type] = mappings
+
+        if update_cols:
+            now = datetime.now(timezone.utc).isoformat()
+            set_parts = ["last_edited_at=$1", "last_edited_by=$2"]
+            values = [now, current_user["id"]]
+            idx = 3
+            for field, val in update_cols.items():
+                set_parts.append(f"{field}=${idx}::jsonb")
+                values.append(val)
+                idx += 1
+            values.append(analysis_id)
+            await conn.execute(f"UPDATE analyses SET {', '.join(set_parts)} WHERE id=${idx}", *values)
+            confidence_label = "likely evidence" if data.confidence == "likely_evidence" else "possible evidence"
+            await _log_edit(conn, meeting_id, org_id, "evidence", current_user["id"], current_user.get("name", ""),
+                            f"{changed_count} {confidence_label} item{'s' if changed_count != 1 else ''} bulk-accepted")
+
+    return {"message": f"{changed_count} items updated", "updated_count": changed_count, **all_mappings}
 
 
 # ── Risk management ───────────────────────────────────────────────────────────

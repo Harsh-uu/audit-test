@@ -1,0 +1,45 @@
+{
+  "summary": "Tested the new bulk-accept feature end-to-end (backend + frontend) on preview. Backend: new pytest suite /app/backend/tests/test_iter87_bulk_accept.py (12 tests, 11 pass, 1 skip) covering POST /api/review/{id}/evidence/bulk-action - RBAC 403 for attendee, 401/403 unauthenticated, 404 unknown meeting, 409 signed_off/locked, 422 missing confidence, correct pending-only updates across cqc/care_cert/custom mappings, legacy confidence aliases (needs_review/not_enough_evidence counted as possible_evidence), pre-accepted/pre-rejected items untouched, idempotent second call (updated_count=0), full mapping arrays returned, DB persistence verified via GET, and exactly ONE summarised audit-trail entry ('5 likely evidence items bulk-accepted'). Frontend (admin@supervision.com, meeting 2f1cc088): 'Compliance Evidence (16)' inline count confirmed (old floated '16 items' gone); section headers render 'CQC Regulations (6)', 'Care Certificate (4)', 'Organisational Standards (6)' inline; accept-all-likely-btn/accept-all-possible-btn in panel top-right; clicking them bulk-accepted 5 then 7 items with correct toasts ('5 items accepted', '7 items accepted', 'No pending items in that category to accept' on repeat) and cards flipped to 'Accepted' with NO page refresh (persisted after reload); pre-rejected cards untouched. Re-scan relocated: exactly 1 rescan-evidence-btn, inside the sticky top bar next to 'Mark Reviewed' (not in the Compliance panel); dropdown rescan-dialog with textarea + 3 buttons works, with-guidance disabled until text entered, closes on outside click and on Cancel. Individual accept/reject/flag regression passes (PUT .../evidence/cqc_1 -> 200 each). Locked (signed_off) meeting correctly hides both bulk buttons and the re-scan button. ONE REAL BUG: an attendee on an in_review meeting still SEES both bulk-accept buttons (and all per-card Accept/Reject/Flag/Edit buttons) - clicking gives a 403 error toast 'Only managers can edit evidence items'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/review/{id}/evidence/bulk-action", "issue": "BulkEvidenceActionRequest.status is an unvalidated free-form str (defaults 'accepted'). A manager could set an arbitrary status value (e.g. 'foo') on every pending item of a tier, which the UI cannot render. Constrain with Literal['accepted','rejected','needs_followup'] (or at least reject unknown values with 400)."},
+      {"endpoint": "POST /api/review/{id}/evidence/bulk-action", "issue": "Unknown/unsupported confidence values silently fall through to {value} and return 200 with updated_count=0 instead of a 400. Low impact but hides client bugs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MeetingReport.js line 96 (canReview) -> EvidenceSidebar", "issue": "RBAC false affordance: canReview = isInReview || isReviewed is NOT role-gated, so an attendee (user@supervision.com) viewing an in_review meeting sees BOTH new bulk-accept buttons plus 17 per-card Accept/Reject/Flag/Edit buttons. Clicking 'Accept all likely' fires POST bulk-action -> 403 and shows the raw error toast 'Only managers can edit evidence items'. Requirement #5 (attendee read-only view) is NOT met. Fix: gate canReview (or at minimum the bulk buttons + per-card action row) on user?.role in ['manager','admin'].", "selector": "[data-testid=\"accept-all-likely-btn\"], [data-testid^=\"accept-evidence-\"]", "priority": "HIGH"},
+      {"component": "EvidenceCard (locked meeting)", "issue": "Pre-existing minor: on a signed_off meeting the per-card Accept/Reject/Flag buttons still render (isReviewMode = canReview || isLocked); clicking them would 409. Bulk buttons are correctly hidden, so consider hiding these too for consistency.", "selector": "[data-testid^=\"accept-evidence-\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter87_bulk_accept.py",
+    "/app/backend/tests/_iter87_seed.py",
+    "/app/test_reports/pytest/iter87.xml"
+  ],
+  "action_items": [
+    "HIGH: role-gate the evidence review controls so attendees get a genuinely read-only Compliance tab (bulk-accept buttons + per-card Accept/Reject/Flag/Edit must be hidden for role not in manager/admin). Backend already enforces 403 so this is a UI-only fix.",
+    "LOW: constrain BulkEvidenceActionRequest.status to a Literal of allowed statuses and 400 on unknown confidence values.",
+    "LOW (optional): hide per-card action buttons on signed_off meetings for consistency with the bulk buttons."
+  ],
+  "critical_code_review_comments": [
+    "routers/review.py bulk_update_evidence: correct use of SELECT ... FOR UPDATE + single UPDATE per changed column + single _log_edit summary entry. Only writes columns that actually changed. Verified idempotent.",
+    "MeetingReport.js bulkAcceptEvidence: merges returned mapping arrays into state with ?? fallbacks - correct, avoids nulling untouched arrays; loading state (bulkAccepting) disables both buttons.",
+    "MeetingReport.js is 1090 lines - exceeds the 700-line guideline; consider extracting the top-bar action cluster (rescan dropdown, more-menu) into its own component.",
+    "NOTE for future test agents: /app/backend/pytest.ini enables xdist parallelism; these tests share one meeting fixture so they MUST be run with -n 0 (serially) or they race and produce false failures."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter87_bulk_accept.py",
+    "/app/backend/tests/_iter87_seed.py"
+  ],
+  "success_rate": {"backend": "100% (11 passed, 1 skipped, 0 failed)", "frontend": "92% (all layout/relocation/bulk-accept/regression checks pass; 1 RBAC visibility failure for attendee)"},
+  "seed_data_creation": "No new records. Reset evidence statuses on existing meeting 2f1cc088-0687-48b9-9f40-1dabb5285640 (Test Company, in_review) via tests/_iter87_seed.py; left it fully 'pending' and status in_review afterwards. Meeting was temporarily flipped to signed_off for the locked-state check and restored.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com / Admin123! and user@supervision.com / Staff123!. Cookies via `cd /app/backend && python3 tests/get_tokens.py <email> <pw>`, inject supervision_access/supervision_refresh for domain evidence-link-4.preview.emergentagent.com.",
+  "context_for_next_testing_agent": "Bulk-accept feature verified working. Use `python3 tests/_iter87_seed.py mix|reset|show <meeting_id>` to prepare evidence states (mix = all pending except one pre-accepted likely + one pre-rejected possible per mapping array). Good test meetings: 2f1cc088-0687-48b9-9f40-1dabb5285640 (in_review, 16 mappings, 7 likely / 9 possible, admin+manager attendees) and c20802af-17e3-4210-b497-13d09c9e67ec (in_review, Demo User is attendee - use for read-only/RBAC checks). Report route is /meetings/{id}/report. Audit-trail endpoint returns {\"events\": [...]}. Evidence ids are short slugs like 'cqc_1', not UUIDs. Run tests/test_iter87_bulk_accept.py with `-n 0` (xdist races otherwise).",
+  "rca_of_the_issue": "Attendee-visible review controls: MeetingReport.js derives canReview purely from meeting status (isInReview || isReviewed) with no role check, and passes it straight to EvidenceSidebar, which uses it as the sole gate for the new bulk-accept buttons and for EvidenceCard's isReviewMode. Because the backend (review.py:478) restricts bulk-action and evidence PUT to manager/admin, no data can be corrupted, but attendees are shown non-functional controls that surface a raw 403 detail string as an error toast."
+}

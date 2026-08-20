@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader2, Shield, Send, MoreHorizontal, Info, Share2,
+  FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader2, Shield, Send, MoreHorizontal, Info, Share2, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EvidenceTab } from "@/components/report/EvidenceTab";
@@ -63,7 +63,12 @@ export default function MeetingReport() {
   const [piiGateDone, setPiiGateDone] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const moreMenuRef = useRef(null);
+  const rescanMenuRef = useRef(null);
   const rescanInitiated = useRef(false);
+  const [rescanning, setRescanning] = useState(false);
+  const [showRescanDialog, setShowRescanDialog] = useState(false);
+  const [rescanPrompt, setRescanPrompt] = useState("");
+  const [bulkAccepting, setBulkAccepting] = useState(false);
   const [warningDismissed, setWarningDismissed] = useState(
     () => !!localStorage.getItem(`tw_dismissed_${meetingId}`)
   );
@@ -74,6 +79,13 @@ export default function MeetingReport() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showMoreMenu]);
+
+  useEffect(() => {
+    if (!showRescanDialog) return;
+    const handler = (e) => { if (rescanMenuRef.current && !rescanMenuRef.current.contains(e.target)) setShowRescanDialog(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showRescanDialog]);
 
   const isProcessing = ["processing", "transcribing", "analyzing"].includes(meeting?.status);
   const isRescanning = meeting?.rescan_status === "processing";
@@ -193,6 +205,35 @@ export default function MeetingReport() {
       toast.error("Failed to update evidence — changes reverted.");
     }
   }, [meetingId, meeting]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const bulkAcceptEvidence = async (confidence) => {
+    setBulkAccepting(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/review/${meetingId}/evidence/bulk-action`,
+        { confidence, status: "accepted" },
+        getAuthConfig()
+      );
+      setMeeting(m => ({
+        ...m,
+        analysis: {
+          ...m.analysis,
+          cqc_mappings: data.cqc_mappings ?? m.analysis?.cqc_mappings,
+          care_cert_mappings: data.care_cert_mappings ?? m.analysis?.care_cert_mappings,
+          custom_mappings: data.custom_mappings ?? m.analysis?.custom_mappings,
+        },
+      }));
+      if (data.updated_count > 0) {
+        toast.success(`${data.updated_count} item${data.updated_count !== 1 ? "s" : ""} accepted`);
+      } else {
+        toast.info("No pending items in that category to accept");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Bulk accept failed. Please try again.");
+    } finally {
+      setBulkAccepting(false);
+    }
+  };
 
   const onShowInTranscript = useCallback((excerpt) => {
     setHighlightExcerpt(excerpt);
@@ -371,6 +412,17 @@ export default function MeetingReport() {
       toast.success("Compliance evidence re-scanned successfully");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Re-scan failed. Please try again.");
+    }
+  };
+
+  const handleRescanWithPrompt = async (customPrompt) => {
+    setShowRescanDialog(false);
+    setRescanning(true);
+    try {
+      await rescanEvidence(customPrompt);
+    } finally {
+      setRescanning(false);
+      setRescanPrompt("");
     }
   };
 
@@ -623,6 +675,64 @@ export default function MeetingReport() {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {canEditSpeakers && !!meeting?.transcript_id && !isLocked && (
+              <div className="relative" ref={rescanMenuRef}>
+                <button
+                  onClick={() => !rescanning && setShowRescanDialog(v => !v)}
+                  disabled={rescanning}
+                  data-testid="rescan-evidence-btn"
+                  title="Re-scan compliance evidence — optionally with custom guidance"
+                  className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors disabled:opacity-60"
+                >
+                  {rescanning
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <RefreshCw className="w-4 h-4" />}
+                  <span className="hidden sm:inline">{rescanning ? "Re-scanning…" : "Re-scan"}</span>
+                </button>
+                {showRescanDialog && !rescanning && (
+                  <div
+                    className="absolute right-0 top-full mt-1.5 w-80 border border-blue-200 rounded-lg bg-blue-50 p-3 shadow-lg z-30"
+                    data-testid="rescan-dialog"
+                  >
+                    <p className="text-xs font-semibold text-blue-800 mb-1.5 flex items-center gap-1.5">
+                      <RefreshCw className="w-3 h-3" /> Guide the re-scan (optional)
+                    </p>
+                    <textarea
+                      value={rescanPrompt}
+                      onChange={e => setRescanPrompt(e.target.value)}
+                      placeholder="e.g. Focus on medication management and manual handling, or look for evidence of Care Certificate Standard 9"
+                      className="w-full text-xs px-2.5 py-2 border border-blue-200 rounded-md bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 placeholder-gray-400"
+                      rows={3}
+                      data-testid="rescan-prompt-input"
+                    />
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={() => handleRescanWithPrompt(rescanPrompt.trim())}
+                        disabled={!rescanPrompt.trim()}
+                        className="text-xs px-3 py-1.5 bg-[#1E3A8A] text-white rounded-md font-medium hover:bg-[#1E40AF] disabled:opacity-40 transition-colors"
+                        data-testid="rescan-with-guidance-btn"
+                      >
+                        Re-scan with guidance
+                      </button>
+                      <button
+                        onClick={() => handleRescanWithPrompt("")}
+                        className="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md hover:bg-white transition-colors"
+                        data-testid="rescan-without-guidance-btn"
+                      >
+                        Re-scan without guidance
+                      </button>
+                      <button
+                        onClick={() => { setShowRescanDialog(false); setRescanPrompt(""); }}
+                        className="ml-auto text-xs text-gray-400 hover:text-gray-600"
+                        data-testid="rescan-cancel-btn"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {primaryAction}
             {canSignOff && isSignedOff && (
               <div className="relative" ref={moreMenuRef}>
@@ -869,11 +979,11 @@ export default function MeetingReport() {
                   <div className="-m-6">
                     <EvidenceSidebar
                       analysis={analysis}
-                      canReview={canReview}
+                      canReview={canReview && (user?.role === "manager" || user?.role === "admin")}
                       updateEvidence={updateEvidence}
                       isLocked={isLocked}
-                      canRescan={canEditSpeakers && !!meeting?.transcript_id && !isLocked}
-                      onRescanEvidence={rescanEvidence}
+                      onBulkAccept={bulkAcceptEvidence}
+                      bulkAccepting={bulkAccepting}
                       onShowInTranscript={onShowInTranscript}
                       className="bg-[#F8F9FA]"
                       noMaxHeight
