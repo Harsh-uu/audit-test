@@ -26,6 +26,12 @@ const PROCESSING_STAGES = {
   processing_failed: { label: "Processing failed", pct: 0, error: true },
 };
 
+// UK-English overrides for statuses whose US-spelled enum value would
+// otherwise leak into the header pill via naive title-casing.
+const STATUS_LABELS = {
+  analyzing: "Analysing",
+};
+
 export default function MeetingReport() {
   const { meetingId } = useParams();
   const navigate = useNavigate();
@@ -607,7 +613,7 @@ export default function MeetingReport() {
               <ArrowLeft className="w-4 h-4" />
             </button>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium border text-xs flex-shrink-0 ${isSignedOff ? "bg-emerald-100 text-emerald-800 border-emerald-200" : canReview ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-blue-100 text-blue-700 border-blue-200"}`} data-testid="meeting-status-pill">
-              {meeting.status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+              {STATUS_LABELS[meeting.status] || meeting.status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
             </span>
             {hasReviewed && canReview && (
               <span className="flex items-center gap-1.5 text-emerald-600 text-xs font-medium flex-shrink-0" data-testid="you-reviewed-this">
