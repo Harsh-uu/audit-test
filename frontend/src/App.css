@@ -45,3 +45,23 @@ h3, h4, h5, h6 {
 .spin {
   animation: spin 1s linear infinite;
 }
+
+@keyframes shimmerSlide {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.shimmer-bg {
+  background: linear-gradient(90deg, #EFF6FF 0%, #DBEAFE 25%, #EFF6FF 50%, #DBEAFE 75%, #EFF6FF 100%);
+  background-size: 200% 100%;
+  animation: shimmerSlide 2.5s linear infinite;
+}
+
+@keyframes barIndeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+.bar-indeterminate {
+  animation: barIndeterminate 1.4s ease-in-out infinite;
+}

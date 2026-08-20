@@ -106,10 +106,6 @@ export default function RecordingScreen() {
   const [completedSteps, setCompletedSteps] = useState({});
   const [guideOpen, setGuideOpen] = useState(() => window.innerWidth >= 768);
   const [prepMode, setPrepMode] = useState(true); // true = show prep agenda, false = static template
-  const [processingStatus, setProcessingStatus] = useState("processing"); // backend meeting.status during processing stage
-  const [processingError, setProcessingError] = useState(null);
-  const [step2Progress, setStep2Progress] = useState(0);
-  const [step3Progress, setStep3Progress] = useState(0);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
@@ -189,52 +185,9 @@ export default function RecordingScreen() {
     }
   };
 
-  // ── Poll backend status when in processing stage ─────────────────────────
-  useEffect(() => {
-    if (stage !== "processing") return;
-    setStep2Progress(0);
-    setStep3Progress(0);
-    setProcessingError(null);
-    const poll = setInterval(async () => {
-      try {
-        const { data } = await axios.get(`${API}/meetings/${meetingId}`, getAuthConfig());
-        setProcessingStatus(data.status);
-        if (data.processing_error) {
-          setProcessingError(data.processing_error);
-          clearInterval(poll);
-          return;
-        }
-        // Hand off to the report page as soon as the transcript is ready (status
-        // reaches "analyzing") so the manager can do the confidentiality check
-        // while compliance mapping keeps running in the background.
-        if (!["processing", "transcribing"].includes(data.status)) {
-          clearInterval(poll);
-          navigate(`/meetings/${meetingId}/report`);
-        }
-      } catch {}
-    }, 3000);
-    return () => clearInterval(poll);
-  }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Animate step 2 progress bar while transcribing
-  useEffect(() => {
-    const isActive = stage === "processing" && ["processing", "transcribing"].includes(processingStatus);
-    if (!isActive) return;
-    const t = setInterval(() => setStep2Progress(p => {
-      const remaining = 88 - p; return p < 88 ? p + Math.max(0.15, remaining * 0.018) : p;
-    }), 1000);
-    return () => clearInterval(t);
-  }, [stage, processingStatus]);
-
-  // Animate step 3 progress bar while analyzing
-  useEffect(() => {
-    const isActive = stage === "processing" && processingStatus === "analyzing";
-    if (!isActive) return;
-    const t = setInterval(() => setStep3Progress(p => {
-      const remaining = 88 - p; return p < 88 ? p + Math.max(0.2, remaining * 0.025) : p;
-    }), 1000);
-    return () => clearInterval(t);
-  }, [stage, processingStatus]);
+  // ── Hand-off happens immediately on upload success (see handleUpload) —
+  // the full post-recording flow (transcribe/confidentiality/mapping) now
+  // lives as one cohesive screen on the report page.
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState === "visible" && !wakeLockRef.current) {
@@ -451,8 +404,10 @@ export default function RecordingScreen() {
       // Success — clear the IndexedDB backup
       await clearAudioBackup(meetingId);
       setSavedBlob(null);
-      setStage("processing");
-      // Polling effect will watch for completion and navigate
+      // Hand off to the report page immediately — the full post-recording
+      // flow (transcribe/confidentiality check/compliance mapping) is one
+      // cohesive screen there now, instead of separate progress bars here.
+      navigate(`/meetings/${meetingId}/report`);
     } catch (err) {
       const status = err.response?.status;
       const detail = err.response?.data?.detail || err.message;
@@ -877,91 +832,28 @@ export default function RecordingScreen() {
           </div>
         )}
 
-        {/* ── Unified processing progress ─────────────────────────────────── */}
-        {(stage === "uploading" || stage === "processing") && (() => {
-          // Derive per-step state
-          const step1 = stage === "processing"
-            ? { state: "complete", progress: 100, right: "Complete" }
-            : { state: "active", progress: uploadProgress, right: `${uploadProgress}%` };
-
-          const transcribingActive = stage === "processing" && ["processing", "transcribing"].includes(processingStatus);
-          const transcribingDone  = stage === "processing" && ["analyzing", "in_review", "reviewed", "signed_off"].includes(processingStatus);
-          const step2 = transcribingDone
-            ? { state: "complete", progress: 100, right: "Complete" }
-            : transcribingActive
-            ? { state: "active", progress: step2Progress, right: "~1–5 minutes" }
-            : { state: "waiting", progress: 0, right: "Waiting" };
-
-          const analyzingActive = stage === "processing" && processingStatus === "analyzing";
-          const analyzingDone   = stage === "processing" && ["in_review", "reviewed", "signed_off"].includes(processingStatus);
-          const step3 = analyzingDone
-            ? { state: "complete", progress: 100, right: "Complete" }
-            : analyzingActive
-            ? { state: "active", progress: step3Progress, right: "~1–3 minutes" }
-            : { state: "waiting", progress: 0, right: "Waiting" };
-
-          const steps = [
-            { num: 1, label: "Uploading & Compressing Audio", ...step1 },
-            { num: 2, label: "Transcribing Recording",        ...step2 },
-            { num: 3, label: "Mapping Compliance Evidence",   ...step3 },
-          ];
-
-          const barColor = s => s === "complete" ? "#22C55E" : s === "active" ? "#1E3A8A" : "#D1D5DB";
-          const bgColor  = s => s === "complete" ? "#F0FDF4" : s === "active" ? "#EFF6FF" : "white";
-          const borderColor = s => s === "complete" ? "#BBF7D0" : s === "active" ? "#BFDBFE" : "#E5E7EB";
-          const labelColor  = s => s === "complete" ? "#15803D" : s === "active" ? "#1E3A8A" : "#9CA3AF";
-          const rightColor  = s => s === "complete" ? "#22C55E" : s === "active" ? "#1E3A8A" : "#9CA3AF";
-
-          return (
-            <div className="fade-in" data-testid="unified-processing-screen">
-              <div className="text-center mb-8">
-                <div className="w-12 h-12 border-[3px] border-[#1E3A8A] border-t-transparent rounded-full spin mx-auto mb-4"></div>
-                <h2 className="text-xl font-bold text-gray-900 font-display">Processing your recording</h2>
-                <p className="text-sm text-gray-500 mt-1">Do not close or refresh this page whilst processing the meeting</p>
+        {/* ── Upload progress — hand-off to the report page happens the
+             moment this completes; transcribe/confidentiality/mapping are
+             all shown as one cohesive flow there ──────────────────────── */}
+        {stage === "uploading" && (
+          <div className="fade-in" data-testid="unified-processing-screen">
+            <div className="text-center mb-8">
+              <div className="w-12 h-12 border-[3px] border-[#1E3A8A] border-t-transparent rounded-full spin mx-auto mb-4"></div>
+              <h2 className="text-xl font-bold text-gray-900 font-display">Uploading recording</h2>
+              <p className="text-sm text-gray-500 mt-1">Do not close or refresh this page whilst uploading</p>
+            </div>
+            <div className="border border-blue-200 bg-blue-50 rounded-xl px-5 py-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-full bg-[#1E3A8A] flex items-center justify-center flex-shrink-0 text-sm font-bold text-white">1</div>
+                <span className="font-semibold text-sm flex-1 text-[#1E3A8A]">Uploading & Compressing Audio</span>
+                <span className="text-sm font-medium text-[#1E3A8A]">{uploadProgress}%</span>
               </div>
-
-              {processingError && (
-                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                  <p className="font-semibold mb-1">Processing failed</p>
-                  <p className="font-mono text-xs whitespace-pre-wrap">{processingError}</p>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                {steps.map(({ num, label, state, progress, right }) => (
-                  <div
-                    key={num}
-                    style={{ background: bgColor(state), borderColor: borderColor(state) }}
-                    className="border rounded-xl px-5 py-4 transition-all duration-500"
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      {state === "complete" ? (
-                        <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
-                          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        </div>
-                      ) : (
-                        <div
-                          style={{ background: state === "active" ? "#1E3A8A" : "#E5E7EB", color: state === "active" ? "white" : "#9CA3AF" }}
-                          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold"
-                        >
-                          {num}
-                        </div>
-                      )}
-                      <span style={{ color: labelColor(state) }} className="font-semibold text-sm flex-1">{label}</span>
-                      <span style={{ color: rightColor(state) }} className="text-sm font-medium">{right}</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        style={{ width: `${progress}%`, background: barColor(state), transition: "width 0.8s ease-out" }}
-                        className="h-full rounded-full"
-                      />
-                    </div>
-                  </div>
-                ))}
+              <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                <div style={{ width: `${uploadProgress}%` }} className="h-full rounded-full bg-[#1E3A8A] transition-all duration-500" />
               </div>
             </div>
-          );
-        })()}
+          </div>
+        )}
 
         {/* Event timeline */}
         {events.length > 0 && (

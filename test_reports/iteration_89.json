@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only verification of the new merged 'Inline Action Stream' post-recording flow (PostRecordingFlow.js) in MeetingReport.js. Tested via Playwright with cookie-injected manager + attendee sessions against the public preview URL, using seed_pii_flow.py to drive meeting.status/pii_review_status. All 10 requested scenarios plus regressions A-D from iteration_67 verified as PASSING. Only minor cosmetic/copy/contrast issues found; no functional breakage.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PostRecordingFlow step 3", "issue": "When meeting.pii_review_status is already 'reviewed' but status is back at 'processing'/'transcribing' (e.g. Retry Processing / re-upload of a meeting whose PII was previously reviewed), step 3 'Confidentiality Check' renders as green 'Complete' out of order while steps 2 and 4 are still Waiting. Consider gating step3 'done' on step2Done as well.", "selector": "[data-testid=\"prf-step-3\"]", "priority": "LOW"},
+      {"component": "PostRecordingFlow step 1 (mobile 390px)", "issue": "'Complete' right-hand label wraps onto a second line beneath the title for step 1 only (step 2 stays right-aligned) — inconsistent row heights on mobile.", "selector": "[data-testid=\"prf-step-1\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Apply/Skip -> full report transition (delayed-PII case where analysis already exists)", "issue": "After clicking Skip/Apply the flow stays on screen for ~5-7s showing all 4 steps green + the 'Processing your recording' spinner before the tabbed report renders (awaits fetchMeeting + transcript-text fetch). Functionally correct, but the lingering spinner reads as a stall. Consider an optimistic switch once pii completion returns 200.", "affected_selectors": ["[data-testid=\"pii-skip-btn\"]", "[data-testid=\"pii-apply-btn\"]", "[data-testid=\"processing-indicator\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "PostRecordingFlow", "issues": [
+        "'Waiting' status labels and waiting-step titles use text-gray-300/text-gray-400 on a gray-50 background (~1.5-2.5:1) — fails WCAG AA; the attendee's 'Pending manager review' label is almost illegible (see attendee/analyzing state).",
+        "Step 4 shimmer copy 'Continues in the background — you can complete the confidentiality check above while this finishes' is shown unconditionally: it still displays after the confidentiality check is Complete, and to attendees who cannot perform the check at all."
+      ]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/seed_pii_flow.py"],
+  "action_items": [
+    "Optional: gate step-3 'done' state on step2Done so it cannot show Complete before transcription in the retry/re-process case.",
+    "Optional: make step-4 shimmer copy conditional (only while step3 is active for manager/admin).",
+    "Optional: raise contrast of 'Waiting'/'Pending manager review' labels (text-gray-300 -> gray-500).",
+    "Optional: reduce the ~5s post-skip/apply spinner lag before the tabbed report renders."
+  ],
+  "critical_code_review_comments": [
+    "PostRecordingFlow.js scan effect keys off scanStartedRef only — if the scan request fails it never retries (scanError copy says 'Scan could not complete — you can still proceed', shown inside a 'No issues found' card which is slightly misleading wording for an error state).",
+    "MeetingReport.js showPostRecordingFlow logic verified: no duplicate stepper remains, processing_failed branch correctly excluded from the merged flow."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100% of 10 requested scenarios functionally passing"},
+  "seed_data_creation": "Created 2 TEST_PII meetings via /app/backend/tests/seed_pii_flow.py create (one driven through processing/transcribing/analyzing/in_review/processing_failed, one forced to status='stopped' with transcript_id=NULL for the not-yet-processed CTA). All TEST_PII meetings deleted afterwards via `seed_pii_flow.py cleanup` (deleted 8).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "manager@supervision.com / Manager123! (cookies obtained via /app/backend/tests/get_tokens.py, MFA bypassed), user@supervision.com / Staff123!",
+  "context_for_next_testing_agent": "Verified: (1) manager @ analyzing -> processing-indicator with steps 1&2 done, step3 expanded with 5 PII flags (Margaret Thompson / Peter / 07700 900123 / Mr Ahmed Khan / 42 Rosewood Avenue), step4 active with .shimmer-bg + background copy; (2) unchecking a flag updates 'Apply N redactions' count, editing replacement text persists — DB showed only the 4 checked flags with the custom '[Relative]' replacement; (3) after Apply while still analyzing, step3 collapses to done and step4 keeps running (no block); (4) status in_review + pii reviewed -> flow disappears, full tabs (Overview/Transcript/Compliance/Comments/Prep Agenda/Audit Trail) render for both manager and attendee; (5) attendee @ analyzing -> step3 'waiting/Pending manager review', zero scan-pii requests, no apply/skip buttons; (6) attendee @ in_review with pii NOT reviewed -> full report (not blocked); (7) delayed-PII regression: manager @ in_review with pii reset -> merged flow with steps 1/2/4 done and step3 active with flags; (8) Skip path writes pii_skipped=true and transitions to report; (9) processing_failed -> error card + Retry Processing button, no prf-steps; (10) status stopped w/o transcript -> 'No report yet' + 'Go to Recording Screen' CTA navigating to /record which renders the Recording Notice fine. RecordingScreen handleUpload navigate() to report verified by code inspection only (no real audio upload performed). Full sign-off/PDF export after the new PII step was NOT re-tested this iteration.",
+  "rca_of_the_issue": "N/A - no functional defect found. The step-3-shows-Complete-during-processing case stems from step3 state deriving solely from pii_review_status without requiring step2Done."
+}

@@ -15,16 +15,9 @@ import { AuditTrailTab } from "@/components/report/AuditTrailTab";
 import { EvidenceSidebar } from "@/components/report/EvidenceSidebar";
 import { EmailModal } from "@/components/report/EmailModal";
 import { ShareModal } from "@/components/report/ShareModal";
-import { PIIReviewGate } from "@/components/PIIReviewGate";
+import { PostRecordingFlow } from "@/components/report/PostRecordingFlow";
 import { RetryButton } from "@/components/report/RetryButton";
 import { PrepAgendaTab } from "@/components/report/PrepAgendaTab";
-
-const PROCESSING_STAGES = {
-  processing:        { label: "Uploading audio...", pct: 20 },
-  transcribing:      { label: "Transcribing Audio...", pct: 50 },
-  analyzing:         { label: "Mapping compliance evidence with AI...", pct: 80 },
-  processing_failed: { label: "Processing failed", pct: 0, error: true },
-};
 
 // UK-English overrides for statuses whose US-spelled enum value would
 // otherwise leak into the header pill via naive title-casing.
@@ -568,35 +561,39 @@ export default function MeetingReport() {
     </div>
   );
 
-  // ── PII confidentiality gate ─────────────────────────────────────────
-  // Shown to managers/admins as soon as the transcript is ready (status
-  // reaches "analyzing") rather than waiting for compliance mapping to
-  // finish — so the manager does the confidentiality check while mapping
-  // keeps running in the background.
+  // ── Post-recording processing flow ────────────────────────────────────
+  // Covers upload/transcribe/confidentiality-check/compliance-mapping as
+  // ONE cohesive screen — the confidentiality check expands inline as soon
+  // as the transcript is ready, while mapping keeps running in the
+  // background, instead of jumping between separate progress-bar and
+  // gate screens.
+  const isProcessingStage = ["processing", "transcribing", "analyzing"].includes(meeting.status);
   const shouldShowPIIGate =
     !piiGateDone &&
     meeting.pii_review_status !== "reviewed" &&
     (user?.role === "manager" || user?.role === "admin") &&
     !!meeting.transcript &&
     !["recording", "processing", "transcribing", "processing_failed"].includes(meeting.status);
+  const showPostRecordingFlow = meeting.status !== "processing_failed" && (isProcessingStage || shouldShowPIIGate);
 
-  if (shouldShowPIIGate) {
+  if (showPostRecordingFlow) {
     return (
       <Layout headerCenter={meetingHeaderCenter}>
-        <PIIReviewGate
+        <PostRecordingFlow
+          meeting={meeting}
           meetingId={meetingId}
-          onComplete={async () => {
+          API={API}
+          getAuthConfig={getAuthConfig}
+          role={user?.role}
+          onPiiComplete={async () => {
             await fetchMeeting();
             setPiiGateDone(true);
           }}
-          API={API}
-          getAuthConfig={getAuthConfig}
         />
       </Layout>
     );
   }
 
-  const stageCfg = PROCESSING_STAGES[meeting.status];
   const analysis = meeting.analysis;
 
   const tabBtnCls = (t) => `flex-shrink-0 inline-flex items-center gap-1.5 text-sm font-medium py-3 border-b-2 transition-colors ${activeTab === t ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"}`;
@@ -770,91 +767,8 @@ export default function MeetingReport() {
           </div>
         </div>
 
-        {/* Processing state — three-stage stepper */}
-        {stageCfg && !stageCfg.error && (
-          <div className="flex-1 flex items-center justify-center p-8" data-testid="processing-indicator">
-            <div className="w-full max-w-lg">
-              <div className="text-center mb-8">
-                <div className="w-12 h-12 border-[3px] border-[#1E3A8A] border-t-transparent rounded-full spin mx-auto mb-4"></div>
-                <h3 className="font-semibold text-gray-900 text-lg">Processing your recording</h3>
-                <p className="text-sm text-gray-500 mt-1">Do not close or refresh this page whilst processing the meeting</p>
-              </div>
-
-              <div className="space-y-5">
-                {[
-                  {
-                    key: "processing",
-                    icon: "1",
-                    title: "Uploading & Compressing Audio",
-                    desc: "Audio is compressed to 16 kHz mono MP3 for optimal transcription",
-                    eta: "~10–30 seconds",
-                  },
-                  {
-                    key: "transcribing",
-                    icon: "2",
-                    title: "Transcribing Recording",
-                    desc: "AssemblyAI converts the audio to a speaker-labelled transcript",
-                    eta: "~1–5 minutes",
-                  },
-                  {
-                    key: "analyzing",
-                    icon: "3",
-                    title: "Mapping Compliance Evidence",
-                    desc: "AI reviews the transcript and maps discussion points to regulatory standards",
-                    eta: "~30–90 seconds",
-                  },
-                ].map((stage, idx) => {
-                  const ORDER = ["processing", "transcribing", "analyzing"];
-                  const currentIdx = ORDER.indexOf(meeting.status);
-                  const stageIdx   = ORDER.indexOf(stage.key);
-                  const isDone     = stageIdx < currentIdx;
-                  const isActive   = stageIdx === currentIdx;
-                  const isPending  = stageIdx > currentIdx;
-                  return (
-                    <div key={stage.key} className={`rounded-xl border p-4 transition-all ${
-                      isActive  ? "border-[#1E3A8A] bg-blue-50/60 shadow-sm" :
-                      isDone    ? "border-emerald-200 bg-emerald-50/40" :
-                                  "border-gray-100 bg-gray-50/60 opacity-60"
-                    }`}>
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mt-0.5 ${
-                          isDone   ? "bg-emerald-500 text-white" :
-                          isActive ? "bg-[#1E3A8A] text-white" :
-                                     "bg-gray-200 text-gray-400"
-                        }`}>
-                          {isDone ? "✓" : stage.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className={`text-sm font-semibold ${
-                              isActive ? "text-[#1E3A8A]" : isDone ? "text-emerald-700" : "text-gray-400"
-                            }`}>{stage.title}</span>
-                            <span className={`text-xs flex-shrink-0 ${
-                              isActive ? "text-[#1E3A8A]" : isDone ? "text-emerald-600" : "text-gray-300"
-                            }`}>
-                              {isDone ? "Complete" : isActive ? stage.eta : "Waiting"}
-                            </span>
-                          </div>
-
-                        </div>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden ml-10">
-                        <div className={`h-full rounded-full transition-all duration-700 ${
-                          isDone   ? "w-full bg-emerald-500" :
-                          isActive ? "bg-[#1E3A8A] animate-pulse" :
-                                     "w-0"
-                        } ${isActive ? "w-3/4" : ""}`}></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Processing failed state */}
-        {stageCfg && stageCfg.error && (
+        {meeting.status === "processing_failed" && (
           <div className="p-8 flex flex-col items-center justify-center" data-testid="processing-indicator">
             <div className="text-center">
               <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
@@ -871,7 +785,7 @@ export default function MeetingReport() {
         )}
 
         {/* Not yet processed — recording/draft/stopped state */}
-        {!stageCfg && !analysis && (
+        {meeting.status !== "processing_failed" && !analysis && (
           <div className="flex-1 flex items-center justify-center p-12">
             <div className="text-center max-w-sm">
               <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -896,7 +810,7 @@ export default function MeetingReport() {
         )}
 
         {/* Content — single column, tabs only (no permanent sidebar) at every viewport width */}
-        {!stageCfg && analysis && (
+        {meeting.status !== "processing_failed" && analysis && (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <div className="sticky top-0 z-10 bg-white border-b border-gray-200 flex-shrink-0">
               <div className="max-w-5xl mx-auto px-6 flex items-center gap-6 overflow-x-auto scrollbar-hide">
