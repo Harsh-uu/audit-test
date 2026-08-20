@@ -32,6 +32,14 @@ async def create_pool() -> asyncpg.Pool:
         min_size=2,
         max_size=15,
         init=_init_connection,
+        # Required when DATABASE_URL points at a transaction-mode pooler
+        # (Supavisor/PgBouncer, e.g. Supabase's transaction pooler on port
+        # 6543): each query can land on a different physical backend
+        # connection, so asyncpg's client-side prepared-statement cache
+        # must be disabled — a cached statement may not exist on whichever
+        # backend the pooler routes the next query to. Harmless no-op on a
+        # direct connection (port 5432).
+        statement_cache_size=0,
     )
     logger.info("PostgreSQL pool created")
     return pool
