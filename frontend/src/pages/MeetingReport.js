@@ -3,7 +3,6 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   FileText, CheckCircle, ArrowLeft, AlertTriangle, Loader2, Shield, Send, MoreHorizontal, Info, Share2, RefreshCw,
 } from "lucide-react";
@@ -499,50 +498,8 @@ export default function MeetingReport() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex flex-col h-full">
-          {/* Top bar skeleton — mirrors the sticky header (title lives in Layout's org-colour bar) */}
-          <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20 gap-2">
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-4 w-4 rounded" />
-              <Skeleton className="h-5 w-20 rounded-full" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-8 w-28 rounded-md" />
-              <Skeleton className="h-8 w-8 rounded-md" />
-            </div>
-          </div>
-          {/* Tab row skeleton — mirrors Overview/Transcript/Compliance/Comments/Prep Agenda/Audit Trail */}
-          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 flex-shrink-0">
-            <div className="max-w-5xl mx-auto px-6 flex items-center gap-6 overflow-x-auto">
-              <Skeleton className="h-4 w-16 my-3" />
-              <Skeleton className="h-4 w-20 my-3" />
-              <Skeleton className="h-4 w-20 my-3" />
-              <Skeleton className="h-4 w-20 my-3" />
-              <Skeleton className="h-4 w-24 my-3" />
-              <Skeleton className="h-4 w-20 my-3" />
-            </div>
-          </div>
-          {/* Single-column content skeleton — no permanent sidebar, matches the current tabbed layout */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="max-w-5xl mx-auto p-6 w-full space-y-5">
-              <Skeleton className="h-5 w-40" />
-              <Skeleton className="h-24 w-full rounded-lg" />
-              <Skeleton className="h-5 w-32" />
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <Skeleton className="h-4 w-4 rounded-full flex-shrink-0 mt-0.5" />
-                  <Skeleton className="h-4 flex-1" />
-                </div>
-              ))}
-              <Skeleton className="h-5 w-28 mt-2" />
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <Skeleton className="h-4 w-4 rounded-full flex-shrink-0 mt-0.5" />
-                  <Skeleton className="h-4" style={{ width: `${55 + i * 12}%` }} />
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="min-h-full flex items-center justify-center" data-testid="meeting-report-loading">
+          <div className="w-10 h-10 border-[3px] border-[#1E3A8A] border-t-transparent rounded-full spin" />
         </div>
       </Layout>
     );

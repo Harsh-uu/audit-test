@@ -171,7 +171,7 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
             state={step2Done ? "done" : step2Active ? "active" : "waiting"}
             icon={<span className="text-xs font-bold">2</span>}
             title="Transcribing Recording"
-            subtitle="AssemblyAI converts the audio to a speaker-labelled transcript"
+            subtitle="Converting the audio into a speaker-labelled transcript"
             right={step2Done ? "Complete" : step2Active ? "~1–5 minutes" : "Waiting"}
           >
             <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden relative">
