@@ -160,7 +160,7 @@ export default function NewMeeting() {
         <div className="flex flex-col md:flex-row flex-1 overflow-auto md:overflow-hidden">
 
           {/* LEFT PANEL — config fields + action button */}
-          <div className="w-full md:w-80 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 bg-gray-50 flex flex-col p-5 gap-5 md:overflow-y-auto">
+          <div className="w-full md:w-80 flex-shrink-0 md:border-r border-gray-100 bg-gray-50 flex flex-col p-5 gap-5 md:overflow-y-auto order-2 md:order-1">
 
             <div>
               <label htmlFor="meeting-type" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center">
@@ -280,7 +280,7 @@ export default function NewMeeting() {
           </div>
 
           {/* RIGHT PANEL — attendees (scrolls independently) */}
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex-1 overflow-y-auto p-5 border-b md:border-b-0 order-1 md:order-2">
             <div className="flex items-center gap-2 mb-4">
               <Users className="w-4 h-4 text-[#1E3A8A]" />
               <h3 className="font-semibold text-gray-800 text-sm font-display">Attendees</h3>

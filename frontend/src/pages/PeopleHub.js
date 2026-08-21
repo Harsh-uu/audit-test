@@ -13,29 +13,31 @@ import {
 } from "lucide-react";
 
 // ── Avatar helper ────────────────────────────────────────────────────────────
-function avatarColor(name = "") {
+function avatarColor(name) {
+  const safe = name || "";
   const palette = ["#1E3A8A","#7C3AED","#059669","#D97706","#DC2626","#0891B2","#9333EA"];
   let h = 0;
-  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % palette.length;
+  for (const c of safe) h = (h * 31 + c.charCodeAt(0)) % palette.length;
   return palette[h];
 }
 
-function initials(name = "") {
-  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+function initials(name) {
+  return (name || "").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
 // ── Sparkbar ─────────────────────────────────────────────────────────────────
-function Sparkbar({ data = [] }) {
-  const max = Math.max(...data, 1);
+function Sparkbar({ data }) {
+  const safeData = Array.isArray(data) ? data : [];
+  const max = Math.max(...safeData, 1);
   return (
     <div className="flex items-end gap-0.5" style={{ height: 22 }}>
-      {data.map((v, i) => (
+      {safeData.map((v, i) => (
         <div
           key={i}
           className="w-1.5 rounded-sm"
           style={{
             height: v === 0 ? 3 : Math.max(4, Math.round((v / max) * 22)),
-            background: v === 0 ? "#E5E7EB" : i === data.length - 1 ? "#1E3A8A" : "#93C5FD",
+            background: v === 0 ? "#E5E7EB" : i === safeData.length - 1 ? "#1E3A8A" : "#93C5FD",
           }}
         />
       ))}
