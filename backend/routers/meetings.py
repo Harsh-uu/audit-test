@@ -122,11 +122,24 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
 
     async with database.with_org(org_id) as conn:
         attendees = await _resolve_attendees(conn, data.attendee_ids, org_id)
+
+        # Auto-default the sign-off manager: if it wasn't explicitly chosen and
+        # exactly one attendee is a manager/admin, use them. With 0 or 2+
+        # managers among the attendees it's ambiguous, so leave it for manual
+        # selection as before. This also fixes a downstream bug where a
+        # never-selected sign_off_manager_id let a co-attending manager be
+        # mistaken for a "shared supervisee" between two different meetings.
+        sign_off_manager_id = data.sign_off_manager_id
+        if not sign_off_manager_id:
+            manager_attendees = [a for a in attendees if a.get("role") in ("manager", "admin")]
+            if len(manager_attendees) == 1:
+                sign_off_manager_id = manager_attendees[0]["user_id"]
+
         manager_name = None
-        if data.sign_off_manager_id:
+        if sign_off_manager_id:
             mgr = await conn.fetchrow(
                 "SELECT name FROM users WHERE id = $1 AND org_id = $2",
-                data.sign_off_manager_id, org_id,
+                sign_off_manager_id, org_id,
             )
             if mgr:
                 manager_name = mgr["name"]
@@ -140,7 +153,7 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)""",
             meeting_id, org_id, data.title, data.date, data.location, data.meeting_type,
             current_user["id"], current_user.get("name", ""),
-            data.sign_off_manager_id, manager_name,
+            sign_off_manager_id, manager_name,
             attendees,
             current_user.get("team_id"), current_user.get("setting_id"),
             data.schedule_id, "draft",
@@ -151,7 +164,7 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
         "id": meeting_id, "org_id": org_id, "title": data.title, "date": data.date,
         "location": data.location, "meeting_type": data.meeting_type,
         "created_by": current_user["id"], "created_by_name": current_user.get("name", ""),
-        "sign_off_manager_id": data.sign_off_manager_id, "sign_off_manager_name": manager_name,
+        "sign_off_manager_id": sign_off_manager_id, "sign_off_manager_name": manager_name,
         "attendees": attendees, "status": "draft",
         "recording_events": [], "paused_periods": [], "total_paused_duration_seconds": 0,
         "audio_deletion_status": "none", "created_at": now, "updated_at": now,

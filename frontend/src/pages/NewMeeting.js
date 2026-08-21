@@ -94,7 +94,14 @@ export default function NewMeeting() {
       const newIds = f.attendee_ids.includes(userId)
         ? f.attendee_ids.filter(id => id !== userId)
         : [...f.attendee_ids, userId];
-      const newManagerId = newIds.includes(f.sign_off_manager_id) ? f.sign_off_manager_id : "";
+      let newManagerId = newIds.includes(f.sign_off_manager_id) ? f.sign_off_manager_id : "";
+      // Auto-default: if exactly one manager/admin is among the selected
+      // attendees, pre-select them as sign-off manager (still overridable).
+      // With 0 or 2+ managers it's ambiguous, so leave it for manual choice.
+      if (!newManagerId) {
+        const managerAttendees = users.filter(u => newIds.includes(u.id) && ["manager", "admin"].includes(u.role));
+        if (managerAttendees.length === 1) newManagerId = managerAttendees[0].id;
+      }
       return { ...f, attendee_ids: newIds, sign_off_manager_id: newManagerId };
     });
   };

@@ -53,15 +53,25 @@ def _jdict(val):
     return val or {}
 
 
-async def _get_rolled_actions(conn, supervisee_ids: list, current_meeting_id: str, manager_id: str = None, attendee_names: list = None) -> list:
-    """Return incomplete actions from previous meetings relevant to these supervisees."""
-    if not supervisee_ids:
-        return []
-    supervisee_ids = [uid for uid in supervisee_ids if uid and uid != manager_id]
+async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, manager_id: str = None) -> list:
+    """Return incomplete actions from previous meetings relevant to these supervisees.
+
+    A "supervisee" here is any attendee whose account role is NOT manager/admin
+    (checked via the role stored on the attendee record itself), in addition to
+    excluding whoever is set as this meeting's sign_off_manager_id. Relying on
+    sign_off_manager_id alone is not enough — it's an optional field and, if left
+    unset, a manager who is a genuine co-attendee of two different supervisees'
+    meetings would incorrectly look like a "shared supervisee" linking the two,
+    dragging one supervisee's outstanding actions into the other's meeting.
+    """
+    supervisee_ids = [
+        a.get("user_id") for a in attendees
+        if a.get("user_id") and a.get("role") not in ("manager", "admin") and a.get("user_id") != manager_id
+    ]
     if not supervisee_ids:
         return []
 
-    new_attendee_names_lower = {n.lower() for n in (attendee_names or []) if n}
+    new_attendee_names_lower = {a.get("name", "").lower() for a in attendees if a.get("name")}
     rolled = []
     seen_sources = set()
 
@@ -87,7 +97,7 @@ async def _get_rolled_actions(conn, supervisee_ids: list, current_meeting_id: st
         source_supervisee_ids = {
             a.get("user_id")
             for a in _jlist(prev.get("attendees"))
-            if a.get("user_id") and a.get("user_id") != source_manager_id
+            if a.get("user_id") and a.get("role") not in ("manager", "admin") and a.get("user_id") != source_manager_id
         }
         if not source_supervisee_ids.intersection(set(supervisee_ids)):
             continue
@@ -236,14 +246,12 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         # Fetch rolled-over actions
         attendees = _jlist(meeting.get("attendees"))
-        attendee_ids = [a.get("user_id") for a in attendees]
-        attendee_names = [a.get("name") for a in attendees]
         manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or "Manager"
         manager_id = meeting.get("sign_off_manager_id")
 
         async with database.with_admin() as conn:
             rolled_actions = await _get_rolled_actions(
-                conn, attendee_ids, meeting_id, manager_id=manager_id, attendee_names=attendee_names
+                conn, attendees, meeting_id, manager_id=manager_id
             )
 
         meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
