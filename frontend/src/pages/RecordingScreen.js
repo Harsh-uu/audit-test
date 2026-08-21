@@ -4,6 +4,7 @@ import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Mic, MicOff, Pause, Play, Square, AlertTriangle, Clock, Info, Upload, ArrowRight, Users, ExternalLink, CheckSquare, ChevronDown, ChevronUp, BookOpen, Sparkles
 } from "lucide-react";
@@ -447,7 +448,7 @@ export default function RecordingScreen() {
   return (
     <Layout>
       <div className="p-4 sm:p-6 md:p-8 max-w-2xl mx-auto w-full fade-in">
-        {meeting && (
+        {meeting ? (
           <div className="mb-5">
             <h1 className="text-lg sm:text-xl font-semibold text-gray-900 leading-snug font-display">{meeting.title}</h1>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-sm text-gray-500">
@@ -456,6 +457,11 @@ export default function RecordingScreen() {
               )}
               {meeting.sign_off_manager_name && <span className="hidden sm:inline">Manager: {meeting.sign_off_manager_name}</span>}
             </div>
+          </div>
+        ) : (
+          <div className="mb-5" data-testid="recording-header-skeleton">
+            <Skeleton className="h-6 w-72 max-w-full" />
+            <Skeleton className="h-4 w-28 mt-2" />
           </div>
         )}
 
