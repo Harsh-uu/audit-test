@@ -585,9 +585,13 @@ export default function MeetingReport() {
           API={API}
           getAuthConfig={getAuthConfig}
           role={user?.role}
-          onPiiComplete={async () => {
-            await fetchMeeting();
+          onPiiComplete={() => {
+            // Flip the gate immediately once the PII step reports success —
+            // don't block the transition to the tabbed report on a network
+            // round-trip. fetchMeeting() still runs to bring in the applied
+            // redactions/audit entry, it just no longer gates the switch.
             setPiiGateDone(true);
+            fetchMeeting();
           }}
         />
       </Layout>

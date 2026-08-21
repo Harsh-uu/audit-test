@@ -113,6 +113,7 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
     try {
       await axios.post(`${API}/review/${meetingId}/complete-pii-review`, { redactions, skipped }, getAuthConfig());
       setLocalPiiDone(true);
+      setSaving(false);
       onPiiComplete();
     } catch (e) {
       setScanError(e.response?.data?.detail || "Failed to save. Please try again.");
