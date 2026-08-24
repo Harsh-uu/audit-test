@@ -509,195 +509,170 @@ async def save_template(request: Request, current_user=Depends(get_current_user)
 
 # ── Team Insights ─────────────────────────────────────────────────────────────
 
-@router.get("/team-insights")
-async def get_team_insights(
-    team_id: Optional[str] = None,
-    setting_id: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    current_user=Depends(get_current_user),
-):
-    if current_user["role"] not in ["admin", "manager"]:
-        raise HTTPException(403, "Insufficient permissions")
-    org_id = current_user.get("org_id", "")
-
-    async with database.with_org(org_id) as conn:
-        # Staff
-        if team_id:
-            staff_rows = await conn.fetch(
+async def _ti_resolve_staff(conn, org_id: str, current_user: dict, team_id: Optional[str], setting_id: Optional[str]) -> list:
+    """Resolve the staff list in scope for this Team Insights request."""
+    if team_id:
+        rows = await conn.fetch(
+            "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
+            org_id, team_id,
+        )
+    elif setting_id:
+        rows = await conn.fetch(
+            "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
+            org_id, setting_id,
+        )
+    elif current_user["role"] == "manager":
+        mgr_scope = get_manager_scope(current_user)
+        if mgr_scope["level"] == "team":
+            rows = await conn.fetch(
                 "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
-                org_id, team_id,
+                org_id, mgr_scope["team_id"],
             )
-        elif setting_id:
-            staff_rows = await conn.fetch(
+        elif mgr_scope["level"] == "setting":
+            rows = await conn.fetch(
                 "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
-                org_id, setting_id,
+                org_id, mgr_scope["setting_id"],
             )
-        elif current_user["role"] == "manager":
-            mgr_scope = get_manager_scope(current_user)
-            if mgr_scope["level"] == "team":
-                staff_rows = await conn.fetch(
-                    "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
-                    org_id, mgr_scope["team_id"],
-                )
-            elif mgr_scope["level"] == "setting":
-                staff_rows = await conn.fetch(
-                    "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
-                    org_id, mgr_scope["setting_id"],
-                )
-            else:
-                staff_rows = await conn.fetch(
-                    "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
-                    org_id,
-                )
         else:
-            staff_rows = await conn.fetch(
+            rows = await conn.fetch(
                 "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
                 org_id,
             )
-
-        staff = [dict(r) for r in staff_rows]
-        if not staff:
-            return {
-                "staff_count": 0, "meeting_count": 0,
-                "matrix": {"cqc": {"standards": [], "rows": []}, "care_cert": {"standards": [], "rows": []}, "custom": {"standards": [], "rows": []}},
-                "themes": {"coverage_gaps": [], "common_risks": [], "outstanding_actions": []},
-            }
-
-    # Get org jurisdiction to load the correct framework standards
-    async with database.with_admin() as conn:
-        org_info = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
-    org_jurisdiction = (org_info["jurisdiction"] if org_info else None) or "england"
-    org_service_type = (org_info["service_type"] if org_info else None)
-
-    # Standards — jurisdiction-aware (reg types map to "cqc" matrix key; cert types to "care_cert")
-    REG_TYPES = {"cqc", "ciw", "ci", "rqia_dom", "rqia_res"}
-    async with database.with_org(org_id) as conn:
-        if org_jurisdiction == "wales":
-            std_rows = await conn.fetch(
-                "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND is_system=TRUE AND jurisdiction='wales' ORDER BY type, reference",
-            )
-        elif org_jurisdiction == "scotland":
-            std_rows = await conn.fetch(
-                "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND is_system=TRUE AND jurisdiction='scotland' ORDER BY type, reference",
-            )
-        elif org_jurisdiction == "northern_ireland":
-            std_rows = await conn.fetch(
-                """SELECT type, reference, name, sub_outcomes FROM standards_entries
-                   WHERE is_active=TRUE AND jurisdiction='northern_ireland'
-                   AND (service_type IS NULL OR service_type=$1)
-                   ORDER BY type, reference""",
-                org_service_type,
-            )
-        else:
-            std_rows = await conn.fetch(
-                "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND type IN ('cqc','care_cert') AND (is_system=TRUE OR org_id=$1) ORDER BY type, reference",
-                org_id,
-            )
-
-        cqc_stds, cc_stds, cc_sub_outcomes = [], [], {}
-        for s in std_rows:
-            s = dict(s)
-            if s["type"] in REG_TYPES:
-                cqc_stds.append({"ref": s["reference"], "name": s["name"]})
-            else:
-                cc_stds.append({"ref": s["reference"], "name": s["name"]})
-                _raw_subs = s.get("sub_outcomes")
-                subs = (json.loads(_raw_subs) if isinstance(_raw_subs, str) else _raw_subs) or []
-                if subs:
-                    cc_sub_outcomes[s["reference"]] = [so["ref"] for so in subs]
-
-        cqc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
-        cc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
-
-        # Meetings with analyses — single JOIN (no N+1)
-        date_conds = ["m.status IN ('in_review','reviewed','signed_off','shared')", "m.analysis_id IS NOT NULL"]
-        date_params: list = []
-        if date_from:
-            date_params.append(date_from)
-            date_conds.append(f"m.date >= ${len(date_params)}")
-        if date_to:
-            date_params.append(date_to + "T23:59:59")
-            date_conds.append(f"m.date <= ${len(date_params)}")
-        joined_rows = await conn.fetch(
-            f"""SELECT m.*, a.cqc_mappings, a.care_cert_mappings, a.custom_mappings,
-                       a.actions, a.risks, a.learning_needs, a.achievements
-                FROM meetings m
-                JOIN analyses a ON a.id = m.analysis_id
-                WHERE {' AND '.join(date_conds)}""",
-            *date_params,
+    else:
+        rows = await conn.fetch(
+            "SELECT id, name, role FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
+            org_id,
         )
-        all_items = [
-            {"meeting": dict(r), "analysis": {
-                "cqc_mappings": r["cqc_mappings"],
-                "care_cert_mappings": r["care_cert_mappings"],
-                "custom_mappings": r["custom_mappings"],
-                "actions": r["actions"],
-                "risks": r["risks"],
-                "learning_needs": r["learning_needs"],
-                "achievements": r["achievements"],
-            }}
-            for r in joined_rows
-        ]
+    return [dict(r) for r in rows]
 
-        # Fetch accepted evidence from uploaded supervision documents
-        upload_rows = []
+
+async def _ti_load_standards(conn, org_id: str, org_jurisdiction: str, org_service_type: Optional[str]):
+    """Load jurisdiction-aware standards and split into CQC-type vs Care-Cert-type buckets."""
+    REG_TYPES = {"cqc", "ciw", "ci", "rqia_dom", "rqia_res"}
+    if org_jurisdiction == "wales":
+        std_rows = await conn.fetch(
+            "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND is_system=TRUE AND jurisdiction='wales' ORDER BY type, reference",
+        )
+    elif org_jurisdiction == "scotland":
+        std_rows = await conn.fetch(
+            "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND is_system=TRUE AND jurisdiction='scotland' ORDER BY type, reference",
+        )
+    elif org_jurisdiction == "northern_ireland":
+        std_rows = await conn.fetch(
+            """SELECT type, reference, name, sub_outcomes FROM standards_entries
+               WHERE is_active=TRUE AND jurisdiction='northern_ireland'
+               AND (service_type IS NULL OR service_type=$1)
+               ORDER BY type, reference""",
+            org_service_type,
+        )
+    else:
+        std_rows = await conn.fetch(
+            "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND type IN ('cqc','care_cert') AND (is_system=TRUE OR org_id=$1) ORDER BY type, reference",
+            org_id,
+        )
+
+    cqc_stds, cc_stds, cc_sub_outcomes = [], [], {}
+    for s in std_rows:
+        s = dict(s)
+        if s["type"] in REG_TYPES:
+            cqc_stds.append({"ref": s["reference"], "name": s["name"]})
+        else:
+            cc_stds.append({"ref": s["reference"], "name": s["name"]})
+            _raw_subs = s.get("sub_outcomes")
+            subs = (json.loads(_raw_subs) if isinstance(_raw_subs, str) else _raw_subs) or []
+            if subs:
+                cc_sub_outcomes[s["reference"]] = [so["ref"] for so in subs]
+
+    cqc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
+    cc_stds.sort(key=lambda x: _ref_nums(x["ref"]))
+    return cqc_stds, cc_stds, cc_sub_outcomes
+
+
+async def _ti_load_meetings_and_uploads(conn, date_from: Optional[str], date_to: Optional[str]):
+    """Fetch in-scope meetings+analyses (single JOIN) plus accepted upload evidence."""
+    date_conds = ["m.status IN ('in_review','reviewed','signed_off','shared')", "m.analysis_id IS NOT NULL"]
+    date_params: list = []
+    if date_from:
+        date_params.append(date_from)
+        date_conds.append(f"m.date >= ${len(date_params)}")
+    if date_to:
+        date_params.append(date_to + "T23:59:59")
+        date_conds.append(f"m.date <= ${len(date_params)}")
+    joined_rows = await conn.fetch(
+        f"""SELECT m.*, a.cqc_mappings, a.care_cert_mappings, a.custom_mappings,
+                   a.actions, a.risks, a.learning_needs, a.achievements
+            FROM meetings m
+            JOIN analyses a ON a.id = m.analysis_id
+            WHERE {' AND '.join(date_conds)}""",
+        *date_params,
+    )
+    all_items = [
+        {"meeting": dict(r), "analysis": {
+            "cqc_mappings": r["cqc_mappings"],
+            "care_cert_mappings": r["care_cert_mappings"],
+            "custom_mappings": r["custom_mappings"],
+            "actions": r["actions"],
+            "risks": r["risks"],
+            "learning_needs": r["learning_needs"],
+            "achievements": r["achievements"],
+        }}
+        for r in joined_rows
+    ]
+
+    upload_rows = []
+    try:
+        upload_date_conds = ["status='done'", "staff_id IS NOT NULL"]
+        upload_date_params: list = []
+        if date_from:
+            upload_date_params.append(date_from)
+            upload_date_conds.append(f"created_at >= ${len(upload_date_params)}")
+        if date_to:
+            upload_date_params.append(date_to + "T23:59:59")
+            upload_date_conds.append(f"created_at <= ${len(upload_date_params)}")
+        upload_rows = await conn.fetch(
+            f"SELECT staff_id, created_at, cqc_mappings, care_cert_mappings, custom_mappings FROM supervision_uploads WHERE {' AND '.join(upload_date_conds)}",
+            *upload_date_params,
+        )
+    except Exception as e:
+        logger.warning("Could not fetch upload evidence for team insights: %s", e)
+
+    return all_items, upload_rows
+
+
+def _ti_jlist(val):
+    """Ensure a JSONB field is a list — guards against raw strings when asyncpg
+    prepared-statement cache is reset by SET LOCAL ROLE."""
+    if val is None:
+        return []
+    if isinstance(val, str):
         try:
-            upload_date_conds = ["status='done'", "staff_id IS NOT NULL"]
-            upload_date_params: list = []
-            if date_from:
-                upload_date_params.append(date_from)
-                upload_date_conds.append(f"created_at >= ${len(upload_date_params)}")
-            if date_to:
-                upload_date_params.append(date_to + "T23:59:59")
-                upload_date_conds.append(f"created_at <= ${len(upload_date_params)}")
-            upload_rows = await conn.fetch(
-                f"SELECT staff_id, created_at, cqc_mappings, care_cert_mappings, custom_mappings FROM supervision_uploads WHERE {' AND '.join(upload_date_conds)}",
-                *upload_date_params,
-            )
-        except Exception as e:
-            logger.warning("Could not fetch upload evidence for team insights: %s", e)
-
-    staff_ids = {s["id"] for s in staff}
-
-    def empty_cqc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "latest_excerpt": "", "source_meeting_id": ""}
-    def empty_cc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "latest_excerpt": "", "source_meeting_id": "", "covered_refs": set()}
-
-    cqc_ev = {s["id"]: {} for s in staff}
-    cc_ev = {s["id"]: {} for s in staff}
-    cust_ev = {s["id"]: {} for s in staff}
-    cust_names: dict = {}
-    all_risks, all_outstanding = [], []
-
-    import json as _json
-
-    def _jlist(val):
-        """Ensure a JSONB field is a list — guards against raw strings when asyncpg
-        prepared-statement cache is reset by SET LOCAL ROLE."""
-        if val is None:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
             return []
-        if isinstance(val, str):
-            try:
-                parsed = _json.loads(val)
-                return parsed if isinstance(parsed, list) else []
-            except Exception:
-                return []
-        return val if isinstance(val, list) else []
+    return val if isinstance(val, list) else []
 
+
+def _ti_empty_cqc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "latest_excerpt": "", "source_meeting_id": ""}
+def _ti_empty_cc(): return {"likely": 0, "review": 0, "total": 0, "last_date": "", "latest_excerpt": "", "source_meeting_id": "", "covered_refs": set()}
+
+
+def _ti_accumulate_from_meetings(all_items: list, staff_ids: set, cqc_ev: dict, cc_ev: dict, cust_ev: dict, cust_names: dict, all_risks: list, all_outstanding: list):
+    """Walk each meeting's analysis mappings/risks/actions into the evidence accumulators (in place)."""
     for item in all_items:
         mtg, ana = item["meeting"], item["analysis"]
         date = mtg.get("date", "")
         sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
-        for attendee in _jlist(mtg.get("attendees")):
+        for attendee in _ti_jlist(mtg.get("attendees")):
             uid = attendee.get("user_id", "") if isinstance(attendee, dict) else ""
             if uid not in staff_ids or (sign_off_mgr_id and uid == sign_off_mgr_id):
                 continue
-            for m in _jlist(ana.get("cqc_mappings")):
+            for m in _ti_jlist(ana.get("cqc_mappings")):
                 if not isinstance(m, dict): continue
                 if m.get("status") == "rejected": continue
                 ref = m.get("regulation_ref", "")
                 if not ref: continue
-                if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = empty_cqc()
+                if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = _ti_empty_cqc()
                 c = cqc_ev[uid][ref]
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
@@ -707,12 +682,12 @@ async def get_team_insights(
                     if m.get("transcript_excerpt"):
                         c["latest_excerpt"] = m["transcript_excerpt"][:200]
                         c["source_meeting_id"] = str(mtg.get("id", ""))
-            for m in _jlist(ana.get("care_cert_mappings")):
+            for m in _ti_jlist(ana.get("care_cert_mappings")):
                 if not isinstance(m, dict): continue
                 if m.get("status") == "rejected": continue
                 std_ref = m.get("standard_ref", "")
                 if not std_ref: continue
-                if std_ref not in cc_ev[uid]: cc_ev[uid][std_ref] = empty_cc()
+                if std_ref not in cc_ev[uid]: cc_ev[uid][std_ref] = _ti_empty_cc()
                 c = cc_ev[uid][std_ref]
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
@@ -724,13 +699,13 @@ async def get_team_insights(
                         c["source_meeting_id"] = str(mtg.get("id", ""))
                 or_ref = m.get("outcome_ref", "")
                 if or_ref: c["covered_refs"].add(or_ref)
-            for m in _jlist(ana.get("custom_mappings")):
+            for m in _ti_jlist(ana.get("custom_mappings")):
                 if not isinstance(m, dict): continue
                 if m.get("status") == "rejected": continue
                 ref = m.get("criterion_ref", "") or m.get("document_name", "")
                 if not ref: continue
                 cust_names.setdefault(ref, m.get("criterion_name", ref))
-                if ref not in cust_ev[uid]: cust_ev[uid][ref] = empty_cqc()
+                if ref not in cust_ev[uid]: cust_ev[uid][ref] = _ti_empty_cqc()
                 c = cust_ev[uid][ref]
                 c["total"] += 1
                 if m.get("confidence") == "likely_evidence": c["likely"] += 1
@@ -740,17 +715,25 @@ async def get_team_insights(
                     if m.get("transcript_excerpt"):
                         c["latest_excerpt"] = m["transcript_excerpt"][:200]
                         c["source_meeting_id"] = str(mtg.get("id", ""))
-        for risk in _jlist(ana.get("risks")):
+        for risk in _ti_jlist(ana.get("risks")):
             text = risk if isinstance(risk, str) else (risk.get("text", "") if isinstance(risk, dict) else "")
             if text.strip(): all_risks.append(text.strip())
-        for action in _jlist(ana.get("actions")):
+        for action in _ti_jlist(ana.get("actions")):
             if isinstance(action, dict) and not action.get("completed", False):
                 t = action.get("text", "").strip()
                 if t: all_outstanding.append(t)
 
-    # Merge accepted evidence from supervision_uploads into the same accumulators
-    # Build a string-keyed copy of the accumulators so UUID ↔ str comparison works
+
+def _ti_accumulate_from_uploads(upload_rows: list, staff: list, cqc_ev: dict, cc_ev: dict, cust_ev: dict, cust_names: dict):
+    """Merge accepted evidence from supervision_uploads into the same accumulators (in place)."""
     staff_id_str = {str(s["id"]): s["id"] for s in staff}
+
+    def _parse(val):
+        if isinstance(val, str):
+            try: return json.loads(val)
+            except Exception: return []
+        return val or []
+
     for urow in upload_rows:
         uid_str = str(urow["staff_id"] or "")
         if uid_str not in staff_id_str:
@@ -758,17 +741,11 @@ async def get_team_insights(
         uid = staff_id_str[uid_str]   # use the original UUID key for the accumulators
         date = str(urow["created_at"] or "")[:10]
 
-        def _parse(val):
-            if isinstance(val, str):
-                try: return _json.loads(val)
-                except Exception: return []
-            return val or []
-
         for m in _parse(urow["cqc_mappings"]):
             if m.get("status") not in ("accepted", "needs_followup"): continue
             ref = m.get("regulation_ref", "")
             if not ref: continue
-            if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = empty_cqc()
+            if ref not in cqc_ev[uid]: cqc_ev[uid][ref] = _ti_empty_cqc()
             c = cqc_ev[uid][ref]
             c["total"] += 1
             if m.get("status") == "accepted": c["likely"] += 1
@@ -779,7 +756,7 @@ async def get_team_insights(
             if m.get("status") not in ("accepted", "needs_followup"): continue
             std_ref = m.get("standard_ref", "")
             if not std_ref: continue
-            if std_ref not in cc_ev[uid]: cc_ev[uid][std_ref] = empty_cc()
+            if std_ref not in cc_ev[uid]: cc_ev[uid][std_ref] = _ti_empty_cc()
             c = cc_ev[uid][std_ref]
             c["total"] += 1
             if m.get("status") == "accepted": c["likely"] += 1
@@ -793,77 +770,68 @@ async def get_team_insights(
             ref = m.get("criterion_ref", "") or m.get("document_name", "")
             if not ref: continue
             cust_names.setdefault(ref, m.get("criterion_name", ref))
-            if ref not in cust_ev[uid]: cust_ev[uid][ref] = empty_cqc()
+            if ref not in cust_ev[uid]: cust_ev[uid][ref] = _ti_empty_cqc()
             c = cust_ev[uid][ref]
             c["total"] += 1
             if m.get("status") == "accepted": c["likely"] += 1
             else: c["review"] += 1
             if date > c["last_date"]: c["last_date"] = date
 
-    def build_cqc_matrix(stds, ev_map):
-        rows = []
-        for s in staff:
-            cells = {}
-            for std in stds:
-                ref = std["ref"]
-                cell = ev_map[s["id"]].get(ref)
-                if cell and cell["total"] > 0:
-                    cells[ref] = {**cell, "status": "evidenced" if cell["likely"] > 0 else "needs_review"}
-                else:
-                    cells[ref] = {"status": "gap", "total": 0, "likely": 0, "review": 0, "last_date": ""}
-            rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
-        return {"standards": stds, "rows": rows}
 
-    def build_cc_matrix(stds, ev_map):
-        rows = []
-        for s in staff:
-            cells = {}
-            for std in stds:
-                ref = std["ref"]
-                all_subs = set(cc_sub_outcomes.get(ref, []))
-                total_subs = len(all_subs)
-                ev = ev_map[s["id"]].get(ref, {})
-                covered_refs = ev.get("covered_refs", set())
-                if total_subs > 0:
-                    covered_count = len(covered_refs & all_subs)
-                    pct = round((covered_count / total_subs) * 100)
-                else:
-                    covered_count = 1 if ev.get("total", 0) > 0 else 0
-                    total_subs = 1
-                    pct = 100 if covered_count else 0
-                if covered_count == total_subs and total_subs > 0:
-                    status = "evidenced"
-                elif covered_count > 0:
-                    status = "partial"
-                else:
-                    status = "gap"
-                cells[ref] = {
-                    "status": status, "total": ev.get("total", 0), "likely": ev.get("likely", 0),
-                    "review": ev.get("review", 0), "last_date": ev.get("last_date", ""),
-                    "covered_sub": covered_count, "total_sub": total_subs, "pct": pct,
-                    "evidenced_refs": sorted(list(covered_refs & all_subs)),
-                    "latest_excerpt": ev.get("latest_excerpt", ""),
-                    "source_meeting_id": ev.get("source_meeting_id", ""),
-                }
-            rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
-        return {"standards": stds, "rows": rows}
+def _ti_build_simple_matrix(staff: list, stds: list, ev_map: dict) -> dict:
+    """Shared builder for the CQC and custom-standards matrices (identical gap/evidenced/needs_review logic)."""
+    rows = []
+    for s in staff:
+        cells = {}
+        for std in stds:
+            ref = std["ref"]
+            cell = ev_map[s["id"]].get(ref)
+            if cell and cell["total"] > 0:
+                cells[ref] = {**cell, "status": "evidenced" if cell["likely"] > 0 else "needs_review"}
+            else:
+                cells[ref] = {"status": "gap", "total": 0, "likely": 0, "review": 0, "last_date": ""}
+        rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
+    return {"standards": stds, "rows": rows}
 
-    def build_custom_matrix(stds, ev_map):
-        rows = []
-        for s in staff:
-            cells = {}
-            for std in stds:
-                ref = std["ref"]
-                cell = ev_map[s["id"]].get(ref)
-                if cell and cell["total"] > 0:
-                    cells[ref] = {**cell, "status": "evidenced" if cell["likely"] > 0 else "needs_review"}
-                else:
-                    cells[ref] = {"status": "gap", "total": 0, "likely": 0, "review": 0, "last_date": ""}
-            rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
-        return {"standards": stds, "rows": rows}
 
-    cust_stds = [{"ref": r, "name": cust_names.get(r, r)} for r in sorted(cust_names)]
+def _ti_build_cc_matrix(staff: list, stds: list, ev_map: dict, cc_sub_outcomes: dict) -> dict:
+    """Care Cert matrix builder — tracks partial coverage via sub-outcome refs, unlike the simple matrices."""
+    rows = []
+    for s in staff:
+        cells = {}
+        for std in stds:
+            ref = std["ref"]
+            all_subs = set(cc_sub_outcomes.get(ref, []))
+            total_subs = len(all_subs)
+            ev = ev_map[s["id"]].get(ref, {})
+            covered_refs = ev.get("covered_refs", set())
+            if total_subs > 0:
+                covered_count = len(covered_refs & all_subs)
+                pct = round((covered_count / total_subs) * 100)
+            else:
+                covered_count = 1 if ev.get("total", 0) > 0 else 0
+                total_subs = 1
+                pct = 100 if covered_count else 0
+            if covered_count == total_subs and total_subs > 0:
+                status = "evidenced"
+            elif covered_count > 0:
+                status = "partial"
+            else:
+                status = "gap"
+            cells[ref] = {
+                "status": status, "total": ev.get("total", 0), "likely": ev.get("likely", 0),
+                "review": ev.get("review", 0), "last_date": ev.get("last_date", ""),
+                "covered_sub": covered_count, "total_sub": total_subs, "pct": pct,
+                "evidenced_refs": sorted(list(covered_refs & all_subs)),
+                "latest_excerpt": ev.get("latest_excerpt", ""),
+                "source_meeting_id": ev.get("source_meeting_id", ""),
+            }
+        rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
+    return {"standards": stds, "rows": rows}
 
+
+def _ti_compute_coverage_gaps(staff: list, cqc_stds: list, cc_stds: list, cust_stds: list, cqc_ev: dict, cc_ev: dict, cust_ev: dict, cc_sub_outcomes: dict) -> list:
+    """Build the sorted coverage-gaps theme list across all three standard types."""
     gaps = []
     for std in cqc_stds:
         ref = std["ref"]
@@ -888,25 +856,73 @@ async def get_team_insights(
         gaps.append({"ref": ref, "name": std["name"], "type": "custom", "covered": covered, "total": len(staff)})
     _to = {"cqc": 0, "care_cert": 1, "custom": 2}
     gaps.sort(key=lambda x: (_to.get(x["type"], 9), _ref_nums(x["ref"])))
+    return gaps
 
-    def agg(items, top=10):
-        counts: dict = {}
-        for text in items:
-            key = text[:60].lower()
-            if key not in counts: counts[key] = {"text": text, "count": 0}
-            counts[key]["count"] += 1
-        return sorted(counts.values(), key=lambda x: -x["count"])[:top]
+
+def _ti_agg_top(items: list, top: int = 10) -> list:
+    """Dedupe similar free-text items (by 60-char lowercase prefix) and rank by frequency."""
+    counts: dict = {}
+    for text in items:
+        key = text[:60].lower()
+        if key not in counts: counts[key] = {"text": text, "count": 0}
+        counts[key]["count"] += 1
+    return sorted(counts.values(), key=lambda x: -x["count"])[:top]
+
+
+@router.get("/team-insights")
+async def get_team_insights(
+    team_id: Optional[str] = None,
+    setting_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user=Depends(get_current_user),
+):
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+
+    async with database.with_org(org_id) as conn:
+        staff = await _ti_resolve_staff(conn, org_id, current_user, team_id, setting_id)
+        if not staff:
+            return {
+                "staff_count": 0, "meeting_count": 0,
+                "matrix": {"cqc": {"standards": [], "rows": []}, "care_cert": {"standards": [], "rows": []}, "custom": {"standards": [], "rows": []}},
+                "themes": {"coverage_gaps": [], "common_risks": [], "outstanding_actions": []},
+            }
+
+    # Get org jurisdiction to load the correct framework standards
+    async with database.with_admin() as conn:
+        org_info = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
+    org_jurisdiction = (org_info["jurisdiction"] if org_info else None) or "england"
+    org_service_type = (org_info["service_type"] if org_info else None)
+
+    async with database.with_org(org_id) as conn:
+        cqc_stds, cc_stds, cc_sub_outcomes = await _ti_load_standards(conn, org_id, org_jurisdiction, org_service_type)
+        all_items, upload_rows = await _ti_load_meetings_and_uploads(conn, date_from, date_to)
+
+    staff_ids = {s["id"] for s in staff}
+    cqc_ev = {s["id"]: {} for s in staff}
+    cc_ev = {s["id"]: {} for s in staff}
+    cust_ev = {s["id"]: {} for s in staff}
+    cust_names: dict = {}
+    all_risks, all_outstanding = [], []
+
+    _ti_accumulate_from_meetings(all_items, staff_ids, cqc_ev, cc_ev, cust_ev, cust_names, all_risks, all_outstanding)
+    _ti_accumulate_from_uploads(upload_rows, staff, cqc_ev, cc_ev, cust_ev, cust_names)
+
+    cust_stds = [{"ref": r, "name": cust_names.get(r, r)} for r in sorted(cust_names)]
+    gaps = _ti_compute_coverage_gaps(staff, cqc_stds, cc_stds, cust_stds, cqc_ev, cc_ev, cust_ev, cc_sub_outcomes)
 
     return {
         "staff_count": len(staff), "meeting_count": len(all_items),
         "org_jurisdiction": org_jurisdiction,
         "org_service_type": org_service_type or "",
         "matrix": {
-            "cqc": build_cqc_matrix(cqc_stds, cqc_ev),
-            "care_cert": build_cc_matrix(cc_stds, cc_ev),
-            "custom": build_custom_matrix(cust_stds, cust_ev),
+            "cqc": _ti_build_simple_matrix(staff, cqc_stds, cqc_ev),
+            "care_cert": _ti_build_cc_matrix(staff, cc_stds, cc_ev, cc_sub_outcomes),
+            "custom": _ti_build_simple_matrix(staff, cust_stds, cust_ev),
         },
-        "themes": {"coverage_gaps": gaps, "common_risks": agg(all_risks), "outstanding_actions": agg(all_outstanding)},
+        "themes": {"coverage_gaps": gaps, "common_risks": _ti_agg_top(all_risks), "outstanding_actions": _ti_agg_top(all_outstanding)},
     }
 
 
