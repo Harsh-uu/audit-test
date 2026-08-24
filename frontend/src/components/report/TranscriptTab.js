@@ -1,356 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { FileText, Users, Loader2, ArrowLeftRight, Scissors, ChevronUp, ChevronDown, Pencil, Check, RotateCcw, Search, X } from "lucide-react";
+import { Loader2, Scissors } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { anonymiseTranscript } from "@/utils/anonymise";
 import { useAuth } from "@/context/AuthContext";
-
-/** Strip leading/trailing curly quotes and truncate for searching */
-function cleanExcerpt(excerpt) {
-  return (excerpt || "")
-    .replace(/^[\u201C\u201D\u2018\u2019"']+|[\u201C\u201D\u2018\u2019"']+$/g, "")
-    .trim()
-    .slice(0, 120);
-}
-
-/**
- * Find the best searchable substring of an excerpt within text.
- * First tries the full cleaned excerpt; if not found, falls back to
- * progressively shorter word-prefix matches (10 → 8 → 6 → 4 words).
- * This handles cases where the AI paraphrases a quote very slightly.
- * Returns the matched string, or "" if nothing was found.
- */
-function resolveExcerptQuery(text, excerpt) {
-  // Strip [MM:SS] timestamp and optional "SpeakerName: " prefix the AI may have included
-  const cleaned = cleanExcerpt(excerpt)
-    .replace(/^\[\d{1,2}:\d{2}\]\s*/, "")
-    .replace(/^[^:]{1,50}:\s*/, "");
-  if (!cleaned) return "";
-  const tLower = text.toLowerCase();
-
-  if (tLower.includes(cleaned.toLowerCase())) return cleaned;
-
-  const words = cleaned.split(/\s+/).filter(Boolean);
-  for (const n of [10, 8, 6, 4]) {
-    if (words.length <= n) continue;
-    const partial = words.slice(0, n).join(" ");
-    if (tLower.includes(partial.toLowerCase())) return partial;
-  }
-
-  if (words.length >= 4) {
-    const partial = words.slice(0, 4).join(" ");
-    if (tLower.includes(partial.toLowerCase())) return partial;
-  }
-
-  return "";
-}
-
-/** Render text with a highlighted substring */
-function HighlightedText({ text, query }) {
-  if (!query) return <>{text}</>;
-  const q = cleanExcerpt(query).toLowerCase();
-  if (!q) return <>{text}</>;
-  const idx = text.toLowerCase().indexOf(q);
-  if (idx === -1) return <>{text}</>;
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark className="bg-yellow-200 text-gray-900 rounded-sm px-0.5 not-italic">{text.slice(idx, idx + q.length)}</mark>
-      {text.slice(idx + q.length)}
-    </>
-  );
-}
-
-/** Escape special regex chars */
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Render text with multiple highlighted spans — supports current (amber) + other (yellow) */
-function MultiHighlightText({ text, matches, currentGlobalIdx }) {
-  if (!matches || !matches.length) return <>{text}</>;
-  const parts = [];
-  let last = 0;
-  for (const { start, end, globalIdx } of matches) {
-    if (start > last) parts.push(<span key={`t${last}`}>{text.slice(last, start)}</span>);
-    const isCurrent = globalIdx === currentGlobalIdx;
-    parts.push(
-      <mark
-        key={`m${globalIdx}`}
-        data-find-match={isCurrent ? "current" : undefined}
-        className={`rounded-sm px-0.5 not-italic transition-colors ${
-          isCurrent ? "bg-orange-300 text-gray-900 ring-1 ring-orange-400" : "bg-yellow-200 text-gray-900"
-        }`}
-      >
-        {text.slice(start, end)}
-      </mark>
-    );
-    last = end;
-  }
-  if (last < text.length) parts.push(<span key="tail">{text.slice(last)}</span>);
-  return <>{parts}</>;
-}
-
-const API = "/api";
-
-function formatTranscript(text) {
-  if (!text) return [];
-  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
-  if (lines.length > 2) return lines;
-  const sentences = text.match(/[^.!?]+[.!?]+["']?\s*/g) || [text];
-  const paragraphs = [];
-  for (let i = 0; i < sentences.length; i += 3) {
-    const chunk = sentences.slice(i, i + 3).join("").trim();
-    if (chunk) paragraphs.push(chunk);
-  }
-  return paragraphs.length ? paragraphs : [text];
-}
-
-function parseSpeakerText(text) {
-  if (!text) return [];
-  const turns = [];
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    // Extract optional [MM:SS] timestamp prefix
-    const tsMatch = trimmed.match(/^\[(\d{1,2}:\d{2})\]\s+(.+)/);
-    const timestamp = tsMatch ? tsMatch[1] : null;
-    const rest = tsMatch ? tsMatch[2] : trimmed;
-    const match = rest.match(/^([^:]{1,50}):\s*(.+)/);
-    if (match) {
-      turns.push({ speaker: match[1].trim(), text: match[2].trim(), timestamp });
-    } else if (turns.length > 0) {
-      turns[turns.length - 1].text += " " + rest;
-    } else {
-      turns.push({ speaker: "Speaker", text: rest, timestamp });
-    }
-  }
-  return turns;
-}
-
-function serializeTurns(turns) {
-  return turns.map(t => t.timestamp ? `[${t.timestamp}] ${t.speaker}: ${t.text}` : `${t.speaker}: ${t.text}`).join("\n");
-}
-
-function getSpeakerRole(speaker, managerName) {
-  const s = speaker.toLowerCase();
-  const mn = (managerName || "").toLowerCase();
-  const isManager =
-    s === "manager" || s === "supervisor" ||
-    (mn && mn.split(" ").filter(w => w.length > 2).some(w => s.includes(w)));
-  return isManager ? "manager" : "worker";
-}
-
-function roleToStyle(role) {
-  return role === "manager"
-    ? { pill: "bg-[#1E3A8A] text-white", row: "bg-blue-50/40" }
-    : { pill: "bg-emerald-700 text-white", row: "bg-emerald-50/40" };
-}
-
-// ── Speaker colour palette — pastel / -300 range ─────────────────────────────
-const SPEAKER_PALETTE = [
-  "#93C5FD",  // blue-300
-  "#C4B5FD",  // violet-300
-  "#6EE7B7",  // emerald-300
-  "#FCA5A5",  // red-300
-  "#FCD34D",  // amber-300
-  "#67E8F9",  // cyan-300
-  "#F9A8D4",  // pink-300
-  "#FDBA74",  // orange-300
-  "#A5B4FC",  // indigo-300
-  "#86EFAC",  // green-300
-];
-
-/** Return dark or white text based on background luminance */
-function getContrastColor(hex) {
-  if (!hex || hex.length < 7) return "#fff";
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.55 ? "#374151" : "#ffffff";
-}
-
-// ── Speaker Manager Panel ────────────────────────────────────────────────────
-function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, onRestoreBackup, saving, isDirty, lastEditedBy, lastEditedAt, backupBy, backupAt, stagedColors, onColorChange }) {
-  const speakerCounts = useMemo(() => {
-    const counts = {};
-    for (const t of localTurns) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
-    return counts;
-  }, [localTurns]);
-
-  const uniqueSpeakers = Object.keys(speakerCounts);
-  const canSwap = uniqueSpeakers.length === 2;
-  const [collapsed, setCollapsed] = useState(false);
-  const [openColorPicker, setOpenColorPicker] = useState(null);
-
-  // Close palette on click outside
-  React.useEffect(() => {
-    if (!openColorPicker) return;
-    const handler = (e) => { if (!e.target.closest("[data-colorpicker]")) setOpenColorPicker(null); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [openColorPicker]);
-
-  // Staging: temporary rename values before committing to localTurns
-  const [staged, setStaged] = useState({});
-  useEffect(() => { setStaged({}); }, [localTurns.length]);
-
-  const applyRename = (original) => {
-    const newName = (staged[original] || "").trim();
-    if (newName && newName !== original) {
-      onRenameAll(original, newName);
-      setStaged(prev => { const n = { ...prev }; delete n[original]; return n; });
-    } else {
-      setStaged(prev => { const n = { ...prev }; delete n[original]; return n; });
-    }
-  };
-
-  return (
-    <div className="bg-gray-50 border-b border-gray-200" data-testid="speaker-manager-panel">
-      {/* Always-visible header row */}
-      <div className="flex items-center justify-between px-5 py-3">
-        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-shrink-0">Speaker Labels</p>
-          {collapsed && uniqueSpeakers.map(s => (
-            <span key={s} className="text-xs px-2 py-0.5 bg-white border border-gray-200 text-gray-600 rounded-full">
-              {staged[s] ?? s}
-            </span>
-          ))}
-          {lastEditedBy && !isDirty && (
-            <span className="text-xs text-gray-400 italic" data-testid="speaker-last-edited-badge">
-              Last saved by {lastEditedBy}
-              {lastEditedAt ? ` · ${new Date(lastEditedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
-            </span>
-          )}
-        </div>
-        <button
-          onClick={() => setCollapsed(c => !c)}
-          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 ml-3"
-          data-testid="toggle-speaker-panel"
-        >
-          {collapsed
-            ? <><ChevronDown className="w-3.5 h-3.5" /> Expand</>
-            : <><ChevronUp className="w-3.5 h-3.5" /> Minimise</>}
-        </button>
-      </div>
-
-      {/* Collapsible body */}
-      {!collapsed && (
-        <div className="px-5 pb-4">
-          <div className="flex items-start gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-col gap-2.5">
-                {uniqueSpeakers.map(speaker => (
-                  <div key={speaker} className="flex items-center gap-2 flex-wrap">
-                    {/* Colour swatch + palette picker */}
-                    <div className="relative flex-shrink-0" data-colorpicker>
-                      <button
-                        type="button"
-                        onClick={() => setOpenColorPicker(openColorPicker === speaker ? null : speaker)}
-                        className="w-6 h-6 rounded-full border-2 border-white shadow ring-1 ring-gray-300 hover:ring-blue-400 transition-all flex-shrink-0"
-                        style={{ backgroundColor: stagedColors?.[speaker] || "#6B7280" }}
-                        title="Pick colour"
-                        data-testid={`color-swatch-${speaker.replace(/\s/g, "-")}`}
-                      />
-                      {openColorPicker === speaker && (
-                        <div className="absolute left-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-2.5 grid grid-cols-5 gap-1.5 w-max">
-                          {SPEAKER_PALETTE.map(c => (
-                            <button
-                              key={c}
-                              type="button"
-                              data-colorpicker
-                              onClick={() => { onColorChange(speaker, c); setOpenColorPicker(null); }}
-                              className="w-6 h-6 rounded-full transition-transform hover:scale-125 focus:outline-none"
-                              style={{
-                                backgroundColor: c,
-                                outline: stagedColors?.[speaker] === c ? `2px solid ${c}` : "none",
-                                outlineOffset: "2px",
-                              }}
-                              title={c}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <input
-                      className="text-xs font-semibold px-2.5 py-1.5 rounded border border-gray-200 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 focus:outline-none w-44 bg-white"
-                      value={staged[speaker] ?? speaker}
-                      onChange={e => setStaged(prev => ({ ...prev, [speaker]: e.target.value }))}
-                      onBlur={() => applyRename(speaker)}
-                      onKeyDown={e => { if (e.key === "Enter") { e.target.blur(); } }}
-                      placeholder="Enter label…"
-                      data-testid={`speaker-rename-${speaker.replace(/\s/g, "-")}`}
-                    />
-                    <span className="text-xs text-gray-400">
-                      {speakerCounts[speaker]} turn{speakerCounts[speaker] !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 flex-shrink-0">
-              {canSwap && (
-                <button
-                  onClick={onSwapAll}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 transition-colors"
-                  data-testid="swap-speakers-btn"
-                  title="Swap all speaker labels"
-                >
-                  <ArrowLeftRight className="w-3.5 h-3.5" />
-                  Swap all
-                </button>
-              )}
-              {isDirty && (
-                <>
-                  <button
-                    onClick={() => onSave(staged)}
-                    disabled={saving}
-                    className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded bg-[#1E3A8A] text-white hover:bg-[#1E40AF] transition-colors disabled:opacity-60"
-                    data-testid="save-speaker-map-btn"
-                  >
-                    {saving && <Loader2 className="w-3 h-3 animate-spin" />}
-                    Save
-                  </button>
-                  <button
-                    onClick={onDiscard}
-                    className="text-xs px-3 py-1.5 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
-                    data-testid="discard-speaker-map-btn"
-                  >
-                    Discard
-                  </button>
-                </>
-              )}
-              {!isDirty && lastEditedBy && onReset && (
-                <button
-                  onClick={onReset}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors mt-1"
-                  data-testid="reset-speaker-labels-btn"
-                  title="Clear edited speaker labels and restore full raw transcript"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  Reset
-                </button>
-              )}
-              {!isDirty && backupBy && onRestoreBackup && (
-                <button
-                  onClick={onRestoreBackup}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors mt-1"
-                  data-testid="restore-backup-btn"
-                  title={`Restore previous save by ${backupBy}${backupAt ? ` at ${new Date(backupAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}`}
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  Restore previous save
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+import {
+  resolveExcerptQuery, escapeRegex, formatTranscript,
+  parseSpeakerText, serializeTurns, getSpeakerRole, roleToStyle, getContrastColor,
+} from "@/utils/transcriptHelpers";
+import { HighlightedText, MultiHighlightText } from "./transcript/HighlightedText";
+import { SpeakerManagerPanel } from "./transcript/SpeakerManagerPanel";
+import { FindReplaceBar } from "./transcript/FindReplaceBar";
+import { TranscriptToolbar } from "./transcript/TranscriptToolbar";
+import { SpeakerTurnRow } from "./transcript/SpeakerTurnRow";
 
 // ── Main component ───────────────────────────────────────────────────────────
 export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "", highlightKey = 0, onFindReplace }) {
@@ -840,6 +502,18 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     setEditingTurnText("");
   }, []);
 
+  const handleTurnMenuToggle = useCallback((index) => {
+    setOpenTurnMenu(prev => (prev === index ? null : index));
+    setSplitPopup(null);
+  }, []);
+
+  const handleStartTurnEdit = useCallback((index, text) => {
+    setSplitPopup(null);
+    setOpenTurnMenu(null);
+    setEditingTurnIndex(index);
+    setEditingTurnText(text);
+  }, []);
+
   // ── Find & Replace effects ─────────────────────────────────────────────────
   // Reset match index when query changes
   useEffect(() => { setFindMatchIdx(0); }, [findQuery, viewMode]);
@@ -917,6 +591,12 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     setFindReplaceOpen(false);
   }, [findQuery, replaceWith, viewMode, findMatches.length, onFindReplace, setDirty]); // eslint-disable-line
 
+  const handleCloseFindReplace = useCallback(() => {
+    setFindReplaceOpen(false);
+    setFindQuery("");
+    setReplaceWith("");
+  }, []);
+
   // ── Anonymise selection (Full Text only) ──────────────────────────────────
   const handleFullTextMouseUp = useCallback(() => {
     if (!canAnonymise) return;
@@ -986,69 +666,26 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
   const raw = anonymiseTranscript(meeting.transcript?.text || lazyRawText, meeting.attendees || []);
   const wordCount = raw ? raw.trim().split(/\s+/).filter(Boolean).length : 0;
   const readMins = Math.ceil(wordCount / 150);
+  const findQueryTrimmed = Boolean(findQuery.trim());
+  const showFindReplaceBtn = Boolean(
+    (meeting.transcript?.text || lazyRawText || meeting.transcript?.speaker_text) && (canAnonymise || canEditSpeakers)
+  );
 
   return (
     <div data-testid="transcript-view">
       {/* Header row */}
-      <div className="flex items-start gap-2 mb-4 flex-wrap">
-        <div className="flex-1 bg-amber-50 border border-amber-200 rounded-md p-3 hidden sm:flex items-center gap-2">
-          <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
-          <p className="text-xs text-amber-700 flex-1">
-            {viewMode === "speaker"
-              ? "Rename speakers in the panel. Click any pill to reassign a turn. Click the pencil icon to edit turn text. Select text within a turn to split it."
-              : canAnonymise
-              ? "Highlight any name and click Anonymise to replace it with an initial."
-              : "Transcript is read-only. Use the Evidence tab to edit summaries and evidence wording."}
-          </p>
-        </div>
-
-        {/* Find & Replace button — always visible when transcript exists */}
-        {(meeting.transcript?.text || lazyRawText || meeting.transcript?.speaker_text) && (canAnonymise || canEditSpeakers) && (
-          <button
-            onClick={() => setFindReplaceOpen(v => !v)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-medium transition-colors ${
-              findReplaceOpen
-                ? "bg-[#1E3A8A] border-[#1E3A8A] text-white"
-                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-            }`}
-            data-testid="find-replace-btn"
-            title="Find & Replace (Ctrl+H)"
-          >
-            <Search className="w-3.5 h-3.5" />
-            Find & Replace
-          </button>
-        )}
-
-        {hasSpeakerText ? (
-          <div className="flex rounded-md border border-gray-200 overflow-hidden flex-shrink-0 text-xs font-medium">
-            <button
-              className={`px-3 py-2 transition-colors ${viewMode === "full" ? "bg-[#1E3A8A] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-              onClick={() => setViewMode("full")}
-              data-testid="transcript-full-btn"
-            >
-              Full Text
-            </button>
-            <button
-              className={`px-3 py-2 flex items-center gap-1.5 transition-colors ${viewMode === "speaker" ? "bg-[#1E3A8A] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-              onClick={() => setViewMode("speaker")}
-              data-testid="transcript-speaker-btn"
-            >
-              <Users className="w-3.5 h-3.5" />
-              Speaker View
-            </button>
-          </div>
-        ) : raw ? (
-          <button
-            onClick={generateSpeakerView}
-            disabled={generating}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-md border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors disabled:opacity-60"
-            data-testid="generate-speaker-btn"
-          >
-            {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
-            {generating ? "Identifying…" : "Identify Speakers"}
-          </button>
-        ) : null}
-      </div>
+      <TranscriptToolbar
+        viewMode={viewMode}
+        canAnonymise={canAnonymise}
+        showFindReplaceBtn={showFindReplaceBtn}
+        findReplaceOpen={findReplaceOpen}
+        onToggleFindReplace={() => setFindReplaceOpen(v => !v)}
+        hasSpeakerText={hasSpeakerText}
+        onSetViewMode={setViewMode}
+        raw={raw}
+        generating={generating}
+        onGenerateSpeakerView={generateSpeakerView}
+      />
 
       {/* Transcript body */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
@@ -1069,92 +706,21 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
 
         {/* ── Find & Replace Bar ──────────────────────────────────────────── */}
         {findReplaceOpen && (
-          <div className="border-b border-blue-200 bg-blue-50 px-4 py-3" data-testid="find-replace-bar">
-            {/* Row 1 — Find */}
-            <div className="flex items-center gap-2 mb-2">
-              <Search className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-              <input
-                ref={findInputRef}
-                type="text"
-                value={findQuery}
-                onChange={e => setFindQuery(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") { e.shiftKey ? handleFindPrev() : handleFindNext(); } }}
-                placeholder="Find…"
-                className="flex-1 min-w-0 text-xs px-2.5 py-1.5 rounded border border-blue-200 bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] placeholder-gray-400"
-                data-testid="find-input"
-              />
-              {/* Match counter */}
-              <span className="text-xs text-gray-500 min-w-[44px] text-center flex-shrink-0">
-                {findQuery.trim()
-                  ? findMatches.length === 0
-                    ? <span className="text-red-500">No match</span>
-                    : `${findMatchIdx + 1} / ${findMatches.length}`
-                  : ""}
-              </span>
-              {/* Prev / Next */}
-              <button
-                onClick={handleFindPrev}
-                disabled={findMatches.length === 0}
-                className="p-1 rounded hover:bg-blue-100 disabled:opacity-30 transition-colors"
-                title="Previous (Shift+Enter)"
-                data-testid="find-prev-btn"
-              >
-                <ChevronUp className="w-3.5 h-3.5 text-gray-600" />
-              </button>
-              <button
-                onClick={handleFindNext}
-                disabled={findMatches.length === 0}
-                className="p-1 rounded hover:bg-blue-100 disabled:opacity-30 transition-colors"
-                title="Next (Enter)"
-                data-testid="find-next-btn"
-              >
-                <ChevronDown className="w-3.5 h-3.5 text-gray-600" />
-              </button>
-              {/* Close */}
-              <button
-                onClick={() => { setFindReplaceOpen(false); setFindQuery(""); setReplaceWith(""); }}
-                className="ml-1 p-1 rounded hover:bg-blue-100 transition-colors"
-                title="Close (Escape)"
-                data-testid="find-replace-close-btn"
-              >
-                <X className="w-3.5 h-3.5 text-gray-500" />
-              </button>
-            </div>
-            {/* Row 2 — Replace */}
-            <div className="flex items-center gap-2">
-              <div className="w-3.5 flex-shrink-0" /> {/* align with search icon */}
-              <input
-                type="text"
-                value={replaceWith}
-                onChange={e => setReplaceWith(e.target.value)}
-                onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") handleReplaceAll(); }}
-                placeholder="Replace with…"
-                className="flex-1 min-w-0 text-xs px-2.5 py-1.5 rounded border border-blue-200 bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] placeholder-gray-400"
-                data-testid="replace-input"
-              />
-              <button
-                onClick={handleReplaceOne}
-                disabled={findMatches.length === 0}
-                className="text-xs px-3 py-1.5 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors flex-shrink-0 font-medium"
-                data-testid="replace-one-btn"
-              >
-                Replace
-              </button>
-              <button
-                onClick={handleReplaceAll}
-                disabled={findMatches.length === 0}
-                className="text-xs px-3 py-1.5 rounded bg-[#1E3A8A] text-white hover:bg-[#1E40AF] disabled:opacity-40 transition-colors flex-shrink-0 font-semibold"
-                data-testid="replace-all-btn"
-              >
-                Replace All
-              </button>
-              {viewMode === "speaker" && findMatches.length > 0 && (
-                <span className="text-xs text-gray-400 hidden sm:inline">
-                  Changes will appear in Save flow
-                </span>
-              )}
-            </div>
-          </div>
+          <FindReplaceBar
+            findInputRef={findInputRef}
+            findQuery={findQuery}
+            setFindQuery={setFindQuery}
+            replaceWith={replaceWith}
+            setReplaceWith={setReplaceWith}
+            findMatches={findMatches}
+            findMatchIdx={findMatchIdx}
+            viewMode={viewMode}
+            onFindNext={handleFindNext}
+            onFindPrev={handleFindPrev}
+            onClose={handleCloseFindReplace}
+            onReplaceOne={handleReplaceOne}
+            onReplaceAll={handleReplaceAll}
+          />
         )}
 
         {viewMode === "full" && rawTextLoading ? (
@@ -1201,150 +767,39 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
               {localTurns.map((turn, i) => {
                 const style = roleToStyle(speakerRoleMap[turn.speaker] || getSpeakerRole(turn.speaker, managerName));
                 const customColor = stagedColors[turn.speaker];
-                const isMenuOpen = openTurnMenu === i;
                 const rowStyle = customColor ? { backgroundColor: `${customColor}30` } : {};
                 const pillStyle = customColor ? { backgroundColor: customColor, color: getContrastColor(customColor) } : {};
                 const pillClass = customColor ? "" : style.pill;
+                const rowClassName = customColor ? "" : style.row;
                 return (
-                  <div key={i} className={`flex flex-col sm:flex-row gap-1.5 sm:gap-3 px-5 py-3.5 ${customColor ? "" : style.row}`} style={rowStyle}>
-                    {/* Speaker column: timestamp badge + speaker pill — inline row on mobile (above the text), stacked column on sm+ (beside the text) */}
-                    <div className="relative sm:flex-shrink-0 sm:mt-0.5 flex flex-row sm:flex-col items-center sm:items-start gap-2 sm:gap-1">
-                      {turn.timestamp && (
-                        <span className="text-[10px] font-mono text-gray-400 tabular-nums leading-none">
-                          {turn.timestamp}
-                        </span>
-                      )}
-                      {canEditSpeakers ? (
-                        <button
-                          data-testid={`speaker-pill-${i}`}
-                          onMouseDown={e => { e.stopPropagation(); setOpenTurnMenu(isMenuOpen ? null : i); setSplitPopup(null); }}
-                          className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${pillClass} ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
-                          style={pillStyle}
-                          title="Click to reassign this speaker turn"
-                        >
-                          {turn.speaker}
-                          <svg className="w-2.5 h-2.5 opacity-70" viewBox="0 0 10 6" fill="none">
-                            <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                          </svg>
-                        </button>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full h-fit ${pillClass}`}
-                          style={pillStyle}
-                        >
-                          {turn.speaker}
-                        </span>
-                      )}
-
-                      {canEditSpeakers && isMenuOpen && (
-                        <div
-                          onMouseDown={e => e.stopPropagation()}
-                          data-testid={`turn-menu-${i}`}
-                          className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg w-52 py-1 text-xs"
-                        >
-                          <p className="px-3 pt-1.5 pb-1 text-gray-400 font-semibold uppercase tracking-wide" style={{ fontSize: "10px" }}>
-                            Assign turn {i + 1} to
-                          </p>
-                          {uniqueSpeakers.map(s => (
-                            <button
-                              key={s}
-                              onMouseDown={() => handleTurnAssign(i, s)}
-                              data-testid={`assign-turn-${i}-${s}`}
-                              className={`w-full text-left px-3 py-1.5 hover:bg-blue-50 flex items-center gap-2 transition-colors ${
-                                turn.speaker === s ? "text-[#1E3A8A] font-semibold bg-blue-50/60" : "text-gray-700"
-                              }`}
-                            >
-                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${turn.speaker === s ? "bg-[#1E3A8A]" : "bg-gray-300"}`} />
-                              {s}
-                              {turn.speaker === s && <span className="ml-auto text-[10px] text-gray-400">current</span>}
-                            </button>
-                          ))}
-                          {uniqueSpeakers.length >= 2 && (
-                            <>
-                              <div className="my-1 border-t border-gray-100" />
-                              <button
-                                onMouseDown={() => handleFlipFromHere(i)}
-                                data-testid={`flip-from-here-${i}`}
-                                className="w-full text-left px-3 py-1.5 hover:bg-amber-50 text-amber-700 font-medium transition-colors flex items-center gap-2"
-                                title="Swap all speakers from this turn to the end"
-                              >
-                                <ArrowLeftRight className="w-3 h-3 flex-shrink-0" />
-                                Flip speakers from here
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Turn text — editable by managers, selectable for splitting */}
-                    <div className="flex-1 min-w-0 relative group/turntext">
-                      {canEditSpeakers && editingTurnIndex === i ? (
-                        <div onMouseDown={e => e.stopPropagation()}>
-                          <textarea
-                            autoFocus
-                            value={editingTurnText}
-                            onChange={e => setEditingTurnText(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === "Escape") handleTurnTextCancel();
-                              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") handleTurnTextSave(i);
-                            }}
-                            className="w-full text-sm text-gray-800 leading-relaxed border border-blue-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none bg-white"
-                            rows={Math.max(2, Math.ceil(editingTurnText.length / 80))}
-                            data-testid={`turn-text-edit-${i}`}
-                          />
-                          <div className="flex items-center gap-1.5 mt-1.5">
-                            <button
-                              onMouseDown={e => { e.preventDefault(); handleTurnTextSave(i); }}
-                              className="flex items-center gap-1 text-xs px-2.5 py-1 bg-[#1E3A8A] text-white rounded hover:bg-[#1E40AF] transition-colors"
-                              data-testid={`turn-text-save-${i}`}
-                            >
-                              <Check className="w-3 h-3" /> Save
-                            </button>
-                            <button
-                              onMouseDown={e => { e.preventDefault(); handleTurnTextCancel(); }}
-                              className="text-xs px-2.5 py-1 border border-gray-200 text-gray-600 rounded hover:bg-gray-50 transition-colors"
-                              data-testid={`turn-text-cancel-${i}`}
-                            >
-                              Cancel
-                            </button>
-                            <span className="text-xs text-gray-400 hidden sm:inline">Ctrl+Enter · Esc to cancel</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="relative" ref={matchTurnIdx === i ? highlightRef : null}>
-                          <p
-                            data-turn-index={i}
-                            className={`text-sm text-gray-800 leading-relaxed select-text cursor-text pr-5 transition-colors duration-300 ${
-                              matchTurnIdx === i ? "rounded px-1 -mx-1 bg-yellow-50 ring-1 ring-yellow-300" : ""
-                            }`}
-                          >
-                            {findReplaceOpen && findQuery.trim() && turnMatchMap[i]
-                              ? <MultiHighlightText text={turn.text} matches={turnMatchMap[i]} currentGlobalIdx={findMatchIdx} />
-                              : matchTurnIdx === i
-                              ? <HighlightedText text={turn.text} query={effectiveHighlightQuery} />
-                              : turn.text}
-                          </p>
-                          {canEditSpeakers && (
-                            <button
-                              onMouseDown={e => {
-                                e.stopPropagation();
-                                setSplitPopup(null);
-                                setOpenTurnMenu(null);
-                                setEditingTurnIndex(i);
-                                setEditingTurnText(turn.text);
-                              }}
-                              className="absolute top-0 right-0 opacity-0 group-hover/turntext:opacity-100 transition-opacity text-gray-400 hover:text-gray-700 p-0.5 rounded hover:bg-white/80"
-                              data-testid={`turn-text-edit-btn-${i}`}
-                              title="Edit turn text"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <SpeakerTurnRow
+                    key={i}
+                    turn={turn}
+                    index={i}
+                    pillClass={pillClass}
+                    pillStyle={pillStyle}
+                    rowClassName={rowClassName}
+                    rowStyle={rowStyle}
+                    canEditSpeakers={canEditSpeakers}
+                    isMenuOpen={openTurnMenu === i}
+                    onToggleMenu={handleTurnMenuToggle}
+                    uniqueSpeakers={uniqueSpeakers}
+                    onAssign={handleTurnAssign}
+                    onFlipFromHere={handleFlipFromHere}
+                    isEditing={editingTurnIndex === i}
+                    editingTurnText={editingTurnText}
+                    setEditingTurnText={setEditingTurnText}
+                    onSaveTurnText={handleTurnTextSave}
+                    onCancelTurnText={handleTurnTextCancel}
+                    onStartEdit={handleStartTurnEdit}
+                    isHighlighted={matchTurnIdx === i}
+                    highlightRef={highlightRef}
+                    findReplaceOpen={findReplaceOpen}
+                    findQueryTrimmed={findQueryTrimmed}
+                    turnMatches={turnMatchMap[i]}
+                    findMatchIdx={findMatchIdx}
+                    effectiveHighlightQuery={effectiveHighlightQuery}
+                  />
                 );
               })}
             </div>
@@ -1366,7 +821,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
                   matchParaIdx === idx ? "rounded px-1 -mx-1 bg-yellow-50 ring-1 ring-yellow-300" : ""
                 }`}
               >
-                {findReplaceOpen && findQuery.trim() && paraMatchMap[idx]
+                {findReplaceOpen && findQueryTrimmed && paraMatchMap[idx]
                   ? <MultiHighlightText text={para} matches={paraMatchMap[idx]} currentGlobalIdx={findMatchIdx} />
                   : matchParaIdx === idx
                   ? <HighlightedText text={para} query={effectiveHighlightQuery} />
