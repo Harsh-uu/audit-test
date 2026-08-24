@@ -76,11 +76,16 @@ export default defineConfig(({ mode }) => {
           // autoUpdate keeps max size manageable.
 
           runtimeCaching: [
-            // ── NetworkOnly: auth + recording + processing ──────────────────
-            // These MUST always hit the network — never serve stale auth
-            // tokens or stale meeting processing state.
+            // ── NetworkOnly: auth + recording + processing + live meeting data ──
+            // These MUST always hit the network — never serve a stale cached
+            // response. Meeting/review data was previously NetworkFirst with a
+            // cache fallback, but that risks silently rendering a JSON shape
+            // from a browser cache that pre-dates a backend deploy against a
+            // newer frontend bundle — exactly the kind of mismatch that trips
+            // the render-error boundary and requires a manual refresh to clear.
+            // Reviewer-facing compliance data must always be current anyway.
             {
-              urlPattern: /\/api\/(auth|recording|processing|jobs)\//,
+              urlPattern: /\/api\/(auth|recording|processing|jobs|meetings|review)\//,
               handler: "NetworkOnly",
             },
 
@@ -93,21 +98,6 @@ export default defineConfig(({ mode }) => {
               options: {
                 cacheName: "api-stable",
                 expiration: { maxEntries: 20, maxAgeSeconds: 3600 }, // 1 hour
-                cacheableResponse: { statuses: [0, 200] },
-              },
-            },
-
-            // ── NetworkFirst: live meeting data ─────────────────────────────
-            // Always try the network; fall back to cache if offline so
-            // previously loaded meeting reports remain readable.
-            // 4-second timeout keeps the UI responsive on poor connections.
-            {
-              urlPattern: /\/api\/(meetings|review)\//,
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "api-meetings",
-                networkTimeoutSeconds: 4,
-                expiration: { maxEntries: 50, maxAgeSeconds: 300 }, // 5 min
                 cacheableResponse: { statuses: [0, 200] },
               },
             },
