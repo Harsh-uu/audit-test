@@ -111,6 +111,7 @@ class AnonymiseRequest(BaseModel):
 class SpeakerTextUpdateRequest(BaseModel):
     speaker_text: str
     speaker_colors: Optional[dict] = None
+    edit_note: Optional[str] = None
 
 class RescanRequest(BaseModel):
     custom_prompt: Optional[str] = None
@@ -925,7 +926,9 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
         raise HTTPException(status_code=403, detail="Only managers can edit speaker labels")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT transcript_id, status FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT transcript_id, status, pii_redactions FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if (m_row["status"] or "") in ["signed_off", "shared"]:
@@ -941,6 +944,23 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
             transcript_id,
         )
     prev_text = existing_t["speaker_text"] if existing_t else ""
+
+    # Redactions are applied on top at read-time (never persisted back into the
+    # transcript row), so the DB's "previous" text can still contain names a
+    # manager already redacted in an earlier confidentiality review. Without
+    # this, that redaction shows up here as a fabricated "text edited" entry
+    # attributed to whoever next saves speaker labels — even if all they did
+    # was flip two speakers and never touched the wording.
+    existing_redactions = m_row.get("pii_redactions")
+    if isinstance(existing_redactions, str):
+        try:
+            existing_redactions = json.loads(existing_redactions)
+        except Exception:
+            existing_redactions = []
+    if not isinstance(existing_redactions, list):
+        existing_redactions = []
+    if existing_redactions and prev_text:
+        prev_text = _apply_redactions_to_text(prev_text, existing_redactions)
 
     # Parse turns properly — strips [MM:SS] prefix before comparing.
     # Continuation lines (no speaker colon) are appended to the previous turn
@@ -1028,15 +1048,25 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
 
         # Build targeted audit entries with meaningful detail
         audit_logs = []
-        if has_speaker_rename:
-            rename_detail = "; ".join(f"'{old}' \u2192 '{new}'" for old, new in speaker_renames.items())
-            audit_logs.append(("speaker_correction", f"Speaker labels updated: {rename_detail}"))
-        if has_text_edit:
-            parts = text_edit_details[:3]
-            edit_detail = "; ".join(parts)
-            if len(text_edit_details) > 3:
-                edit_detail += f" (+{len(text_edit_details) - 3} more turns)"
-            audit_logs.append(("transcript_text_edited", edit_detail))
+        if data.edit_note:
+            # Frontend knows exactly what UI action was performed (e.g. "Flip
+            # From Here", "Split Turn") — use that verbatim instead of
+            # reverse-engineering it from a position-by-position text diff.
+            # That diff is unreliable whenever the action changes the turn
+            # count (a split shifts every later turn by one position), so it
+            # must not run alongside an explicit edit_note — both the
+            # rename AND text-edit inference are skipped in that case.
+            audit_logs.append(("speaker_correction", data.edit_note))
+        else:
+            if has_speaker_rename:
+                rename_detail = "; ".join(f"'{old}' \u2192 '{new}'" for old, new in speaker_renames.items())
+                audit_logs.append(("speaker_correction", f"Speaker labels updated: {rename_detail}"))
+            if has_text_edit:
+                parts = text_edit_details[:3]
+                edit_detail = "; ".join(parts)
+                if len(text_edit_details) > 3:
+                    edit_detail += f" (+{len(text_edit_details) - 3} more turns)"
+                audit_logs.append(("transcript_text_edited", edit_detail))
         if not audit_logs:
             # Colour-only change or first save
             colour_only = data.speaker_colors is not None and not has_text_edit and not has_speaker_rename

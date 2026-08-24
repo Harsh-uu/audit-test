@@ -53,6 +53,30 @@ def _jdict(val):
     return val or {}
 
 
+def _match_attendee_user_id(name: str, attendees: list) -> str:
+    """Best-effort match of an AI-extracted assignee name to a real attendee's user_id.
+
+    The AI extracts the assignee straight from the transcript, so it's usually just a
+    first name (e.g. "Priya"), not the attendee's full stored name ("Priya Sharma") —
+    exact-equality alone would almost never match. Try exact full-name match first,
+    then fall back to a first-name-token match, but only when it resolves to exactly
+    one attendee (an ambiguous match is treated as no match).
+    """
+    if not name:
+        return None
+    name_lower = name.strip().lower()
+    for a in attendees:
+        if a.get("user_id") and a.get("name", "").strip().lower() == name_lower:
+            return a["user_id"]
+    token_matches = {
+        a["user_id"] for a in attendees
+        if a.get("user_id") and a.get("name", "").strip().lower().split(" ")[0] == name_lower
+    }
+    if len(token_matches) == 1:
+        return token_matches.pop()
+    return None
+
+
 async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, manager_id: str = None) -> list:
     """Return incomplete actions from previous meetings relevant to these supervisees.
 
@@ -72,6 +96,7 @@ async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, ma
         return []
 
     new_attendee_names_lower = {a.get("name", "").lower() for a in attendees if a.get("name")}
+    new_supervisee_ids = set(supervisee_ids)
     rolled = []
     seen_sources = set()
 
@@ -116,9 +141,16 @@ async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, ma
             if key in seen_sources:
                 continue
 
-            assigned = (action.get("assigned_to") or "").strip().lower()
-            if assigned and new_attendee_names_lower and assigned not in new_attendee_names_lower:
-                continue
+            assigned_uid = action.get("assigned_to_user_id")
+            if assigned_uid:
+                # Strict match — a linked assignee must be a supervisee on this new meeting too.
+                if assigned_uid not in new_supervisee_ids:
+                    continue
+            else:
+                # Legacy/unlinked action — fall back to fuzzy name matching.
+                assigned = (action.get("assigned_to") or "").strip().lower()
+                if assigned and new_attendee_names_lower and assigned not in new_attendee_names_lower:
+                    continue
 
             seen_sources.add(key)
             rolled.append({
@@ -319,6 +351,12 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             item.setdefault("completed", False)
             item.setdefault("completed_at", None)
             item.setdefault("is_rolled_over", False)
+            item["assigned_to_user_id"] = _match_attendee_user_id(item.get("assigned_to"), attendees)
+        for item in analysis_result.get("learning_needs", []):
+            if not item.get("id"):
+                item["id"] = f"ln_{uuid.uuid4().hex[:12]}"
+            item.setdefault("completed", False)
+            item["assigned_to_user_id"] = _match_attendee_user_id(item.get("assigned_to"), attendees)
         analysis_result["actions"] = rolled_actions + analysis_result.get("actions", [])
 
         analysis_id = str(uuid.uuid4())

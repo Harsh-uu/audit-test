@@ -1,0 +1,41 @@
+{
+  "summary": "Verified the two audit-trail bug fixes (PII-redaction false positive + Flip From Here swap wording) end-to-end via 11 pytest API tests (10 pass, 1 xfail documenting a NEW related bug) and full browser-driven UI testing of the real flow: AI confidentiality review -> Apply redactions -> Transcript tab (Speaker View) -> Flip speakers from here -> Save -> Audit Trail. Both fixes work. Regressions (manual rename, direct text edit, split turn persistence, discard, restore backup, reset) all pass. Found 2 issues: (1) Split Turn still produces exactly the original 'nonsense audit entry' the user complained about (index-shift diff garbage + contradictory rename pair) because the edit_note fix was only wired to the flip action; (2) the Audit Trail tab never refetches after edits (only fetches once when auditTrail === null), so a manager who edits and switches to Audit Trail sees a stale list until they click Refresh.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/review/{id}/speaker-text", "issue": "Split Turn (and any save that changes turn count) still yields nonsense audit entries: verified in UI as 'Speaker labels updated: 'Line Manager' -> 'Support Worker'; 'Support Worker' -> 'Line Manager'' PLUS 'Transcript text edited' listing 9 shifted turns, from a single split. Root cause: zip(prev_turns, new_turns) positional diff breaks when turn count changes. The edit_note escape hatch fixes only the flip path. Reproduced by test_11 (xfail) in tests/test_iter90_audit_flip.py."},
+      {"endpoint": "PATCH /api/review/{id}/speaker-text", "issue": "When edit_note is supplied the auto-inferred rename detail is skipped entirely (elif). If a manager flips AND renames a speaker in the same save, the rename is silently omitted from the audit trail. Consider appending the inferred rename instead of replacing it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MeetingReport.js / AuditTrailTab", "issue": "Audit trail is fetched only once (`if (activeTab === 'audit' && auditTrail === null) fetchAuditTrail()`, line ~156). After saving speaker labels / text edits and switching to the Audit Trail tab, the new entries are NOT shown until the user clicks Refresh or reloads. Confirmed: backend had 3 new entries while the UI list still showed the old 5. This directly undermines the very flow being fixed (manager edits, then checks the audit trail).", "selector": "[data-testid=\"audit-trail-tab\"], [data-testid=\"refresh-audit-btn\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Audit Trail tab", "issues": ["The U+2194 swap glyph renders as a small dash-like mark in the headless/limited-font environment ('Manager' -- 'Staff'); text content is correct (verified U+2194 via DOM inner_text). Consider a text fallback like \"swapped with\" for font-safety."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter90_audit_flip.py",
+    "/app/test_reports/pytest/iter90_results.xml"
+  ],
+  "action_items": [
+    "Extend the audit-detail fix to Split Turn (and any turn-count-changing save): either push a pendingEditNotes entry from handleSplitTurn (e.g. \"Turn N split into two\") or make the backend diff index-aware so shifted turns are not reported as text edits/renames.",
+    "Make the Audit Trail tab refetch on tab activation (or invalidate auditTrail after a successful speaker-text/text save) so managers see their own edits without clicking Refresh.",
+    "Consider logging both the edit_note and any genuine speaker rename in the same save (currently mutually exclusive)."
+  ],
+  "critical_code_review_comments": [
+    "routers/review.py update_speaker_text: the positional zip() diff is inherently unsafe when turn counts differ (split/merge/delete). The edit_note workaround masks it only for the flip path — recommend a proper alignment (difflib.SequenceMatcher) or an explicit client-supplied change descriptor for all mutating transcript actions.",
+    "routers/review.py is 2389 lines — well above the 700-line guideline; the transcript/speaker-text + PII-review sections are natural split candidates.",
+    "The read-time-only redaction architecture is still the underlying hazard: any other future diff/compare against transcripts.speaker_text must remember to normalise with pii_redactions first. Consider a single shared helper (e.g. get_effective_speaker_text(meeting)) so callers cannot forget."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter90_audit_flip.py"],
+  "success_rate": {"backend": "100% (10/10 pass, 1 xfail documenting known split-turn bug)", "frontend": "90% (all target flows pass; 1 stale-data UI bug)"},
+  "seed_data_creation": "Created TEST_PII meetings via backend/tests/seed_pii_flow.py (create + analysis) for both the pytest suite and the browser run; all cleaned up afterwards (verified no TEST_PII rows remain; a pre-existing unrelated 'TEST_ Supervision with Connor Repro' meeting from an earlier session was left untouched).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "manager@supervision.com / Manager123! (MFA bypassed via backend/tests/get_tokens.py; cookies injected into Playwright context)",
+  "context_for_next_testing_agent": "Reusable suite: /app/backend/tests/test_iter90_audit_flip.py (session fixtures do manager login+MFA bypass, seed a TEST_PII meeting, and clean up). UI recipe that works: get cookies via `python backend/tests/get_tokens.py manager@supervision.com 'Manager123!'`, add supervision_access/supervision_refresh cookies for domain evidence-link-4.preview.emergentagent.com, goto /meetings/{id}/report. Note the turn menu opens by clicking [data-testid=speaker-pill-{i}] (onMouseDown) — NOT turn-menu-{i}, which is the popup container. Audit trail list is newest-first; the tab caches its first fetch so always click [data-testid=refresh-audit-btn] after an edit.",
+  "rca_of_the_issue": "Both reported bugs are fixed and confirmed: (1) update_speaker_text now normalises prev_text with the meeting's pii_redactions before diffing, so a completed PII review no longer surfaces as a fabricated 'transcript_text_edited' entry on the next save — verified end-to-end (5 AI-detected redactions applied via the real UI, then a flip save produced NO text-edited entry and no redacted/original names in the audit trail). (2) The frontend now sends a human-readable edit_note for Flip From Here and the backend uses it verbatim, producing \"Speakers flipped from Turn 3 onwards: 'Manager' <-> 'Staff'\" instead of the contradictory one-way arrow pair. Residual risk: the same positional-diff weakness still produces nonsense entries for Split Turn, which is the most likely source of any further user reports of 'nonsense entries'."
+}

@@ -80,8 +80,10 @@ async def main():
         meeting_c = f"test-carryover-c-{uuid.uuid4().hex[:8]}"
         attendees_c = [attendee(MANAGER_ID, "Demo Manager", "manager"), attendee(DEMO_USER_ID, "Demo User", "attendee")]
         rolled_into_c = await _get_rolled_actions(conn, attendees_c, meeting_c, manager_id=None)
-        assert len(rolled_into_c) == 1 and rolled_into_c[0]["source_meeting_id"] == meeting_a, \
-            f"FAIL: genuine carry-over broke: {rolled_into_c}"
+        # Filter to THIS run's seeded meeting — a concurrent pytest-xdist worker may have
+        # seeded its own identical meeting_a for the same Demo User.
+        mine = [r for r in rolled_into_c if r["source_meeting_id"] == meeting_a]
+        assert len(mine) == 1, f"FAIL: genuine carry-over broke: {rolled_into_c}"
         print("PASS: genuine same-person carry-over still works")
 
     finally:
@@ -90,4 +92,10 @@ async def main():
         await conn.close()
 
 
-asyncio.run(main())
+def test_carryover_manager_exclusion_and_genuine_rollover():
+    """pytest entry point (also runnable directly via `python3 tests/test_carryover_fix.py`)."""
+    asyncio.run(main())
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

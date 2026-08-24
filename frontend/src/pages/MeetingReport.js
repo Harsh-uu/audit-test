@@ -40,7 +40,7 @@ export default function MeetingReport() {
   const [highlightKey, setHighlightKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [addingAction, setAddingAction] = useState(false);
-  const [newAction, setNewAction] = useState({ text: "", assigned_to: "", due_date: "" });
+  const [newAction, setNewAction] = useState({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
   const [auditTrail, setAuditTrail] = useState(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
@@ -153,8 +153,11 @@ export default function MeetingReport() {
   }, [meeting?.rescan_status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (activeTab === "audit" && auditTrail === null) fetchAuditTrail();
-  }, [activeTab, auditTrail, fetchAuditTrail]);
+    // Refetch every time the tab is switched to Audit Trail (not just once)
+    // so edits made elsewhere in the report (speaker labels, evidence, PII
+    // review) are reflected without the manager needing to hit Refresh.
+    if (activeTab === "audit") fetchAuditTrail();
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     document.getElementById("report-scroll-container")?.scrollTo(0, 0);
@@ -251,11 +254,11 @@ export default function MeetingReport() {
     const current = meeting?.analysis?.actions || [];
     const updated = [
       ...current,
-      { id: `action_manual_${Date.now()}`, text: newAction.text.trim(), assigned_to: newAction.assigned_to.trim() || null, due_date: newAction.due_date.trim() || null },
+      { id: `action_manual_${Date.now()}`, text: newAction.text.trim(), assigned_to: newAction.assigned_to.trim() || null, assigned_to_user_id: newAction.assigned_to_user_id || null, due_date: newAction.due_date.trim() || null },
     ];
     // Optimistic: show the new action immediately, persist in the background
     setMeeting(m => ({ ...m, analysis: { ...m.analysis, actions: updated } }));
-    setNewAction({ text: "", assigned_to: "", due_date: "" });
+    setNewAction({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
     setAddingAction(false);
     await saveActions(updated);
   };

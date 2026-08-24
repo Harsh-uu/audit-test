@@ -289,7 +289,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
   // ── Learning Needs local state ───────────────────────────────────────────────
   const [learningNeeds, setLearningNeeds] = useState(() => Array.isArray(analysis?.learning_needs) ? analysis.learning_needs : []);
   const [addingLN, setAddingLN] = useState(false);
-  const [newLN, setNewLN] = useState({ text: "", assigned_to: "", due_date: "" });
+  const [newLN, setNewLN] = useState({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
   const [lnMessage, setLnMessage] = useState("");
   const [lnSaving, setLnSaving] = useState(false);
 
@@ -313,12 +313,12 @@ export const EvidenceTab = React.memo(function EvidenceTab({
 
   const addLN = async () => {
     if (!newLN.text.trim()) return;
-    const updated = [...learningNeeds, { id: `ln_${Date.now()}`, text: newLN.text.trim(), assigned_to: newLN.assigned_to.trim() || null, due_date: newLN.due_date.trim() || null, completed: false }];
+    const updated = [...learningNeeds, { id: `ln_${Date.now()}`, text: newLN.text.trim(), assigned_to: newLN.assigned_to.trim() || null, assigned_to_user_id: newLN.assigned_to_user_id || null, due_date: newLN.due_date.trim() || null, completed: false }];
     // Save first — only close the form if it succeeds so data isn't lost on failure
     const ok = await saveLearningNeeds(updated);
     if (ok) {
       setAddingLN(false);
-      setNewLN({ text: "", assigned_to: "", due_date: "" });
+      setNewLN({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
     }
   };
 
@@ -550,14 +550,28 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addAction(); } }}
               />
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <input type="text" value={newAction.assigned_to} onChange={e => setNewAction(a => ({ ...a, assigned_to: e.target.value }))} placeholder="Assigned to (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid="new-action-assigned" />
+                <select
+                  value={newAction.assigned_to_user_id}
+                  onChange={e => {
+                    const uid = e.target.value;
+                    const att = (meeting.attendees || []).find(a => a.user_id === uid);
+                    setNewAction(a => ({ ...a, assigned_to_user_id: uid, assigned_to: att ? att.name : "" }));
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
+                  data-testid="new-action-assigned"
+                >
+                  <option value="">Assigned to (optional)</option>
+                  {(meeting.attendees || []).map(a => (
+                    <option key={a.user_id} value={a.user_id}>{a.name}</option>
+                  ))}
+                </select>
                 <input type="text" value={newAction.due_date} onChange={e => setNewAction(a => ({ ...a, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid="new-action-due" />
               </div>
               <div className="flex gap-2">
                 <button onClick={addAction} disabled={!newAction.text.trim()} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-[#1E40AF] disabled:opacity-50 transition-colors" data-testid="save-new-action-btn">
                   <Plus className="w-3 h-3" /> Add Action
                 </button>
-                <button onClick={() => { setAddingAction(false); setNewAction({ text: "", assigned_to: "", due_date: "" }); }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-action-btn">
+                <button onClick={() => { setAddingAction(false); setNewAction({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" }); }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-action-btn">
                   Cancel
                 </button>
               </div>
@@ -632,14 +646,28 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addLN(); } }}
               />
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <input type="text" value={newLN.assigned_to} onChange={e => setNewLN(n => ({ ...n, assigned_to: e.target.value }))} placeholder="Assigned to — anyone (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid="new-ln-assigned" />
+                <select
+                  value={newLN.assigned_to_user_id}
+                  onChange={e => {
+                    const uid = e.target.value;
+                    const att = (meeting.attendees || []).find(a => a.user_id === uid);
+                    setNewLN(n => ({ ...n, assigned_to_user_id: uid, assigned_to: att ? att.name : "" }));
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                  data-testid="new-ln-assigned"
+                >
+                  <option value="">Assigned to — anyone (optional)</option>
+                  {(meeting.attendees || []).map(a => (
+                    <option key={a.user_id} value={a.user_id}>{a.name}</option>
+                  ))}
+                </select>
                 <input type="text" value={newLN.due_date} onChange={e => setNewLN(n => ({ ...n, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid="new-ln-due" />
               </div>
               <div className="flex gap-2 items-center">
                 <button onClick={addLN} disabled={!newLN.text.trim() || lnSaving} className="flex items-center gap-1.5 bg-teal-700 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-teal-800 disabled:opacity-50 transition-colors" data-testid="save-new-ln-btn">
                   <Plus className="w-3 h-3" /> Add Learning Need
                 </button>
-                <button onClick={() => { setAddingLN(false); setNewLN({ text: "", assigned_to: "", due_date: "" }); }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-ln-btn">
+                <button onClick={() => { setAddingLN(false); setNewLN({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" }); }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-ln-btn">
                   Cancel
                 </button>
                 {lnMessage && <span className={`text-xs ml-1 ${lnMessage === "Saved" ? "text-teal-600" : "text-red-500"}`}>{lnMessage}</span>}

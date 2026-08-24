@@ -600,6 +600,8 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     setOpenTurnMenu(null);
   }, []);
 
+  const [pendingEditNotes, setPendingEditNotes] = useState([]);
+
   const handleFlipFromHere = useCallback((fromIndex) => {
     if (uniqueSpeakers.length < 2) return;
     const currentSpeaker = localTurns[fromIndex]?.speaker;
@@ -627,6 +629,10 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
       }
       return next;
     });
+    setPendingEditNotes(prev => [
+      ...prev,
+      `Speakers flipped from Turn ${fromIndex + 1} onwards: '${currentSpeaker}' \u2194 '${otherSpeaker}'`,
+    ]);
     setDirty(true);
     setOpenTurnMenu(null);
   }, [uniqueSpeakers, localTurns]);
@@ -655,6 +661,10 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
       next.splice(turnIndex, 1, ...parts);
       return next;
     });
+    setPendingEditNotes(prev => [
+      ...prev,
+      `Turn ${turnIndex + 1} split into ${parts.length} turns`,
+    ]);
     setDirty(true);
     setSplitPopup(null);
     window.getSelection()?.removeAllRanges();
@@ -665,6 +675,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     setDirty(false);
     setEditingTurnIndex(null);
     setEditingTurnText("");
+    setPendingEditNotes([]);
   }, [originalTurns]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [stagedColors, setStagedColors] = useState(meeting.transcript?.speaker_colors || {});
@@ -735,12 +746,17 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
 
       const res = await axios.patch(
         `${API}/review/${meeting.id}/speaker-text`,
-        { speaker_text: newText, speaker_colors: Object.keys(finalColors).length ? finalColors : null }
+        {
+          speaker_text: newText,
+          speaker_colors: Object.keys(finalColors).length ? finalColors : null,
+          edit_note: pendingEditNotes.length ? pendingEditNotes.join("; ") : null,
+        }
       );
       // Immediately commit the saved state — must happen before onSpeakerTextGenerated
       // so the isDirty guard in the useEffect doesn't skip the reset
       setLocalTurns(finalTurns.map(t => ({ ...t })));
       setDirty(false);
+      setPendingEditNotes([]);
       toast.success("Speaker labels saved");
       if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText, res.data.edited_by_name, res.data.edited_at, res.data.speaker_colors);
     } catch (e) {
