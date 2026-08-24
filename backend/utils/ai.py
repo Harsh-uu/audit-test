@@ -52,14 +52,12 @@ def _safe_custom_prompt(text: str) -> str:
 
 # UK language: replacements applied to all AI-generated free text so that
 # American/inappropriate terms never appear in the final output.
-_UK_REPLACEMENTS = [
-    # "pastoral" in any capitalisation → context-appropriate UK equivalent
-    (r'\bpastoral follow[\s-]?up\b', "informal welfare follow-up"),
-    (r'\bpastoral check[\s-]?in\b',  "welfare check-in"),
-    (r'\bpastoral support\b',         "wellbeing support"),
-    (r'\bpastoral care\b',            "welfare support"),
-    (r'\bpastoral\b',                 "welfare"),  # catch-all fallback
-
+#
+# Spelling-only rules (orthographic, same word) — safe to apply to a VERBATIM
+# transcript too, since they don't change what was actually said, just how it's
+# spelled. AssemblyAI's model defaults to US spelling for -ize/-ise homophones
+# (they sound identical) regardless of the speaker's accent.
+_UK_SPELLING_RULES = [
     # American -ize/-ization → British -ise/-isation (all inflected forms)
     # Minimum 3-char stem excludes false positives: "size" (1-char stem),
     # "prize"/"seize" (2-char stems). Longest suffix forms listed first.
@@ -76,6 +74,19 @@ _UK_REPLACEMENTS = [
     (r'\b([a-zA-Z]{3,})yzed\b',      r'\1ysed'),
     (r'\b([a-zA-Z]{3,})yzes\b',      r'\1yses'),
     (r'\b([a-zA-Z]{3,})yze\b',       r'\1yse'),
+]
+
+# Content-rewrite rules (change the actual wording, not just spelling) — only
+# safe for AI-GENERATED text (summaries, risks, actions, evidence). Must NEVER
+# be applied to a verbatim transcript — that would misrepresent what was
+# literally said, which matters for an evidentiary record.
+_UK_REPLACEMENTS = [
+    # "pastoral" in any capitalisation → context-appropriate UK equivalent
+    (r'\bpastoral follow[\s-]?up\b', "informal welfare follow-up"),
+    (r'\bpastoral check[\s-]?in\b',  "welfare check-in"),
+    (r'\bpastoral support\b',         "wellbeing support"),
+    (r'\bpastoral care\b',            "welfare support"),
+    (r'\bpastoral\b',                 "welfare"),  # catch-all fallback
 
     # "caseload" is not used in UK adult social care — safety-net fallback if the
     # model ignores the prompt instruction. "workload" is the grammatically safe
@@ -99,13 +110,26 @@ _UK_REPLACEMENTS = [
 ]
 
 import re as _re_mod
+_UK_SPELLING_COMPILED = [(_re_mod.compile(p, _re_mod.IGNORECASE), r) for p, r in _UK_SPELLING_RULES]
 _UK_COMPILED = [(_re_mod.compile(p, _re_mod.IGNORECASE), r) for p, r in _UK_REPLACEMENTS]
+
+
+def _apply_uk_spelling(text: str) -> str:
+    """Spelling-only US→UK normalisation (e.g. 'recognizing'→'recognising'). Safe
+    to apply to a verbatim transcript — never changes the words, only the spelling
+    of AssemblyAI's US-English transcription defaults."""
+    if not text:
+        return text
+    for pattern, replacement in _UK_SPELLING_COMPILED:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 def _apply_uk_language(text: str) -> str:
     """Replace US/inappropriate terms with UK adult-social-care equivalents."""
     if not text:
         return text
+    text = _apply_uk_spelling(text)
     for pattern, replacement in _UK_COMPILED:
         text = pattern.sub(replacement, text)
     return text
@@ -724,7 +748,7 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
     if transcript.status == aai.TranscriptStatus.error:
         raise ValueError(f"AssemblyAI transcription failed: {transcript.error}")
 
-    plain_text = transcript.text or ""
+    plain_text = _apply_uk_spelling(transcript.text or "")
     logger.info(f"AssemblyAI transcription complete: {len(plain_text)} chars")
 
     # --- Content safety & hallucination checks ---
@@ -738,10 +762,10 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
         logger.info(f"AssemblyAI found {len(unique_speakers)} speaker(s): {sorted(unique_speakers)}")
 
         if len(unique_speakers) > 1:
-            lines = [f"[{_ms_to_mmss(u.start)}] Speaker {u.speaker}: {u.text}" for u in transcript.utterances]
+            lines = [f"[{_ms_to_mmss(u.start)}] Speaker {u.speaker}: {_apply_uk_spelling(u.text)}" for u in transcript.utterances]
             speaker_text = "\n".join(lines)
             # Build a timestamped version of the plain text for analysis (no speaker labels — diarization runs in parallel)
-            ts_lines = [f"[{_ms_to_mmss(u.start)}] {u.text}" for u in transcript.utterances]
+            ts_lines = [f"[{_ms_to_mmss(u.start)}] {_apply_uk_spelling(u.text)}" for u in transcript.utterances]
             timestamped_plain = "\n".join(ts_lines)
             logger.info("AssemblyAI diarization usable — GPT-4o will map names only")
             return plain_text, speaker_text, timestamped_plain, warnings
