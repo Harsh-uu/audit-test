@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 import asyncpg
-from routers.processing import _get_rolled_actions
+from utils.transcription_pipeline import _get_rolled_actions
 
 MANAGER_ID = "465c5101-bbc8-4f26-adaa-c906d3324dd5"   # Demo Manager
 DEMO_USER_ID = "831bdaef-14ca-49ed-8fb0-9b8d36bc1ef6"  # Demo User ("Diane")

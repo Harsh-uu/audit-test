@@ -99,13 +99,13 @@ def target(mgr):
 # ------------------------------------------------- unit: name -> user_id ----
 class TestMatchAttendeeUserId:
     def test_exact_and_case_insensitive(self):
-        from routers.processing import _match_attendee_user_id
+        from utils.transcription_pipeline import _match_attendee_user_id
         atts = [_att("u1", "Demo User", "attendee"), _att("u2", "Demo Manager", "manager")]
         assert _match_attendee_user_id("Demo User", atts) == "u1"
         assert _match_attendee_user_id("  demo manager ", atts) == "u2"
 
     def test_no_match_and_empty(self):
-        from routers.processing import _match_attendee_user_id
+        from utils.transcription_pipeline import _match_attendee_user_id
         atts = [_att("u1", "Demo User", "attendee")]
         assert _match_attendee_user_id("Someone Else", atts) is None
         assert _match_attendee_user_id("", atts) is None
@@ -113,7 +113,7 @@ class TestMatchAttendeeUserId:
         assert _match_attendee_user_id("Demo User", []) is None
 
     def test_attendee_without_user_id_is_skipped(self):
-        from routers.processing import _match_attendee_user_id
+        from utils.transcription_pipeline import _match_attendee_user_id
         atts = [{"name": "Demo User", "role": "attendee"}]
         assert _match_attendee_user_id("Demo User", atts) is None
 
@@ -175,7 +175,7 @@ def rolled_env():
 
 
 def _roll(attendees, new_meeting_id, manager_id=None):
-    from routers.processing import _get_rolled_actions
+    from utils.transcription_pipeline import _get_rolled_actions
 
     async def run():
         c = await asyncpg.connect(DSN, ssl="require")

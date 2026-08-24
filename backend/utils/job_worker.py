@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 import database
+from utils.transcription_pipeline import run_transcription_and_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,6 @@ async def _process_job(job: dict):
     logger.info(f"[queue] Starting job {job_id} meeting {meeting_id} (attempt {attempt}/{MAX_ATTEMPTS})")
 
     try:
-        from routers.processing import run_transcription_and_analysis
         await run_transcription_and_analysis(meeting_id, audio_path)
 
         async with database.with_admin() as conn:
