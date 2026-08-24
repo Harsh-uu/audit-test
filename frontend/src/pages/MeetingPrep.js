@@ -39,6 +39,13 @@ const DOC_TYPE_LABELS = {
   other: "Document",
 };
 
+function formatSourceDate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 // ── Single question row ────────────────────────────────────────────────────────
 function QuestionRow({ question, onToggle, onEdit, onDelete }) {
   const [editing, setEditing] = useState(false);
@@ -214,7 +221,7 @@ function SourceCard({ source, included, onToggle }) {
         <p className="text-sm font-medium text-gray-800 truncate">{source.label}</p>
         <p className="text-xs text-gray-500">
           {typeLabel && <span className="mr-1.5">{typeLabel}</span>}
-          {source.date && <span>{source.date}</span>}
+          {source.date && <span>{formatSourceDate(source.date)}</span>}
         </p>
         {isProcessing && (
           <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
