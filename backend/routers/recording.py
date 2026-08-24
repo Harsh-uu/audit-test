@@ -97,8 +97,11 @@ async def start_recording(meeting_id: str, request: Request, current_user=Depend
                                    datetime.now(timezone.utc).isoformat(), meeting_id)
             except Exception:
                 pass
-        await _write_audit_log(conn, meeting_id, org_id, "recording_started",
-                               current_user.get("id", ""), current_user.get("name", ""), ts)
+            # Fallback audit entry — only needed when the primary recording_events write
+            # (already rendered by the audit-trail endpoint) failed, otherwise this would
+            # show as a duplicate "Recording started" entry alongside the real one.
+            await _write_audit_log(conn, meeting_id, org_id, "recording_started",
+                                   current_user.get("id", ""), current_user.get("name", ""))
     return {"message": "Recording started", "timestamp": ts}
 
 
@@ -209,8 +212,9 @@ async def stop_recording(meeting_id: str, request: Request, current_user=Depends
                                    datetime.now(timezone.utc).isoformat(), meeting_id)
             except Exception:
                 pass
-        await _write_audit_log(conn, meeting_id, org_id, "recording_stopped",
-                               current_user.get("id", ""), current_user.get("name", ""), ts)
+            # Fallback audit entry — see matching comment in start_recording above.
+            await _write_audit_log(conn, meeting_id, org_id, "recording_stopped",
+                                   current_user.get("id", ""), current_user.get("name", ""))
     return {"message": "Recording stopped", "timestamp": ts}
 
 

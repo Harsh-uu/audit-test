@@ -25,9 +25,14 @@ const AUDIT_EVENT_CONFIG = {
   audio_deleted:     { color: "bg-red-50 text-red-600", dot: "bg-red-300" },
 };
 
+const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?$/;
+
 function AuditEvent({ event }) {
   const cfg = AUDIT_EVENT_CONFIG[event.type] || { color: "bg-gray-100 text-gray-600", dot: "bg-gray-400" };
   const isPostSignoff = event.flagged;
+  // Some older log entries stored the raw event timestamp as the "detail" text — redundant
+  // now that the formatted timestamp already renders on the right of every entry, so hide it.
+  const showDetail = event.detail && !ISO_TIMESTAMP_RE.test(event.detail.trim());
   return (
     <div className="relative">
       <div className={`absolute -left-5 w-2.5 h-2.5 rounded-full border-2 border-white ${cfg.dot}`} style={{ top: "0.35rem" }} />
@@ -42,7 +47,7 @@ function AuditEvent({ event }) {
           </span>
         </div>
         <p className="text-xs text-gray-500 mt-1">by <strong className="text-gray-700">{event.actor}</strong></p>
-        {event.detail && <p className="text-xs text-gray-600 mt-1 italic">"{event.detail}"</p>}
+        {showDetail && <p className="text-xs text-gray-600 mt-1 italic">"{event.detail}"</p>}
       </div>
     </div>
   );
