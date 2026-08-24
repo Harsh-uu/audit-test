@@ -42,7 +42,6 @@ if BASE_URL.endswith("/api"):
 
 JWT_SECRET    = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
-MONGO_URL     = os.environ.get("MONGO_URL") or os.environ.get("DATABASE_URL")
 _PG_DSN       = os.environ.get("DATABASE_URL")  # asyncpg needs the PostgreSQL DSN
 
 # Test accounts (from /app/memory/test_credentials.md)
