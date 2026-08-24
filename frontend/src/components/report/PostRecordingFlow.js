@@ -156,7 +156,7 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
             testId="prf-step-1"
             state={step1Done ? "done" : step1Active ? "active" : "waiting"}
             icon={<span className="text-xs font-bold">1</span>}
-            title="Uploading & Compressing Audio"
+            title="Processing Audio"
             subtitle="Audio is compressed to 16 kHz mono MP3 for optimal transcription"
             right={step1Done ? "Complete" : step1Active ? "~10–30 seconds" : "Waiting"}
           >

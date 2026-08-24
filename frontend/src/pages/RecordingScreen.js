@@ -851,7 +851,7 @@ export default function RecordingScreen() {
             <div className="border border-blue-200 bg-blue-50 rounded-xl px-5 py-4">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-8 h-8 rounded-full bg-[#1E3A8A] flex items-center justify-center flex-shrink-0 text-sm font-bold text-white">1</div>
-                <span className="font-semibold text-sm flex-1 text-[#1E3A8A]">Uploading & Compressing Audio</span>
+                <span className="font-semibold text-sm flex-1 text-[#1E3A8A]">Processing Audio</span>
                 <span className="text-sm font-medium text-[#1E3A8A]">{uploadProgress}%</span>
               </div>
               <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
