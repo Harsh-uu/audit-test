@@ -294,10 +294,30 @@ function CareCertDrillDown({ mappings }) {
   );
 }
 
+const CONFIDENCE_ALIASES = {
+  likely_evidence: ["likely_evidence"],
+  possible_evidence: ["possible_evidence", "needs_review", "not_enough_evidence"],
+};
+
 export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAccepting = false }) {
   const { user } = useAuth();
   const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction);
-  const totalCount = (analysis.cqc_mappings?.length || 0) + (analysis.care_cert_mappings?.length || 0) + (analysis.custom_mappings?.length || 0);
+  const allMappings = [
+    ...(analysis.cqc_mappings || []),
+    ...(analysis.care_cert_mappings || []),
+    ...(analysis.custom_mappings || []),
+  ];
+  const totalCount = allMappings.length;
+  const bulkTierStats = (confidence) => {
+    const tierItems = allMappings.filter(m => CONFIDENCE_ALIASES[confidence].includes(m.confidence));
+    return {
+      total: tierItems.length,
+      pending: tierItems.filter(m => (m.status || "pending") === "pending").length,
+      accepted: tierItems.filter(m => m.status === "accepted").length,
+    };
+  };
+  const likelyStats = bulkTierStats("likely_evidence");
+  const possibleStats = bulkTierStats("possible_evidence");
   const wrapperClass = className !== undefined ? className : "lg:col-span-5 bg-[#F8F9FA] overflow-y-auto";
 
   return (
@@ -309,26 +329,48 @@ export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, c
           </h2>
           {canReview && !isLocked && totalCount > 0 && (
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => onBulkAccept?.("likely_evidence")}
-                disabled={bulkAccepting}
-                data-testid="accept-all-likely-btn"
-                title="Accept every pending item marked Likely Evidence"
-                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60"
-              >
-                {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
-                Accept all likely
-              </button>
-              <button
-                onClick={() => onBulkAccept?.("possible_evidence")}
-                disabled={bulkAccepting}
-                data-testid="accept-all-possible-btn"
-                title="Accept every pending item marked Possible Evidence"
-                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-60"
-              >
-                {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
-                Accept all possible
-              </button>
+              {likelyStats.total > 0 && likelyStats.pending === 0 && likelyStats.accepted > 0 ? (
+                <span
+                  data-testid="accept-all-likely-btn"
+                  title={`All ${likelyStats.accepted} likely evidence item${likelyStats.accepted !== 1 ? "s" : ""} accepted`}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-emerald-200 bg-emerald-50 text-emerald-600 cursor-default"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  Accepted ({likelyStats.accepted})
+                </span>
+              ) : (
+                <button
+                  onClick={() => onBulkAccept?.("likely_evidence")}
+                  disabled={bulkAccepting}
+                  data-testid="accept-all-likely-btn"
+                  title="Accept every pending item marked Likely Evidence"
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60"
+                >
+                  {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                  Accept all likely
+                </button>
+              )}
+              {possibleStats.total > 0 && possibleStats.pending === 0 && possibleStats.accepted > 0 ? (
+                <span
+                  data-testid="accept-all-possible-btn"
+                  title={`All ${possibleStats.accepted} possible evidence item${possibleStats.accepted !== 1 ? "s" : ""} accepted`}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-amber-200 bg-amber-50 text-amber-600 cursor-default"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  Accepted ({possibleStats.accepted})
+                </span>
+              ) : (
+                <button
+                  onClick={() => onBulkAccept?.("possible_evidence")}
+                  disabled={bulkAccepting}
+                  data-testid="accept-all-possible-btn"
+                  title="Accept every pending item marked Possible Evidence"
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-60"
+                >
+                  {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                  Accept all possible
+                </button>
+              )}
             </div>
           )}
         </div>
