@@ -196,7 +196,7 @@ async def _generate_and_send_mfa(conn, user: dict) -> None:
 
 
 @router.post("/register")
-async def register(_data: dict = {}):
+async def register(_data: dict = None):
     """Self-registration is disabled — users must be invited by an organisation admin."""
     raise HTTPException(
         status_code=403,
