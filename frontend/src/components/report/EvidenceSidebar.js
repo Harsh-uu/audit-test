@@ -145,10 +145,22 @@ function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence,
               </div>
             </div>
           ) : (
-            <p className="text-sm text-gray-800 mb-3 leading-relaxed">
-              {mapping.edited_evidence_summary || mapping.evidence_summary}
-              {mapping.edited_evidence_summary && <span className="ml-1 text-xs text-blue-500">(edited)</span>}
-            </p>
+            <div className="relative group/evidencetext">
+              <p className="text-sm text-gray-800 mb-3 leading-relaxed pr-5">
+                {mapping.edited_evidence_summary || mapping.evidence_summary}
+                {mapping.edited_evidence_summary && <span className="ml-1 text-xs text-blue-500">(edited)</span>}
+              </p>
+              {isReviewMode && canEditWording !== false && (
+                <button
+                  onClick={() => setEditing(true)}
+                  className="absolute top-0 right-0 text-gray-400 hover:text-[#1E3A8A] p-0.5 rounded hover:bg-gray-100 transition-colors"
+                  data-testid={`edit-evidence-${mapping.id}`}
+                  title="Edit evidence summary"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           )}
           {mapping.notes && (
             <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mb-3 text-xs text-yellow-800">
@@ -168,11 +180,6 @@ function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence,
                 <button onClick={() => handleAction("needs_followup")} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded border transition-colors ${mapping.status === "needs_followup" ? "bg-amber-200 border-amber-400 text-amber-800 font-semibold" : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"}`} data-testid={`flag-evidence-${mapping.id}`}>
                   <Flag className="w-3 h-3" /> Flag
                 </button>
-                {canEditWording !== false && !editing && (
-                  <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50" data-testid={`edit-evidence-${mapping.id}`}>
-                    <Edit3 className="w-3 h-3" /> Edit
-                  </button>
-                )}
               </div>
             </div>
           ) : (
