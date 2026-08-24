@@ -1036,84 +1036,70 @@ async def get_action_stats(current_user=Depends(get_current_user)):
     return {"outstanding": outstanding, "overdue": overdue}
 
 
-@router.get("/team-insights/registers")
-async def get_registers(
-    team_id: Optional[str] = None,
-    setting_id: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    current_user=Depends(get_current_user),
-):
-    """Return per-item detail lists for Actions, Risks and Learning Needs across the org."""
-    if current_user["role"] not in ["admin", "manager"]:
-        raise HTTPException(403, "Insufficient permissions")
-    org_id = current_user.get("org_id", "")
-
-    async with database.with_org(org_id) as conn:
-        # Scoped staff list (mirrors team-insights scoping logic)
-        if team_id:
-            staff_rows = await conn.fetch(
+async def _reg_resolve_staff(conn, org_id: str, current_user: dict, team_id: Optional[str], setting_id: Optional[str]) -> list:
+    """Resolve the staff list in scope for this Registers request (mirrors Team Insights scoping)."""
+    if team_id:
+        rows = await conn.fetch(
+            "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
+            org_id, team_id,
+        )
+    elif setting_id:
+        rows = await conn.fetch(
+            "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
+            org_id, setting_id,
+        )
+    elif current_user["role"] == "manager":
+        mgr_scope = get_manager_scope(current_user)
+        if mgr_scope["level"] == "team":
+            rows = await conn.fetch(
                 "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
-                org_id, team_id,
+                org_id, mgr_scope["team_id"],
             )
-        elif setting_id:
-            staff_rows = await conn.fetch(
+        elif mgr_scope["level"] == "setting":
+            rows = await conn.fetch(
                 "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
-                org_id, setting_id,
+                org_id, mgr_scope["setting_id"],
             )
-        elif current_user["role"] == "manager":
-            mgr_scope = get_manager_scope(current_user)
-            if mgr_scope["level"] == "team":
-                staff_rows = await conn.fetch(
-                    "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND team_id=$2",
-                    org_id, mgr_scope["team_id"],
-                )
-            elif mgr_scope["level"] == "setting":
-                staff_rows = await conn.fetch(
-                    "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE AND setting_id=$2",
-                    org_id, mgr_scope["setting_id"],
-                )
-            else:
-                staff_rows = await conn.fetch(
-                    "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
-                    org_id,
-                )
         else:
-            staff_rows = await conn.fetch(
+            rows = await conn.fetch(
                 "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
                 org_id,
             )
-
-        staff = [dict(r) for r in staff_rows]
-        if not staff:
-            return {"actions": [], "risks": [], "learning_needs": []}
-
-        staff_id_to_name = {str(s["id"]): s["name"] for s in staff}
-        staff_id_set = set(staff_id_to_name.keys())
-
-        # Fetch meetings + analyses in one JOIN
-        date_conds = [
-            "m.status IN ('in_review','reviewed','signed_off','shared')",
-            "m.analysis_id IS NOT NULL",
-        ]
-        date_params: list = []
-        if date_from:
-            date_params.append(date_from)
-            date_conds.append(f"m.date >= ${len(date_params)}")
-        if date_to:
-            date_params.append(date_to + "T23:59:59")
-            date_conds.append(f"m.date <= ${len(date_params)}")
-
+    else:
         rows = await conn.fetch(
-            f"""SELECT m.id, m.title, m.date, m.attendees, m.sign_off_manager_id,
-                       a.actions, a.risks, a.learning_needs, a.achievements
-                FROM meetings m
-                JOIN analyses a ON a.id = m.analysis_id
-                WHERE {' AND '.join(date_conds)}
-                ORDER BY m.date DESC""",
-            *date_params,
+            "SELECT id, name FROM users WHERE org_id=$1 AND role IN ('attendee','manager') AND is_active=TRUE",
+            org_id,
         )
+    return [dict(r) for r in rows]
 
+
+async def _reg_load_meetings(conn, date_from: Optional[str], date_to: Optional[str]):
+    """Fetch in-scope meetings+analyses (single JOIN) for the Registers breakdown."""
+    date_conds = [
+        "m.status IN ('in_review','reviewed','signed_off','shared')",
+        "m.analysis_id IS NOT NULL",
+    ]
+    date_params: list = []
+    if date_from:
+        date_params.append(date_from)
+        date_conds.append(f"m.date >= ${len(date_params)}")
+    if date_to:
+        date_params.append(date_to + "T23:59:59")
+        date_conds.append(f"m.date <= ${len(date_params)}")
+
+    return await conn.fetch(
+        f"""SELECT m.id, m.title, m.date, m.attendees, m.sign_off_manager_id,
+                   a.actions, a.risks, a.learning_needs, a.achievements
+            FROM meetings m
+            JOIN analyses a ON a.id = m.analysis_id
+            WHERE {' AND '.join(date_conds)}
+            ORDER BY m.date DESC""",
+        *date_params,
+    )
+
+
+def _reg_extract_registers(rows: list, staff_id_to_name: dict, staff_id_set: set):
+    """Walk each meeting's row into flat per-item Actions/Risks/Learning-Needs/Achievements lists."""
     actions_out, risks_out, lns_out, achs_out = [], [], [], []
 
     for row in rows:
@@ -1227,6 +1213,11 @@ async def get_registers(
                 "meeting_status": r.get("status", ""),
             })
 
+    return actions_out, risks_out, lns_out, achs_out
+
+
+def _reg_sort_registers(actions_out: list, risks_out: list, lns_out: list, achs_out: list):
+    """Apply the display ordering for each register: priority/urgency first, then resolved/completed."""
     today = datetime.now(timezone.utc).date().isoformat()
     sev_order = {"high": 0, "medium": 1, "low": 2}
 
@@ -1248,6 +1239,35 @@ async def get_registers(
 
     # Achievements: newest meeting first
     achs_out.sort(key=lambda a: a.get("meeting_date") or "", reverse=True)
+
+    return actions_out, risks_out, lns_out, achs_out
+
+
+@router.get("/team-insights/registers")
+async def get_registers(
+    team_id: Optional[str] = None,
+    setting_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user=Depends(get_current_user),
+):
+    """Return per-item detail lists for Actions, Risks and Learning Needs across the org."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+
+    async with database.with_org(org_id) as conn:
+        staff = await _reg_resolve_staff(conn, org_id, current_user, team_id, setting_id)
+        if not staff:
+            return {"actions": [], "risks": [], "learning_needs": []}
+
+        staff_id_to_name = {str(s["id"]): s["name"] for s in staff}
+        staff_id_set = set(staff_id_to_name.keys())
+
+        rows = await _reg_load_meetings(conn, date_from, date_to)
+
+    actions_out, risks_out, lns_out, achs_out = _reg_extract_registers(rows, staff_id_to_name, staff_id_set)
+    actions_out, risks_out, lns_out, achs_out = _reg_sort_registers(actions_out, risks_out, lns_out, achs_out)
 
     return {"actions": actions_out, "risks": risks_out, "learning_needs": lns_out, "achievements": achs_out}
 
