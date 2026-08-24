@@ -1206,9 +1206,9 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
                 const pillStyle = customColor ? { backgroundColor: customColor, color: getContrastColor(customColor) } : {};
                 const pillClass = customColor ? "" : style.pill;
                 return (
-                  <div key={i} className={`flex gap-3 px-5 py-3.5 ${customColor ? "" : style.row}`} style={rowStyle}>
-                    {/* Speaker column: timestamp badge + speaker pill */}
-                    <div className="relative flex-shrink-0 mt-0.5 flex flex-col items-start gap-1">
+                  <div key={i} className={`flex flex-col sm:flex-row gap-1.5 sm:gap-3 px-5 py-3.5 ${customColor ? "" : style.row}`} style={rowStyle}>
+                    {/* Speaker column: timestamp badge + speaker pill — inline row on mobile (above the text), stacked column on sm+ (beside the text) */}
+                    <div className="relative sm:flex-shrink-0 sm:mt-0.5 flex flex-row sm:flex-col items-center sm:items-start gap-2 sm:gap-1">
                       {turn.timestamp && (
                         <span className="text-[10px] font-mono text-gray-400 tabular-nums leading-none">
                           {turn.timestamp}
