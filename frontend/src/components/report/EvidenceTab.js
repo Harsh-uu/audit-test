@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -15,7 +15,7 @@ const SEV = {
 };
 
 // ── Single risk card ──────────────────────────────────────────────────────────
-function RiskCard({ risk, meetingId, canEdit, canToggle, onToggleResolved, onCreateAction }) {
+function RiskCard({ risk, meetingId, canEdit, canToggle, onToggleResolved, onCreateAction, linkedActionId, onViewAction }) {
   const { getAuthConfig, API } = useAuth();
   const [open, setOpen] = useState(false);
   const [loadingSugg, setLoadingSugg] = useState(false);
@@ -117,15 +117,28 @@ function RiskCard({ risk, meetingId, canEdit, canToggle, onToggleResolved, onCre
                 <p className="text-xs text-gray-400 italic">No additional detail available.</p>
               )}
 
-              {/* Create Action button */}
-              {canEdit && !risk.is_resolved && (
-                <button
-                  onClick={() => onCreateAction(risk)}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
-                  data-testid={`risk-create-action-${risk.id}`}
-                >
-                  <Zap className="w-3 h-3" /> Create Action from this Risk
-                </button>
+              {/* Create Action button + link to the resulting action, if one has been created */}
+              {((canEdit && !risk.is_resolved) || linkedActionId) && (
+                <div className="flex items-center justify-between gap-3">
+                  {canEdit && !risk.is_resolved && (
+                    <button
+                      onClick={() => onCreateAction(risk)}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+                      data-testid={`risk-create-action-${risk.id}`}
+                    >
+                      <Zap className="w-3 h-3" /> Create Action from this Risk
+                    </button>
+                  )}
+                  {linkedActionId && (
+                    <button
+                      onClick={() => onViewAction(linkedActionId)}
+                      className="ml-auto flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium hover:underline flex-shrink-0"
+                      data-testid={`view-linked-action-${risk.id}`}
+                    >
+                      View Action <ArrowUp className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               )}
             </>
           )}
@@ -136,7 +149,7 @@ function RiskCard({ risk, meetingId, canEdit, canToggle, onToggleResolved, onCre
 }
 
 // ── Risks section ─────────────────────────────────────────────────────────────
-function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit, canToggle }) {
+function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit, canToggle, riskActionLinks, onViewAction }) {
   const { getAuthConfig, API } = useAuth();
 
   const handleToggleResolved = async (riskId, resolved) => {
@@ -158,7 +171,8 @@ function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit
       <div className="space-y-2" data-testid="risks-list">
         {open.map(risk => (
           <RiskCard key={risk.id || risk.text} risk={risk} meetingId={meetingId} canEdit={canEdit} canToggle={canToggle || canEdit}
-            onToggleResolved={handleToggleResolved} onCreateAction={onCreateAction} />
+            onToggleResolved={handleToggleResolved} onCreateAction={onCreateAction}
+            linkedActionId={riskActionLinks?.[risk.id]} onViewAction={onViewAction} />
         ))}
         {resolved.length > 0 && (
           <details className="mt-2">
@@ -168,7 +182,8 @@ function RisksSection({ risks, meetingId, onRisksChange, onCreateAction, canEdit
             <div className="mt-2 space-y-2">
               {resolved.map(risk => (
                 <RiskCard key={risk.id || risk.text} risk={risk} meetingId={meetingId} canEdit={canEdit} canToggle={canToggle || canEdit}
-                  onToggleResolved={handleToggleResolved} onCreateAction={onCreateAction} />
+                  onToggleResolved={handleToggleResolved} onCreateAction={onCreateAction}
+                  linkedActionId={riskActionLinks?.[risk.id]} onViewAction={onViewAction} />
               ))}
             </div>
           </details>
@@ -363,10 +378,41 @@ export const EvidenceTab = React.memo(function EvidenceTab({
   };
 
   const handleCreateActionFromRisk = (risk) => {
+    pendingRiskIdRef.current = risk.id;
     setNewAction(a => ({ ...a, text: `[Risk] ${risk.text}` }));
     setAddingAction(true);
     // Scroll to actions section
     setTimeout(() => document.getElementById("section-actions")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+  };
+
+  // ── Risk → created-action linking ────────────────────────────────────────
+  // "Create Action from this Risk" only opens/pre-fills the Add Action form —
+  // the action itself isn't created until the user submits it. Once the
+  // actions array grows while a risk-originated draft was pending, link the
+  // newly-appended action back to that risk so a "View Action" link can be
+  // shown on the risk card (there was previously no confirmation at all).
+  const [riskActionLinks, setRiskActionLinks] = useState({});
+  const [highlightedActionId, setHighlightedActionId] = useState(null);
+  const pendingRiskIdRef = useRef(null);
+  const prevActionsLenRef = useRef(analysis?.actions?.length || 0);
+
+  useEffect(() => {
+    const actions = analysis?.actions || [];
+    if (pendingRiskIdRef.current && actions.length > prevActionsLenRef.current) {
+      const created = actions[actions.length - 1];
+      if (created?.id) {
+        setRiskActionLinks(prev => ({ ...prev, [pendingRiskIdRef.current]: created.id }));
+      }
+      pendingRiskIdRef.current = null;
+    }
+    prevActionsLenRef.current = actions.length;
+  }, [analysis?.actions]);
+
+  const handleViewAction = (actionId) => {
+    const el = document.getElementById(`action-row-${actionId}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedActionId(actionId);
+    setTimeout(() => setHighlightedActionId(null), 2000);
   };
 
   const [regenerating, setRegenerating] = useState(false);
@@ -502,7 +548,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
 
           <div className="space-y-2" data-testid="actions-list">
             {(analysis.actions || []).map((action, i) => (
-              <div key={action.id || action.text?.slice(0, 40) || i} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-colors ${action.completed ? "bg-gray-50 border-gray-100 opacity-70" : action.is_rolled_over ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-transparent"}`}>
+              <div key={action.id || action.text?.slice(0, 40) || i} id={action.id ? `action-row-${action.id}` : undefined} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-all ${highlightedActionId === action.id ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-200" : action.completed ? "bg-gray-50 border-gray-100 opacity-70" : action.is_rolled_over ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-transparent"}`}>
                 <button
                   onClick={() => toggleActionComplete(action.id || i, !action.completed)}
                   className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${action.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-emerald-400"}`}
@@ -687,6 +733,8 @@ export const EvidenceTab = React.memo(function EvidenceTab({
           onCreateAction={handleCreateActionFromRisk}
           canEdit={canEdit}
           canToggle={isLocked}
+          riskActionLinks={riskActionLinks}
+          onViewAction={handleViewAction}
         />
       )}
 
