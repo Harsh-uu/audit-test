@@ -69,7 +69,23 @@ export function AuthProvider({ children }) {
             // Cookie is now fresh — replay request; no Authorization header needed
             delete original.headers?.Authorization;
             return axios(original);
-          } catch {
+          } catch (refreshErr) {
+            // A transient network blip / 5xx / proxy hiccup on the refresh call
+            // (e.g. a Cloudflare edge glitch) does NOT mean the session is
+            // actually invalid — retry once after a short delay before giving
+            // up, so a one-off hiccup doesn't force a false logout.
+            const isDefiniteAuthFailure = refreshErr.response?.status === 401 || refreshErr.response?.status === 403;
+            if (!isDefiniteAuthFailure) {
+              try {
+                await new Promise(r => setTimeout(r, 1200));
+                await silentRefresh();
+                isRefreshing.current = false;
+                refreshQueue.current.forEach(p => p.resolve());
+                refreshQueue.current = [];
+                delete original.headers?.Authorization;
+                return axios(original);
+              } catch { /* fall through to logout handling below */ }
+            }
             isRefreshing.current = false;
             refreshQueue.current.forEach(p => p.reject());
             refreshQueue.current = [];

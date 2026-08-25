@@ -52,6 +52,7 @@ export default function MeetingReport() {
     saveSummary, updateEvidence, bulkAcceptEvidence,
     onShowInTranscript, onDirtyChange, onAnalysisChange,
     addAction, removeAction, toggleActionComplete,
+    editAction,
     markReviewed, signOff, addComment,
     handleAnonymise, handleFindReplace,
     handleRescanWithPrompt, handleReopenRequest, handleApproveReopen,
@@ -315,6 +316,7 @@ export default function MeetingReport() {
                     addAction={addAction}
                     removeAction={removeAction}
                     toggleActionComplete={toggleActionComplete}
+                    editAction={editAction}
                     actionMessage={actionMessage}
                     onSummaryRegenerated={newSummary => {
                       onAnalysisChange({ ...analysis, summary: newSummary });

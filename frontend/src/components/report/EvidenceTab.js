@@ -14,6 +14,14 @@ const SEV = {
   low:    { bg: "bg-gray-50",   border: "border-gray-200",  text: "text-gray-700",  badge: "bg-gray-100 text-gray-600",  icon: "text-gray-400"  },
 };
 
+// AI-generated actions/learning needs sometimes carry the literal string
+// "null" (rather than an actual null) when no assignee/due date was mentioned
+// in the transcript — treat those the same as a real empty value everywhere.
+const NULLISH_STRINGS = new Set(["null", "none", "n/a", "na", "not specified", "not mentioned"]);
+function isBlankValue(v) {
+  return v == null || (typeof v === "string" && (v.trim() === "" || NULLISH_STRINGS.has(v.trim().toLowerCase())));
+}
+
 // ── Single risk card ──────────────────────────────────────────────────────────
 function RiskCard({ risk, meetingId, canEdit, canToggle, onToggleResolved, onCreateAction, linkedActionId, onViewAction }) {
   const { getAuthConfig, API } = useAuth();
@@ -288,6 +296,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
   addAction,
   removeAction,
   toggleActionComplete,
+  editAction,
   actionMessage,
   onSummaryRegenerated,
   onAnalysisChange,
@@ -339,6 +348,11 @@ export const EvidenceTab = React.memo(function EvidenceTab({
 
   const removeLN = async (idx) => {
     await saveLearningNeeds(learningNeeds.filter((_, i) => i !== idx));
+  };
+
+  const editLN = async (idx, fields) => {
+    const updated = learningNeeds.map((ln, i) => i === idx ? { ...ln, ...fields } : ln);
+    await saveLearningNeeds(updated);
   };
 
   const toggleLNComplete = async (idx, completed) => {
@@ -413,6 +427,56 @@ export const EvidenceTab = React.memo(function EvidenceTab({
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightedActionId(actionId);
     setTimeout(() => setHighlightedActionId(null), 2000);
+  };
+
+  // ── Inline edit — Action Items ────────────────────────────────────────────
+  const [editingActionIdx, setEditingActionIdx] = useState(null);
+  const [editActionDraft, setEditActionDraft] = useState({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
+
+  const startEditAction = (idx, action) => {
+    setEditingActionIdx(idx);
+    setEditActionDraft({
+      text: action.text || "",
+      assigned_to: isBlankValue(action.assigned_to) ? "" : action.assigned_to,
+      assigned_to_user_id: action.assigned_to_user_id || "",
+      due_date: isBlankValue(action.due_date) ? "" : action.due_date,
+    });
+  };
+
+  const saveEditAction = async () => {
+    if (!editActionDraft.text.trim()) return;
+    await editAction?.(editingActionIdx, {
+      text: editActionDraft.text.trim(),
+      assigned_to: editActionDraft.assigned_to.trim() || null,
+      assigned_to_user_id: editActionDraft.assigned_to_user_id || null,
+      due_date: editActionDraft.due_date.trim() || null,
+    });
+    setEditingActionIdx(null);
+  };
+
+  // ── Inline edit — Learning Needs ──────────────────────────────────────────
+  const [editingLNIdx, setEditingLNIdx] = useState(null);
+  const [editLNDraft, setEditLNDraft] = useState({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
+
+  const startEditLN = (idx, ln) => {
+    setEditingLNIdx(idx);
+    setEditLNDraft({
+      text: ln.text || "",
+      assigned_to: isBlankValue(ln.assigned_to) ? "" : ln.assigned_to,
+      assigned_to_user_id: ln.assigned_to_user_id || "",
+      due_date: isBlankValue(ln.due_date) ? "" : ln.due_date,
+    });
+  };
+
+  const saveEditLN = async () => {
+    if (!editLNDraft.text.trim()) return;
+    await editLN(editingLNIdx, {
+      text: editLNDraft.text.trim(),
+      assigned_to: editLNDraft.assigned_to.trim() || null,
+      assigned_to_user_id: editLNDraft.assigned_to_user_id || null,
+      due_date: editLNDraft.due_date.trim() || null,
+    });
+    setEditingLNIdx(null);
   };
 
   const [regenerating, setRegenerating] = useState(false);
@@ -548,34 +612,80 @@ export const EvidenceTab = React.memo(function EvidenceTab({
 
           <div className="space-y-2" data-testid="actions-list">
             {(analysis.actions || []).map((action, i) => (
-              <div key={action.id || action.text?.slice(0, 40) || i} id={action.id ? `action-row-${action.id}` : undefined} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-all ${highlightedActionId === action.id ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-200" : action.completed ? "bg-gray-50 border-gray-100 opacity-70" : action.is_rolled_over ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-transparent"}`}>
-                <button
-                  onClick={() => toggleActionComplete(action.id || i, !action.completed)}
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${action.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-emerald-400"}`}
-                  title={action.completed ? "Mark as outstanding" : "Mark as complete"}
-                  data-testid={`complete-action-${i}`}
-                >
-                  {action.completed && <Check className="w-3 h-3" />}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm ${action.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{action.text}</p>
-                  {action.is_rolled_over && !action.completed && (
-                    <p className="text-xs text-amber-600 font-medium mt-0.5">Carried over from: {action.source_meeting_title}</p>
-                  )}
-                  {(action.assigned_to || action.due_date) && (
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {action.assigned_to && `Assigned: ${action.assigned_to}`}
-                      {action.assigned_to && action.due_date && " · "}
-                      {action.due_date && `Due: ${action.due_date}`}
-                    </p>
+              editingActionIdx === i ? (
+                <div key={action.id || i} className="border border-dashed border-[#1E3A8A] rounded-md p-3 bg-blue-50 fade-in" data-testid={`edit-action-form-${i}`}>
+                  <p className="text-xs font-semibold text-[#1E3A8A] mb-2">Edit Action</p>
+                  <input
+                    type="text"
+                    value={editActionDraft.text}
+                    onChange={e => setEditActionDraft(d => ({ ...d, text: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white mb-2"
+                    data-testid={`edit-action-text-${i}`}
+                    autoFocus
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEditAction(); } }}
+                  />
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <select
+                      value={editActionDraft.assigned_to_user_id}
+                      onChange={e => {
+                        const uid = e.target.value;
+                        const att = (meeting.attendees || []).find(a => a.user_id === uid);
+                        setEditActionDraft(d => ({ ...d, assigned_to_user_id: uid, assigned_to: att ? att.name : "" }));
+                      }}
+                      className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
+                      data-testid={`edit-action-assigned-${i}`}
+                    >
+                      <option value="">Assigned to — please select</option>
+                      {(meeting.attendees || []).map(a => (
+                        <option key={a.user_id} value={a.user_id}>{a.name}</option>
+                      ))}
+                    </select>
+                    <input type="text" value={editActionDraft.due_date} onChange={e => setEditActionDraft(d => ({ ...d, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid={`edit-action-due-${i}`} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={saveEditAction} disabled={!editActionDraft.text.trim()} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-[#1E40AF] disabled:opacity-50 transition-colors" data-testid={`save-edit-action-${i}`}>
+                      <Check className="w-3 h-3" /> Save
+                    </button>
+                    <button onClick={() => setEditingActionIdx(null)} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid={`cancel-edit-action-${i}`}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div key={action.id || action.text?.slice(0, 40) || i} id={action.id ? `action-row-${action.id}` : undefined} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-all ${highlightedActionId === action.id ? "ring-2 ring-indigo-400 bg-indigo-50 border-indigo-200" : action.completed ? "bg-gray-50 border-gray-100 opacity-70" : action.is_rolled_over ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-transparent"}`}>
+                  <button
+                    onClick={() => toggleActionComplete(action.id || i, !action.completed)}
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${action.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-emerald-400"}`}
+                    title={action.completed ? "Mark as outstanding" : "Mark as complete"}
+                    data-testid={`complete-action-${i}`}
+                  >
+                    {action.completed && <Check className="w-3 h-3" />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${action.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{action.text}</p>
+                    {action.is_rolled_over && !action.completed && (
+                      <p className="text-xs text-amber-600 font-medium mt-0.5">Carried over from: {action.source_meeting_title}</p>
+                    )}
+                    {(!isBlankValue(action.assigned_to) || !isBlankValue(action.due_date)) && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {!isBlankValue(action.assigned_to) && `Assigned: ${action.assigned_to}`}
+                        {!isBlankValue(action.assigned_to) && !isBlankValue(action.due_date) && " · "}
+                        {!isBlankValue(action.due_date) && `Due: ${action.due_date}`}
+                      </p>
+                    )}
+                  </div>
+                  {canReview && !action.is_rolled_over && (
+                    <div className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-0.5 flex-shrink-0">
+                      <button onClick={() => startEditAction(i, action)} className="p-1 text-gray-400 hover:text-[#1E3A8A] rounded" data-testid={`edit-action-btn-${i}`} title="Edit action">
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => removeAction(i)} className="p-1 text-gray-400 hover:text-red-500 rounded" data-testid={`remove-action-${i}`} title="Remove action">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
-                {canReview && !action.is_rolled_over && (
-                  <button onClick={() => removeAction(i)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded flex-shrink-0" data-testid={`remove-action-${i}`} title="Remove action">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+              )
             ))}
             {analysis.actions?.length === 0 && !addingAction && (
               <p className="text-sm text-gray-400 py-2 text-center">No actions yet — add one below</p>
@@ -646,32 +756,78 @@ export const EvidenceTab = React.memo(function EvidenceTab({
 
           <div className="space-y-2" data-testid="learning-needs-list">
             {learningNeeds.map((ln, i) => (
-              <div key={ln.id || i} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-colors ${ln.completed ? "bg-gray-50 border-gray-100 opacity-70" : "bg-teal-50 border-teal-100"}`}>
-                <button
-                  onClick={() => !isLocked && toggleLNComplete(i, !ln.completed)}
-                  disabled={isLocked}
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${ln.completed ? "bg-teal-600 border-teal-600 text-white" : "border-teal-300 hover:border-teal-500"}`}
-                  title={ln.completed ? "Mark as outstanding" : "Mark as addressed"}
-                  data-testid={`complete-ln-${i}`}
-                >
-                  {ln.completed && <Check className="w-3 h-3" />}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm ${ln.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{ln.text}</p>
-                  {(ln.assigned_to || ln.due_date) && (
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {ln.assigned_to && `Assigned: ${ln.assigned_to}`}
-                      {ln.assigned_to && ln.due_date && " · "}
-                      {ln.due_date && `Due: ${ln.due_date}`}
-                    </p>
+              editingLNIdx === i ? (
+                <div key={ln.id || i} className="border border-dashed border-teal-400 rounded-md p-3 bg-teal-50" data-testid={`edit-ln-form-${i}`}>
+                  <p className="text-xs font-semibold text-teal-800 mb-2">Edit Learning Need</p>
+                  <input
+                    type="text"
+                    value={editLNDraft.text}
+                    onChange={e => setEditLNDraft(d => ({ ...d, text: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white mb-2"
+                    data-testid={`edit-ln-text-${i}`}
+                    autoFocus
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEditLN(); } }}
+                  />
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <select
+                      value={editLNDraft.assigned_to_user_id}
+                      onChange={e => {
+                        const uid = e.target.value;
+                        const att = (meeting.attendees || []).find(a => a.user_id === uid);
+                        setEditLNDraft(d => ({ ...d, assigned_to_user_id: uid, assigned_to: att ? att.name : "" }));
+                      }}
+                      className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      data-testid={`edit-ln-assigned-${i}`}
+                    >
+                      <option value="">Assigned to — please select</option>
+                      {(meeting.attendees || []).map(a => (
+                        <option key={a.user_id} value={a.user_id}>{a.name}</option>
+                      ))}
+                    </select>
+                    <input type="text" value={editLNDraft.due_date} onChange={e => setEditLNDraft(d => ({ ...d, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid={`edit-ln-due-${i}`} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={saveEditLN} disabled={!editLNDraft.text.trim()} className="flex items-center gap-1.5 bg-teal-700 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-teal-800 disabled:opacity-50 transition-colors" data-testid={`save-edit-ln-${i}`}>
+                      <Check className="w-3 h-3" /> Save
+                    </button>
+                    <button onClick={() => setEditingLNIdx(null)} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid={`cancel-edit-ln-${i}`}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div key={ln.id || i} className={`flex items-start gap-3 p-2.5 rounded-md group border transition-colors ${ln.completed ? "bg-gray-50 border-gray-100 opacity-70" : "bg-teal-50 border-teal-100"}`}>
+                  <button
+                    onClick={() => !isLocked && toggleLNComplete(i, !ln.completed)}
+                    disabled={isLocked}
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${ln.completed ? "bg-teal-600 border-teal-600 text-white" : "border-teal-300 hover:border-teal-500"}`}
+                    title={ln.completed ? "Mark as outstanding" : "Mark as addressed"}
+                    data-testid={`complete-ln-${i}`}
+                  >
+                    {ln.completed && <Check className="w-3 h-3" />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${ln.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{ln.text}</p>
+                    {(!isBlankValue(ln.assigned_to) || !isBlankValue(ln.due_date)) && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {!isBlankValue(ln.assigned_to) && `Assigned: ${ln.assigned_to}`}
+                        {!isBlankValue(ln.assigned_to) && !isBlankValue(ln.due_date) && " · "}
+                        {!isBlankValue(ln.due_date) && `Due: ${ln.due_date}`}
+                      </p>
+                    )}
+                  </div>
+                  {canEdit && !isLocked && (
+                    <div className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-0.5 flex-shrink-0">
+                      <button onClick={() => startEditLN(i, ln)} className="p-1 text-gray-400 hover:text-teal-700 rounded" data-testid={`edit-ln-btn-${i}`} title="Edit">
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => removeLN(i)} className="p-1 text-gray-400 hover:text-red-500 rounded" data-testid={`remove-ln-${i}`} title="Remove">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
-                {canEdit && !isLocked && (
-                  <button onClick={() => removeLN(i)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded flex-shrink-0" data-testid={`remove-ln-${i}`} title="Remove">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+              )
             ))}
             {learningNeeds.length === 0 && !addingLN && (
               <p className="text-sm text-gray-400 py-2 text-center">No learning needs identified automatically — use + Add to record one manually</p>

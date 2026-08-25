@@ -178,7 +178,23 @@ def _sanitise_analysis(data: dict) -> dict:
             return {k: _clean(vv) for k, vv in v.items()}
         return v
 
-    return {k: _clean(v) for k, v in data.items()}
+    cleaned = {k: _clean(v) for k, v in data.items()}
+
+    # The AI sometimes returns the literal string "null" (rather than a real
+    # JSON null) for assigned_to/due_date when nothing was mentioned — normalise
+    # those to real None so the UI never shows a raw "Due: null".
+    nullish = {"null", "none", "n/a", "na", "not specified", "not mentioned"}
+    for key in ("actions", "learning_needs"):
+        items = cleaned.get(key)
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    for field in ("assigned_to", "due_date"):
+                        val = item.get(field)
+                        if isinstance(val, str) and val.strip().lower() in nullish:
+                            item[field] = None
+
+    return cleaned
 
 
 async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360) -> str:

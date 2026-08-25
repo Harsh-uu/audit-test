@@ -255,6 +255,13 @@ export function useMeetingReport() {
     await saveActions(updated);
   };
 
+  const editAction = async (idx, fields) => {
+    const current = meeting?.analysis?.actions || [];
+    const updated = current.map((a, i) => i === idx ? { ...a, ...fields } : a);
+    setMeeting(m => ({ ...m, analysis: { ...m.analysis, actions: updated } }));
+    await saveActions(updated);
+  };
+
   const toggleActionComplete = async (actionId, completed) => {
     const prevActions = meeting?.analysis?.actions || [];
     const nextActions = prevActions.map(a =>
@@ -510,7 +517,7 @@ export function useMeetingReport() {
     fetchMeeting,
     saveSummary, updateEvidence, bulkAcceptEvidence,
     onShowInTranscript, onDirtyChange, onAnalysisChange,
-    addAction, removeAction, toggleActionComplete,
+    addAction, removeAction, toggleActionComplete, editAction,
     markReviewed, signOff, addComment,
     handleAnonymise, handleFindReplace,
     handleRescanWithPrompt, handleReopenRequest, handleApproveReopen,

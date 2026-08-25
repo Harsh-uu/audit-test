@@ -370,6 +370,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
     update_cols = {}
     changed_fields = []
     is_finalised = False
+    old_status_by_type = {}
 
     async with database.with_org(org_id) as conn:
         m_row = await conn.fetchrow(
@@ -402,6 +403,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
                             raise HTTPException(409, "Report is locked. Cannot edit evidence wording after sign-off.")
                         if data.notes is not None:
                             raise HTTPException(409, "Report is locked. Cannot edit evidence notes after sign-off.")
+                    old_status_by_type[mapping_type] = m.get("status")
                     if data.edited_evidence_summary is not None:
                         old_val = m.get("edited_evidence_summary") or m.get("evidence_summary", "")
                         mappings[i]["edited_evidence_summary"] = data.edited_evidence_summary
@@ -439,7 +441,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
         for item in mappings:
             if item.get("id") != evidence_id:
                 continue
-            action = data.status if data.status and data.status != item.get("status") else ("edited_summary" if data.edited_evidence_summary is not None else "viewed")
+            action = data.status if data.status and data.status != old_status_by_type.get(mapping_type) else ("edited_summary" if data.edited_evidence_summary is not None else "viewed")
             ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
             name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
             try:
