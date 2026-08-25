@@ -7,7 +7,7 @@ import { EvidenceTab } from "@/components/report/EvidenceTab";
 import { TranscriptTab } from "@/components/report/TranscriptTab";
 import { CommentsTab } from "@/components/report/CommentsTab";
 import { AuditTrailTab } from "@/components/report/AuditTrailTab";
-import { EvidenceSidebar } from "@/components/report/EvidenceSidebar";
+import { ComplianceTab } from "@/components/report/ComplianceTab";
 import { EmailModal } from "@/components/report/EmailModal";
 import { ShareModal } from "@/components/report/ShareModal";
 import { PostRecordingFlow } from "@/components/report/PostRecordingFlow";
@@ -354,7 +354,7 @@ export default function MeetingReport() {
                 </div>
                 {activeTab === "compliance" && (
                   <div className="-m-6">
-                    <EvidenceSidebar
+                    <ComplianceTab
                       analysis={analysis}
                       canReview={canReview && (user?.role === "manager" || user?.role === "admin")}
                       updateEvidence={updateEvidence}

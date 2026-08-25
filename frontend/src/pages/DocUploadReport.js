@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { EvidenceSidebar } from "@/components/report/EvidenceSidebar";
+import { ComplianceTab } from "@/components/report/ComplianceTab";
 import {
   ArrowLeft, FileText, User, Calendar, Upload, Loader2, AlertCircle,
   CheckCircle, Clock
@@ -202,7 +202,7 @@ export default function DocUploadReport() {
           </div>
         ) : (
           <div className="flex-1 overflow-hidden">
-            <EvidenceSidebar
+            <ComplianceTab
               analysis={analysis}
               canReview={true}
               updateEvidence={updateEvidence}

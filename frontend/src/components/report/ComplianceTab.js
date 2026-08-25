@@ -306,7 +306,7 @@ const CONFIDENCE_ALIASES = {
   possible_evidence: ["possible_evidence", "needs_review", "not_enough_evidence"],
 };
 
-export const EvidenceSidebar = React.memo(function EvidenceSidebar({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAccepting = false }) {
+export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAccepting = false }) {
   const { user } = useAuth();
   const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction);
   const allMappings = [
