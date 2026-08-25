@@ -82,21 +82,6 @@ export function serializeTurns(turns) {
   return turns.map(t => t.timestamp ? `[${t.timestamp}] ${t.speaker}: ${t.text}` : `${t.speaker}: ${t.text}`).join("\n");
 }
 
-export function getSpeakerRole(speaker, managerName) {
-  const s = speaker.toLowerCase();
-  const mn = (managerName || "").toLowerCase();
-  const isManager =
-    s === "manager" || s === "supervisor" ||
-    (mn && mn.split(" ").filter(w => w.length > 2).some(w => s.includes(w)));
-  return isManager ? "manager" : "worker";
-}
-
-export function roleToStyle(role) {
-  return role === "manager"
-    ? { pill: "bg-[#1E3A8A] text-white", row: "bg-blue-50/40" }
-    : { pill: "bg-emerald-700 text-white", row: "bg-emerald-50/40" };
-}
-
 // ── Speaker colour palette — pastel / -300 range ─────────────────────────────
 // Hues spread evenly around the colour wheel (~35° apart) so no two swatches
 // read as "the same colour" — earlier version had two look-alike greens

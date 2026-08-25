@@ -727,7 +727,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                 <button onClick={addAction} disabled={!newAction.text.trim()} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-[#1E40AF] disabled:opacity-50 transition-colors" data-testid="save-new-action-btn">
                   <Plus className="w-3 h-3" /> Add Action
                 </button>
-                <button onClick={() => { setAddingAction(false); setNewAction({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" }); }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-action-btn">
+                <button onClick={() => { setAddingAction(false); setNewAction({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" }); pendingRiskIdRef.current = null; }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-action-btn">
                   Cancel
                 </button>
               </div>

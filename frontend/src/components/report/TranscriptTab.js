@@ -6,7 +6,7 @@ import { anonymiseTranscript } from "@/utils/anonymise";
 import { useAuth } from "@/context/AuthContext";
 import {
   resolveExcerptQuery, escapeRegex, formatTranscript,
-  parseSpeakerText, serializeTurns, getSpeakerRole, getContrastColor,
+  parseSpeakerText, serializeTurns, getContrastColor,
   getDefaultSpeakerColor,
 } from "@/utils/transcriptHelpers";
 import { HighlightedText, MultiHighlightText } from "./transcript/HighlightedText";
@@ -22,7 +22,6 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
 
   // ── Speaker editing state ─────────────────────────────────────────────────
   const [localTurns, setLocalTurns] = useState([]);
-  const [speakerRoleMap, setSpeakerRoleMap] = useState({}); // name → "manager"|"worker"
   const [isDirty, setIsDirty] = useState(false);
   // Ref mirrors isDirty so the useEffect always reads the latest value
   // even if a concurrent render has not yet committed the state update.
@@ -94,21 +93,12 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     [meeting.transcript?.speaker_text]
   );
 
-  const managerName = meeting.sign_off_manager_name || "";
-
-  // Initialise / reset localTurns + role map when speaker_text changes
+  // Initialise / reset localTurns when speaker_text changes
   useEffect(() => {
     // Use the ref (not state) to read isDirty — avoids stale-closure issues in
     // React 19 Concurrent Mode where the committed render may differ from the
     // render that enqueued setIsDirty(false) earlier in the same flush.
     if (isDirtyRef.current) return;
-    const map = {};
-    for (const t of originalTurns) {
-      if (!(t.speaker in map)) {
-        map[t.speaker] = getSpeakerRole(t.speaker, managerName);
-      }
-    }
-    setSpeakerRoleMap(map);
     setLocalTurns(originalTurns.map(t => ({ ...t })));
   }, [meeting.transcript?.speaker_text]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -242,11 +232,6 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
 
   const handleRenameAll = useCallback((original, newName) => {
     setLocalTurns(prev => prev.map(t => t.speaker === original ? { ...t, speaker: newName } : t));
-    setSpeakerRoleMap(prev => {
-      if (!(original in prev)) return prev;
-      const { [original]: role, ...rest } = prev;
-      return { ...rest, [newName]: role };
-    });
     setDirty(true);
   }, []);
 
@@ -575,7 +560,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
       }));
       setDirty(true);
       // Move to next (or clamp) after replacement since matches will recompute
-      setFindMatchIdx(i => Math.min(i, findMatches.length - 2));
+      setFindMatchIdx(i => Math.max(0, Math.min(i, findMatches.length - 2)));
     } else if (match.type === "para" && onFindReplace) {
       // Full text: replace exactly the highlighted occurrence.
       // Count how many full-text (para) matches precede the current one to get the 0-based index.
@@ -778,18 +763,14 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
             >
               {localTurns.map((turn, i) => {
                 const customColor = speakerColorMap[turn.speaker];
-                const rowStyle = customColor ? { backgroundColor: `${customColor}30` } : {};
-                const pillStyle = customColor ? { backgroundColor: customColor, color: getContrastColor(customColor) } : {};
-                const pillClass = "";
-                const rowClassName = "";
+                const rowStyle = { backgroundColor: `${customColor}30` };
+                const pillStyle = { backgroundColor: customColor, color: getContrastColor(customColor) };
                 return (
                   <SpeakerTurnRow
                     key={i}
                     turn={turn}
                     index={i}
-                    pillClass={pillClass}
                     pillStyle={pillStyle}
-                    rowClassName={rowClassName}
                     rowStyle={rowStyle}
                     canEditSpeakers={canEditSpeakers}
                     isMenuOpen={openTurnMenu === i}

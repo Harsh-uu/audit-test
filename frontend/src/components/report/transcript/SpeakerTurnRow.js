@@ -4,14 +4,14 @@ import { HighlightedText, MultiHighlightText } from "./HighlightedText";
 
 /** A single speaker-turn row in the Speaker View — pill, reassign menu, editable text, split-to-highlight support */
 export function SpeakerTurnRow({
-  turn, index, pillClass, pillStyle, rowClassName, rowStyle,
+  turn, index, pillStyle, rowStyle,
   canEditSpeakers, isMenuOpen, onToggleMenu, uniqueSpeakers, onAssign, onFlipFromHere,
   isEditing, editingTurnText, setEditingTurnText, onSaveTurnText, onCancelTurnText, onStartEdit,
   isHighlighted, highlightRef,
   findReplaceOpen, findQueryTrimmed, turnMatches, findMatchIdx, effectiveHighlightQuery,
 }) {
   return (
-    <div className={`flex flex-col sm:flex-row gap-1.5 sm:gap-3 px-5 py-3.5 ${rowClassName}`} style={rowStyle}>
+    <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-3 px-5 py-3.5" style={rowStyle}>
       {/* Speaker column: timestamp badge + speaker pill — inline row on mobile (above the text), stacked column on sm+ (beside the text) */}
       <div className="relative sm:flex-shrink-0 sm:mt-0.5 flex flex-row sm:flex-col items-center sm:items-start gap-2 sm:gap-1">
         {turn.timestamp && (
@@ -23,7 +23,7 @@ export function SpeakerTurnRow({
           <button
             data-testid={`speaker-pill-${index}`}
             onMouseDown={e => { e.stopPropagation(); onToggleMenu(index); }}
-            className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${pillClass} ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
+            className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full h-fit transition-all ${isMenuOpen ? "ring-2 ring-offset-1 ring-blue-400" : "hover:opacity-80"}`}
             style={pillStyle}
             title="Click to reassign this speaker turn"
           >
@@ -34,7 +34,7 @@ export function SpeakerTurnRow({
           </button>
         ) : (
           <span
-            className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full h-fit ${pillClass}`}
+            className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full h-fit"
             style={pillStyle}
           >
             {turn.speaker}
