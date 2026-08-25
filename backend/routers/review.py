@@ -504,11 +504,13 @@ async def bulk_update_evidence(meeting_id: str, data: BulkEvidenceActionRequest,
         all_mappings = {}
         update_cols = {}
         changed_count = 0
+        changed_items = []
         for mapping_type in ["cqc_mappings", "care_cert_mappings", "custom_mappings"]:
             mappings = _ensure_list(analysis.get(mapping_type))
             changed = False
             for i, m in enumerate(mappings):
                 if m.get("confidence") in confidence_set and (m.get("status") or "pending") == "pending":
+                    changed_items.append((mapping_type, dict(m)))
                     mappings[i]["status"] = data.status
                     changed = True
                     changed_count += 1
@@ -530,6 +532,31 @@ async def bulk_update_evidence(meeting_id: str, data: BulkEvidenceActionRequest,
             confidence_label = "likely evidence" if data.confidence == "likely_evidence" else "possible evidence"
             await _log_edit(conn, meeting_id, org_id, "evidence", current_user["id"], current_user.get("name", ""),
                             f"{changed_count} {confidence_label} item{'s' if changed_count != 1 else ''} bulk-accepted")
+
+    type_label_map = {"cqc_mappings": "cqc", "care_cert_mappings": "care_cert", "custom_mappings": "custom"}
+    for mapping_type, item in changed_items:
+        ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
+        name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
+        try:
+            async with database.with_admin() as fb_conn:
+                await fb_conn.execute(
+                    """INSERT INTO evidence_feedback
+                       (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
+                        evidence_type, standard_ref, standard_name, ai_confidence,
+                        manager_action, evidence_summary, edited_summary,
+                        transcript_excerpt, timestamp)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
+                    str(uuid.uuid4()), meeting_id, org_id,
+                    current_user["id"], current_user.get("name", ""),
+                    item.get("id", ""), type_label_map.get(mapping_type, mapping_type), ref, name,
+                    item.get("confidence", ""), data.status,
+                    item.get("evidence_summary", ""),
+                    None,
+                    item.get("transcript_excerpt", ""),
+                    datetime.now(timezone.utc).isoformat(),
+                )
+        except Exception as _fb_err:
+            logger.warning(f"evidence_feedback insert skipped (bulk): {_fb_err}")
 
     return {"message": f"{changed_count} items updated", "updated_count": changed_count, **all_mappings}
 
