@@ -164,6 +164,13 @@ async def update_user(user_id: str, data: UpdateUserRequest, current_user=Depend
     if current_user["role"] == "manager":
         update_data.pop("role", None)
         update_data.pop("email", None)   # SEC-003: prevent email hijack via manager
+    # SEC-001: admins may only assign org-level roles — never super_admin, and
+    # never to themselves (prevents privilege-escalation via a crafted role value)
+    if "role" in update_data and current_user["role"] == "admin":
+        if update_data["role"] not in ("admin", "manager", "attendee", "shared_reviewer"):
+            raise HTTPException(403, "Cannot assign that role")
+        if user_id == current_user["id"]:
+            raise HTTPException(403, "Cannot change your own role")
 
     set_parts = [f"{k}=${i+2}" for i, k in enumerate(update_data.keys())]
     async with database.with_admin() as conn:
@@ -1454,24 +1461,34 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
     conditions = ["status IN ('signed_off','shared')", "analysis_id IS NOT NULL"]
     params: list = []
 
-    if meeting_ids:
-        params.append(meeting_ids)
-        conditions.append(f"id = ANY(${len(params)})")
-    else:
-        if staff_ids:
-            params.append(staff_ids)
-            conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}))")
-        if date_from:
-            params.append(date_from)
-            conditions.append(f"date >= ${len(params)}")
-        if date_to:
-            params.append(date_to)
-            conditions.append(f"date <= ${len(params)}")
-
-    where = " AND ".join(conditions)
     rows_csv, mtg_analyses = [], []
 
     async with database.with_org(org_id) as conn:
+        # SEC-002: constrain to the caller's assigned team/setting — applied
+        # unconditionally so an explicit meeting_ids/staff_ids filter can't be
+        # used to reach records outside a scoped manager's remit.
+        scope = get_manager_scope(current_user)
+        if scope["level"] != "org":
+            scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
+            scoped_ids = list(set(scoped_ids) | {current_user["id"]})
+            params.append(scoped_ids)
+            conditions.append(f"(created_by = ANY(${len(params)}) OR sign_off_manager_id = ANY(${len(params)}) OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)})))")
+
+        if meeting_ids:
+            params.append(meeting_ids)
+            conditions.append(f"id = ANY(${len(params)})")
+        else:
+            if staff_ids:
+                params.append(staff_ids)
+                conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}))")
+            if date_from:
+                params.append(date_from)
+                conditions.append(f"date >= ${len(params)}")
+            if date_to:
+                params.append(date_to)
+                conditions.append(f"date <= ${len(params)}")
+
+        where = " AND ".join(conditions)
         mtg_rows = await conn.fetch(f"SELECT * FROM meetings WHERE {where} ORDER BY date DESC", *params)
         for mtg_row in mtg_rows:
             mtg = dict(mtg_row)
@@ -1627,24 +1644,34 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
 
     conditions = ["status='signed_off'", "analysis_id IS NOT NULL", "transcript_id IS NOT NULL"]
     params: list = []
-    if meeting_ids:
-        params.append(meeting_ids)
-        conditions.append(f"id = ANY(${len(params)})")
-    else:
-        if staff_ids:
-            params.append(staff_ids)
-            conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}))")
-        if date_from:
-            params.append(date_from)
-            conditions.append(f"date >= ${len(params)}")
-        if date_to:
-            params.append(date_to)
-            conditions.append(f"date <= ${len(params)}")
-
-    where = " AND ".join(conditions)
     meetings_data = []
 
     async with database.with_org(org_id) as conn:
+        # SEC-002: constrain to the caller's assigned team/setting — applied
+        # unconditionally so an explicit meeting_ids/staff_ids filter can't be
+        # used to reach records outside a scoped manager's remit.
+        scope = get_manager_scope(current_user)
+        if scope["level"] != "org":
+            scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
+            scoped_ids = list(set(scoped_ids) | {current_user["id"]})
+            params.append(scoped_ids)
+            conditions.append(f"(created_by = ANY(${len(params)}) OR sign_off_manager_id = ANY(${len(params)}) OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)})))")
+
+        if meeting_ids:
+            params.append(meeting_ids)
+            conditions.append(f"id = ANY(${len(params)})")
+        else:
+            if staff_ids:
+                params.append(staff_ids)
+                conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}))")
+            if date_from:
+                params.append(date_from)
+                conditions.append(f"date >= ${len(params)}")
+            if date_to:
+                params.append(date_to)
+                conditions.append(f"date <= ${len(params)}")
+
+        where = " AND ".join(conditions)
         mtg_rows = await conn.fetch(f"SELECT * FROM meetings WHERE {where} ORDER BY date DESC", *params)
         for mtg_row in mtg_rows:
             mtg = dict(mtg_row)
