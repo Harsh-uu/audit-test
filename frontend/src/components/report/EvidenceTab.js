@@ -560,7 +560,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                   className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
                   data-testid="new-action-assigned"
                 >
-                  <option value="">Assigned to (optional)</option>
+                  <option value="">Assigned to — please select</option>
                   {(meeting.attendees || []).map(a => (
                     <option key={a.user_id} value={a.user_id}>{a.name}</option>
                   ))}
@@ -656,7 +656,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                   className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                   data-testid="new-ln-assigned"
                 >
-                  <option value="">Assigned to — anyone (optional)</option>
+                  <option value="">Assigned to — please select</option>
                   {(meeting.attendees || []).map(a => (
                     <option key={a.user_id} value={a.user_id}>{a.name}</option>
                   ))}
