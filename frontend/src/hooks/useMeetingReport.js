@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+import { invalidateCache } from "@/utils/apiCache";
 
 /**
  * All state, effects and server-communicating handlers for the Meeting Report
@@ -179,6 +180,10 @@ export function useMeetingReport() {
     }));
     try {
       await axios.put(`${API}/review/${meetingId}/evidence/${evidenceId}`, updates, getAuthConfig());
+      // Team Themes/Insights caches the evidence matrix for 60s — bust it so
+      // an accept/reject/flag here shows up immediately rather than looking
+      // like it "didn't happen" for up to a minute.
+      invalidateCache("/admin/team-insights");
     } catch (err) {
       setMeeting(prev); // revert on failure
       console.error("Evidence update failed", err.message);
@@ -205,6 +210,7 @@ export function useMeetingReport() {
       }));
       if (data.updated_count > 0) {
         toast.success(`${data.updated_count} item${data.updated_count !== 1 ? "s" : ""} accepted`);
+        invalidateCache("/admin/team-insights");
       } else {
         toast.info("No pending items in that category to accept");
       }

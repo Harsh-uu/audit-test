@@ -4,6 +4,7 @@ import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { ComplianceTab } from "@/components/report/ComplianceTab";
+import { invalidateCache } from "@/utils/apiCache";
 import {
   ArrowLeft, FileText, User, Calendar, Upload, Loader2, AlertCircle,
   CheckCircle, Clock
@@ -94,6 +95,7 @@ export default function DocUploadReport() {
 
   const updateEvidence = async (evidenceId, updates) => {
     await axios.put(`${API}/doc-uploads/${uploadId}/evidence/${evidenceId}`, updates, getAuthConfig());
+    invalidateCache("/admin/team-insights");
     // Optimistically update local state so buttons reflect immediately
     setUpload(prev => {
       const next = { ...prev };
