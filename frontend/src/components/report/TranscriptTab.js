@@ -6,7 +6,8 @@ import { anonymiseTranscript } from "@/utils/anonymise";
 import { useAuth } from "@/context/AuthContext";
 import {
   resolveExcerptQuery, escapeRegex, formatTranscript,
-  parseSpeakerText, serializeTurns, getSpeakerRole, roleToStyle, getContrastColor,
+  parseSpeakerText, serializeTurns, getSpeakerRole, getContrastColor,
+  getDefaultSpeakerColor,
 } from "@/utils/transcriptHelpers";
 import { HighlightedText, MultiHighlightText } from "./transcript/HighlightedText";
 import { SpeakerManagerPanel } from "./transcript/SpeakerManagerPanel";
@@ -352,6 +353,17 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     setStagedColors(prev => ({ ...prev, [speaker]: color }));
     setDirty(true);
   }, [setDirty]);
+
+  // Effective colour per speaker — explicit saved/staged colour if set, else a
+  // distinct default from the palette based on first-appearance order. Used
+  // for both the panel swatches and the turn rows so they always match.
+  const speakerColorMap = useMemo(() => {
+    const map = {};
+    uniqueSpeakers.forEach((s, i) => {
+      map[s] = stagedColors[s] || getDefaultSpeakerColor(i);
+    });
+    return map;
+  }, [uniqueSpeakers, stagedColors]);
 
   const handleRestoreBackup = async () => {
     const backupBy = meeting.transcript?.speaker_text_backup_by;
@@ -748,7 +760,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
                 lastEditedAt={meeting.transcript?.speaker_text_edited_at}
                 backupBy={meeting.transcript?.speaker_text_backup_by}
                 backupAt={meeting.transcript?.speaker_text_backup_at}
-                stagedColors={stagedColors}
+                stagedColors={speakerColorMap}
                 onColorChange={handleColorChange}
               />
             ) : (
@@ -765,12 +777,11 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
               onMouseUp={handleSpeakerViewMouseUp}
             >
               {localTurns.map((turn, i) => {
-                const style = roleToStyle(speakerRoleMap[turn.speaker] || getSpeakerRole(turn.speaker, managerName));
-                const customColor = stagedColors[turn.speaker];
+                const customColor = speakerColorMap[turn.speaker];
                 const rowStyle = customColor ? { backgroundColor: `${customColor}30` } : {};
                 const pillStyle = customColor ? { backgroundColor: customColor, color: getContrastColor(customColor) } : {};
-                const pillClass = customColor ? "" : style.pill;
-                const rowClassName = customColor ? "" : style.row;
+                const pillClass = "";
+                const rowClassName = "";
                 return (
                   <SpeakerTurnRow
                     key={i}

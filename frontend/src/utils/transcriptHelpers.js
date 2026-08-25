@@ -98,18 +98,27 @@ export function roleToStyle(role) {
 }
 
 // ── Speaker colour palette — pastel / -300 range ─────────────────────────────
+// Hues spread evenly around the colour wheel (~35° apart) so no two swatches
+// read as "the same colour" — earlier version had two look-alike greens
+// (emerald-300 + green-300) and an orange/amber pair that read the same.
 export const SPEAKER_PALETTE = [
-  "#93C5FD",  // blue-300
-  "#C4B5FD",  // violet-300
-  "#6EE7B7",  // emerald-300
   "#FCA5A5",  // red-300
-  "#FCD34D",  // amber-300
-  "#67E8F9",  // cyan-300
-  "#F9A8D4",  // pink-300
   "#FDBA74",  // orange-300
-  "#A5B4FC",  // indigo-300
+  "#FDE047",  // yellow-300
+  "#BEF264",  // lime-300
   "#86EFAC",  // green-300
+  "#5EEAD4",  // teal-300
+  "#93C5FD",  // blue-300
+  "#A5B4FC",  // indigo-300
+  "#D8B4FE",  // purple-300
+  "#F9A8D4",  // pink-300
 ];
+
+/** Deterministic default colour for a speaker by their order of first appearance —
+ *  ensures every speaker gets a distinct colour out of the box, not grey. */
+export function getDefaultSpeakerColor(index) {
+  return SPEAKER_PALETTE[index % SPEAKER_PALETTE.length];
+}
 
 /** Return dark or white text based on background luminance */
 export function getContrastColor(hex) {
