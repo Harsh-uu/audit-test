@@ -3,9 +3,13 @@ import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import {
-  Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw,
+  Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw, Copy,
   ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText, ArrowUp,
 } from "lucide-react";
+
+// Regenerate-summary button is hidden per user request (Aug 2026) — handler/UI kept
+// in place below so it can be switched back on later, just flip this to true.
+const REGENERATE_ENABLED = false;
 
 // ── Severity config ──────────────────────────────────────────────────────────
 const SEV = {
@@ -498,6 +502,15 @@ export const EvidenceTab = React.memo(function EvidenceTab({
     setRegenerating(false);
   };
 
+  const handleCopySummary = async () => {
+    try {
+      await navigator.clipboard.writeText(analysis.edited_summary || analysis.summary || "");
+      toast.success("Summary copied to clipboard");
+    } catch (err) {
+      toast.error("Could not copy summary");
+    }
+  };
+
   const scrollToSection = (id) =>
     setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
 
@@ -541,23 +554,37 @@ export const EvidenceTab = React.memo(function EvidenceTab({
       <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm" id="section-summary">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-900 text-sm font-display">Meeting Summary</h3>
-          {canReview && !editingSummary && (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            {!editingSummary && (
               <button
-                onClick={handleRegenerate}
-                disabled={regenerating}
-                className="text-xs text-gray-500 flex items-center gap-1 hover:text-[#1E3A8A] disabled:opacity-50"
-                title="Regenerate summary in structured format"
-                data-testid="regenerate-summary-btn"
+                onClick={handleCopySummary}
+                className="text-xs text-gray-500 flex items-center gap-1 hover:text-[#1E3A8A]"
+                title="Copy summary to clipboard"
+                data-testid="copy-summary-btn"
               >
-                <RefreshCw className={`w-3 h-3 ${regenerating ? "animate-spin" : ""}`} />
-                {regenerating ? "Regenerating…" : "Regenerate"}
+                <Copy className="w-3 h-3" /> Copy
               </button>
-              <button onClick={() => setEditingSummary(true)} className="text-xs text-[#1E3A8A] flex items-center gap-1 hover:underline" data-testid="edit-summary-btn">
-                <Edit3 className="w-3 h-3" /> Edit
-              </button>
-            </div>
-          )}
+            )}
+            {canReview && !editingSummary && (
+              <>
+                {REGENERATE_ENABLED && (
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                    className="text-xs text-gray-500 flex items-center gap-1 hover:text-[#1E3A8A] disabled:opacity-50"
+                    title="Regenerate summary in structured format"
+                    data-testid="regenerate-summary-btn"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${regenerating ? "animate-spin" : ""}`} />
+                    {regenerating ? "Regenerating…" : "Regenerate"}
+                  </button>
+                )}
+                <button onClick={() => setEditingSummary(true)} className="text-xs text-[#1E3A8A] flex items-center gap-1 hover:underline" data-testid="edit-summary-btn">
+                  <Edit3 className="w-3 h-3" /> Edit
+                </button>
+              </>
+            )}
+          </div>
         </div>
         {regenError && <p className="text-xs text-red-500 mb-2">{regenError}</p>}
         {editingSummary ? (
