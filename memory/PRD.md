@@ -68,6 +68,18 @@ AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
   has a `BASE_URL` scheme bug causing `MissingSchema` errors. Neither touched — flagging
   for whoever next needs that suite green.
 
+## Recently Completed (Aug 2026, cont. 3)
+- **Optimistic bulk-accept on Evidence page**: `bulkAcceptEvidence` in
+  `useMeetingReport.js` now flips matching pending items to accepted + shows a success
+  toast instantly on click, fires the API call in the background, reconciles with the
+  server response on success, and reverts + shows an error toast on failure. No-pending
+  case short-circuits with an info toast and no network call. Renamed `bulkAccepting`
+  (bool) → `bulkAcceptingTier` (string|null) so the spinner/disabled state on
+  "Accept all likely"/"Accept all possible" only affects the tier actually submitting,
+  not both buttons. Tested via testing_agent — 100% (7/7 scenarios: happy path, no-pending
+  short-circuit, forced-500 revert, server-truth reconciliation after reload, individual
+  accept/reject regression, Team Themes cache-bust). No open issues.
+
 ## Known minor/optional items (not blocking)
 - AchievementsTimeline's own search input / staff filter / 4 stat cards have no data-testid (unlike
   the register tabs) — cosmetic testability gap only.

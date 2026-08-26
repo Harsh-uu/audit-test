@@ -306,7 +306,7 @@ const CONFIDENCE_ALIASES = {
   possible_evidence: ["possible_evidence", "needs_review", "not_enough_evidence"],
 };
 
-export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAccepting = false }) {
+export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAcceptingTier = null }) {
   const { user } = useAuth();
   const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction);
   const allMappings = [
@@ -348,12 +348,12 @@ export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canRe
               ) : (
                 <button
                   onClick={() => onBulkAccept?.("likely_evidence")}
-                  disabled={bulkAccepting}
+                  disabled={bulkAcceptingTier === "likely_evidence"}
                   data-testid="accept-all-likely-btn"
                   title="Accept every pending item marked Likely Evidence"
                   className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60"
                 >
-                  {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                  {bulkAcceptingTier === "likely_evidence" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
                   Accept all likely
                 </button>
               )}
@@ -369,12 +369,12 @@ export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canRe
               ) : (
                 <button
                   onClick={() => onBulkAccept?.("possible_evidence")}
-                  disabled={bulkAccepting}
+                  disabled={bulkAcceptingTier === "possible_evidence"}
                   data-testid="accept-all-possible-btn"
                   title="Accept every pending item marked Possible Evidence"
                   className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-60"
                 >
-                  {bulkAccepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                  {bulkAcceptingTier === "possible_evidence" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
                   Accept all possible
                 </button>
               )}

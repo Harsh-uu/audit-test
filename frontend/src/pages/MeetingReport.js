@@ -43,7 +43,7 @@ export default function MeetingReport() {
     piiGateDone, setPiiGateDone,
     showMoreMenu, setShowMoreMenu, moreMenuRef,
     rescanMenuRef, rescanning, showRescanDialog, setShowRescanDialog, rescanPrompt, setRescanPrompt,
-    bulkAccepting,
+    bulkAcceptingTier,
     warningDismissed, setWarningDismissed,
     isProcessing, isRescanning, isInReview, isSignedOff, isLocked,
     canReview, canSignOff, canEditSpeakers, canAddComment, canAnonymise,
@@ -360,7 +360,7 @@ export default function MeetingReport() {
                       updateEvidence={updateEvidence}
                       isLocked={isLocked}
                       onBulkAccept={bulkAcceptEvidence}
-                      bulkAccepting={bulkAccepting}
+                      bulkAcceptingTier={bulkAcceptingTier}
                       onShowInTranscript={onShowInTranscript}
                       className="bg-[#F8F9FA]"
                       noMaxHeight

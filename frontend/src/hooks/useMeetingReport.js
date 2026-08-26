@@ -46,7 +46,7 @@ export function useMeetingReport() {
   const [rescanning, setRescanning] = useState(false);
   const [showRescanDialog, setShowRescanDialog] = useState(false);
   const [rescanPrompt, setRescanPrompt] = useState("");
-  const [bulkAccepting, setBulkAccepting] = useState(false);
+  const [bulkAcceptingTier, setBulkAcceptingTier] = useState(null);
   const [warningDismissed, setWarningDismissed] = useState(
     () => !!localStorage.getItem(`tw_dismissed_${meetingId}`)
   );
@@ -191,14 +191,54 @@ export function useMeetingReport() {
     }
   }, [meetingId, meeting]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const BULK_CONFIDENCE_ALIASES = {
+    likely_evidence: ["likely_evidence"],
+    possible_evidence: ["possible_evidence", "needs_review", "not_enough_evidence"],
+  };
+
   const bulkAcceptEvidence = async (confidence) => {
-    setBulkAccepting(true);
+    const prev = meeting;
+    const aliases = BULK_CONFIDENCE_ALIASES[confidence] || [confidence];
+    const isPending = (arr) => (arr || []).filter(
+      e => aliases.includes(e.confidence) && (e.status || "pending") === "pending"
+    ).length;
+    const pendingCount =
+      isPending(meeting.analysis?.cqc_mappings) +
+      isPending(meeting.analysis?.care_cert_mappings) +
+      isPending(meeting.analysis?.custom_mappings);
+
+    if (pendingCount === 0) {
+      toast.info("No pending items in that category to accept");
+      return;
+    }
+
+    // Optimistic: flip every matching pending item to accepted immediately,
+    // reconcile with the server's authoritative response in the background.
+    const patchMappings = arr => (arr || []).map(e =>
+      aliases.includes(e.confidence) && (e.status || "pending") === "pending"
+        ? { ...e, status: "accepted" }
+        : e
+    );
+    setMeeting(m => ({
+      ...m,
+      analysis: {
+        ...m.analysis,
+        cqc_mappings: patchMappings(m.analysis?.cqc_mappings),
+        care_cert_mappings: patchMappings(m.analysis?.care_cert_mappings),
+        custom_mappings: patchMappings(m.analysis?.custom_mappings),
+      },
+    }));
+    toast.success(`${pendingCount} item${pendingCount !== 1 ? "s" : ""} accepted`);
+    invalidateCache("/admin/team-insights");
+
+    setBulkAcceptingTier(confidence);
     try {
       const { data } = await axios.post(
         `${API}/review/${meetingId}/evidence/bulk-action`,
         { confidence, status: "accepted" },
         getAuthConfig()
       );
+      // Reconcile with the server's version (e.g. accepted_by/accepted_at fields)
       setMeeting(m => ({
         ...m,
         analysis: {
@@ -208,16 +248,11 @@ export function useMeetingReport() {
           custom_mappings: data.custom_mappings ?? m.analysis?.custom_mappings,
         },
       }));
-      if (data.updated_count > 0) {
-        toast.success(`${data.updated_count} item${data.updated_count !== 1 ? "s" : ""} accepted`);
-        invalidateCache("/admin/team-insights");
-      } else {
-        toast.info("No pending items in that category to accept");
-      }
     } catch (err) {
+      setMeeting(prev); // revert on failure
       toast.error(err?.response?.data?.detail || "Bulk accept failed. Please try again.");
     } finally {
-      setBulkAccepting(false);
+      setBulkAcceptingTier(null);
     }
   };
 
@@ -515,7 +550,7 @@ export function useMeetingReport() {
     piiGateDone, setPiiGateDone,
     showMoreMenu, setShowMoreMenu, moreMenuRef,
     rescanMenuRef, rescanning, showRescanDialog, setShowRescanDialog, rescanPrompt, setRescanPrompt,
-    bulkAccepting,
+    bulkAcceptingTier,
     warningDismissed, setWarningDismissed,
     isProcessing, isRescanning, isInReview, isReviewed, isSignedOff, isLocked,
     canReview, canSignOff, canEditSpeakers, canAddComment, canAnonymise,

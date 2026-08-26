@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only verification of the optimistic-update rewrite of bulkAcceptEvidence (Accept all likely / Accept all possible) on the Compliance tab. Tested via Playwright with injected admin cookies on meetings c20802af-17e3-4210-b497-13d09c9e67ec (3 pending possible items seeded) and 2f1cc088-0687-48b9-9f40-1dabb5285640 (5 pending likely items seeded). Covered: instant optimistic flip with an artificially delayed (2.5s) network response, success toast count, no-pending info-toast path (0 API calls), forced-500 revert path via page.route fulfil, server-truth reconciliation after reload, individual Accept/Reject/Flag regression, and Team Themes cache invalidation. ALL scenarios passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Compliance tab bulk-accept buttons", "issues": ["`bulkAccepting` is a single shared flag, so while one tier's background request is in flight the OTHER tier's button also shows a spinner and is disabled (observed: clicking 'Accept all possible' put a spinner on 'Accept all likely' for ~2.5s). Cosmetically undercuts the 'no spinner' goal and briefly blocks the second bulk action; consider tracking the in-flight tier (e.g. bulkAcceptingTier state).", "Inherent to the optimistic pattern: on failure the user sees a green 'N items accepted' toast immediately followed by a red error toast. Acceptable, but a slightly softer optimistic toast wording could reduce confusion."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/_iter96_find_pending.py", "/app/backend/tests/_iter96_cleanup.py"],
+  "action_items": ["Optional polish only: scope the bulkAccepting spinner/disabled state to the tier actually being submitted so the other tier's button is unaffected."],
+  "critical_code_review_comments": [
+    "bulkAcceptEvidence captures `const prev = meeting` from the closure and reverts with setMeeting(prev) — this discards any other state changes made between click and failure (e.g. an individual accept, a comment, or a poll refetch during the ~request window). A functional revert (recomputing the previous statuses of only the affected items) would be safer, though not reproducible in practice with the current UI timings.",
+    "Server response reconciliation uses `data.cqc_mappings ?? m.analysis?.cqc_mappings`; if the backend ever returns only changed items this would silently drop data — currently it returns full arrays, so fine."
+  ],
+  "updated_files": ["/app/backend/tests/_iter96_find_pending.py", "/app/backend/tests/_iter96_cleanup.py"],
+  "success_rate": {"backend": "not tested (frontend-only request)", "frontend": "100% (7/7 scenarios)"},
+  "seed_data_creation": "Set 3 possible-evidence items (cqc_1-3) on meeting c20802af back to 'pending' and 5 likely-evidence items (cqc_2, cqc_13, cqc_16, cqc_17, cqc_20) on meeting 2f1cc088 back to 'pending' to create testable pending tiers. All were re-accepted by the test itself; cqc_13/cqc_16 (left rejected/flagged by the individual-button regression test) were restored to 'accepted' via cleanup script. Both meetings are now back to fully accepted evidence.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com / Admin123! (cookies obtained via /app/backend/tests/get_tokens.py)",
+  "context_for_next_testing_agent": "Deep-linking to /meetings/{id}/report works fine with injected supervision_access/supervision_refresh cookies (domain evidence-link-4.preview.emergentagent.com) — no redirect to /dashboard. The report opens on the Overview tab; you must click the 'Compliance' role=button tab to render ComplianceTab. Bulk-accept tier badge/button share data-testid accept-all-likely-btn / accept-all-possible-btn; check tagName (BUTTON = actionable, SPAN = 'Accepted (N)' badge). Only 2 meetings in the Test Company org have evidence mappings (c20802af = 17 items, 2f1cc088 = 128 items) and both are currently fully accepted — use /app/backend/tests/_iter96_find_pending.py [reset <meetingId> <confidence> <n>] to seed pending items again.",
+  "rca_of_the_issue": "N/A — no defects found. Measured evidence: optimistic toast + badge flip observed at ~280-346ms while the POST /evidence/bulk-action response was artificially delayed 1.5-2.5s; forced 500 correctly reverted all 5 items to pending with their Accept/Reject/Flag buttons restored and the tier button back to 'Accept all likely', and a page reload confirmed the UI matched server truth exactly (same 5 pending ids). Empty-tier click produced the 'No pending items in that category to accept' info toast with 0 network calls. Navigating to Team Themes after a successful bulk accept issued fresh /admin/team-insights requests (cache busted)."
+}
