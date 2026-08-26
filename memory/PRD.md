@@ -80,6 +80,27 @@ AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
   short-circuit, forced-500 revert, server-truth reconciliation after reload, individual
   accept/reject regression, Team Themes cache-bust). No open issues.
 
+## Recently Completed (Aug 2026, cont. 4)
+- **Fixed AI summary "the home manager" assumption bug**: Root cause was two-fold in
+  `utils/ai.py`: (1) the primary summariser (`generate_meeting_summary` /
+  `SUMMARY_ONLY_PROMPT`, which OVERWRITES `analyze_meeting`'s summary field on every
+  real meeting) was never given the actual attendee names — only the raw transcript —
+  so it fell back to inferring generic role phrasing when the transcript's speaker
+  labels/dialogue didn't spell out names clearly; (2) its own instruction text
+  literally modelled the bad example: 'Name both participants and their roles (e.g.
+  "the home manager", "a care worker")'. Fixed by: passing `manager_name` +
+  `attendee_names` (from `meeting.attendees`/`sign_off_manager_name`/`created_by_name`)
+  into `generate_meeting_summary()` and `analyze_meeting()` as an explicit ATTENDEES
+  context block, added a new NAMING RULE to both prompts mandating real names over
+  role placeholders (manager's title varies — team/registered/area/deputy manager —
+  so "home manager" is often just wrong), and updated all 3 call sites (
+  `transcription_pipeline.py`'s main pipeline, `review.py`'s `/regenerate-summary` and
+  `/rescan-evidence` endpoints). Verified end-to-end via a real regenerate-summary call
+  on a demo meeting: output changed from "Priya, the home manager, and Connor, a care
+  worker, held a one-to-one supervision meeting" to consistently naming "Demo Manager"
+  and "Demo User" throughout, with role only mentioned in context, never as a name
+  substitute.
+
 ## Known minor/optional items (not blocking)
 - AchievementsTimeline's own search input / staff filter / 4 stat cards have no data-testid (unlike
   the register tabs) — cosmetic testability gap only.

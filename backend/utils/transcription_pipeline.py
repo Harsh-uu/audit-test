@@ -293,9 +293,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             effective_jurisdiction = f"northern_ireland_{org_service_type or 'domiciliary'}"
 
         results = await asyncio.gather(
-            analyze_meeting(timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards, supervision_template, jurisdiction=effective_jurisdiction),
+            analyze_meeting(
+                timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards,
+                supervision_template, jurisdiction=effective_jurisdiction,
+                manager_name=manager_name, attendee_names=supervisee_names, meeting_type=meeting_type,
+            ),
             diarize_coro,
-            generate_meeting_summary(timestamped_plain),   # runs concurrently — zero added latency
+            generate_meeting_summary(timestamped_plain, manager_name=manager_name, attendee_names=supervisee_names),   # runs concurrently — zero added latency
             return_exceptions=True,
         )
         analysis_result = results[0]

@@ -1264,9 +1264,14 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             supervision_template = _ensure_dict(tmpl_row["data"])
 
         paused_periods = meeting.get("paused_periods") or []
+        rescan_attendees = _ensure_list(meeting.get("attendees"))
+        rescan_manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or ""
+        rescan_supervisee_names = [a.get("name") for a in rescan_attendees if a.get("name")]
+        rescan_meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
         analysis_result = await _analyze_meeting(
             transcript_text, cqc_standards, care_cert_standards, paused_periods,
             custom_standards, supervision_template, custom_prompt, jurisdiction=org_jurisdiction,
+            manager_name=rescan_manager_name, attendee_names=rescan_supervisee_names, meeting_type=rescan_meeting_type,
         )
 
         cqc_kq_map = {s.get("reference"): s.get("key_questions") or [] for s in cqc_standards}
@@ -1351,7 +1356,10 @@ async def regenerate_summary(meeting_id: str, current_user=Depends(get_current_u
         raise HTTPException(status_code=403, detail="Only managers/admins can regenerate summaries")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT analysis_id, transcript_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT analysis_id, transcript_id, attendees, sign_off_manager_name, created_by_name FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if not m_row["analysis_id"]:
@@ -1367,8 +1375,12 @@ async def regenerate_summary(meeting_id: str, current_user=Depends(get_current_u
     if not text:
         raise HTTPException(status_code=400, detail="No transcript text to summarise")
 
+    regen_attendees = _ensure_list(m_row["attendees"])
+    regen_manager_name = m_row["sign_off_manager_name"] or m_row["created_by_name"] or ""
+    regen_supervisee_names = [a.get("name") for a in regen_attendees if a.get("name")]
+
     from utils.ai import generate_meeting_summary
-    new_summary = await generate_meeting_summary(text)
+    new_summary = await generate_meeting_summary(text, manager_name=regen_manager_name, attendee_names=regen_supervisee_names)
     async with database.with_org(org_id) as conn:
         await conn.execute("UPDATE analyses SET summary=$1 WHERE id=$2", new_summary, m_row["analysis_id"])
         await _log_edit(conn, meeting_id, org_id, "summary_regenerated",

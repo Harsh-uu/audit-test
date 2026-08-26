@@ -425,7 +425,7 @@ Care Certificate standards describe competencies workers should DEMONSTRATE in p
 
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
 {
-  "summary": "Two opening sentences that set context and introduce the session (who, when, what type of meeting).\\n\\n- Key topic or discussion point one\\n- Key topic or discussion point two\\n- Key topic or discussion point three\\n- Key topic or discussion point four\\n- Key topic or discussion point five\\n\\nTwo closing sentences that frame the essential outcomes, any overall themes or next steps from the session.",
+  "summary": "Two opening sentences that introduce the session using the ATTENDEES' ACTUAL NAMES given below (never a generic role placeholder), what type of meeting it was, and when.\\n\\n- Key topic or discussion point one\\n- Key topic or discussion point two\\n- Key topic or discussion point three\\n- Key topic or discussion point four\\n- Key topic or discussion point five\\n\\nTwo closing sentences that frame the essential outcomes, any overall themes or next steps from the session.",
   "achievements": [
     {"id": "ach_1", "description": "Brief description of a specific thing done well, demonstrated, or grown in (max 25 words)"}
   ],
@@ -533,6 +533,7 @@ Rules:
 - CRITICAL — excerpt selection: always choose the MOST EVIDENTIAL passage for the mapped standard — the quote that most clearly demonstrates the behaviour, narration, or competency. Do NOT pick the first incidental mention or a greeting. A short opener like "[00:03] how are you feeling?" cannot establish workforce wellbeing — pick the passage where the substantive discussion actually occurs. If evidence is spread across the conversation, pick the single passage where the content is richest and most specific.
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
 - Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections. IMPORTANT — the summary bullet points must capture ALL significant topics discussed, including: any personal welfare disclosures made by the worker (especially if the worker confirms — even tentatively — that personal circumstances are affecting their work or their conduct); any linked workplace incidents the worker attributes to personal stress; any interpersonal tensions, family or relationship difficulties raised; any concerns about team dynamics. Do NOT omit a topic from the summary simply because it was sensitive or personal — the summary is a confidential professional record and must be complete.
+- NAMING RULE — use the actual attendee names given under ATTENDEES at the top of the transcript context everywhere in the summary, achievements, actions, learning_needs and risks text — never a generic role placeholder. Do NOT write "the home manager", "the manager", "a care worker", or similar in place of a name — the manager's actual job title varies (team manager, registered manager, area manager, deputy manager, etc.) and defaulting to "home manager" is frequently just wrong. Use each person's real name as given (e.g. "David and Sarah discussed..."), not "Manager"/"Attendee 1". A role may be mentioned alongside a name once for context (e.g. "David, the team manager, and Sarah discussed...") but never as a substitute for the name. Only fall back to a role-only description if no name was provided for that person at all.
 - OUTPUT ORDER: Risks must be ordered by severity (High first, then Medium, then Low), not by the order they appeared in the transcript. Within the same severity tier, order by: (1) potential harm to the service user; (2) potential harm to the worker; (3) organisational/process risk. The synthesis entry, if generated, is placed at the position matching its own severity — it is not automatically placed first or last.
 - RECENCY RULE: The position of a disclosure within the transcript (early, middle, or end) has no bearing on its severity. A concern raised in the final minute of a session, or after “is there anything else?”, must be evaluated identically to one raised at the start. Do not under-weight late disclosures, and do not assume a session is “routine” until it has fully concluded.
 - For RISKS: when a worker describes noticing a concern but failing to escalate, record, or act on it appropriately, the risk text must capture the ACTION GAP — not just the underlying concern. Frame it as what was missed or what requires follow-up (e.g. "Possible welfare indicator noted but not escalated or recorded — requires investigation" rather than "potential self-harm risk"). The suggested_resolutions must include both the immediate escalation action AND a training implication for the worker who missed it.
@@ -919,7 +920,7 @@ LANGUAGE RULE — NEVER use the word "caseload" anywhere. It is not used in UK a
 SUMMARY_ONLY_PROMPT = _PROMPT_INJECTION_GUARD + """You are a meeting summarizer for UK adult social care supervision sessions.
 Generate a structured meeting summary in EXACTLY this format — three sections separated by a blank line (\\n\\n):
 
-Section 1 (2 sentences, plain paragraph, no bullets): Two sentences that introduce the session. Name both participants and their roles (e.g. "the home manager", "a care worker"). Describe what kind of meeting it was and what it set out to cover.
+Section 1 (2 sentences, plain paragraph, no bullets): Two sentences that introduce the session. Use the ATTENDEES' ACTUAL NAMES given below — never a generic role placeholder such as "the home manager" or "a care worker" (the manager's real title varies — team manager, registered manager, area manager, deputy manager — so guessing "home manager" is often simply wrong; the attendee's name is always correct). A role may be named once alongside a person's name for context (e.g. "David, the team manager, and Sarah discussed..."), but never as a substitute for the name. Describe what kind of meeting it was and what it set out to cover.
 
 Section 2 (4 to 6 bullet points): Each bullet point MUST be on its own line and MUST start with "- " (a hyphen followed by a single space — do NOT use "•", "*", or any other bullet character). Each bullet is a concise, specific sentence covering one key topic or discussion point. Be concrete:
 - Use participants' actual names.
@@ -1060,9 +1061,19 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
     return flags
 
 
-async def generate_meeting_summary(transcript_text: str) -> str:
+async def generate_meeting_summary(transcript_text: str, manager_name: str = "", attendee_names: list = None) -> str:
     """Re-generate just the meeting summary in the new structured format."""
-    user_prompt = f"Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
+    attendee_lines = []
+    if manager_name:
+        attendee_lines.append(f"- Manager: {manager_name}")
+    for n in (attendee_names or []):
+        if n and n != manager_name:
+            attendee_lines.append(f"- Attendee: {n}")
+    attendee_context = (
+        "ATTENDEES — use these actual names, never a generic role placeholder like \"the home manager\":\n"
+        + "\n".join(attendee_lines) + "\n\n"
+    ) if attendee_lines else ""
+    user_prompt = f"{attendee_context}Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
     result = await _ai_chat("o4-mini", SUMMARY_ONLY_PROMPT, user_prompt, reasoning_effort="medium")
     return _apply_uk_language(result)
 
@@ -1238,6 +1249,9 @@ async def analyze_meeting(
     supervision_template: dict = None,
     custom_prompt: str = None,
     jurisdiction: str = "england",
+    manager_name: str = "",
+    attendee_names: list = None,
+    meeting_type: str = "",
 ) -> dict:
     # Build jurisdiction-aware labels for prompts
     if jurisdiction == "wales":
@@ -1740,9 +1754,21 @@ Map when a worker reflects on their own learning, describes seeking to improve t
         ) if safe_focus else ""
 
     truncated_marker = "[TRANSCRIPT TRUNCATED — analyse the above portion only]" if len(transcript_text) > 80000 else ""
+    attendee_lines = []
+    if manager_name:
+        attendee_lines.append(f"- Manager: {manager_name}")
+    for n in (attendee_names or []):
+        if n and n != manager_name:
+            attendee_lines.append(f"- Attendee: {n}")
+    attendee_context = (
+        "ATTENDEES — use these actual names throughout the summary and never a generic role placeholder like \"the home manager\":\n"
+        + "\n".join(attendee_lines) + "\n\n"
+    ) if attendee_lines else ""
+    meeting_type_line = f"Meeting type: {meeting_type}\n\n" if meeting_type else ""
+
     user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
 
-<transcript>{pause_note}
+{attendee_context}{meeting_type_line}<transcript>{pause_note}
 {transcript_text[:80000]}{truncated_marker}
 </transcript>
 
