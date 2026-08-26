@@ -1,0 +1,71 @@
+{
+  "summary": "Frontend-only regression pass on Team Themes (/admin/team) after the PersonGroups unification refactor in /app/frontend/src/pages/TeamInsights.js. Authenticated as admin@supervision.com via cookie injection (tests/get_tokens.py) and navigated via the 'Team Themes' sidebar link. Verified all 4 register tabs: Learning Needs, Attention (risks), Actions now render the person-grouped collapsible timeline (avatar, name, 'N outstanding'/'All clear' pill, timeline dots, severity badges, due-date/Assigned meta, Show N earlier / Show fewer, inline expand + 'View in meeting report' navigation to /meetings/{id}/report). Toggle dots fire the correct PATCH endpoints (all 200) and the change PERSISTS after a full page reload (learning_needs stats went 4/4/0 -> 4/3/1 and stayed after reload). Top controls (4 stat cards, search, staff filter, status filter, Export CSV -> actions-register.csv download) all present and functional. Achievements regression check PASSED: own search bar + 4 stats (Total recorded / This month / Staff celebrated / New (last 7 days)), '6 achievements' count pill, ZERO toggle dots (static), expand shows View-in-report link. All test data was mutated and then restored to its original state (verified via GET /api/admin/team-insights/registers). Two real defects found: cross-person inline-expansion sync, and colliding data-testids.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "PersonGroups (TeamInsights.js ~line 658)",
+        "issue": "Cross-person inline expansion sync bug. Items shared by multiple staff (e.g. 'Supervision with Demo Manager & Sarah Thompson') are rendered inside BOTH person cards. Clicking the item under Demo Manager also opens the inline detail panel for the same item under Sarah Thompson (verified: expanded 'View in meeting report' links A=1 B=1 after a single click). Root cause: expandKey = `${item.meeting_id}-${item.id}-${idx}` is not scoped by personName, so both groups share one expansion key. Fix: include personName in expandKey. Affects learning_needs, risks, actions AND achievements (same shared component).",
+        "selector": "[data-testid^=\"learning_needs-item-\"]",
+        "priority": "MEDIUM-HIGH"
+      },
+      {
+        "component": "PersonGroups data-testid scheme",
+        "issue": "data-testid collisions break automation and risk wrong-record actions. Register item ids are per-meeting sequential (GET /registers returns ln_1 for TWO different meetings, risk_1/risk_2 twice, action_1..action_5 twice) and the same item is also duplicated across person groups. So [data-testid=\"learning_needs-toggle-ln_1\"] resolves to 2+ elements -> Playwright strict-mode violation, and a test/automation click can mutate a DIFFERENT meeting's item (reproduced: an intended 'undo' click marked meeting c20802af's ln_1 done instead of un-doing 2f1cc088's ln_1). Recommend `${type}-toggle-${meetingId}-${itemId}` and person-scoped ids for -item-/-view-meeting-.",
+        "selector": "[data-testid=\"learning_needs-toggle-ln_1\"], [data-testid=\"risks-toggle-risk_1\"]",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "PersonGroups - risks",
+        "issue": "After clicking the dot to resolve a risk, the 'Resolved by X' meta does not appear (verified 'Resolved by' absent post-toggle) because the optimistic update in handleRegisterToggle only sets is_resolved and never resolved_by; it only shows after a reload/refetch.",
+        "selector": "[data-testid^=\"risks-toggle-\"]",
+        "priority": "LOW"
+      },
+      {
+        "component": "PersonGroups - overdue logic",
+        "issue": "Overdue badge uses a lexical string compare (item.due_date < today ISO string). Seeded due_date values are free text ('today', 'end of the week'), so the Overdue badge can never fire for current data and would produce wrong results for any non-ISO date format. Actions 'Overdue' stat card therefore always reads 0. Pre-existing logic carried into the refactor - recommend normalising/parsing due dates.",
+        "selector": "[data-testid=\"register-stat-actions-3\"]",
+        "priority": "LOW"
+      },
+      {
+        "component": "PersonGroups - dead code",
+        "issue": "`faded = idx >= SHOW_LIMIT && !showAllFor.has(personName)` can never be true because `visible` is already sliced to SHOW_LIMIT before mapping; the opacity-50 fade never renders. Harmless but dead.",
+        "selector": "n/a",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Team Themes - Learning Needs / Attention / Actions",
+        "issues": [
+          "No visual/contrast problems found; stat strip, filter bar and collapsible cards align consistently with the Achievements layout.",
+          "Minor consistency note: the person-header preview quote is hidden when the card is expanded (by design) but the header pill for Achievements uses emerald while other types use the type accent - matches spec."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Scope the inline-expansion key by personName (expandKey should include personName) so expanding a shared item under one staff member no longer expands it under another.",
+    "Make data-testids unique: include meeting_id (and person for item/link ids) in `${type}-toggle-*`, `${type}-item-*`, `${type}-view-meeting-*` - current register item ids repeat across meetings.",
+    "Include resolved_by (current user name) in the optimistic risk-resolve update so 'Resolved by X' shows immediately.",
+    "Optional: normalise/parse due_date before the Overdue comparison (free-text values like 'today' make the badge and Overdue stat unusable)."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/src/pages/TeamInsights.js is 1472 lines - exceeds the 700-line guideline; PersonGroups/RegisterView/AchievementsTimeline/EvidenceMatrix should be split into separate modules.",
+    "PersonGroups auto-expand effect keys off `items.length` only, so it will not re-auto-expand when the filtered set changes but keeps the same length (minor UX inconsistency).",
+    "handleRegisterToggle does not call invalidateCache('/admin/team-insights') after a successful PATCH; the in-memory apiCache TTL can serve stale register data on a subsequent filter change within the same session (page reload was fine since the cache is memory-only)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only request)", "frontend": "85%"},
+  "seed_data_creation": "None created. Existing seeded register items were toggled during testing and fully restored afterwards (learning_needs all completed=false; risks: only risk_2/2f1cc088 resolved as originally seeded; actions all completed=false) - verified via GET /api/admin/team-insights/registers.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! - MFA bypass via `cd /app/backend && python3 tests/get_tokens.py admin@supervision.com 'Admin123!'` then inject supervision_access/supervision_refresh cookies. NOTE: direct page.goto('https://<host>/dashboard') with injected cookies DOES work; Team Themes must then be reached by clicking the sidebar link (it lives at /admin/team, not /team-insights).",
+  "context_for_next_testing_agent": "Team Themes URL is /admin/team. Tab testids: main-tab-{matrix|themes|achievements|learning_needs|risks|actions}. Register controls: register-stat-{type}-{0..3}, register-search-{type}, register-staff-filter-{type}, register-status-filter-{type}, register-export-{type}, register-list-{type}. PersonGroups: {type}-person-{Name-with-dashes}, {type}-toggle-{itemId}, {type}-item-{itemId}, {type}-view-meeting-{itemId}. WARNING: item ids repeat across meetings and across person groups -> always scope locators to the person card (e.g. page.locator('[data-testid^=\"risks-person-\"]').first.locator('xpath=..')) and use .first, otherwise you will mutate the wrong record. Seed data: 4 learning needs, 5 risks, 10 actions, 11 achievements across meetings 2f1cc088-... and c20802af-....",
+  "rca_of_the_issue": "Both defects stem from PersonGroups rendering the same item object into multiple person groups while keying UI state only by meeting_id+item.id+index: (1) expansion state is shared across person groups, and (2) data-testids are not unique because register item ids are only unique within a meeting, not globally. Toggle persistence itself is correct - PATCH /api/admin/team-insights/learning_needs|actions/{meetingId}/{itemId} and PATCH /api/review/{meetingId}/risks/{itemId} all returned 200 and survived a reload."
+}

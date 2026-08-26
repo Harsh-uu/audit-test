@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { cachedGet } from "@/utils/apiCache";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,7 +9,7 @@ import { UkDatePicker } from "@/components/ui/uk-date-picker";
 import {
   Grid3x3, TrendingUp, AlertTriangle, ClipboardList, Shield, Award,
   FileText, Users, RefreshCw, ChevronRight, Building2, Check, X, Download,
-  BookOpen, Square, CheckSquare, Search, ExternalLink,
+  BookOpen, Search, ExternalLink,
 } from "lucide-react";
 
 // ── Cell rendering ──────────────────────────────────────────────────────────
@@ -450,11 +450,6 @@ function isNew(item) {
 const SHOW_LIMIT = 3;
 
 function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onStaffFilterChange, staffList = [] }) {
-  const navigate = useNavigate();
-  const [expandedPersons, setExpandedPersons] = useState(() => new Set());
-  const [expandedItems, setExpandedItems] = useState(() => new Set());
-  const [showAllFor, setShowAllFor] = useState(() => new Set());
-
   // Filter
   const filtered = items.filter(item => {
     if (staffFilter !== "all" && !(item.staff_names || "").includes(staffFilter)) return false;
@@ -465,44 +460,8 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
     return true;
   });
 
-  // Group by individual staff name (one achievement may cover multiple people)
-  const groupMap = new Map();
-  filtered.forEach(item => {
-    const names = (item.staff_names || "Unknown").split(/,\s*/);
-    names.forEach(name => {
-      const key = name.trim() || "Unknown";
-      if (!groupMap.has(key)) groupMap.set(key, []);
-      // avoid duplicate if name appears twice
-      if (!groupMap.get(key).find(e => e.id === item.id && e.meeting_id === item.meeting_id)) {
-        groupMap.get(key).push(item);
-      }
-    });
-  });
-
-  // Sort groups: most recent first; within group newest first
-  const groups = [...groupMap.entries()].sort((a, b) => {
-    const aDate = (a[1][0]?.meeting_date || "");
-    const bDate = (b[1][0]?.meeting_date || "");
-    return bDate.localeCompare(aDate);
-  });
-
-  // Auto-expand first person on load
-  useEffect(() => {
-    if (groups.length > 0) setExpandedPersons(new Set([groups[0][0]]));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length]);
-
-  const togglePerson = name => setExpandedPersons(prev => {
-    const next = new Set(prev);
-    next.has(name) ? next.delete(name) : next.add(name);
-    return next;
-  });
-
-  const toggleItem = id => setExpandedItems(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const staffSet = new Set();
+  filtered.forEach(item => (item.staff_names || "Unknown").split(/,\s*/).forEach(n => staffSet.add(n.trim() || "Unknown")));
 
   const newCount = items.filter(isNew).length;
   const thisMonth = (() => {
@@ -550,7 +509,7 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
         {[
           { label: "Total recorded", value: items.length, green: true },
           { label: "This month", value: thisMonth },
-          { label: "Staff celebrated", value: groupMap.size },
+          { label: "Staff celebrated", value: staffSet.size },
           { label: "New (last 7 days)", value: newCount, green: newCount > 0 },
         ].map(({ label, value, green }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
@@ -560,12 +519,82 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
         ))}
       </div>
 
-      {/* Person groups */}
+      <PersonGroups items={filtered} type="achievements" />
+    </div>
+  );
+}
+
+// ── PersonGroups ─────────────────────────────────────────────────────────────
+// Shared person-focused, collapsible timeline layout used by Achievements,
+// Learning Needs, Area for Attention (risks) and Actions.
+const TYPE_CFG = {
+  achievements:   { icon: Award,         accent: "#059669", noun: "achievement" },
+  learning_needs: { icon: BookOpen,      accent: "#0D9488", noun: "learning need",  doneField: "completed" },
+  risks:          { icon: AlertTriangle, accent: "#DC2626", noun: "attention item", doneField: "is_resolved" },
+  actions:        { icon: ClipboardList, accent: "#D97706", noun: "action",         doneField: "completed" },
+};
+
+function isItemDone(item, cfg) {
+  return cfg.doneField ? !!item[cfg.doneField] : false;
+}
+
+function PersonGroups({ items, type, onToggle }) {
+  const navigate = useNavigate();
+  const cfg = TYPE_CFG[type];
+  const Icon = cfg.icon;
+  const today = new Date().toISOString().slice(0, 10);
+  const [expandedPersons, setExpandedPersons] = useState(() => new Set());
+  const [expandedItems, setExpandedItems] = useState(() => new Set());
+  const [showAllFor, setShowAllFor] = useState(() => new Set());
+
+  // Group by individual staff name (one item may cover multiple people)
+  const groupMap = new Map();
+  items.forEach(item => {
+    const names = (item.staff_names || "Unknown").split(/,\s*/);
+    names.forEach(name => {
+      const key = name.trim() || "Unknown";
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      if (!groupMap.get(key).find(e => e.id === item.id && e.meeting_id === item.meeting_id)) {
+        groupMap.get(key).push(item);
+      }
+    });
+  });
+
+  // Sort groups: most recent first
+  const groups = [...groupMap.entries()].sort((a, b) => {
+    const aDate = (a[1][0]?.meeting_date || "");
+    const bDate = (b[1][0]?.meeting_date || "");
+    return bDate.localeCompare(aDate);
+  });
+
+  // Auto-expand first person on load
+  useEffect(() => {
+    if (groups.length > 0) setExpandedPersons(new Set([groups[0][0]]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
+
+  const togglePerson = name => setExpandedPersons(prev => {
+    const next = new Set(prev);
+    next.has(name) ? next.delete(name) : next.add(name);
+    return next;
+  });
+
+  const toggleItem = id => setExpandedItems(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
       {groups.map(([personName, personItems]) => {
         const open = expandedPersons.has(personName);
         const hasNew = personItems.some(isNew);
         const visible = showAllFor.has(personName) ? personItems : personItems.slice(0, SHOW_LIMIT);
         const hiddenCount = personItems.length - SHOW_LIMIT;
+        const outstanding = cfg.doneField ? personItems.filter(i => !isItemDone(i, cfg)).length : null;
 
         return (
           <div key={personName} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -573,7 +602,7 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
             <button
               className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-gray-50 transition-colors"
               onClick={() => togglePerson(personName)}
-              data-testid={`ach-person-${personName.replace(/\s/g, "-")}`}
+              data-testid={`${type}-person-${personName.replace(/\s/g, "-")}`}
             >
               <div
                 className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
@@ -595,9 +624,24 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
                     New
                   </span>
                 )}
-                <span className="text-xs font-semibold text-[#059669] bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
-                  {personItems.length} {personItems.length === 1 ? "achievement" : "achievements"}
-                </span>
+                {cfg.doneField ? (
+                  outstanding > 0 ? (
+                    <span
+                      className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                      style={{ color: cfg.accent, background: `${cfg.accent}14`, border: `1px solid ${cfg.accent}33` }}
+                    >
+                      {outstanding} outstanding
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+                      All clear
+                    </span>
+                  )
+                ) : (
+                  <span className="text-xs font-semibold text-[#059669] bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+                    {personItems.length} {personItems.length === 1 ? cfg.noun : `${cfg.noun}s`}
+                  </span>
+                )}
                 <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-90" : ""}`} />
               </div>
             </button>
@@ -611,27 +655,59 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
 
                   {visible.map((item, idx) => {
                     const _new = isNew(item);
-                    const expandKey = `${item.meeting_id}-${item.id}-${idx}`;
+                    const personSlug = personName.replace(/\s/g, "-");
+                    const expandKey = `${personSlug}-${item.meeting_id}-${item.id}-${idx}`;
+                    const testidSuffix = `${item.meeting_id}-${item.id}-${personSlug}`;
                     const expanded = expandedItems.has(expandKey);
-                    const faded = idx >= SHOW_LIMIT && !showAllFor.has(personName);
+                    const done = isItemDone(item, cfg);
+                    const sev = type === "risks" ? (item.severity || "low").toLowerCase() : null;
+                    const sc = sev ? (SEV_CFG[sev] || SEV_CFG.low) : null;
+                    const isIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(item.due_date || "");
+                    const overdue = (type === "learning_needs" || type === "actions") && !done && isIsoDate && item.due_date < today;
+                    const dotColor = done ? "#059669" : sc ? sc.bar : (_new ? "#FBBF24" : cfg.accent);
 
                     return (
-                      <div key={expandKey} className={`relative transition-opacity ${faded ? "opacity-50" : "opacity-100"}`}>
-                        {/* Timeline dot */}
-                        <div className={`absolute left-[-28px] top-1 w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center flex-shrink-0 ${_new ? "bg-amber-400" : "bg-[#059669]"}`}>
-                          <Award className="w-2.5 h-2.5 text-white" />
-                        </div>
+                      <div key={expandKey} className="relative">
+                        {/* Timeline dot — clickable toggle for types that have a done state */}
+                        {cfg.doneField ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); onToggle(type, item.meeting_id, item.id, !done); }}
+                            className="absolute left-[-28px] top-1 w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center flex-shrink-0"
+                            style={{ background: dotColor }}
+                            title={done ? "Mark as outstanding" : "Mark as done"}
+                            data-testid={`${type}-toggle-${testidSuffix}`}
+                          >
+                            {done ? <Check className="w-2.5 h-2.5 text-white" /> : <Icon className="w-2.5 h-2.5 text-white" />}
+                          </button>
+                        ) : (
+                          <div
+                            className="absolute left-[-28px] top-1 w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center flex-shrink-0"
+                            style={{ background: dotColor }}
+                          >
+                            <Icon className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        )}
 
                         {/* Entry */}
                         <button
                           className="w-full text-left group"
                           onClick={() => toggleItem(expandKey)}
-                          data-testid={`ach-item-${item.id}`}
+                          data-testid={`${type}-item-${testidSuffix}`}
                         >
                           <div className="flex items-start gap-2">
-                            <p className={`text-sm font-medium leading-snug flex-1 text-gray-900 group-hover:text-[#059669] transition-colors ${expanded ? "text-[#059669]" : ""}`}>
+                            <p className={`text-sm font-medium leading-snug flex-1 transition-colors ${done ? "line-through text-gray-400" : "text-gray-900"}`}>
                               {item.text}
                             </p>
+                            {sev && (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${sc.badge}`}>
+                                {sev.charAt(0).toUpperCase() + sev.slice(1)}
+                              </span>
+                            )}
+                            {overdue && (
+                              <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5">
+                                Overdue
+                              </span>
+                            )}
                             {_new && (
                               <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5">
                                 New
@@ -643,6 +719,26 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
                             <span className="text-xs text-gray-400">{item.meeting_title}</span>
                             <span className="text-gray-200 text-xs">·</span>
                             <span className="text-xs font-medium text-gray-500">{item.meeting_date}</span>
+                            {type === "learning_needs" && item.assigned_to && (
+                              <>
+                                <span className="text-gray-200 text-xs">·</span>
+                                <span className="text-xs text-gray-400">Assigned: {item.assigned_to}</span>
+                              </>
+                            )}
+                            {(type === "learning_needs" || type === "actions") && item.due_date && (
+                              <>
+                                <span className="text-gray-200 text-xs">·</span>
+                                <span className={`text-xs ${overdue ? "text-red-500 font-medium" : "text-gray-400"}`}>
+                                  Due: {item.due_date}
+                                </span>
+                              </>
+                            )}
+                            {type === "risks" && done && item.resolved_by && (
+                              <>
+                                <span className="text-gray-200 text-xs">·</span>
+                                <span className="text-xs text-emerald-600">Resolved by {item.resolved_by}</span>
+                              </>
+                            )}
                           </div>
                         </button>
 
@@ -653,7 +749,7 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
                             <button
                               onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
                               className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1E3A8A] hover:text-[#1E3A8A]/80 hover:underline"
-                              data-testid={`ach-view-meeting-${item.id}`}
+                              data-testid={`${type}-view-meeting-${testidSuffix}`}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                               View in meeting report
@@ -672,11 +768,12 @@ function AchievementsTimeline({ items, search, staffFilter, onSearchChange, onSt
                         next.has(personName) ? next.delete(personName) : next.add(personName);
                         return next;
                       })}
-                      className="text-xs font-medium text-[#059669] hover:text-[#059669]/80 pl-0 flex items-center gap-1"
+                      className="text-xs font-medium hover:opacity-80 pl-0 flex items-center gap-1"
+                      style={{ color: cfg.accent }}
                     >
                       {showAllFor.has(personName)
                         ? <><ChevronRight className="w-3 h-3 rotate-90" /> Show fewer</>
-                        : <><ChevronRight className="w-3 h-3 -rotate-90" /> Show {hiddenCount} earlier {hiddenCount === 1 ? "achievement" : "achievements"}</>
+                        : <><ChevronRight className="w-3 h-3 -rotate-90" /> Show {hiddenCount} earlier {hiddenCount === 1 ? cfg.noun : `${cfg.noun}s`}</>
                       }
                     </button>
                   )}
@@ -706,7 +803,6 @@ function avatarColor(name) {
 
 // ── RegisterView ─────────────────────────────────────────────────────────────
 function RegisterView({ type, items = [], loading, onToggle }) {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [staffFilter, setStaffFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -812,190 +908,6 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     URL.revokeObjectURL(url);
   };
 
-  const renderItem = (item, idx) => {
-    if (type === "actions") {
-      const overdue  = !item.completed && item.due_date && item.due_date < today;
-      const barColor = item.completed ? "#D1FAE5" : overdue ? "#DC2626" : accent;
-      return (
-        <div
-          key={item.id || idx}
-          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer ${item.completed ? "opacity-65" : ""}`}
-          onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
-          data-testid={`register-action-${item.id}`}
-        >
-          <div style={{ width: 3, background: barColor, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
-          <button
-            onClick={e => { e.stopPropagation(); onToggle("actions", item.meeting_id, item.id, !item.completed); }}
-            className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${item.completed ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"}`}
-            title={item.completed ? "Mark as outstanding" : "Mark as complete"}
-            data-testid={`register-action-toggle-${item.id}`}
-          >
-            {item.completed && <Check className="w-3 h-3 text-white" />}
-          </button>
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium leading-snug ${item.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{item.text}</p>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: avatarColor(item.staff_names) }}>
-                {(item.staff_names || "?")[0].toUpperCase()}
-              </div>
-              <span className="text-xs font-semibold text-gray-600">{item.staff_names}</span>
-              <span className="text-xs text-gray-300">·</span>
-              <span className="text-xs text-gray-400">{item.meeting_title} · {item.meeting_date}</span>
-              {item.due_date && (
-                <>
-                  <span className="text-xs text-gray-300">·</span>
-                  <span className={`text-xs ${overdue ? "text-red-500 font-medium" : "text-gray-400"}`}>
-                    Due: {item.due_date}{overdue ? " (overdue)" : ""}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="flex-shrink-0 ml-2">
-            {item.completed
-              ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">Completed</span>
-              : overdue
-              ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">Overdue</span>
-              : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Outstanding</span>
-            }
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
-        </div>
-      );
-    }
-
-    if (type === "risks") {
-      const sev = (item.severity || "low").toLowerCase();
-      const sc  = SEV_CFG[sev] || SEV_CFG.low;
-      return (
-        <div
-          key={item.id || idx}
-          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer ${item.is_resolved ? "opacity-65" : ""}`}
-          onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
-          data-testid={`register-risk-${item.id}`}
-        >
-          <div style={{ width: 3, background: sc.bar, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
-          <button
-            onClick={e => { e.stopPropagation(); onToggle("risks", item.meeting_id, item.id, !item.is_resolved); }}
-            className="flex-shrink-0 mt-0.5"
-            title={item.is_resolved ? "Mark unresolved" : "Mark resolved"}
-            data-testid={`register-risk-toggle-${item.id}`}
-          >
-            {item.is_resolved
-              ? <CheckSquare className="w-4 h-4 text-emerald-600" />
-              : <Square className="w-4 h-4 text-gray-400 hover:text-emerald-500 transition-colors" />
-            }
-          </button>
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium leading-snug ${item.is_resolved ? "line-through text-gray-400" : "text-gray-800"}`}>{item.text}</p>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: avatarColor(item.staff_names) }}>
-                {(item.staff_names || "?")[0].toUpperCase()}
-              </div>
-              <span className="text-xs font-semibold text-gray-600">{item.staff_names}</span>
-              <span className="text-xs text-gray-300">·</span>
-              <span className="text-xs text-gray-400">{item.meeting_title} · {item.meeting_date}</span>
-              {item.is_resolved && item.resolved_by && (
-                <>
-                  <span className="text-xs text-gray-300">·</span>
-                  <span className="text-xs text-emerald-600">Resolved by {item.resolved_by}</span>
-                </>
-              )}
-            </div>
-          </div>
-          <span className={`flex-shrink-0 ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${sc.badge}`}>
-            {sev.charAt(0).toUpperCase() + sev.slice(1)}
-          </span>
-          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
-        </div>
-      );
-    }
-
-    // achievements
-    if (type === "achievements") {
-      return (
-        <div
-          key={item.id || idx}
-          className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer ${item.acknowledged ? "opacity-65" : ""}`}
-          onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
-          data-testid={`register-ach-${item.id}`}
-        >
-          <div style={{ width: 3, background: item.acknowledged ? "#D1FAE5" : accent, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
-          <button
-            onClick={e => { e.stopPropagation(); onToggle("achievements", item.meeting_id, item.id, !item.acknowledged); }}
-            className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${item.acknowledged ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"}`}
-            title={item.acknowledged ? "Mark unacknowledged" : "Acknowledge"}
-            data-testid={`register-ach-toggle-${item.id}`}
-          >
-            {item.acknowledged && <Check className="w-3 h-3 text-white" />}
-          </button>
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium leading-snug ${item.acknowledged ? "line-through text-gray-400" : "text-gray-800"}`}>{item.text}</p>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: avatarColor(item.staff_names) }}>
-                {(item.staff_names || "?")[0].toUpperCase()}
-              </div>
-              <span className="text-xs font-semibold text-gray-600">{item.staff_names}</span>
-              <span className="text-xs text-gray-300">·</span>
-              <span className="text-xs text-gray-400">{item.meeting_title} · {item.meeting_date}</span>
-            </div>
-          </div>
-          <div className="flex-shrink-0 ml-2">
-            {item.acknowledged
-              ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">Acknowledged</span>
-              : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">New</span>
-            }
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
-        </div>
-      );
-    }
-
-    // learning_needs
-    return (
-      <div
-        key={item.id || idx}
-        className={`bg-white border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:shadow-sm hover:border-gray-300 transition-all cursor-pointer ${item.completed ? "opacity-65" : ""}`}
-        onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
-        data-testid={`register-ln-${item.id}`}
-      >
-        <div style={{ width: 3, background: item.completed ? "#D1FAE5" : accent, borderRadius: 2, alignSelf: "stretch", flexShrink: 0 }} />
-        <button
-          onClick={e => { e.stopPropagation(); onToggle("learning_needs", item.meeting_id, item.id, !item.completed); }}
-          className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${item.completed ? "bg-teal-500 border-teal-500" : "border-gray-300 hover:border-teal-400"}`}
-          title={item.completed ? "Mark as outstanding" : "Mark as addressed"}
-          data-testid={`register-ln-toggle-${item.id}`}
-        >
-          {item.completed && <Check className="w-3 h-3 text-white" />}
-        </button>
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium leading-snug ${item.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{item.text}</p>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: avatarColor(item.staff_names) }}>
-              {(item.staff_names || "?")[0].toUpperCase()}
-            </div>
-            <span className="text-xs font-semibold text-gray-600">{item.staff_names}</span>
-            <span className="text-xs text-gray-300">·</span>
-            <span className="text-xs text-gray-400">{item.meeting_title} · {item.meeting_date}</span>
-            {item.assigned_to && (
-              <>
-                <span className="text-xs text-gray-300">·</span>
-                <span className="text-xs text-gray-400">Assigned: {item.assigned_to}</span>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="flex-shrink-0 ml-2">
-          {item.completed
-            ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">Addressed</span>
-            : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Outstanding</span>
-          }
-        </div>
-        <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
-      </div>
-    );
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
@@ -1090,14 +1002,14 @@ function RegisterView({ type, items = [], loading, onToggle }) {
         </button>
       </div>
 
-      {/* Item list */}
+      {/* Item list — person-focused collapsible timeline, same layout as Achievements */}
       {filtered.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <p className="text-sm">{(search || staffFilter !== "all" || statusFilter !== "all") ? "No items match your filters" : EMPTY_MSG[type]}</p>
         </div>
       ) : (
-        <div className="space-y-2" data-testid={`register-list-${type}`}>
-          {filtered.map((item, idx) => renderItem(item, idx))}
+        <div data-testid={`register-list-${type}`}>
+          <PersonGroups items={filtered} type={type} onToggle={onToggle} />
         </div>
       )}
     </div>
@@ -1181,7 +1093,7 @@ export default function TeamInsights() {
         [type]: prev[type].map(item => {
           if (item.id === itemId && item.meeting_id === meetingId) {
             return type === "risks"
-              ? { ...item, is_resolved: newValue }
+              ? { ...item, is_resolved: newValue, resolved_by: newValue ? (user?.name || item.resolved_by) : null }
               : type === "achievements"
               ? { ...item, acknowledged: newValue }
               : { ...item, completed: newValue };
@@ -1200,6 +1112,7 @@ export default function TeamInsights() {
       } else {
         await axios.patch(`${API}/admin/team-insights/learning_needs/${meetingId}/${itemId}`, { completed: newValue }, getAuthConfig());
       }
+      invalidateCache("/admin/team-insights");
     } catch (err) {
       console.error("Toggle error", err.message);
       // Revert on failure

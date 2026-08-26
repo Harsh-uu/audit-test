@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only re-test of the 4 regressions from iteration_94 on /admin/team (Team Themes) after the PersonGroups unification fixes. Authenticated as admin@supervision.com via get_tokens.py cookie injection, navigated Dashboard -> 'Team Themes' sidebar link. ALL 4 FIXES VERIFIED PASS: (1) cross-person independent inline expansion (expanded shared learning need ln_1/meeting 2f1cc088 under Demo Manager -> Sarah Thompson's copy stayed collapsed: view-meeting testid count A=1, B=0); (2) no data-testid collisions — after expanding all 3 person cards on each tab, all toggle/item/view-meeting testids resolve to exactly 1 element (learning_needs 14, risks 16, actions 18 unique ids, 0 duplicates, 0 strict-mode violations) despite ids repeating across meetings and being shared across persons; (3) resolving risk_1 (meeting c20802af) immediately rendered 'Resolved by Test Admin' with no reload; (4) free-text due dates ('today', 'end of the week') render as 'Due: today' with NO Overdue badge and no crash. Sanity re-checks all pass: learning-need toggle persisted across full page reload (Learning Needs badge 4->3, item shown struck-through after reload) and reverted cleanly; search / staff filter / status filter / per-tab Export CSV work on Learning Needs, Attention and Actions; top-bar Export CSV works; Achievements tab unchanged (own search bar, 4 stat cards, no clickable toggle dots). No console errors, no .error elements on page.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Team Themes registers (Learning Needs/Attention/Actions)", "issues": ["After marking an item done/resolved, it is re-sorted below the 3-item visible cut-off and hides behind 'Show N earlier ...' — the user loses sight of the item they just toggled (UX nit, not a defect; also makes automated verification of the toggled row require expanding 'Show more')."]}
+    ],
+    "testability_gaps": [
+      {"component": "AchievementsTimeline", "issue": "Achievements tab's own search input, staff-filter select and the 4 stat cards have no data-testid (unlike register-search-*/register-staff-filter-*/register-stat-* on other tabs). Had to fall back to placeholder/text selectors."}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: add data-testid to AchievementsTimeline search input, staff-filter select and the 4 stat cards for consistency with the register tabs.",
+    "Note for future test passes: the seeded resolved risk is risk_2 of meeting 2f1cc088 (resolved_by 'Demo Manager'), NOT risk_2 of c20802af as stated in the test request."
+  ],
+  "critical_code_review_comments": [
+    "expandKey/testidSuffix now include personSlug — correct. Note expandKey still includes the array index `idx`, so if filters/sorting change item order while an item is expanded, the expansion can visually jump to a different row; consider dropping idx since (personSlug, meeting_id, item.id) is already unique.",
+    "personName.replace(/\\s/g,'-') only replaces the first whitespace occurrence pattern-wise it is global (ok), but names containing '-' plus ids containing '-' make testids ambiguous to parse; not a functional issue.",
+    "TeamInsights.js is ~1500 lines — recommend splitting PersonGroups/RegisterTab/AchievementsTimeline into separate modules (file-size guideline >700 lines)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a", "frontend": "100% (4/4 regression fixes + 6/6 sanity checks passed)" },
+  "seed_data_creation": "No new data. Mutations made during testing (risk_1@c20802af resolved, ln_2@2f1cc088 completed) were reverted via PATCH. Final verified state: learning_needs all completed=false, risks only risk_2@2f1cc088 is_resolved=true (resolved_by 'Demo Manager'), actions all completed=false.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! (MFA bypass via /app/backend/tests/get_tokens.py + cookie injection)",
+  "context_for_next_testing_agent": "Direct goto to /admin/team redirects to /dashboard — inject supervision_access/supervision_refresh cookies, goto /dashboard, then click 'Team Themes'. Person cards default-open state varies (Demo Manager open by default), so before asserting on item testids check whether items for a person slug exist and only click the person header if count==0 (blind clicking collapses already-open cards). Completed/resolved items may be hidden behind 'Show N earlier ...' after toggling. Seed register state verified/restored at end of this pass.",
+  "rca_of_the_issue": "All 4 previously reported issues stem from expandKey/data-testid not being person-scoped and from a string comparison against free-text due_date; the applied fixes (personSlug in expandKey + testid suffix, ISO-date regex guard on due_date, resolved_by set to user?.name in the optimistic update) fully resolve them as verified above."
+}
