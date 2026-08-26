@@ -455,7 +455,8 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Staffing",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "likely_evidence|possible_evidence"
+      "confidence": "likely_evidence|possible_evidence",
+      "witnessed_outcome": false
     },
     {
       "id": "cqc_2",
@@ -463,7 +464,8 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "regulation_name": "Kindness, compassion and dignity",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "likely_evidence|possible_evidence"
+      "confidence": "likely_evidence|possible_evidence",
+      "witnessed_outcome": false
     }
   ],
   "care_cert_mappings": [
@@ -475,7 +477,8 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "outcome_name": "Describe the processes for identifying own learning needs",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "likely_evidence|possible_evidence"
+      "confidence": "likely_evidence|possible_evidence",
+      "witnessed_outcome": false
     }
   ],
   "custom_mappings": [
@@ -487,7 +490,8 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
       "criterion_name": "Compassion",
       "evidence_summary": "Brief description of evidence",
       "transcript_excerpt": "Exact quote from transcript",
-      "confidence": "likely_evidence|possible_evidence"
+      "confidence": "likely_evidence|possible_evidence",
+      "witnessed_outcome": false
     }
   ]
 }
@@ -514,6 +518,11 @@ Rules:
   When in doubt: possible_evidence. Err heavily toward possible_evidence. It is far better to surface something for the manager to review than to silently discard it.
   IMPORTANT: Agreeing with the manager, describing awareness of a policy, or saying what they would normally do does NOT pass condition (a). These must always be "possible_evidence".
   IMPORTANT: If the worker uses minimising or dismissive language when describing the situation or their response (e.g. "it was probably nothing", "I didn't think I needed to", "I suppose I should have"), the evidence CANNOT be "likely_evidence" — use "possible_evidence" regardless of other content.
+- WITNESSED OUTCOME EVIDENCE — within any piece of practice described in the transcript, distinguish three evidence types: (1) Action/process — what the worker did; (2) Reasoning/judgement — why they did it, their internal decision-making; (3) Outcome/result — what happened as a consequence. Self-report is valid, primary evidence for all three types on its own — this rule does not change that. However, when the OUTCOME specifically is independently reported by someone OTHER than the supervisee (e.g. the manager, a colleague, a family member, the person being cared for) AND includes a specific, measurable, or time-bound detail ("within five minutes", "completely calm", "went from disrupted to settled"), this constitutes WITNESSED OUTCOME EVIDENCE. When this occurs for a mapping:
+  - Set `"witnessed_outcome": true` on that mapping (omit or set false otherwise — this is the rare case, not the default)
+  - Weight it as strong supporting evidence — an independently corroborated, specific outcome is a strong signal toward "likely_evidence", particularly for Effective-domain / outcome-focused standards
+  - Attribute it clearly to the observer in evidence_summary (e.g. "Manager observed that...", "Family member reported that...") — do NOT fold the observer's account into the worker's own narration as if the worker said it
+  Do NOT apply this elevated weighting to: witnessed ACTIONS alone with no outcome stated (e.g. "colleague saw them do X"), or self-reported outcomes (e.g. "I think it went well", "I think it worked"). Only an independently witnessed, specific OUTCOME claim qualifies — the source (someone other than the supervisee) and the specificity (measurable/time-bound detail) must BOTH be present.
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h", "13.9c"). Use the exact sub-outcome ref and its description as provided in the standards context below. One evidence item = one sub-outcome ref. Create separate mapping entries if evidence covers multiple sub-outcomes.
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
 - If no custom standards are provided, return custom_mappings as an empty array []
@@ -530,7 +539,7 @@ Rules:
 - For ACTIONS: list only concrete tasks, follow-ups, or agreed next steps to be completed before the next session. Do NOT include identified learning needs here — those belong in learning_needs only.
 - If the transcript contains [MM:SS] timestamps, include the timestamp at the start of transcript_excerpt values (e.g. "[14:32] I always check the care plan before..."). This helps locate evidence within the session.
 - Include transcript excerpts as exact quotes from the provided text
-- CRITICAL — excerpt selection: always choose the MOST EVIDENTIAL passage for the mapped standard — the quote that most clearly demonstrates the behaviour, narration, or competency. Do NOT pick the first incidental mention or a greeting. A short opener like "[00:03] how are you feeling?" cannot establish workforce wellbeing — pick the passage where the substantive discussion actually occurs. If evidence is spread across the conversation, pick the single passage where the content is richest and most specific.
+- CRITICAL — excerpt selection: always choose the MOST EVIDENTIAL passage for the mapped standard — the quote that most clearly demonstrates the behaviour, narration, or competency. Do NOT pick the first incidental mention or a greeting. A short opener like "[00:03] how are you feeling?" cannot establish workforce wellbeing — pick the passage where the substantive discussion actually occurs. If evidence is spread across the conversation, pick the single passage where the content is richest and most specific. When a mapping is `"witnessed_outcome": true`, the transcript_excerpt must be the OBSERVER's own words reporting the outcome, not the worker's account of the same event — the excerpt is what makes the corroboration checkable.
 - Generate unique IDs for each item (e.g. "action_1", "risk_1", "cqc_1", "cc_1", "custom_1")
 - Summary format MUST follow exactly: two intro sentences, then a blank line, then 4-6 bullet points each starting with "- ", then a blank line, then two closing sentences. Use \\n\\n to separate sections. IMPORTANT — the summary bullet points must capture ALL significant topics discussed, including: any personal welfare disclosures made by the worker (especially if the worker confirms — even tentatively — that personal circumstances are affecting their work or their conduct); any linked workplace incidents the worker attributes to personal stress; any interpersonal tensions, family or relationship difficulties raised; any concerns about team dynamics. Do NOT omit a topic from the summary simply because it was sensitive or personal — the summary is a confidential professional record and must be complete.
 - NAMING RULE — use the actual attendee names given under ATTENDEES at the top of the transcript context everywhere in the summary, achievements, actions, learning_needs and risks text — never a generic role placeholder. Do NOT write "the home manager", "the manager", "a care worker", or similar in place of a name — the manager's actual job title varies (team manager, registered manager, area manager, deputy manager, etc.) and defaulting to "home manager" is frequently just wrong. Use each person's real name as given (e.g. "David and Sarah discussed..."), not "Manager"/"Attendee 1". A role may be mentioned alongside a name once for context (e.g. "David, the team manager, and Sarah discussed...") but never as a substitute for the name. Only fall back to a role-only description if no name was provided for that person at all.

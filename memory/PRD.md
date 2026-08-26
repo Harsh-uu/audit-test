@@ -101,6 +101,23 @@ AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
   and "Demo User" throughout, with role only mentioned in context, never as a name
   substitute.
 
+## Recently Completed (Aug 2026, cont. 5)
+- **Added "Witnessed Outcome Evidence" rule to evidence-scanning prompt**: In
+  `ANALYSIS_SYSTEM_PROMPT` (`utils/ai.py`), inserted a new rule right after the existing
+  EVIDENCE CONFIDENCE block (before Care Certificate mapping rule) — distinguishes
+  Action/Reasoning/Outcome evidence types; when an OUTCOME is independently reported by
+  someone other than the supervisee AND includes a specific/measurable/time-bound detail,
+  sets a new `"witnessed_outcome": true` field on that mapping, weights it toward
+  `likely_evidence`, and requires evidence_summary to attribute it to the observer (not
+  fold into the worker's own account). Added the field to all 4 mapping-type JSON schema
+  examples (default false) and extended the excerpt-selection rule so the transcript
+  excerpt is the observer's words when this flag is set. Deliberately NOT applied to
+  `DOC_EVIDENCE_SYSTEM_PROMPT` (separate document-upload pipeline, out of scope — no
+  multi-party corroboration concept there). Verified live via a real rescan-evidence
+  call on a demo meeting: 4 mappings correctly flagged `witnessed_outcome: true`,
+  confidence `likely_evidence`, evidence_summary attributing to "family"/"observed by",
+  excerpt containing the corroborating quote.
+
 ## Known minor/optional items (not blocking)
 - AchievementsTimeline's own search input / staff filter / 4 stat cards have no data-testid (unlike
   the register tabs) — cosmetic testability gap only.
