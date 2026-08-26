@@ -118,6 +118,21 @@ AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
   confidence `likely_evidence`, evidence_summary attributing to "family"/"observed by",
   excerpt containing the corroborating quote.
 
+## Recently Completed (Aug 2026, cont. 6)
+- **Fixed DBS evidence mis-mapped to Regulation 18 instead of Regulation 19**: The
+  evidence-scanning prompt had no dedicated guidance for `Regulation 19 — Fit and proper
+  persons employed` (DBS/references/right-to-work/barring checks), so Vertex defaulted
+  to the much more heavily-documented `Regulation 18 — Staffing` (QS Safe 6) whenever a
+  worker mentioned DBS, even a proactive early renewal. Added an explicit Reg 19
+  paragraph to the STANDALONE REGULATIONS section of `ANALYSIS_SYSTEM_PROMPT` plus a
+  cross-reference note on QS Safe 6 telling the model not to use Reg 18 for
+  vetting/DBS evidence. Verified live via a direct `analyze_meeting()` call with the
+  user's exact scenario ("worker renewed DBS 2 months early") — primary mapping is now
+  correctly `Regulation 19` at `likely_evidence` (previously `Regulation 18`).
+  Deliberately NOT touched: the broader "how many standards should one comment map to"
+  over-tagging pattern (same test run still produced 5 additional `possible_evidence`
+  mappings across QS Safe 6 + four Well-led QSs for the same one comment) — see backlog.
+
 ## Known minor/optional items (not blocking)
 - AchievementsTimeline's own search input / staff filter / 4 stat cards have no data-testid (unlike
   the register tabs) — cosmetic testability gap only.
@@ -139,6 +154,18 @@ AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 - Mobile Evidence Pass: mobile-spacing for Compliance Evidence card badges/links.
 - Crash Reporting: lightweight client-side error logging.
 - Split TeamInsights.js into smaller modules.
+- **Evidence-specific domain tagging (Option 3 from DBS/Well-led discussion, Aug 2026)**:
+  Domain badges (Safe/Effective/Well-led) are currently a STATIC per-regulation lookup
+  from standards seed data — every mapping to a given regulation shows that regulation's
+  full official domain set, regardless of what the specific piece of evidence actually
+  demonstrates (e.g. an individual worker's proactive DBS renewal gets tagged Well-led
+  just because Reg 19 is officially Well-led, even though this instance is about
+  individual conduct, not organisational governance). Proposed fix: have the AI output
+  which domain(s) THIS SPECIFIC evidence instance demonstrates (a subset of the
+  regulation's official domains, similar pattern to the `witnessed_outcome` field),
+  store it on the mapping, and have the frontend render that instead of the static
+  full list. Deferred for user review — bigger change, deviates slightly from strict
+  regulation-level CQC categorisation so worth being deliberate about.
 
 ### P3
 - Audit Trail Digest (filter/collapse routine recording events).

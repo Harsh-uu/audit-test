@@ -1359,7 +1359,7 @@ QS Safe 5 — Safe environments
 This standard is about maintaining a physically safe care environment. Map it whenever a worker mentions checking, repairing, reporting, or questioning the safety of equipment, premises, or the care environment.
 
 QS Safe 6 — Safe and effective staffing (also Reg 18)
-This standard is about whether staff are competent, supported and appropriately deployed. The supervision meeting itself is direct evidence — it demonstrates the organisation invests in staff support and oversight. Beyond that, map it whenever training is discussed, workload or capability concerns are raised, support from a manager is described, or the worker talks about whether they feel equipped to do their job. Also map it when the supervisee expresses personal welfare concerns — fatigue, tiredness, stress, feeling overwhelmed, or self-doubt about their own performance — because these signals directly engage the employer's Regulation 18 duty to ensure staff are fit and supported to carry out their role safely.
+This standard is about whether staff are competent, supported and appropriately deployed. The supervision meeting itself is direct evidence — it demonstrates the organisation invests in staff support and oversight. Beyond that, map it whenever training is discussed, workload or capability concerns are raised, support from a manager is described, or the worker talks about whether they feel equipped to do their job. Also map it when the supervisee expresses personal welfare concerns — fatigue, tiredness, stress, feeling overwhelmed, or self-doubt about their own performance — because these signals directly engage the employer's Regulation 18 duty to ensure staff are fit and supported to carry out their role safely. Do NOT map DBS/criminal record checks, references, right-to-work checks, or barring-list checks here — that is Reg 19, not Reg 18 (see STANDALONE REGULATIONS below).
 
 QS Safe 7 — Infection prevention and control
 This standard is about hygiene and preventing the spread of infection. Map it whenever any IPC-related practice is mentioned, however routine — handwashing, wearing gloves or PPE, cleaning procedures, managing an infectious situation, or following isolation protocols.
@@ -1457,6 +1457,9 @@ This standard is about a culture of continuous improvement — reflecting on pra
 
 Reg 14 — Nutrition and hydration
 This regulation is about ensuring people receive adequate food and drink that meets their needs. Map it whenever a worker mentions meals, dietary needs, monitoring food or fluid intake, nutrition concerns, weight changes, or MUST scoring. Any engagement with eating, drinking, or nutrition in the transcript maps here.
+
+Reg 19 — Fit and proper persons employed
+This regulation is about the ORGANISATION's recruitment and employment-vetting processes — confirming, before and throughout employment, that a worker is of good character and legally fit to do the job. Map it whenever DBS/criminal record checks (including renewals), references, right-to-work checks, or barring-list (DBS barred list) checks are mentioned — even when the worker completed the check themself, proactively or ahead of schedule. This is a distinct regulation from Reg 18/QS Safe 6 (staffing levels, training, day-to-day support) — do not map DBS/vetting evidence there instead.
 
 Reg 20 — Duty of candour
 This regulation is about being open and transparent when things go wrong — informing and apologising to people affected. Map it whenever a worker or manager describes communicating openly about an error or adverse event, apologising to a service user or family, or demonstrating that the organisation expects honesty about mistakes."""
