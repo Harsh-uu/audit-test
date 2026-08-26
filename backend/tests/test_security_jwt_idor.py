@@ -86,13 +86,17 @@ def login_cached(email: str, password: str) -> str:
 
 
 def forge_token(overrides: dict, secret: str = JWT_SECRET, algorithm: str = JWT_ALGORITHM) -> str:
-    """Create a JWT with custom payload fields. Defaults to a well-formed access payload."""
+    """Create a JWT with custom payload fields. Defaults to a well-formed access payload.
+    pwd_ts defaults to 0 to match test-inserted users whose password_changed_at is NULL
+    (i.e. DB-side pwd_ts also resolves to 0) — override via `overrides` if a test user
+    has a real password_changed_at set."""
     now = int(time.time())
     payload = {
         "sub":  str(uuid.uuid4()),   # non-existent user by default
         "type": "access",
         "exp":  now + 3600,
         "iat":  now,
+        "pwd_ts": 0,
     }
     payload.update(overrides)
     return pyjwt.encode(payload, secret, algorithm=algorithm)
@@ -232,11 +236,15 @@ class TestJWTAttacks:
         Expected: role in response must be 'attendee' (from DB, not JWT payload).
         deps.py returns the DB row — the JWT payload role is ignored.
         """
-        # Step 1: get real attendee user_id via login
+        # Step 1: get real attendee user_id via login (decode the real token to
+        # reuse its current pwd_ts, so the forged token below isn't rejected as
+        # stale by the SEC-001 access-token pwd_ts check — this test targets
+        # role-injection specifically, not token freshness).
         staff_token = login_cached(STAFF_EMAIL, STAFF_PASS)
         me = requests.get(api("/auth/me"), headers=auth_header(staff_token), timeout=10).json()
         attendee_id  = me["id"]
         attendee_org = me["org_id"]
+        real_pwd_ts = pyjwt.decode(staff_token, JWT_SECRET, algorithms=[JWT_ALGORITHM]).get("pwd_ts", 0)
 
         # Step 2: forge a token with the real secret, real sub, but role=admin
         now = int(time.time())
@@ -247,7 +255,7 @@ class TestJWTAttacks:
             "iat":     now,
             "role":    "admin",          # attacker-injected escalated role
             "org_id":  attendee_org,
-            "pwd_ts":  0,
+            "pwd_ts":  real_pwd_ts,
         }
         evil_token = pyjwt.encode(evil_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 

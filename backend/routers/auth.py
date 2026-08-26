@@ -8,6 +8,7 @@ import uuid
 import secrets
 import logging
 import resend
+import html
 from datetime import datetime, timezone, timedelta
 from deps import get_db, get_current_user
 import database
@@ -70,12 +71,19 @@ def _to_pwd_ts(user: dict) -> float:
     return 0.0
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, pwd_ts: float = 0.0) -> str:
+    """
+    pwd_ts: Unix timestamp of the user's last password change.
+    Embedding this lets get_current_user reject a stolen/cached access token
+    the moment a password is reset or changed, instead of waiting out its
+    30-minute lifetime (mirrors the same protection already on refresh tokens).
+    """
     payload = {
         "sub": user_id,
         "email": email,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
         "type": "access",
+        "pwd_ts": pwd_ts,
     }
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
 
@@ -181,7 +189,7 @@ async def _generate_and_send_mfa(conn, user: dict) -> None:
                 "<div style='font-family:Poppins,sans-serif;max-width:480px;margin:0 auto;"
                 "padding:32px 24px;background:#f8fafc;border-radius:12px;'>"
                 "<h2 style='color:#1E3A8A;font-size:22px;margin-bottom:8px;'>Verification code</h2>"
-                f"<p style='color:#475569;font-size:15px;margin-bottom:20px;'>Hi {user.get('name','')}, "
+                f"<p style='color:#475569;font-size:15px;margin-bottom:20px;'>Hi {html.escape(user.get('name','') or '')}, "
                 "enter the code below to complete your sign-in. It expires in <strong>10 minutes</strong>.</p>"
                 f"<div style='font-size:36px;font-weight:700;letter-spacing:10px;color:#1E3A8A;"
                 f"text-align:center;padding:20px 0;'>{code}</div>"
@@ -316,7 +324,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
             "email": _mask_email(user["email"]),
         }
 
-    access_token = create_access_token(user_id, user["email"])
+    access_token = create_access_token(user_id, user["email"], _to_pwd_ts(user))
     refresh_token = create_refresh_token(user_id, _to_pwd_ts(user))
     # P3b: set HttpOnly cookies; tokens no longer returned in body
     _set_auth_cookies(response, access_token, refresh_token)
@@ -376,7 +384,7 @@ async def verify_mfa(data: VerifyMfaRequest, response: Response):
             user_id,
         )
 
-    access_token = create_access_token(user_id, user["email"])
+    access_token = create_access_token(user_id, user["email"], _to_pwd_ts(user))
     refresh_token = create_refresh_token(user_id, _to_pwd_ts(user))
     # P3b: set HttpOnly cookies; tokens no longer returned in body
     _set_auth_cookies(response, access_token, refresh_token)
@@ -509,7 +517,7 @@ async def refresh_token(request: Request, response: Response):
             raise HTTPException(status_code=401, detail="Password changed — please sign in again.")
 
         user_id = user["id"]
-        new_access = create_access_token(user_id, user["email"])
+        new_access = create_access_token(user_id, user["email"], db_pwd_ts)
         new_refresh = create_refresh_token(user_id, db_pwd_ts)
         # P3b: rotate both cookies on every refresh; tokens stay in HttpOnly cookies only
         _set_auth_cookies(response, new_access, new_refresh)
@@ -698,7 +706,7 @@ async def accept_invite(data: AcceptInviteRequest, response: Response):
     # password_changed_at was just set to `now` in the UPDATE above — use it as
     # pwd_ts so the refresh token is valid immediately (pwd_ts=0.0 would be
     # rejected by the refresh endpoint because 0.0 < now).
-    access_token = create_access_token(user_id, email)
+    access_token = create_access_token(user_id, email, _to_pwd_ts({"password_changed_at": now}))
     refresh_token_val = create_refresh_token(user_id, _to_pwd_ts({"password_changed_at": now}))
     # P3b: set HttpOnly cookies; tokens no longer returned in body
     _set_auth_cookies(response, access_token, refresh_token_val)

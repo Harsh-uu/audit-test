@@ -4,6 +4,7 @@ import secrets
 import asyncio
 import os
 import logging
+import html
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timezone, timedelta
@@ -261,6 +262,8 @@ async def delete_org_user(org_id: str, user_id: str, current_user=Depends(get_cu
 
 
 def _build_invite_email(name: str, org_name: str, invite_link: str) -> str:
+    name = html.escape(name or "")
+    org_name = html.escape(org_name or "")
     return f"""<!DOCTYPE html>
 <html lang="en">
 <body style="margin:0;padding:0;background:#F1F5F9;font-family:'Segoe UI',Arial,sans-serif;">

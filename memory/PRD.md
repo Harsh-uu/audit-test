@@ -40,6 +40,34 @@ AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
   zip-bomb docx (50MB decompressed from a 50KB file) is rejected with 400 on both
   endpoints; a normal docx still uploads successfully (200) on both.
 
+## Recently Completed (Aug 2026, cont. 2)
+- **Security audit fixes (P2 + hardening)**: Ran full security_audit_agent review — verdict
+  CONDITIONAL PASS, no critical/high issues, all prior fixes (SEC-001 IDOR, role
+  self-escalation, export-scope leaks, zip-bomb guard) confirmed intact. Fixed the 3 items
+  the user asked for:
+  1. **[P2] Access token not revoked on password reset/logout** — `create_access_token`
+     now embeds `pwd_ts` (password_changed_at timestamp), and `deps.py get_current_user`
+     rejects any access token whose `pwd_ts` is missing or stale vs the DB value (mirrors
+     the existing refresh-token protection). Verified end-to-end: old access token gets
+     401 immediately after a password change; frontend's axios interceptor silently
+     refreshes via the (also-rejected, forcing full re-login) refresh token — no code
+     changes needed there. Updated `tests/test_security_jwt_idor.py` (forge_token default
+     pwd_ts=0, role-escalation test reuses real pwd_ts) — full suite (26 tests) passes.
+  2. **CORS**: dropped `http://localhost:3000` from `backend/.env` CORS_ORIGINS allowlist
+     (now just preview + `https://1two.one`). Verified via direct OPTIONS request that
+     localhost origin gets no `access-control-allow-origin` header.
+  3. **Email HTML escaping**: `html.escape()` applied to user-controlled `name`/`org_name`
+     before interpolation into MFA-code email (`auth.py`) and org-admin invite email
+     (`super_admin.py::_build_invite_email`) — defense-in-depth against stored-content
+     rendering, even though these are same-recipient-only emails.
+  - Deferred (not requested this round): P3 items — MFA OTP per-IP throttle, audit-trail
+    silent-exception swallowing (`review.py get_audit_trail`).
+- **Known pre-existing test-data issue (unrelated to above)**: `tests/test_idor_sec001.py`
+  has a hardcoded `TARGET_MEETING` UUID that no longer exists in the DB, causing 8
+  failures + 2 precondition errors unrelated to any code change. `tests/test_security_fixes.py`
+  has a `BASE_URL` scheme bug causing `MissingSchema` errors. Neither touched — flagging
+  for whoever next needs that suite green.
+
 ## Known minor/optional items (not blocking)
 - AchievementsTimeline's own search input / staff filter / 4 stat cards have no data-testid (unlike
   the register tabs) — cosmetic testability gap only.

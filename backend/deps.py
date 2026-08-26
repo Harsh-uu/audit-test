@@ -1,10 +1,26 @@
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from datetime import datetime
 import jwt
 import os
 import database
 
 security = HTTPBearer(auto_error=False)
+
+
+def _pwd_ts_of(user: dict) -> float:
+    """Convert a user's password_changed_at field to a Unix float for pwd_ts comparison."""
+    pc = user.get("password_changed_at")
+    if not pc:
+        return 0.0
+    if isinstance(pc, str):
+        try:
+            return datetime.fromisoformat(pc.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            return 0.0
+    if hasattr(pc, "timestamp"):
+        return pc.timestamp()
+    return 0.0
 
 
 def get_db(request: Request):
@@ -49,6 +65,16 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="User not found or inactive")
 
     user = dict(row)
+
+    # SEC-001: reject access tokens issued before the user's last password
+    # change — closes the window where a stolen token kept working for up to
+    # 30 min after a reset/change (mirrors the same check on refresh tokens).
+    # Tokens without the pwd_ts claim predate this fix; the frontend's axios
+    # interceptor auto-refreshes on 401, so this is a silent, seamless upgrade.
+    token_pwd_ts = payload.get("pwd_ts")
+    if token_pwd_ts is None or token_pwd_ts < _pwd_ts_of(user):
+        raise HTTPException(status_code=401, detail="Session expired — please sign in again.")
+
     return user
 
 
