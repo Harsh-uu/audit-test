@@ -95,9 +95,11 @@ async def upload_supervision_doc(
         raise HTTPException(status_code=400, detail="File too large (max 20 MB)")
 
     # Magic-byte validation — consistent with standards/logo upload endpoints
-    from utils.file_security import validate_upload
+    from utils.file_security import validate_upload, guard_zip_bomb
     try:
         validate_upload(file_data, file_ext)
+        if file_ext == "docx":
+            guard_zip_bomb(file_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

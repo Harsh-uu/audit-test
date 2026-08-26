@@ -29,6 +29,17 @@ AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
   tracking/audit bug fixes, bulk-accept tracking, EvidenceSidebar→ComplianceTab rename, Team Themes
   caching bug fix, security audit fixes (privilege escalation, export data-scope leaks).
 
+## Recently Completed (Aug 2026, cont.)
+- **Zip-bomb decompression guard (security hardening)**: Confirmed Standards Upload
+  (`admin.py POST /admin/standards/upload`) and Import Supervision (`doc_uploads.py POST
+  /doc-uploads/`) already shared the same `validate_upload()` magic-byte check. Added
+  `guard_zip_bomb()` to `/app/backend/utils/file_security.py` — inspects the ZIP central
+  directory (entry count, per-entry compression ratio, total uncompressed size) for
+  docx/xlsx/pptx uploads before `python-docx` ever decompresses content. Wired into both
+  endpoints right after `validate_upload()`. Verified end-to-end via curl: a crafted
+  zip-bomb docx (50MB decompressed from a 50KB file) is rejected with 400 on both
+  endpoints; a normal docx still uploads successfully (200) on both.
+
 ## Known minor/optional items (not blocking)
 - AchievementsTimeline's own search input / staff filter / 4 stat cards have no data-testid (unlike
   the register tabs) — cosmetic testability gap only.

@@ -59,3 +59,34 @@ def validate_upload(data: bytes, ext: str) -> str:
             "Executable files and scripts are not permitted."
         )
     return CANONICAL_MIME.get(ext.lower(), "application/octet-stream")
+
+
+MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024   # 100MB expanded, generous for a doc
+MAX_COMPRESSION_RATIO = 100                  # reject if it expands >100x
+MAX_ZIP_ENTRIES = 1000                       # reject absurd file counts
+
+
+def guard_zip_bomb(data: bytes) -> None:
+    """
+    Reject OOXML (docx/xlsx/pptx) files that would decompress to dangerous sizes.
+    Inspects the ZIP central directory (sizes only) — does not decompress content.
+    """
+    import zipfile
+    import io
+
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        raise ValueError("Document structure is invalid or unsafe.")
+
+    infos = zf.infolist()
+    if len(infos) > MAX_ZIP_ENTRIES:
+        raise ValueError("Document structure is invalid or unsafe.")
+
+    total_uncompressed = 0
+    for info in infos:
+        total_uncompressed += info.file_size
+        if info.compress_size > 0 and info.file_size / info.compress_size > MAX_COMPRESSION_RATIO:
+            raise ValueError("Document structure is invalid or unsafe.")
+        if total_uncompressed > MAX_UNCOMPRESSED_SIZE:
+            raise ValueError("Document is too large when decompressed.")

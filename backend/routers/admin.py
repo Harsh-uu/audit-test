@@ -350,9 +350,11 @@ async def upload_document(
     if file_ext not in allowed_ext:
         raise HTTPException(400, f"Unsupported file type: .{file_ext}")
     # Validate actual file content — reject extension-spoofed executables/scripts
-    from utils.file_security import validate_upload
+    from utils.file_security import validate_upload, guard_zip_bomb
     try:
         canonical_mime = validate_upload(file_data, file_ext)
+        if file_ext in ("docx", "xlsx", "pptx"):
+            guard_zip_bomb(file_data)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
