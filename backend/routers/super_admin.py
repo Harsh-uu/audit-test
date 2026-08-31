@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from deps import get_db, get_current_user
 import database
+from utils.supabase_storage import delete_audio
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -159,8 +160,19 @@ async def delete_org(org_id: str, current_user=Depends(get_current_user)):
         # Get meeting IDs
         meeting_ids = [r["id"] for r in await conn.fetch("SELECT id FROM meetings WHERE org_id = $1", org_id)]
 
+        # Any audio must be deleted from storage too — fetch paths before the rows
+        # disappear below. delete_audio() is idempotent on an already-removed path.
+        audio_paths = []
         if meeting_ids:
-            for table in ["transcripts", "analyses", "audit_logs", "reviewer_comments", "review_edits", "audio_files"]:
+            audio_paths = [
+                r["storage_path"] for r in await conn.fetch(
+                    "SELECT storage_path FROM audio_files WHERE meeting_id = ANY($1) AND storage_path IS NOT NULL",
+                    meeting_ids,
+                )
+            ]
+
+        if meeting_ids:
+            for table in ["transcripts", "analyses", "audit_logs", "reviewer_comments", "review_edits", "audio_files", "evidence_feedback"]:
                 result = await conn.execute(f"DELETE FROM {table} WHERE meeting_id = ANY($1)", meeting_ids)
                 totals[table] = int(result.split()[-1])
 
@@ -170,6 +182,12 @@ async def delete_org(org_id: str, current_user=Depends(get_current_user)):
             totals[table] = int(result.split()[-1])
 
         await conn.execute("DELETE FROM organisations WHERE id = $1", org_id)
+
+    for path in audio_paths:
+        try:
+            await delete_audio(path)
+        except Exception as e:
+            logger.error("Failed to delete audio from storage during org '%s' deletion: path=%s error=%s", org_id, path, e)
 
     logger.info("Deleted org '%s' (%s): %s", org_name, org_id, totals)
     return {"message": f"Organisation '{org_name}' permanently deleted", "deleted": totals}

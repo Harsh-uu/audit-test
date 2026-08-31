@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="2" failures="0" skipped="0" tests="11" time="90.584" timestamp="2026-08-31T13:51:09.139380+00:00" hostname="agent-env-93542dae-df0b-4464-99dc-51eb3c5932f3"><testcase classname="tests.test_iter104_fk_constraints.TestFKSchema" name="test_all_39_fks_present_with_correct_delete_action" time="1.177" /><testcase classname="tests.test_iter104_fk_constraints.TestFKSchema" name="test_no_orphans_in_any_constrained_relationship" time="10.385" /><testcase classname="tests.test_iter104_fk_constraints.TestFKSchema" name="test_preexisting_audit_log_orphans_cleaned_up" time="1.136" /><testcase classname="tests.test_iter104_fk_constraints.TestFKSchema" name="test_deliberately_excluded_relationships_are_not_constrained" time="1.073" /><testcase classname="tests.test_iter104_fk_constraints.TestNegativeEnforcement" name="test_meeting_with_bogus_org_id_rejected" time="2.167" /><testcase classname="tests.test_iter104_fk_constraints.TestNegativeEnforcement" name="test_transcript_with_bogus_meeting_id_rejected" time="1.083" /><testcase classname="tests.test_iter104_fk_constraints.TestNegativeEnforcement" name="test_team_with_bogus_setting_id_rejected" time="1.122" /><testcase classname="tests.test_iter104_fk_constraints.TestNegativeEnforcement" name="test_schedule_with_bogus_staff_user_rejected" time="1.076" /><testcase classname="tests.test_iter104_fk_constraints.TestMeetingLifecycle" name="test_review_edit_and_comment_created_via_api" time="61.506"><error message="failed on setup with &quot;AssertionError: login failed 502: &lt;!DOCTYPE html&gt;&#10;  &lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-js ie8 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class=&quot;no-js&quot; lang=&quot;en-US&quot;&gt; &lt;!&#10;assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code&quot;">@pytest.fixture(scope="session")
+    def admin_s():
+&gt;       return login("admin@supervision.com", "Admin123!")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_iter104_fk_constraints.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+email = 'admin@supervision.com', password = 'Admin123!'
+
+    def login(email, password):
+        clear_limits()
+        s = requests.Session()
+        r = s.post(f"{BASE}/auth/login", json={"email": email, "password": password}, timeout=90)
+&gt;       assert r.status_code == 200, f"login failed {r.status_code}: {r.text[:300]}"
+E       AssertionError: login failed 502: &lt;!DOCTYPE html&gt;
+E         &lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if IE 8]&gt;    &lt;html class="no-js ie8 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class="no-js" lang="en-US"&gt; &lt;!
+E       assert 502 == 200
+E        +  where 502 = &lt;Response [502]&gt;.status_code
+
+tests/test_iter104_fk_constraints.py:106: AssertionError</error></testcase><testcase classname="tests.test_iter104_fk_constraints.TestMeetingLifecycle" name="test_signoff_then_delete_cascades_everything" time="0.000"><error message="failed on setup with &quot;AssertionError: login failed 502: &lt;!DOCTYPE html&gt;&#10;  &lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-js ie8 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class=&quot;no-js&quot; lang=&quot;en-US&quot;&gt; &lt;!&#10;assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code&quot;">@pytest.fixture(scope="session")
+    def admin_s():
+&gt;       return login("admin@supervision.com", "Admin123!")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_iter104_fk_constraints.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+email = 'admin@supervision.com', password = 'Admin123!'
+
+    def login(email, password):
+        clear_limits()
+        s = requests.Session()
+        r = s.post(f"{BASE}/auth/login", json={"email": email, "password": password}, timeout=90)
+&gt;       assert r.status_code == 200, f"login failed {r.status_code}: {r.text[:300]}"
+E       AssertionError: login failed 502: &lt;!DOCTYPE html&gt;
+E         &lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if IE 8]&gt;    &lt;html class="no-js ie8 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class="no-js" lang="en-US"&gt; &lt;!
+E       assert 502 == 200
+E        +  where 502 = &lt;Response [502]&gt;.status_code
+
+tests/test_iter104_fk_constraints.py:106: AssertionError</error></testcase><testcase classname="tests.test_iter104_fk_constraints.TestMeetingLifecycle" name="test_raw_db_delete_cascades_children" time="9.669" /></testsuite></testsuites>

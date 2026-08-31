@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 
 import database
 from utils.transcription_pipeline import run_transcription_and_analysis
+from utils.supabase_storage import delete_audio
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +142,11 @@ async def _sweep_audio_deletions():
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=300)).isoformat()
     async with database.with_admin() as conn:
         rows = await conn.fetch(
-            """SELECT id, audio_file_id FROM meetings
-               WHERE audio_deletion_status = 'grace_period'
-                 AND audio_grace_period_started_at < $1
-                 AND status = 'signed_off'""",
+            """SELECT m.id, m.audio_file_id, a.storage_path FROM meetings m
+               LEFT JOIN audio_files a ON a.id = m.audio_file_id
+               WHERE m.audio_deletion_status = 'grace_period'
+                 AND m.audio_grace_period_started_at < $1
+                 AND m.status = 'signed_off'""",
             cutoff,
         )
     if not rows:
@@ -153,8 +155,13 @@ async def _sweep_audio_deletions():
     for row in rows:
         meeting_id = row["id"]
         audio_file_id = row["audio_file_id"]
+        storage_path = row["storage_path"]
         try:
             if audio_file_id:
+                if storage_path:
+                    # Delete from Supabase Storage first — if this raises, the row stays
+                    # in 'grace_period' and this sweep retries it on its next pass.
+                    await delete_audio(storage_path)
                 async with database.with_admin() as conn:
                     await conn.execute(
                         "UPDATE audio_files SET is_deleted=TRUE, deletion_status='deleted', deleted_at=$1 WHERE id=$2",

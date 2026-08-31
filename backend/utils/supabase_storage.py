@@ -68,7 +68,7 @@ def _sync_put(bucket: str, path: str, data: bytes, content_type: str) -> dict:
         client.storage.from_(bucket).upload(
             path,
             data,
-            file_options={"content-type": content_type, "upsert": "true"},
+            file_options={"content-type": content_type, "upsert": "true", "cache-control": "no-store"},
         )
     except Exception as exc:
         logger.error(
@@ -86,6 +86,11 @@ def _sync_get(bucket: str, path: str):
     return data, content_type
 
 
+def _sync_remove(bucket: str, path: str):
+    client = _get_client()
+    client.storage.from_(bucket).remove([path])
+
+
 async def put_audio(path: str, data: bytes, content_type: str) -> dict:
     """Upload a meeting audio recording to Supabase (EU)."""
     loop = asyncio.get_running_loop()
@@ -99,6 +104,14 @@ async def get_audio(path: str):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None, partial(_sync_get, AUDIO_BUCKET, path)
+    )
+
+
+async def delete_audio(path: str):
+    """Permanently delete a meeting audio recording from Supabase (GDPR)."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, partial(_sync_remove, AUDIO_BUCKET, path)
     )
 
 

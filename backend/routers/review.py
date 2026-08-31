@@ -13,6 +13,7 @@ from deps import get_current_user, get_manager_scope, get_scoped_staff_ids
 import database
 from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
+from utils.supabase_storage import delete_audio
 from routers.admin import _stats_cache as _admin_stats_cache
 
 router = APIRouter()
@@ -165,6 +166,15 @@ async def delete_audio_after_grace(meeting_id: str):
         audio_file_id = meeting.get("audio_file_id")
         now = datetime.now(timezone.utc).isoformat()
         if audio_file_id:
+            async with database.with_admin() as conn:
+                audio_row = await conn.fetchrow("SELECT storage_path FROM audio_files WHERE id=$1", audio_file_id)
+            storage_path = audio_row["storage_path"] if audio_row else None
+            if storage_path:
+                # Delete the actual recording from Supabase Storage first. If this raises,
+                # the exception below leaves audio_deletion_status='grace_period' so the
+                # job_worker recovery sweep retries it on its next pass — we only mark the
+                # row 'deleted' once the file is genuinely gone.
+                await delete_audio(storage_path)
             async with database.with_admin() as conn:
                 await conn.execute(
                     "UPDATE audio_files SET is_deleted=TRUE, deletion_status='deleted', deleted_at=$1 WHERE id=$2",

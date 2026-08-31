@@ -771,6 +771,9 @@ DO $$ BEGIN ALTER TABLE schedules ADD CONSTRAINT fk_schedules_meeting_type_id FO
 
 DO $$ BEGIN ALTER TABLE supervision_uploads ADD CONSTRAINT fk_supervision_uploads_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
 DO $$ BEGIN ALTER TABLE supervision_uploads ADD CONSTRAINT fk_supervision_uploads_staff_id FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
+
+DO $$ BEGIN ALTER TABLE evidence_feedback ADD CONSTRAINT fk_evidence_feedback_meeting_id FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
+DO $$ BEGIN ALTER TABLE evidence_feedback ADD CONSTRAINT fk_evidence_feedback_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
 """
 
 

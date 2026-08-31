@@ -1,11 +1,15 @@
 import json
 import uuid
+import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional, List
 from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
 import database
+from utils.supabase_storage import delete_audio
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -466,12 +470,28 @@ async def delete_meeting(meeting_id: str, current_user=Depends(get_current_user)
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
+        # Any audio must be deleted from storage too — fetch its path before the row
+        # disappears. delete_audio() is idempotent on an already-removed path, so it's
+        # safe to always attempt this rather than trust an is_deleted flag that could
+        # be stale if an earlier purge silently failed.
+        audio_paths = [
+            r["storage_path"] for r in await conn.fetch(
+                "SELECT storage_path FROM audio_files WHERE meeting_id=$1 AND storage_path IS NOT NULL",
+                meeting_id,
+            )
+        ]
         result = await conn.execute("DELETE FROM meetings WHERE id = $1", meeting_id)
         if result == "DELETE 0":
             raise HTTPException(status_code=404, detail="Meeting not found")
-        # Cascade deletes
-        for table in ["transcripts", "analyses", "audio_files", "reviewer_comments", "review_edits", "audit_logs"]:
+        # Cascade deletes — redundant with the FK ON DELETE CASCADE constraints now in
+        # place, kept here as a defence-in-depth safety net matching existing convention.
+        for table in ["transcripts", "analyses", "audio_files", "reviewer_comments", "review_edits", "audit_logs", "evidence_feedback"]:
             await conn.execute(f"DELETE FROM {table} WHERE meeting_id = $1", meeting_id)
+    for path in audio_paths:
+        try:
+            await delete_audio(path)
+        except Exception as e:
+            logger.error(f"Failed to delete audio from storage for meeting {meeting_id}: path={path} error={e}")
     return {"message": "Meeting deleted"}
 
 

@@ -22,6 +22,37 @@ credentials for — schema changes here do NOT propagate there automatically; th
 direct DB password access or a real deploy of this backend pointed at that DB.
 
 ### DB audit fixes completed this session (all verified via testing_agent, 0 regressions)
+8. **Deletion leaves data behind (High, needed a decision)** — confirmed: (a) `evidence_feedback`
+   table was missing from both meeting-deletion and org-deletion manual lists (and I'd missed
+   giving it a FK in fix #7) — `meeting_prep` and the org-hierarchy tables (`teams`, `org_settings`,
+   `settings`, `focus_topics`, `standards_documents`, `standards_entries`) were already auto-fixed
+   as a side effect of #7's FK CASCADE. (b) Audio recordings were NEVER actually deleted from
+   Supabase Storage — the full grace-period design existed (sign-off by all attendees + manager →
+   `audio_deletion_status='grace_period'` → 5-min task + recovery sweep) but no code anywhere
+   called a storage delete; `utils/supabase_storage.py` had no delete function at all. Confirmed
+   "signed off by both parties" was already correctly implemented (`sign_off()`'s P3c check blocks
+   until every attendee has called mark-reviewed) — no workflow change needed, just wiring.
+   User decided: audio deletion must NOT touch transcripts/analyses (kept forever); org deletion =
+   "customer leaves, delete everything." Fixed: added real `delete_audio()` (Supabase Storage
+   `.remove()`, confirmed this bucket supports it) wired into the existing grace-period task +
+   recovery sweep (storage delete happens *before* the DB flag flips, so a storage failure leaves
+   the row retryable rather than falsely marking it deleted) and into both `delete_meeting()` and
+   `delete_org()` for any audio not yet grace-period-deleted. Added `evidence_feedback.meeting_id`/
+   `org_id` FK CASCADE (0 orphans) and added it to both manual lists for defense-in-depth. Verified
+   via testing_agent against REAL Supabase Storage (not mocked): 12/12 pass (iteration_106) — upload
+   → download → delete → confirmed gone at origin; meeting deletion purges the real object;
+   evidence_feedback FK cascade proven with a raw-SQL parent delete; transcript/analysis explicitly
+   confirmed untouched by audio deletion; full role smoke clean.
+   - Hardened further after 2 minor findings: set `cache-control: no-store` on audio uploads (a
+     Supabase CDN edge cache was serving previously-streamed deleted audio for up to 1h after
+     purge, origin was always correctly 404 — GDPR timing gap, now closed); dropped an
+     `is_deleted=FALSE` filter on the meeting/org-deletion storage-purge queries so a silently-
+     failed earlier purge can't be permanently skipped (delete_audio is confirmed idempotent on a
+     missing path). Re-verified via the same 12/12 suite after hardening — self-tested (pytest),
+     no new testing_agent round needed for this size of follow-up.
+   - Not actioned (heavier suite exists but wasn't run for time — `tests/test_iter105_audio_gdpr_delete.py`
+     covers the 5-min grace-period timing, storage-failure retry, and full org-deletion e2e in more
+     depth; available to run selectively later if needed).
 7. **Zero foreign key constraints in the schema (High)** — confirmed 0 FKs existed anywhere;
    every "belongs to" relationship (transcript→meeting, team→org, etc.) was only enforced by hand
    in app code, and this had already caused real drift (3 orphan `audit_logs` rows pointing to

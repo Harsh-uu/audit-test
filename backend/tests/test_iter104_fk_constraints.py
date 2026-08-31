@@ -72,6 +72,9 @@ EXPECTED_FKS = {
     ("schedules", "meeting_type_id", "meeting_types"): "SET NULL",
     ("supervision_uploads", "org_id", "organisations"): "CASCADE",
     ("supervision_uploads", "staff_id", "users"): "SET NULL",
+    # added iteration 105 (audio-GDPR round): evidence_feedback cascade
+    ("evidence_feedback", "meeting_id", "meetings"): "CASCADE",
+    ("evidence_feedback", "org_id", "organisations"): "CASCADE",
 }
 
 
@@ -176,9 +179,9 @@ def fetch_fks():
 
 
 class TestFKSchema:
-    def test_all_37_fks_present_with_correct_delete_action(self):
+    def test_all_39_fks_present_with_correct_delete_action(self):
         actual = fetch_fks()
-        assert len(actual) == 37, f"expected 37 FKs, found {len(actual)}: {sorted(actual)}"
+        assert len(actual) == 39, f"expected 39 FKs, found {len(actual)}: {sorted(actual)}"
         missing = {k: v for k, v in EXPECTED_FKS.items() if k not in actual}
         assert not missing, f"missing FKs: {missing}"
         wrong = {k: (actual[k], v) for k, v in EXPECTED_FKS.items() if actual[k] != v}
