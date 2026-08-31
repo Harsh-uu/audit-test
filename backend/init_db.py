@@ -483,7 +483,6 @@ CREATE POLICY supervision_uploads_rls ON supervision_uploads FOR ALL
 CREATE INDEX IF NOT EXISTS idx_meetings_org_id ON meetings(org_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_created_at ON meetings(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_org_id ON users(org_id);
 CREATE INDEX IF NOT EXISTS idx_transcripts_meeting_id ON transcripts(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_meeting_id ON analyses(meeting_id);
@@ -536,6 +535,10 @@ ALTER TABLE focus_topics ADD COLUMN IF NOT EXISTS active_month TEXT;
 ALTER TABLE focus_topics ADD COLUMN IF NOT EXISTS created_by TEXT;
 
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS manager_user_id TEXT;
+
+-- Duplicate of the auto-created UNIQUE constraint index (users_email_key) — drop it.
+-- users_email_key alone already serves every email lookup/uniqueness check.
+DROP INDEX IF EXISTS public.idx_users_email;
 
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup TEXT;
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup_at TEXT;

@@ -1,0 +1,31 @@
+{
+  "summary": "Backend-only regression verification of the users.email redundant-index removal (idx_users_email dropped; users_email_key UNIQUE retained). Created /app/backend/tests/test_iter100_email_index_regression.py (20 pytest tests) covering DB index inventory, DB-level UNIQUE enforcement, planner index usability, login by email (admin/manager/jane + mixed-case + unknown-email 401), admin create-user duplicate/unique/mixed-case-duplicate, org invite-user duplicate/unique, admin update-user email change (unique / clash-rejected / same-value), and the full forgot-password -> reset-password -> login-with-new-password flow incl. mixed-case lookup. Result: 20/20 passed. Verified via pg_indexes that public.users now has only users_pkey, users_email_key (UNIQUE btree on email), idx_users_org_id, idx_users_team_id, idx_users_setting_id. No regressions found; all test data cleaned up.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "backend/init_db.py schema-patches", "issue": "`DROP INDEX IF EXISTS idx_users_email;` is schema-unqualified. This DB (Supabase) also has an index literally named idx_users_email on auth.users; it survived here (verified still present), but the statement's target depends on the connection role's search_path. Should be `DROP INDEX IF EXISTS public.idx_users_email;` to be deterministic and to guarantee a Supabase-managed auth index can never be dropped."},
+      {"endpoint": "POST /api/auth/forgot-password", "issue": "Pre-existing/environmental: Resend rejects @example.com recipients ('Invalid `to` field'), logged as ERROR. Flow still returns 200 and the reset token is created (failure is caught), so functionally fine, but test-domain emails pollute error logs."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter100_email_index_regression.py",
+    "/app/test_reports/pytest/iter100_results.xml"
+  ],
+  "action_items": [
+    "Optional hardening: qualify the drop as `DROP INDEX IF EXISTS public.idx_users_email;` in init_db.py schema patches."
+  ],
+  "critical_code_review_comments": [
+    "init_db.py: unqualified DROP INDEX relies on search_path; auth.users.idx_users_email exists in this Supabase DB, so qualify with public. to eliminate any chance of dropping the wrong index.",
+    "Email uniqueness is enforced only by an application-level SELECT-then-INSERT (admin.create_user, org.invite_user) plus the DB UNIQUE constraint; the app path is racy but the constraint catches it — a concurrent duplicate would surface as an unhandled UniqueViolationError (500) rather than a clean 400. Consider catching asyncpg.UniqueViolationError and returning 400.",
+    "Email stored lowercased by writers, but some read paths use `email = $1` and others `LOWER(email)=LOWER($1)`; the latter cannot use users_email_key. Consider standardising on lowercased comparisons at write time only, or add a functional index if LOWER() lookups become hot."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter100_email_index_regression.py"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "not tested (no frontend changes this round)"},
+  "seed_data_creation": "Temporary users test_iter100_*@example.com (create/invite/edit/reset fixtures) — all deleted in session teardown; verified zero residue. login_attempts/rate-limit rows cleared via tests/clear_rate_limit.py.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com/Admin123!, manager@supervision.com/Manager123! (MFA bypassed via DB override in test helper), jane@supervision.com/Jane123!",
+  "context_for_next_testing_agent": "test_iter100_email_index_regression.py is a reusable regression suite for email flows. Note: /api/auth/forgot-password is IP-rate-limited to 5 requests / 15 min — run `python /app/backend/tests/clear_rate_limit.py` before re-running the suite or the last forgot-password test will 429 (this caused the only transient failure observed, not a product bug). pytest.ini auto-adds -n loadscope, so -p no:xdist is rejected.",
+  "rca_of_the_issue": "idx_users_email was a plain btree duplicate of users_email_key (the UNIQUE constraint's index) on the same single column; Postgres never needed both. Dropping it removes write/maintenance overhead with zero read impact — all email equality lookups (login, forgot-password, uniqueness checks) are still served by users_email_key, confirmed by EXPLAIN with enable_seqscan=off."
+}
