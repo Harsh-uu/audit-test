@@ -1,0 +1,60 @@
+{
+  "summary": "Regression-tested the additive 7-index change (teams.org_id/setting_id, org_settings.org_id, focus_topics.org_id, standards_documents.org_id, users.team_id/setting_id). Verified index existence + validity + planner usage via pg_indexes/EXPLAIN, then ran 32 API tests (2 new pytest suites) across admin.list_users, org_settings/teams CRUD, assign-team, /org/structure, team-insights, registers, people-stats, dashboard, focus-topics CRUD, standards documents, plus a purpose-built team-scoped-manager isolation suite. Also drove the UI (PeopleHub People/Structure tabs, Team Insights team+setting filters, Settings > Focus Topics, Standards Library) as admin via injected cookies. Result: ZERO regressions attributable to the index change (31/32 API tests pass, all reads return correct scoped data). Two PRE-EXISTING defects surfaced during the regression sweep (one backend 500 on branch rename, one stale-list-after-mutation UI bug) — neither is caused by the indexes but both are user-facing.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/org/settings/{setting_id}", "issue": "Always 500. org.py:213 does existing['manager_user_id'] but the org_settings table has NO manager_user_id column (actual columns: id, org_id, name, settings, created_at, updated_at) -> KeyError: 'manager_user_id'. Every branch/setting rename from Organisation > Structure fails. PRE-EXISTING (not caused by the index change). Fix: add the column via init_db.py idempotent ALTER TABLE ... ADD COLUMN IF NOT EXISTS manager_user_id TEXT (create_setting/update_setting already assume it) or remove the manager_user_id logic. Note get_structure() only survives because it uses dict.get().", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/org/structure", "issue": "2.8s p50 (other endpoints ~1.55s incl. auth+network RTT). Classic N+1: one query per setting for teams, then per team for supervisor name + members. Consider 3 batched queries (settings, teams WHERE setting_id = ANY, users WHERE team_id = ANY)."},
+      {"endpoint": "GET /api/admin/team-insights", "issue": "3.5s p50 for an org with 15 users / few meetings — worth profiling before data grows."},
+      {"endpoint": "data hygiene (teams table)", "issue": "Orphan row teams.name='Team Alpha' with setting_id=NULL is unreachable from the UI (/org/structure only lists teams by setting_id) and from team filters. Pre-existing seed residue."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OrgSettings.js > FocusTopicsTab", "issue": "Add / Set-current a focus topic shows the success toast but the list is NOT updated: load() uses cachedGet('/prep/focus-topics') with a 5-min TTL and invalidateCache() is never called after POST/PUT. Reproduced: DB row TEST_UI_Focus_iter97 created, UI kept showing 'No focus topics yet' until reload. PRE-EXISTING.", "selector": "[data-testid=\"add-focus-topic-btn\"], [data-testid=\"new-focus-topic-input\"]", "priority": "HIGH"},
+      {"component": "OrgStructure.js (PeopleHub > Structure tab)", "issue": "Creating a branch (Add Setting) or team shows 'Setting created'/'Team created' and the row IS persisted server-side, but the tree frequently does not show it — 3 of 5 attempts never refreshed even after 15s; only a full page reload showed it. Additionally the page-header 'Refresh' button fires NO network request (served from the 60s apiCache entry), so the user cannot recover in-app. refreshData() invalidates then calls fetchData() without awaiting/serialising, and the slow (2.8s) /org/structure refetch appears to race with a re-populated cache entry. PRE-EXISTING.", "selector": "[data-testid=\"add-setting-btn\"], [data-testid=\"save-setting-btn\"], [data-testid=\"org-tree\"]", "priority": "HIGH"},
+      {"component": "OrgStructure.js branch row", "issue": "No data-testid on the per-branch/per-team edit / delete / Add Team action buttons, so the rename path (the endpoint that 500s) is not reachable by automated tests without brittle hover+nth-button probing. Please add data-testid=\"edit-setting-btn-{id}\", \"delete-setting-btn-{id}\", \"add-team-btn-{id}\".", "selector": "[data-testid=\"org-tree\"] button", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Branch/team create -> list refresh", "issue": "POST succeeds (200) and a GET /org/structure follows, but the rendered tree keeps the pre-create list; in-page fetch('/api/org/structure') confirmed the server was already correct, so the staleness is purely client-side.", "affected_selectors": ["[data-testid=\"org-tree\"]", "[data-testid=\"save-setting-btn\"]"]},
+      {"flow": "Focus topic create -> list refresh", "issue": "Stale cachedGet response served after mutation (no invalidateCache in FocusTopicsTab).", "affected_selectors": ["[data-testid=\"new-focus-topic-input\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "PeopleHub / Organisation", "issues": ["Header says '7 staff members' while the People & Usage stat card says '10 Total staff' (header appears to exclude the 3 invite-pending users) — inconsistent counts on the same screen."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter97_index_regression.py",
+    "/app/backend/tests/test_iter97_scoped_manager.py",
+    "/app/backend/tests/_iter97_raw_probe.py",
+    "/app/backend/tests/_iter97_latency_cleanup.py",
+    "/app/test_reports/pytest/iter97_results.xml",
+    "/app/test_reports/pytest/iter97_scoped_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: fix PUT /api/org/settings/{id} 500 — add org_settings.manager_user_id column (idempotent ALTER in init_db.py) or drop the manager_user_id references in org.py create_setting/update_setting/get_structure.",
+    "HIGH: add invalidateCache('/prep/focus-topics') (or a live refetch) after focus-topic POST/PUT/DELETE in OrgSettings.js FocusTopicsTab.",
+    "HIGH: make OrgStructure.js post-mutation refresh deterministic (await invalidate+fetch, or force a cache-bypassing GET) and make the header Refresh button bypass apiCache.",
+    "MEDIUM: batch /org/structure's N+1 queries (2.8s p50).",
+    "LOW: add data-testid to branch/team edit/delete/Add-Team buttons in OrgStructure.js; clean up orphan teams row with setting_id NULL."
+  ],
+  "critical_code_review_comments": [
+    "org.py:213 indexes an asyncpg Record by a column that does not exist in the schema — such column access should be schema-verified; init_db.py adds indexes for org_settings but never the manager_user_id column the code assumes.",
+    "utils/apiCache.js gives every cacheable GET a module-level TTL, but several mutation handlers (FocusTopicsTab, and the Refresh button paths) never invalidate, so the UI can display stale data for up to 5 minutes with no user-visible recovery other than a reload. Consider a helper that wraps mutate+invalidate+refetch.",
+    "The index change itself is clean: purely CREATE INDEX IF NOT EXISTS inside init_db.py's idempotent block; verified all 7 indexes exist, are indisvalid, and are chosen by the planner (EXPLAIN with enable_seqscan=off shows Index/Bitmap Index Scan on each of the 7 columns)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter97_index_regression.py (new)",
+    "/app/backend/tests/test_iter97_scoped_manager.py (new)",
+    "/app/backend/tests/_iter97_raw_probe.py (new)",
+    "/app/backend/tests/_iter97_latency_cleanup.py (new)"
+  ],
+  "success_rate": {"backend": "97% (31/32 API assertions passed; the single failure is the pre-existing PUT /org/settings 500)", "frontend": "70% (staff list, team/setting insight filters, structure tree read, standards library all OK; branch/team create refresh + focus-topic list refresh stale)"},
+  "seed_data_creation": "All test data was created and then deleted: TEST_Branch_*/TEST_UI_Branch*/TEST_Scope_Branch_* settings, TEST_Team_*/TEST_UI_Team/TEST_Scope_Team_* teams, TEST_Focus_*/TEST_UI_Focus_iter97 focus topics. Verified post-run DB state restored to pre-test baseline (org_settings = ['Team one','Team Two'], teams = [('Team Alpha', NULL)], focus_topics = empty, manager@ and jane@ team_id/setting_id back to NULL). manager@supervision.com password hash was stale (401) and was re-hashed to Manager123! via tests/reset_test_pw.py.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! (MFA off), manager@supervision.com / Manager123! (MFA mandatory — bypass via tests/get_tokens.py), jane@supervision.com / Jane123! used as the movable staff fixture.",
+  "context_for_next_testing_agent": "Index change itself is fully verified — no need to re-test it. Re-run `python3 -m pytest tests/test_iter97_index_regression.py tests/test_iter97_scoped_manager.py -p no:randomly -o addopts=''` after the org_settings.manager_user_id fix; test_03_update_setting is the only expected failure today. Suites take ~3 min because every login costs ~1.5s and MFA is DB-overridden. If logins start returning 401 'Invalid credentials' run tests/reset_test_pw.py, and if they return 429 run tests/clear_rate_limit.py. For UI testing, inject cookies from tests/get_tokens.py (tokens live 30 min). Note the org has ZERO standards_documents rows, so 'existing parsed custom standards doc still usable in prep/rescan' could only be verified at endpoint level (GET /admin/standards/documents = 200 empty list, GET /prep/{id}/context = 200); upload a doc first if you need end-to-end coverage there.",
+  "rca_of_the_issue": "Index change: safe — 7 indexes created idempotently by init_db.py on backend startup, all present, indisvalid, and used by the planner; no query logic/RLS/columns touched and every scoped read (org / team / setting) returned identical, correctly-filtered data, including the security-sensitive team-scoped manager isolation (manager saw exactly its 2 in-scope users, ?ignore_scope=true correctly ignored, and 403 on out-of-scope branch/team creation). Unrelated defects found: (1) PUT /api/org/settings/{id} raises KeyError 'manager_user_id' because org.py assumes a column absent from org_settings, so branch rename always 500s; (2) the React apiCache module serves stale cached GETs after mutations in FocusTopicsTab (no invalidation at all) and, intermittently, in OrgStructure (invalidate+refetch races with the 2.8s /org/structure request and the Refresh button never hits the network), so newly created branches/teams/topics appear only after a page reload even though they are persisted."
+}

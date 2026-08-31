@@ -497,6 +497,13 @@ CREATE INDEX IF NOT EXISTS idx_schedules_org_id ON schedules(org_id);
 CREATE INDEX IF NOT EXISTS idx_meeting_types_org_id ON meeting_types(org_id);
 CREATE INDEX IF NOT EXISTS idx_supervision_uploads_org_id ON supervision_uploads(org_id);
 CREATE INDEX IF NOT EXISTS idx_supervision_uploads_staff_id ON supervision_uploads(staff_id);
+CREATE INDEX IF NOT EXISTS idx_teams_org_id ON teams(org_id);
+CREATE INDEX IF NOT EXISTS idx_teams_setting_id ON teams(setting_id);
+CREATE INDEX IF NOT EXISTS idx_org_settings_org_id ON org_settings(org_id);
+CREATE INDEX IF NOT EXISTS idx_focus_topics_org_id ON focus_topics(org_id);
+CREATE INDEX IF NOT EXISTS idx_standards_documents_org_id ON standards_documents(org_id);
+CREATE INDEX IF NOT EXISTS idx_users_team_id ON users(team_id);
+CREATE INDEX IF NOT EXISTS idx_users_setting_id ON users(setting_id);
 
 -- ── Schema patches (idempotent — safe to run on existing database) ─────────────
 
