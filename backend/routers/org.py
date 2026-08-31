@@ -112,43 +112,53 @@ async def get_structure(current_user=Depends(get_current_user)):
         else:
             # Branch/team managers see only their own setting
             s_rows = await conn.fetch("SELECT * FROM org_settings WHERE id=$1", scope["setting_id"])
+        s_dicts = [dict(r) for r in s_rows]
+        setting_ids = [s["id"] for s in s_dicts]
+
+        # Determine which teams to show, in a single batched query (avoids N+1 per setting)
+        if scope["level"] == "team":
+            t_rows = await conn.fetch(
+                "SELECT * FROM teams WHERE setting_id = ANY($1::text[]) AND id=$2 ORDER BY name ASC",
+                setting_ids, scope["team_id"],
+            )
+        else:
+            t_rows = await conn.fetch(
+                "SELECT * FROM teams WHERE setting_id = ANY($1::text[]) ORDER BY name ASC", setting_ids,
+            )
+        t_dicts = [dict(r) for r in t_rows]
+        team_ids = [t["id"] for t in t_dicts]
+
+        # Batch-resolve setting-manager + team-supervisor display names in one query
+        mgr_ids = {s["manager_user_id"] for s in s_dicts if s.get("manager_user_id")}
+        sup_ids = {t["supervisor_user_id"] for t in t_dicts if t.get("supervisor_user_id")}
+        name_ids = list(mgr_ids | sup_ids)
+        names_by_id = {}
+        if name_ids:
+            n_rows = await conn.fetch("SELECT id, name FROM users WHERE id = ANY($1::text[])", name_ids)
+            names_by_id = {r["id"]: r["name"] for r in n_rows}
+
+        # Batch-load all team members in one query instead of one per team
+        members_by_team = {tid: [] for tid in team_ids}
+        if team_ids:
+            m_rows = await conn.fetch(
+                "SELECT id, name, email, role, team_id FROM users WHERE team_id = ANY($1::text[]) AND is_active=TRUE ORDER BY name ASC",
+                team_ids,
+            )
+            for m in m_rows:
+                members_by_team[m["team_id"]].append({"id": m["id"], "name": m["name"], "email": m["email"], "role": m["role"]})
+
+        teams_by_setting = {sid: [] for sid in setting_ids}
+        for t in t_dicts:
+            sup_id = t.get("supervisor_user_id")
+            t["supervisor_name"] = names_by_id.get(sup_id) if sup_id else None
+            t["members"] = members_by_team.get(t["id"], [])
+            teams_by_setting.setdefault(t["setting_id"], []).append(t)
 
         settings = []
-        for s_row in s_rows:
-            s = dict(s_row)
+        for s in s_dicts:
             mgr_id = s.get("manager_user_id")
-            if mgr_id:
-                mgr = await conn.fetchrow("SELECT name FROM users WHERE id=$1", mgr_id)
-                s["manager_name"] = mgr["name"] if mgr else None
-            else:
-                s["manager_name"] = None
-            s["teams"] = []
-
-            # Determine which teams to show within this setting
-            if scope["level"] == "team":
-                t_rows = await conn.fetch(
-                    "SELECT * FROM teams WHERE setting_id=$1 AND id=$2 ORDER BY name ASC",
-                    s["id"], scope["team_id"],
-                )
-            else:
-                t_rows = await conn.fetch(
-                    "SELECT * FROM teams WHERE setting_id=$1 ORDER BY name ASC", s["id"]
-                )
-
-            for t_row in t_rows:
-                t = dict(t_row)
-                sup_id = t.get("supervisor_user_id")
-                if sup_id:
-                    sup = await conn.fetchrow("SELECT name FROM users WHERE id=$1", sup_id)
-                    t["supervisor_name"] = sup["name"] if sup else None
-                else:
-                    t["supervisor_name"] = None
-                t["members"] = []
-                m_rows = await conn.fetch(
-                    "SELECT id, name, email, role FROM users WHERE team_id=$1 AND is_active=TRUE ORDER BY name ASC", t["id"]
-                )
-                t["members"] = [dict(m) for m in m_rows]
-                s["teams"].append(t)
+            s["manager_name"] = names_by_id.get(mgr_id) if mgr_id else None
+            s["teams"] = teams_by_setting.get(s["id"], [])
             settings.append(s)
 
         # Unassigned users — only relevant for org-level managers
@@ -186,15 +196,16 @@ async def create_setting(data: SettingCreate, current_user=Depends(get_current_u
     org_id = current_user.get("org_id", "")
     now = datetime.now(timezone.utc).isoformat()
     setting_id = str(uuid.uuid4())
+    mgr_id = data.manager_user_id or None
     async with database.with_org(org_id) as conn:
         await conn.execute(
-            "INSERT INTO org_settings (id, org_id, name, created_at, updated_at) VALUES ($1,$2,$3,$4,$4)",
-            setting_id, org_id, data.name.strip(), now,
+            "INSERT INTO org_settings (id, org_id, name, manager_user_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$5)",
+            setting_id, org_id, data.name.strip(), mgr_id, now,
         )
-        if data.manager_user_id:
+        if mgr_id:
             await conn.execute(
                 "UPDATE users SET setting_id=$1 WHERE id=$2",
-                setting_id, data.manager_user_id,
+                setting_id, mgr_id,
             )
     return {"id": setting_id, "org_id": org_id, "name": data.name.strip(), "created_at": now}
 
@@ -206,20 +217,22 @@ async def update_setting(setting_id: str, data: SettingCreate, current_user=Depe
     scope = get_manager_scope(current_user)
     _assert_setting_scope(scope, setting_id)
     org_id = current_user.get("org_id", "")
+    mgr_id = data.manager_user_id or None
     async with database.with_org(org_id) as conn:
         existing = await conn.fetchrow("SELECT * FROM org_settings WHERE id=$1", setting_id)
         if not existing:
             raise HTTPException(404, "Setting not found")
-        old_mgr = existing.get("manager_user_id") if isinstance(existing, dict) else existing["manager_user_id"]
-        if old_mgr and old_mgr != data.manager_user_id:
+        old_mgr = existing["manager_user_id"]
+        if old_mgr and old_mgr != mgr_id:
             await conn.execute("UPDATE users SET setting_id=NULL WHERE id=$1", old_mgr)
         await conn.execute(
-            "UPDATE org_settings SET name=$1, updated_at=$2 WHERE id=$3",
-            data.name.strip(), datetime.now(timezone.utc).isoformat(), setting_id,
+            "UPDATE org_settings SET name=$1, manager_user_id=$2, updated_at=$3 WHERE id=$4",
+            data.name.strip(), mgr_id, datetime.now(timezone.utc).isoformat(), setting_id,
         )
-        if data.manager_user_id:
-            await conn.execute("UPDATE users SET setting_id=$1 WHERE id=$2", setting_id, data.manager_user_id)
+        if mgr_id:
+            await conn.execute("UPDATE users SET setting_id=$1 WHERE id=$2", setting_id, mgr_id)
     return {"message": "Setting updated"}
+
 
 
 @router.delete("/settings/{setting_id}")

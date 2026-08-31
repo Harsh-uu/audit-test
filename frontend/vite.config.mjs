@@ -89,11 +89,20 @@ export default defineConfig(({ mode }) => {
               handler: "NetworkOnly",
             },
 
-            // ── StaleWhileRevalidate: stable reference data ─────────────────
-            // Standards library and org structure change at most once a day.
-            // Serve the cached copy instantly, refresh silently in background.
+            // org/structure is mutated frequently (create/rename/delete branches,
+            // teams, drag-and-drop staff) — must never serve a stale SW-cached
+            // copy, otherwise the Structure tree can lag one mutation behind
+            // even though the app's own in-memory cache correctly invalidates.
             {
-              urlPattern: /\/api\/(admin\/standards|org\/structure)/,
+              urlPattern: /\/api\/org\/structure/,
+              handler: "NetworkOnly",
+            },
+
+            // ── StaleWhileRevalidate: stable reference data ─────────────────
+            // Standards library changes at most once a day. Serve the cached
+            // copy instantly, refresh silently in background.
+            {
+              urlPattern: /\/api\/admin\/standards/,
               handler: "StaleWhileRevalidate",
               options: {
                 cacheName: "api-stable",

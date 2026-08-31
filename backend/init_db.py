@@ -535,6 +535,8 @@ ALTER TABLE standards_documents ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAU
 ALTER TABLE focus_topics ADD COLUMN IF NOT EXISTS active_month TEXT;
 ALTER TABLE focus_topics ADD COLUMN IF NOT EXISTS created_by TEXT;
 
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS manager_user_id TEXT;
+
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup TEXT;
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup_at TEXT;
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker_text_backup_by TEXT;

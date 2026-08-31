@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { cachedGet } from "@/utils/apiCache";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield } from "lucide-react";
@@ -36,6 +36,7 @@ function FocusTopicsTab({ API, getAuthConfig }) {
         active_month: newMonth || null,
       }, getAuthConfig());
       setNewTopic(""); setNewMonth("");
+      invalidateCache("/prep/focus-topics");
       await load();
       toast.success("Focus topic added");
     } catch (err) { toast.error(err.response?.data?.detail || "Failed to add"); }
@@ -47,6 +48,7 @@ function FocusTopicsTab({ API, getAuthConfig }) {
       await axios.put(`${API}/prep/focus-topics/${topic.id}`, {
         topic: topic.topic, is_current: true, active_month: topic.active_month || null,
       }, getAuthConfig());
+      invalidateCache("/prep/focus-topics");
       await load();
       toast.success("Current focus topic updated");
     } catch { toast.error("Failed to update"); }
@@ -55,6 +57,7 @@ function FocusTopicsTab({ API, getAuthConfig }) {
   const handleDelete = async (id) => {
     try {
       await axios.delete(`${API}/prep/focus-topics/${id}`, getAuthConfig());
+      invalidateCache("/prep/focus-topics");
       setTopics(t => t.filter(x => x.id !== id));
     } catch { toast.error("Failed to delete"); }
   };

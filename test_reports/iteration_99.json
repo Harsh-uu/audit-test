@@ -1,0 +1,49 @@
+{
+  "summary": "Frontend-only verification of the iteration-99 fixes with the PWA service worker ACTIVE (unregistered + all caches cleared once at start, then allowed to re-register and control the page for every mutation). PRIMARY FIX (SW runtimeCaching split) PASSES: on Organisation > Structure with the SW controlling the page, (a) create branch with manager -> branch AND 'Manager: Demo Manager' render without reload (4.0s), (b) rename branch -> new name renders, old name gone (4.6s), (c) create team -> renders (4.1s), (d) delete team (4.0s) and delete branch (4.6s) -> disappear immediately. Confirmed the deployed /sw.js contains registerRoute(/\\/api\\/org\\/structure/, new NetworkOnly, 'GET') and that the runtime 'api-stable' cache only ever contains /admin/standards and /admin/standards/documents (no /org/structure entry). MINOR FIX (manager_user_id '' -> NULL) PASSES at DB level: POST with manager_user_id='' stores NULL, PUT assigning a manager stores the UUID, PUT with '' stores NULL again (verified with direct asyncpg reads on org_settings); tree drops the 'Manager:' line immediately in the UI. REGRESSIONS all pass: Standards Library loads in 3.0s with 47 CQC / 16 Care Cert / 10 users and no error banner (StaleWhileRevalidate rule still working), header reads '7 active staff members', PeopleHub Refresh renders 10 rows, Focus Topics add (3.5s) + delete instant with no reload. No console errors and no non-2xx API responses observed in any run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/org/structure", "issue": "Still ~2-3s per call from the public URL; every Structure mutation therefore takes ~4s (mutation + refetch) before the tree updates. Functionally correct but feels sluggish (carried over from iteration_98, unchanged)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OrgStructure.js — Edit Setting modal", "issue": "STALE-FORM RACE (reproduced): during the ~4s refetch window after a mutation, the Edit buttons stay enabled and the modal prefills settingForm from the not-yet-refreshed structure. In my first run I renamed 'TEST99 Branch'->'TEST99 Renamed', re-opened Edit within 4s, changed only the Manager dropdown and saved — the PUT sent the STALE name and silently reverted the rename. Fix: optimistic local update after mutation (or disable edit/delete + show a spinner on the tree while refreshData() is in flight).", "selector": "[data-testid=\"edit-setting-<id>\"]", "priority": "MEDIUM"},
+      {"component": "OrgStructure.js / OrgSettings.js", "issue": "No visible loading indicator on the tree during the post-mutation refetch — the UI looks unchanged for ~4s after a successful save, which reads as 'nothing happened' to a user.", "selector": "[data-testid=\"org-tree\"]", "priority": "LOW"},
+      {"component": "OrgSettings.js > FocusTopicsTab", "issue": "Native <input type=\"month\"> browser picker still used for 'Assign to month' instead of the app's date-picker component (pre-existing, cosmetic).", "selector": "[data-testid=\"new-focus-topic-month\"]", "priority": "LOW"},
+      {"component": "OrgSettings.js sub-tabs / Setting modal Manager select", "issue": "Testability gap: the Settings page sub-tabs (Supervision Template / Export All / Transcripts / Branding / Focus Topics / Security) and the Manager <select> inside the Add/Edit Setting modal have no data-testid, forcing text/structural selectors in automation.", "selector": "n/a", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Organisation > Structure / Settings > Focus Topics / Standards Library", "issues": ["No contrast, spacing or alignment defects found at 1920x1080; footer and header render correctly on all three screens."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/iter99_db_null_check.py",
+    "/app/backend/tests/iter99_update_race.py",
+    "/app/backend/tests/iter99_cleanup.py"
+  ],
+  "action_items": [
+    "MEDIUM: guard the Structure tab against the stale-form race — after a mutation either apply an optimistic local update or disable the edit/delete controls (with a spinner) until refreshData() resolves, so a user re-opening Edit during the ~4s refetch cannot PUT stale field values and revert their own change.",
+    "LOW: add a refreshing indicator on [data-testid=\"org-tree\"] during the post-mutation refetch.",
+    "LOW: add data-testid to the Settings page sub-tabs and to the Manager select in the Add/Edit Setting modal.",
+    "LOW (pre-existing): replace the native month input in FocusTopicsTab with the app's date-picker component."
+  ],
+  "critical_code_review_comments": [
+    "vite.config.mjs runtimeCaching is now correct: /api/org/structure is its own NetworkOnly rule and /api/admin/standards is the only StaleWhileRevalidate entry; verified against the deployed build (public /sw.js) and at runtime via caches.open('api-stable') keys.",
+    "org.py create_setting/update_setting mgr_id = data.manager_user_id or None is correct and verified against Postgres (NULL, not ''). Consider moving the coercion into the SettingCreate Pydantic model (validator) so every future consumer of the model benefits; the same '' vs NULL risk exists for team supervisor_user_id in create_team/update_team — worth a spot-check.",
+    "OrgStructure.saveSetting sends the whole settingForm on PUT (name + description + manager) rather than only the changed field, which is what makes the stale-prefill race destructive; a PATCH-style partial update would remove the hazard entirely."
+  ],
+  "updated_files": [
+    "/app/backend/tests/iter99_db_null_check.py (new)",
+    "/app/backend/tests/iter99_update_race.py (new)",
+    "/app/backend/tests/iter99_cleanup.py (new)"
+  ],
+  "success_rate": {"backend": "100% (API/DB spot checks: create/rename/clear-manager/delete all 200 and immediately consistent; manager_user_id NULL verified)", "frontend": "100% of the requested scenarios pass (4/4 SW mutation cases, manager->None, standards regression, 3/3 iter98 smoke checks)"},
+  "seed_data_creation": "Created and removed: org_settings 'TEST99 Branch'/'TEST99 Renamed', 'TEST99_API(_R)', 'TEST99_NULLCHK', team 'TEST99 Team', focus topic 'TEST99 Focus Topic'. DB verified back to baseline: org_settings = ['Team one','Team Two'] with manager_user_id NULL, focus_topics empty, no '' manager_user_id rows anywhere.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com / Admin123! via `cd /app/backend && python3 tests/get_tokens.py admin@supervision.com 'Admin123!'` -> inject supervision_access/supervision_refresh cookies with Playwright context.add_cookies (domain supervision-preview.preview.emergentagent.com, secure=True).",
+  "context_for_next_testing_agent": "The SW caching bug is FIXED and verified with the SW active; do not re-test it. Method that works: goto '/', evaluate unregister-all-SW + caches.delete once, add cookies, goto /organisation, wait 4s, reload, wait 4s -> navigator.serviceWorker.controller is non-null; then poll [data-testid=\"org-tree\"] inner_text for up to 25-30s after each mutation. CRITICAL: do NOT assert at a fixed 4s — GET /api/org/structure alone takes 2-3s so a mutation needs 4-5s to show; short waits produce false 'stale' failures AND can trigger the stale-form race described in ui_bugs (my first run accidentally reverted a rename that way). Focus Topics live on /settings > 'Focus Topics' sub-tab (not Organisation > Settings). Writing files under /app/backend triggers a uvicorn reload (~25s of 502s) — sleep before hitting the API.",
+  "rca_of_the_issue": "iteration_98's root cause (workbox StaleWhileRevalidate on /api/org/structure serving pre-mutation payloads) is resolved: the built sw.js now registers /api/org/structure as NetworkOnly and the runtime api-stable cache contains only /admin/standards entries, so every post-mutation GET hits the network (backend also sends Cache-Control: no-store, so the HTTP cache cannot re-introduce staleness). Remaining perceived staleness is purely latency (~4s: mutation RTT + 2-3s structure refetch) plus the absence of an optimistic update / in-flight lock, which additionally exposes a destructive stale-prefill race in the Edit Setting modal. The manager_user_id hygiene fix is confirmed at the database level (NULL on create-with-empty and on clear-manager update)."
+}

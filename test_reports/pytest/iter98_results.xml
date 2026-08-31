@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="22" time="178.355" timestamp="2026-08-31T09:20:24.726595+00:00" hostname="agent-env-93542dae-df0b-4464-99dc-51eb3c5932f3"><testcase classname="tests.test_iter98_org_fixes.TestSettingRenameFix" name="test_schema_has_manager_user_id_column" time="1.158" /><testcase classname="tests.test_iter98_org_fixes.TestSettingRenameFix" name="test_rename_without_manager_returns_200" time="19.555" /><testcase classname="tests.test_iter98_org_fixes.TestSettingRenameFix" name="test_rename_with_manager_persists_and_shows_name" time="6.579" /><testcase classname="tests.test_iter98_org_fixes.TestSettingRenameFix" name="test_rename_clearing_manager_unassigns" time="6.386" /><testcase classname="tests.test_iter98_org_fixes.TestSettingRenameFix" name="test_rename_nonexistent_setting_404" time="1.553" /><testcase classname="tests.test_iter98_org_fixes.TestSettingRenameFix" name="test_create_setting_with_manager_shows_manager_name" time="7.555" /><testcase classname="tests.test_iter98_org_fixes.TestStructureShape" name="test_admin_org_level_shape" time="2.181"><failure message="AssertionError: assert ['Team one', ...ranch_06b010'] == ['TEST98_Bran...', 'Team one']&#10;  &#10;  At index 0 diff: 'Team one' != 'TEST98_Branch_06b010'&#10;  Use -v to get more diff">self = &lt;test_iter98_org_fixes.TestStructureShape object at 0xfb21e6e434d0&gt;
+admin = (&lt;requests.sessions.Session object at 0xfb21e79b5290&gt;, {'id': 'f72ac550-e6b8-4ffc-b2da-46a54a4c06d5', 'org_id': 'b00bf04f-a1b9-4673-8430-b4a08ba15d6c', 'email': 'admin@supervision.com', 'name': 'Test Admin', ...})
+fixtures = {'setting_id': '625eb003-6d30-42e4-91cc-91f4b2794792', 'empty_setting_id': '5393e9a5-6cbf-41ac-8ddf-a6df2d8c0a7d', 'team_a': 'fd290dba-4de6-43da-9062-1a35cff57994', 'team_b': '0f142ddb-b227-4549-b9d2-aea303cbdab9', ...}
+
+    def test_admin_org_level_shape(self, admin, fixtures):
+        s, _ = admin
+        r = s.get(f"{API}/org/structure", timeout=60)
+        assert r.status_code == 200, r.text[:300]
+        body = r.json()
+        assert set(body.keys()) == {"settings", "unassigned_users"}
+        assert isinstance(body["settings"], list) and isinstance(body["unassigned_users"], list)
+        for st in body["settings"]:
+            assert {"id", "org_id", "name", "manager_user_id", "manager_name", "teams"} &lt;= set(st.keys())
+            assert "_id" not in st
+            assert isinstance(st["teams"], list)
+            for t in st["teams"]:
+                assert {"id", "org_id", "setting_id", "name", "supervisor_user_id",
+                        "supervisor_name", "members"} &lt;= set(t.keys())
+                assert t["setting_id"] == st["id"]
+                assert isinstance(t["members"], list)
+                for m in t["members"]:
+                    assert set(m.keys()) == {"id", "name", "email", "role"}
+        for u in body["unassigned_users"]:
+            assert set(u.keys()) == {"id", "name", "email", "role"}
+        # settings sorted by name asc
+        names = [x["name"] for x in body["settings"]]
+&gt;       assert names == sorted(names)
+E       AssertionError: assert ['Team one', ...ranch_06b010'] == ['TEST98_Bran...', 'Team one']
+E         
+E         At index 0 diff: 'Team one' != 'TEST98_Branch_06b010'
+E         Use -v to get more diff
+
+tests/test_iter98_org_fixes.py:241: AssertionError</failure></testcase><testcase classname="tests.test_iter98_org_fixes.TestStructureShape" name="test_setting_with_zero_teams_and_team_with_zero_members" time="2.182" /><testcase classname="tests.test_iter98_org_fixes.TestStructureShape" name="test_teams_sorted_and_members_sorted" time="2.203" /><testcase classname="tests.test_iter98_org_fixes.TestStructureShape" name="test_batched_output_matches_reference_reconstruction" time="10.968" /><testcase classname="tests.test_iter98_org_fixes.TestStructureShape" name="test_setting_scoped_manager" time="10.941" /><testcase classname="tests.test_iter98_org_fixes.TestStructureShape" name="test_team_scoped_manager" time="12.482" /><testcase classname="tests.test_iter98_org_fixes.TestStructureShape" name="test_scoped_manager_out_of_scope_403" time="9.555" /><testcase classname="tests.test_iter98_org_fixes.TestOrgCrudRegression" name="test_team_update_with_supervisor" time="4.399" /><testcase classname="tests.test_iter98_org_fixes.TestOrgCrudRegression" name="test_assign_member_between_teams" time="4.396" /><testcase classname="tests.test_iter98_org_fixes.TestOrgCrudRegression" name="test_unassign_member_to_pool" time="4.184" /><testcase classname="tests.test_iter98_org_fixes.TestOrgCrudRegression" name="test_add_and_remove_member_endpoints" time="5.961" /><testcase classname="tests.test_iter98_org_fixes.TestOrgCrudRegression" name="test_delete_team_unassigns_members" time="9.758" /><testcase classname="tests.test_iter98_org_fixes.TestOrgCrudRegression" name="test_delete_setting_cascades" time="12.485" /><testcase classname="tests.test_iter98_org_fixes.TestOrgCrudRegression" name="test_invite_user_then_edit_and_delete" time="17.975" /><testcase classname="tests.test_iter98_org_fixes.TestFocusTopics" name="test_focus_topic_crud" time="11.187" /><testcase classname="tests.test_iter98_org_fixes.TestPeopleStats" name="test_people_stats_shape" time="14.578" /></testsuite></testsuites>

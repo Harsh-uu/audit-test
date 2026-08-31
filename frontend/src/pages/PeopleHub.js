@@ -509,6 +509,11 @@ export default function PeopleHub() {
 
   useEffect(() => { load(); }, [load]);
 
+  const handleRefresh = useCallback(() => {
+    invalidateCache("/admin/people-stats");
+    load();
+  }, [load]);
+
   const revokeInvite = useCallback(async (person) => {
     if (!window.confirm(`Revoke invite for ${person.name}? This will remove their account.`)) return;
     try {
@@ -545,13 +550,13 @@ export default function PeopleHub() {
             <h1 className="text-base font-semibold text-gray-900 font-display">Organisation</h1>
             {!loading && (
               <p className="text-xs text-gray-500 mt-0.5">
-                {people.filter(p => !p.pending_invite).length} staff members
+                {people.filter(p => !p.pending_invite).length} active staff members
               </p>
             )}
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={load}
+              onClick={handleRefresh}
               disabled={loading}
               className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
               data-testid="people-refresh"
@@ -587,7 +592,7 @@ export default function PeopleHub() {
         {/* Tab content */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {tab === "people" && (
-            <PeopleTab people={people} loading={loading} onRefresh={load} onRevoke={revokeInvite} onEdit={setEditingUser} />
+            <PeopleTab people={people} loading={loading} onRefresh={handleRefresh} onRevoke={revokeInvite} onEdit={setEditingUser} />
           )}
           {tab === "structure" && (
             <div className="overflow-y-auto flex-1">

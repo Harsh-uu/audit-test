@@ -1,0 +1,51 @@
+{
+  "summary": "Verification of the 5 post-iter97 fixes. Backend: new pytest suite (22 tests) covering the org_settings.manager_user_id fix (rename with/without manager, clear manager, 404 path, create-with-manager -> manager_name), the batched GET /org/structure rewrite (shape equivalence vs a SQL-reconstructed reference, org-level admin, setting-scoped manager, team-scoped manager, zero-team setting, zero-member team, null manager/supervisor, out-of-scope 403), full org CRUD regression (team update+supervisor, assign/unassign, add/remove member, delete team unassigns, delete setting cascades, invite -> edit -> deactivate -> delete), focus-topics CRUD and /admin/people-stats shape. 22/22 pass. Also re-ran iter97's two suites: 32/32 pass (previously 31/32 — the PUT /org/settings 500 is gone). Frontend: verified Focus Topics add/set-current/delete now update instantly, PeopleHub Refresh now bypasses the 30s cache (invite in a second client became visible immediately), header label reads 'N active staff members', branch rename from the Edit Setting modal returns 200 and renders 'Manager: Demo Manager' under the branch. IMPORTANT ENV FINDING: the preview frontend is a STATIC Vite production build (no hot reload) — the fixes were not live until I restarted the frontend service. NEW ROOT CAUSE FOUND for iter97's still-open 'tree stale after create/rename/delete' bug: the PWA service worker (vite.config.mjs runtimeCaching) applies StaleWhileRevalidate to /api/org/structure, so after every mutation the SW serves the previous structure payload and the tree is one mutation behind until a second refresh/reload.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/org/settings/{id}", "issue": "Frontend sends manager_user_id: \"\" (empty string) when 'None' is selected, and the endpoint stores '' instead of NULL in org_settings.manager_user_id. Harmless today because get_structure() uses a truthiness check, but it is dirty data and would break any future JOIN/IS NULL query. Coerce empty string to None in SettingCreate (validator) or in update_setting/create_setting."},
+      {"endpoint": "GET /api/org/structure", "issue": "Still ~2.5-3.0s wall time from the public URL after the batching rewrite (network+auth RTT included). Batching is correct (4 queries max) but latency is unchanged in practice — worth profiling database.with_org() / RLS session setup rather than the query count."},
+      {"endpoint": "data hygiene (teams)", "issue": "Orphan row teams.name='Team Alpha' with setting_id=NULL still present (pre-existing, unreachable from UI)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PWA service worker (frontend/vite.config.mjs runtimeCaching)", "issue": "runtimeCaching maps /api/(admin/standards|org/structure) to handler 'StaleWhileRevalidate' (cacheName api-stable, 1h). Once the SW controls the page, EVERY GET /api/org/structure after a mutation is served from the SW cache, so the Structure tree shows pre-mutation data even though the app correctly calls invalidateCache + refetch. Reproduced with network logging: PUT /org/settings 200 followed by GET /org/structure 200 whose BODY still listed the old branch name; a UI delete that returned 404 on a follow-up API delete (i.e. really deleted) still rendered the branch. This is the true root cause of iter97's 'branch/team create needs a page reload' HIGH bug — the JS apiCache was only half the story. Fix: change /api/org/structure to NetworkOnly (or NetworkFirst with a very short maxAge) in vite.config.mjs.", "selector": "[data-testid=\"org-tree\"]", "priority": "HIGH"},
+      {"component": "OrgSettings.js > FocusTopicsTab", "issue": "Native <input type=\"month\"> browser picker used for 'Assign to month' instead of the app's shadcn/uk-date-picker component — inconsistent with the rest of the app (pre-existing, cosmetic).", "selector": "[data-testid=\"new-focus-topic-month\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Organisation > Structure mutations (create/rename/delete branch or team)", "issue": "Stale tree after mutation caused by the service-worker StaleWhileRevalidate rule above (not by the React apiCache, which now invalidates correctly). With the SW absent, create/rename/delete + 'Manager: <name>' all render immediately.", "affected_selectors": ["[data-testid=\"org-tree\"]", "[data-testid=\"save-setting-btn\"]", "[data-testid=\"save-new-team-btn\"]"]},
+      {"flow": "Preview deploy pipeline", "issue": "frontend is served as a static Vite build (supervisor builds on start); source edits do NOT hot-reload. Any frontend fix must be followed by `sudo supervisorctl restart frontend` or it cannot be observed/tested. Testers should also unregister the SW (or bump the SW) because the old bundle keeps being served from the precache."}
+    ],
+    "design_issues": [
+      {"screen": "Organisation header / People & Usage", "issues": ["Header now reads '7 active staff members' next to the '10/11 Total staff' card — the wording fix lands correctly and no layout break; the two numbers are still different metrics by design."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter98_org_fixes.py",
+    "/app/backend/tests/test_iter97_index_regression.py",
+    "/app/backend/tests/test_iter97_scoped_manager.py",
+    "/app/test_reports/pytest/iter98_results.xml",
+    "/app/test_reports/pytest/iter98_iter97rerun.xml"
+  ],
+  "action_items": [
+    "HIGH: change the service-worker runtimeCaching rule for /api/org/structure from StaleWhileRevalidate to NetworkOnly in frontend/vite.config.mjs (and consider the same for /api/admin/* mutable reads), then restart frontend. This is the remaining cause of the stale Structure tree after create/rename/delete.",
+    "LOW: coerce manager_user_id '' -> None in org.py create_setting/update_setting so org_settings.manager_user_id is NULL rather than an empty string.",
+    "INFO: remember to restart the frontend service after frontend edits on preview (static build, no hot reload)."
+  ],
+  "critical_code_review_comments": [
+    "The 5 targeted fixes are all correct: init_db.py's idempotent ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS manager_user_id TEXT is applied (column present), org.py create_setting/update_setting persist and unassign the manager correctly, and the batched get_structure() output is byte-equivalent to a SQL-reconstructed reference for org/setting/team scope including all null/empty edge cases.",
+    "get_structure() builds teams_by_setting from setting_ids then uses setdefault when appending — safe, but a team whose setting_id is not in setting_ids (shouldn't happen given the ANY() filter) would silently create an unread bucket; not a defect, just dead-code risk.",
+    "OrgStructure.js refreshData() correctly invalidates then refetches; the remaining staleness is entirely in the service worker layer. Any future 'stale UI' report on this page should check the SW cache first."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter98_org_fixes.py (new)"
+  ],
+  "success_rate": {"backend": "100% (22/22 new tests + 32/32 iter97 re-run)", "frontend": "85% (focus-topics instant refresh, People Refresh cache-bypass, header label, branch rename + Manager display all PASS; Structure-tree post-mutation refresh still stale due to the service-worker cache)"},
+  "seed_data_creation": "All test data created and removed: TEST98_* org_settings/teams, TEST98_UI_Focus_* focus topics, test98_refresh@example.com / test98_<tag>@example.com users. DB verified back to the iter97 baseline: org_settings=['Team one','Team Two'] (manager_user_id NULL), teams=[('Team Alpha', NULL)], focus_topics empty, manager@/jane@ team_id+setting_id NULL. Frontend service was restarted once (required to pick up the fixes).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! (MFA off), manager@supervision.com / Manager123! (MFA via tests/get_tokens.py), jane@supervision.com / Jane123!",
+  "context_for_next_testing_agent": "Run `cd /app/backend && python3 -m pytest tests/test_iter98_org_fixes.py -p no:randomly -o addopts='' -q` (~3 min; every login costs ~1.5s). Two environment gotchas discovered this round: (1) the preview frontend is a STATIC Vite build — after any frontend source change you MUST `sudo supervisorctl restart frontend` before UI testing, otherwise you will test the old bundle (this is what made the focus-topic fix look broken at first); (2) the PWA service worker caches GET /api/org/structure with StaleWhileRevalidate, so ALWAYS unregister the SW and clear caches at the start of a Playwright run (await page.evaluate over navigator.serviceWorker.getRegistrations() + caches.keys()) or Structure-tab assertions will see stale data. Drag-and-drop of staff between teams was NOT automated (HTML5 dnd); the equivalent backend path (PATCH /org/users/{id}/assign-team) and the Edit User modal team dropdown are covered by tests. Writing files under /app/backend triggers a uvicorn reload (~25s of 502s) — pause before hitting the API.",
+  "rca_of_the_issue": "FIX 1 (500 on branch rename): resolved — org_settings.manager_user_id now exists (verified via information_schema) and update_setting/create_setting persist it; PUT returns 200 with and without a manager, clears the old manager's setting_id, and manager_name renders as 'Manager: Demo Manager' in the tree. FIX 2 (batched /org/structure): output verified identical in shape and data to a SQL-reconstructed reference for admin/org, setting-scoped and team-scoped managers, with unassigned_users only populated at org level and null manager_name/supervisor_name for unassigned rows. FIX 4/5/6: focus-topic list and people-stats now refresh immediately; the header label reads 'N active staff members'. Remaining defect (not part of this round's fixes): the Structure tree can still display pre-mutation data because the PWA service worker serves /api/org/structure from its 'api-stable' StaleWhileRevalidate cache — proven by logging the network response body after a successful PUT/DELETE (body contained the old data) and by the fact that a follow-up API delete returned 404 while the UI still rendered the row."
+}
