@@ -487,6 +487,7 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_org_id ON users(org_id);
 CREATE INDEX IF NOT EXISTS idx_transcripts_meeting_id ON transcripts(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_meeting_id ON analyses(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_audio_files_meeting_id ON audio_files(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_review_edits_meeting_id ON review_edits(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_reviewer_comments_meeting_id ON reviewer_comments(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_meeting_id ON audit_logs(meeting_id);
