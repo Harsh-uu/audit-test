@@ -22,6 +22,31 @@ credentials for — schema changes here do NOT propagate there automatically; th
 direct DB password access or a real deploy of this backend pointed at that DB.
 
 ### DB audit fixes completed this session (all verified via testing_agent, 0 regressions)
+7. **Zero foreign key constraints in the schema (High)** — confirmed 0 FKs existed anywhere;
+   every "belongs to" relationship (transcript→meeting, team→org, etc.) was only enforced by hand
+   in app code, and this had already caused real drift (3 orphan `audit_logs` rows pointing to
+   deleted meetings, found live). User decided: keep `audit_logs.meeting_id` CASCADE (matches
+   current app behavior), do it as one coordinated migration. Added **37 FK constraints** across
+   the schema in `init_db.py` (idempotent DO blocks, safe to re-run every startup): CASCADE on
+   org_id/meeting_id parent-child chains, SET NULL on team/setting/supervisor/manager soft
+   references. Cleaned the 3 pre-existing orphan `audit_logs` rows before adding that constraint.
+   Deliberately excluded (documented in code comments, has pre-existing orphans or is an
+   intentional historical snapshot): `jobs.meeting_id`, `invitations.user_id`,
+   `meetings.transcript_id/analysis_id/audio_file_id` (reverse pointers, circular-FK risk),
+   `meetings.created_by/sign_off_manager_id` (intentional post-deletion snapshots).
+   Hardened the DO blocks to also catch `foreign_key_violation` (log a warning, don't crash boot)
+   so this migration can't brick startup on a dirtier DB (e.g. production) that hasn't been
+   audited yet. Verified via testing_agent: 38/38 tests — meeting-delete cascade (all 6 child
+   tables cleaned, no over-cascade into unrelated orgs), team/setting/user deletion SET NULL
+   (no 500s), negative test (bad FK inserts correctly rejected), full role smoke, and a
+   real raw-SQL bypass test proving the constraint itself (not just the app code) enforces it
+   (iteration_104).
+   - Not yet actioned (flagged by testing_agent): several FK child columns have no supporting
+     index (review_edits.org_id, standards_entries.org_id, meetings.team_id/setting_id/
+     schedule_id, teams.supervisor_user_id, org_settings.manager_user_id, schedules.staff_user_id/
+     meeting_type_id, transcripts/analyses/audio_files/meeting_prep/settings/invitations.org_id) —
+     negligible today, worth indexing before volume grows; no `schema_migrations` version table
+     exists yet, so all DDL here is idempotent-by-hand rather than versioned.
 6. **`SELECT *` waste (deps.py hot path)** — `get_current_user()` (runs on every authenticated
    request via `Depends`) selected all 17 `users` columns including `password_hash`, MFA codes,
    `must_change_password`, timestamps. Narrowed to the 8 columns actually consumed anywhere
