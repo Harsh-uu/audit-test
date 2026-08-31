@@ -55,10 +55,10 @@ async def get_current_user(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
-    pool = request.app.state.pool
     async with database.with_admin() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM users WHERE id = $1 AND is_active = TRUE", user_id
+            "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at "
+            "FROM users WHERE id = $1 AND is_active = TRUE", user_id
         )
 
     if not row:

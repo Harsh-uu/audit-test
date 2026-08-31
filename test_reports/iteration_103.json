@@ -1,0 +1,34 @@
+{
+  "summary": "Backend-only regression pass for the narrowed get_current_user() SELECT in deps.py (id, org_id, email, name, role, team_id, setting_id, password_changed_at). Created /app/backend/tests/test_iter103_current_user_select.py (57 tests) — ALL 57 PASSED. Covered: login + protected access for admin/manager/attendee/super_admin, /api/auth/me field-by-field match against the DB row plus assertion that the 6 dropped columns are not leaked, broad role smoke (17 admin GETs, 8 manager GETs, attendee allowed/403 matrix, meeting detail + review report, org-settings POST/GET/PUT/DELETE roundtrip, portfolio self-view, super-admin/orgs), get_manager_scope org/setting/team isolation end-to-end via /auth/me + /dashboard org_structure, and the SEC-001 token-freshness suite. Also grep-verified the whole backend: the ONLY current_user fields read anywhere are id, org_id, email, name, role, team_id, setting_id (checked direct subscript, .get(), aliases of the dependency param, dict(current_user), and helper functions that receive current_user: get_manager_scope and super_admin._require_super_admin — both only read role/team_id/setting_id). No read of password_hash / mfa_code / mfa_code_expires_at / mfa_code_attempts / must_change_password / created_at / updated_at from current_user exists. No KeyError/None regression found. SEC-001 VERIFIED (4 tests): self change-password invalidates the old access token (401 'Session expired' on /auth/me via both cookie and Authorization header, and on /api/meetings/), admin POST /admin/users/{id}/reset-password invalidates the target user's token, the stale refresh token is also rejected by /auth/refresh, and an unchanged password keeps a valid token working across repeated calls — i.e. password_changed_at is correctly still selected and _pwd_ts_of() works on it.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "deps.py get_current_user()", "issue": "Dead code: `pool = request.app.state.pool` (line ~58) is assigned but never used — the function uses database.with_admin(). Harmless but should be removed."},
+      {"endpoint": "GET /api/auth/me", "issue": "Now-redundant defensive pops of password_hash/mfa_code/mfa_code_expires_at/mfa_code_attempts (auth.py 452-455) — those columns can no longer be present. Safe to keep, but they mask the intent; optional cleanup."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter103_current_user_select.py",
+    "/app/test_reports/pytest/iter103_results.xml",
+    "/app/test_reports/pytest/iter103_regression.xml"
+  ],
+  "action_items": [
+    "Nothing blocking — the narrowed SELECT is safe; 0 regressions in 57 tests.",
+    "Optional: drop the unused `pool = request.app.state.pool` line in deps.get_current_user().",
+    "Test-debt (pre-existing, NOT caused by this change): tests/test_rbac.py fails at collection because its BASE_URL resolves to None (requests.exceptions.InvalidURL) — it reads an env var that is not set instead of /app/frontend/.env; tests/test_idor_sec001.py hard-fails because its hardcoded TARGET_MEETING 0383953a-9a17-4f7f-9924-ed5ec30b42b6 no longer exists in Postgres. Both suites need reseeding/env fixes before they are usable as regression gates again."
+  ],
+  "critical_code_review_comments": [
+    "get_current_user() still performs one DB round-trip per authenticated request. Since the row is now tiny and immutable-ish, a 5-10s TTL in-process cache keyed on (user_id, pwd_ts) would remove the hot-path query entirely — but only if invalidation on password change/deactivation is handled (is_active flip must take effect promptly), so treat as a separate, carefully-scoped change.",
+    "The narrowed SELECT is an implicit contract. Recommend a short comment in deps.py listing the consumers (route handlers read id/org_id/email/name/role/team_id/setting_id; deps itself needs password_changed_at) so a future field read isn't added silently — the failure mode is a KeyError at runtime, not at import.",
+    "Backend log contains a stale traceback `KeyError: 'manager_user_id'` at org.py:213 from an OLDER code revision (line 213 is now the @router.put decorator). Re-verified live: PUT /api/org/settings/{id} returns 200 and the roundtrip persists, so this is historical noise, not a live bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter103_current_user_select.py"],
+  "success_rate": {"backend": "100% (57/57)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "All transient and cleaned up: a temp org_setting 'TEST_iter103 Setting' (created+updated+deleted via API), a temp team row TEST_iter103_team (deleted in fixture teardown), manager@supervision.com setting_id/team_id temporarily set then reset to NULL, jane@supervision.com password temporarily changed to TempJane103! then restored to Jane123! with must_change_password=FALSE. Post-run DB verification confirmed: jane login 200 with Jane123!, manager scope NULL/NULL, zero TEST_ leftovers, login_attempts cleared.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Used /app/memory/test_credentials.md as-is: admin@supervision.com/Admin123!, manager@supervision.com/Manager123! (MFA bypassed via DB bcrypt('123456') override), jane@supervision.com/Jane123! (attendee, no MFA), superadmin@1two.one/NewPass123!. All still valid.",
+  "context_for_next_testing_agent": "New reusable suite: `cd /app/backend && python3 -m pytest tests/test_iter103_current_user_select.py -n 0 -q` (~4.5 min, -n 0 mandatory — shared-account MFA override + global login_attempts table). It contains a self-contained login() helper with MFA bypass and a 4-test SEC-001 token-freshness block that is the canonical regression gate for any future change to deps.get_current_user() or the users SELECT list. NOTE for future runs: the Test Company org (b00bf04f-...) currently has ZERO teams with a setting_id and the iter102 seed data has been cleaned up, so any test needing a team must create one (the suite seeds TEST_iter103_team itself). /portfolio/ and /schedules/due are not attendee-accessible (403 by design); portfolio is /api/portfolio/{user_id}.",
+  "rca_of_the_issue": "No issue found. The change narrows the hot-path users query from SELECT * (17 cols) to 8 cols. Risk was a downstream read of a dropped field; verified impossible by exhaustive grep (direct subscript, .get, aliases, dict() copies, helpers receiving current_user) and by functional smoke across all four roles. The one security-critical dependency, password_changed_at (used by _pwd_ts_of for the SEC-001 token-freshness check), is retained and proven working: old access tokens are rejected with 401 'Session expired' immediately after both self-service change-password and admin reset-password."
+}

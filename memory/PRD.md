@@ -22,6 +22,15 @@ credentials for — schema changes here do NOT propagate there automatically; th
 direct DB password access or a real deploy of this backend pointed at that DB.
 
 ### DB audit fixes completed this session (all verified via testing_agent, 0 regressions)
+6. **`SELECT *` waste (deps.py hot path)** — `get_current_user()` (runs on every authenticated
+   request via `Depends`) selected all 17 `users` columns including `password_hash`, MFA codes,
+   `must_change_password`, timestamps. Narrowed to the 8 columns actually consumed anywhere
+   downstream (`id, org_id, email, name, role, team_id, setting_id, password_changed_at` — the last
+   needed internally by deps.py's own SEC-001 token-freshness check). Verified via exhaustive grep
+   (no code reads a dropped field) + 57/57 tests incl. SEC-001 regression (iteration_103). Removed a
+   dead `pool = request.app.state.pool` line found during the same pass.
+   - ~81 other `SELECT *` occurrences across routers exist but are lower-value (not per-request-
+     for-every-user); not yet addressed, available as a future field if the user wants to continue.
 5. **N+1 query patterns (6 locations)** — batched into single `WHERE id = ANY($1::text[])` queries
    or correlated subqueries: `super_admin.py list_orgs()` (2 counts/org → 1 query),
    `admin.py export_evidence/export_cqc_excerpts/export_cc_excerpts` (analyses fetched per-meeting →
