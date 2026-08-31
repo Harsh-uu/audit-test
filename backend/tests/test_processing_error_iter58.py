@@ -20,7 +20,7 @@ import uuid
 
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://evidence-link-4.preview.emergentagent.com"
+    BASE_URL = "https://supervision-preview.preview.emergentagent.com"
 
 ADMIN_EMAIL = "admin@supervision.com"
 ADMIN_PASS = "Admin123!"

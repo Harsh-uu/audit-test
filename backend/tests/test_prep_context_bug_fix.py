@@ -14,7 +14,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "https://evidence-link-4.preview.emergentagent.com").rstrip("/")
+BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "https://supervision-preview.preview.emergentagent.com").rstrip("/")
 
 ADMIN_EMAIL = "admin@supervision.com"
 ADMIN_PASS = "Admin123!"

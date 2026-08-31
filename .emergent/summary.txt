@@ -1,137 +1,156 @@
-<analysis>**original_problem_statement**: A web-based app for care providers (Supervision 2.0) that records meetings on demand, generates a post-meeting transcript and summary, and maps discussion points to regulatory standards. PRODUCT REQUIREMENTS: Secure login, meeting creation, recording, post-meeting transcription, AI-generated summary/actions/risks, evidence mapping, PDF export, Super Admin layer, custom supervision document upload, Dynamic Supervision Prep, background async processing queue, transcript find & replace, segregated inspection pages, organization sub-tenant hierarchy, Email OTP 2FA, Support for regional jurisdictions (England, Wales, Scotland, Northern Ireland), Timestamped transcripts & evidence, Robust 100% coverage audit trailing, and Strict UK/EU Data Governance.
+<analysis>**original_problem_statement**: A web-based app for care providers (Supervision 2.0) that records meetings on demand, generates a post-meeting transcript and summary, and maps discussion points to regulatory standards. PRODUCT REQUIREMENTS: Secure login, meeting creation, recording, post-meeting transcription, AI-generated summary/actions/risks/achievements, evidence mapping, PDF export, Super Admin layer, background async processing queue, transcript find & replace, segregated inspection pages, organization sub-tenant hierarchy, Team Themes UI.
 
-**User's preferred language**: English (INSTRUCT NEXT AGENT: You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in the user's preferred language only)
+**User's preferred language**: English (INSTRUCT NEXT AGENT: The user's primary language is English. Respond in English only.)
 
-**what currently exists?**: A fully functional React/FastAPI app backed by PostgreSQL (asyncpg). The staging/preview environment runs on a Supabase Pro instance, completely separated from production. Features include jurisdiction-specific standards mapping, MFA, robust Native DB RLS, background jobs for AssemblyAI/OpenAI, dynamic PDF export labels, document upload evidence mapping, and a 3-stage vertical UI stepper for meeting processing tracking.
+**what currently exists?**: A React (Vite 6, PWA-enabled) frontend and FastAPI backend using PostgreSQL (Supabase) and Supabase Storage. Core AI uses Google Cloud Vertex AI (Gemini 2.5 Flash). Application handles meeting recording, transcription, AI extraction mapping to Care Cert/CQC standards. Highly refactored with clean component trees and robust security boundaries. Contains a PWA service worker (Workbox) that caches JS chunks.
 
-**Last working item**:
-    - Last item agent was working: Fixing silent save failures for Speaker Labels in . The  query was silently failing due to an RLS  mismatch, causing 0 rows to update but returning a 200 success. The next background UI poll would then overwrite the UI with the unchanged DB data. The agent added an explicit  check and a rowcount validation to raise a 500 error on failure.
+**Last working item**: 
+    - Last item agent was working: Investigating the root cause of newly invited users (like test add) not appearing in the user list on the Organization Structure page for certain managers. The agent successfully traced the bug to  (lines 154-162), where the  list is only populated for org-level managers/admins. Scoped managers (tied to a specific Setting or Team) cannot see these unassigned users because they are created without any scope.
     - Status: USER VERIFICATION PENDING
-    - Agent Testing Done: Y
-    - Which testing method agent to use? manual testing by curl/python -c
+    - Agent Testing Done: Y (Manually queried DB and investigated codebase via bash)
+    - Which testing method agent to use?: both (Once the user replies with their desired business logic, both the backend endpoint and frontend UI behavior should be tested via testing agent).
     - User Testing Done: N
 
-**All Pending/In progress Issue list**:
-  Issue 1: Speaker Labels Silent Save Failure (Monitoring for RLS mismatch)
-     - Attempted fixes: Added rowcount check in  () and explicit  WHERE clause.
-     - Next debug checklist: Check if the user reports a 500 error (Speaker labels could not be saved) on their production test. If they do, investigate the RLS policy on the  table in  and ensure  is being properly set in the  DB context or correctly assigned during transcript creation in .
-     - Why fix this issue and what will be achieved with the fix? Ensures speaker labels actually persist to the DB and don't get reset by the background polling loop.
+**All Pending/In progress Issue list**:  
+  Issue 1: Newly invited users not visible/found by scoped managers on the Org Structure page (P0)
+     - Attempted fixes: Root cause successfully identified. Code in  restricts scoped managers from seeing unassigned users. Pending user decision on how to resolve (auto-assign the invited user to the manager's scope vs. granting scoped managers access to the unassigned pool).
+     - Next debug checklist: Check user's reply in the pending message. Modify  (to auto-assign) OR  (to expose unassigned users) in . Verify frontend drag-and-drop handles the new logic in .
+     - Why fix this issue and what will be achieved with the fix?: Unblocks scoped managers from assigning staff they invite to teams. Restores confidence in the invite flow.
      - Status: USER VERIFICATION PENDING
-     - Is recurring issue? Y (Speaker label reset has been an ongoing issue)
-     - Should Test frontend/backend/both after fix? both
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix?: Both
      - Blocked on other issue: None
 
-**In progress Task List**: None
+**In progress Task List**: 
+  (None)
 
 **Upcoming and Future Tasks**
     Upcoming Tasks:
-    - Wales AWIF granularity review: Extract specific I can outcome statements instead of topic headings (P2 - Pending user consultation)
-    - Scotland National Induction Framework (NIF) Integration (P2 - Blocked on Turas login / document availability)
-    - Role-specific competency framework upload (P2)
-    - Skills for Care Effective Supervision Guide integration (Per-org upload option) (P2)
+    - Session Expiry Notice: Show a friendly Your session expired, please sign in again message instead of a silent redirect on a genuine logout. (P1)
+    - Meeting Templates: Let managers duplicate a past meeting's setup as a starting template for a new one. (P1)
+    - Toast Position Fix: Move the toast notifications above the header menu so their text never gets clipped. (P2)
+    - Portfolio Progress Ring: Show a progress ring on each staff member's dashboard. (P2)
     
     Future Tasks:
-    - Pending invites dashboard (P2)
-    - Usage dashboard (meeting counts, last activity, storage per org) (P2)
-    - Billing hooks (tie orgs to a plan/subscription via Stripe) (P2)
-    - Impersonate org feature for Super Admins (P2)
+    - Full Code Review Pass: Work through remaining findings from scanner report (missing hook dependencies, index-as-key). (P2)
+    - CSV Export Polish: Add manager-friendly export includes safety-escaped text note to evidence export. (P2)
+    - Mobile Evidence Pass: Mobile-spacing pass for Compliance Evidence card (badges, Show in transcript link). (P2)
+    - Crash Reporting: Add lightweight client-side error logging for future page crashes. (P2)
+    - Evidence-Specific Domains (Option 3): Let the AI narrow down which domains (Safe/Effective/Well-led) apply per piece of evidence rather than inheriting the regulation's full static badge set. (P2)
+    - Corroboration Badge: Show a small Corroborated tag on evidence flagged . (P2)
+    - Audit Trail Digest: Add simple filter/collapse for routine recording start/stop/pause events. (P3)
+    - Bulk Spelling Fix: Add a one-click Fix US spellings pass to Find & Replace. (P3)
+    - Mobile Speaker Menu: Give reassign-speaker dropdown a full-width sheet instead of a small popover. (P3)
+    - Super Admin Portfolio Access: Decide if  should view any org's staff portfolios. (P3)
+    - Undo Bulk Accept: Add a quick undo toast action after bulk-accepting evidence. (P3)
+    - Provider Comparison Log: Track and display which model generated each report. (P3)
+    - Vite 7/8 Migration. (P3)
+    - Impersonate org feature for Super Admins. (P3)
+    - Prep Time Stamps: Show exact time alongside date on context sources. (P3)
+    - MFA OTP per-IP throttling. (P3)
+    - Audit trail endpoint silently swallowing exceptions (Fix it so it doesn't mask a broken tamper-evidence trail). (P3)
 
 **Completed work in this session**
-- Attendee picker fix: Fixed No users found in meeting attendee picker for managers (, ). (DONE)
-- AssemblyAI config: Disabled content safety to prevent false positive hallucinations (). (DONE)
-- UI Cleanup: Removed grey description text under processing UI progress bars (), updated AI is generating to 1two.one is generating (), added company/ICO info to Login footer. (DONE)
-- Audit Trail JSONB fix: Fixed blank Audit Trail by handling  JSONB bug with  and  defensive parsing for , , and  (). (DONE)
-- Meeting Prep toggle: Fixed  undefined runtime error in . (DONE)
-- CQC Evidence Scan improvements: Fixed AI to correctly identify Quality Statements (QS). Replaced hardcoded system prompt guide with dynamically injected jurisdiction-specific guides. Fixed the JSON schema example which previously restricted AI output to Regulations only (). (DONE)
-- Evidence Re-scan logic: Fixed re-scan wiping out Care Cert evidence by changing prompt from prioritise to in addition to full coverage, and implementing a merge (instead of replace) for mapping arrays (). (DONE)
-- Re-scan Audio button confusion: Renamed to Re-transcribe Audio, added a confirmation guard, and clear toast warnings so users stop accidentally resetting speaker labels (). (DONE)
-- Speaker Label save failure: Added explicit  and rowcount check to raise 500 on failure instead of a false success (). (DONE)
+- Recently completed: 
+  - Team Themes UI Layout Unification (DONE)
+  - Upload Security Enhancements (DONE)
+  - Meeting Summary Controls (DONE)
+  - Security Audit Fixes (DONE)
+  - Evidence Bulk Action UX (DONE)
+  - AI Naming Context (DONE)
+  - AI Witnessed Outcome Evidence (DONE)
+  - AI Regulation Mapping Fix (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-   - None
+   Issue 1: Test Suite Scaffolding Bugs
+   - Debug checklist: In , fix the stale  ID fixture that throws 404s. In , add the proper URL scheme () to the base URL building logic which throws .
+   - Why to solve this issue and what will be achieved with this?: Cleans up the security test suite so it runs 100% green and avoids false alarms.
+   - Should Test frontend/backend/both after fix: backend
+   - Is recurring issue? Y
 
 **Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork:  JSONB stringification bug.
-  - Recurrence count: 2 (Impacted team insights previously, and impacted the Audit Trail in this session).
-  - Status: RESOLVED (Fixed via  /  helper workaround, but remains a structural risk for any new JSONB reads).
+  - Issue recurrence in previous fork: None
+  - Recurrence count: 0
+  - Status: N/A
 
 **Code Architecture**
-- /app/backend/routers (admin.py, auth.py, review.py, doc_uploads.py, processing.py)
-- /app/backend/utils (ai.py, seed.py)
-- /app/frontend/src/pages (MeetingReport.js, NewMeeting.js, MeetingPrep.js, Login.js)
-- /app/frontend/src/components/report (AuditTrailTab.js, TranscriptTab.js)
+Tree structure of the entire codebase:
+-  (auth.py, review.py, org.py, admin.py)
+-  (ai.py, file_security.py, transcription_pipeline.py)
+-  (database.py, deps.py, server.py)
+-  (OrgStructure.js, TeamInsights.js, MeetingReport.js)
+-  (ComplianceTab.js, RouteErrorBoundary.js)
+-  (apiCache.js)
 
 **Key Technical Concepts**
-React frontend, FastAPI backend, PostgreSQL (asyncpg), DB-Level Row Level Security (app_rls_user), Async Job Queue, Supabase Storage, AssemblyAI, OpenAI.
+React frontend (Vite production build, Workbox PWA), FastAPI backend, PostgreSQL (asyncpg), Supabase Storage, Google Cloud Vertex AI (Gemini 2.5 Flash), Resend SDK.
 
 **key DB schema**
-  - : , , , , 
-  - : , ,  (JSONB columns prone to asyncpg stringification bug)
-  - : , , 
+  - : Contains  (JSONB), .
+  - : Includes , , , , .
 
 **changes in tech stack**
-  - None.
+  - The stack uses PostgreSQL (Supabase) via . Note: An agent previously failed using a  connection string in a script. Always use the PostgreSQL schema provided in .
 
-**All files of reference** 
-  -  (Edited for audit trail JSONB fix, speaker labels save verification, and re-scan array merging).
-  -  (Edited for AssemblyAI config, jurisdiction-specific AI prompts, and JSON schema example fixes).
-  -  (Edited for UI progress bars and re-transcribe button guards).
-  -  (Speaker labels functionality).
-  -  (Fixed  toggle bug, UI text updates).
-  -  (Footer updates).
+**All files of reference**
+  -  (Locus of the scoped user bug)
+  -  (Current issue locus)
+  -  (Referenced for RBAC/scope validation)
+  - 
+  - 
+  - 
 
-**Areas that need refactoring**: 
-- Database access leveraging  (which issues ) systematically invalidates  JSONB codecs. We are having to implement defensive  ( / ) checks across various endpoints because JSON columns get returned as raw strings instead of dicts/lists.
+**Areas that need refactoring**:
+- Python security test files (, ) have broken fixtures/URL scaffolding.
 
 **key api endpoints**
 - 
 - 
-- 
+-  (Vertex AI Project-Level configurations)
 
-**Critical Info for New Agent** 
-- **Production vs Preview**: The user is actively testing and deploying code to production (). We ONLY fix issues in the Preview environment. The user manually pushes to production. Always ask if they are seeing an issue on Preview or Production.
-- **Asyncpg JSONB stringification bug**: When RLS is enforced via , the Postgres connection loses its mapped  codec. Queries that fetch JSONB columns will return  instead of  or . You must use  or the / helpers to parse them safely before accessing dictionary keys!
-- **AI Evidence Mapping (CQC/Quality Statements)**: Previously, AI wasn't finding Quality Statements (QS). This was fixed by adding QS examples into the JSON Schema prompt and injecting dynamic jurisdiction guides into the user prompt. DO NOT revert the JSON schema example to only show Regulation, as it restricts the model output.
+**Critical Info for New Agent**
+- **PWA Service Worker**: The frontend uses Vite PWA (). When you deploy/restart, previously open browser tabs retain the old JS chunks. When navigating, the app might throw chunk loading errors which triggers  to refresh the page. This is normal and explains transient standard error message reports right after deployments.
+- **Vertex AI Caching**: The application does *not* utilize . Therefore, Zero Data Retention (ZDR) is already enforced.
+- **Role-Based Access Control**:  enforces data scope via . Managers can have , , or  level restrictions. Be highly cautious when modifying endpoints like  to not break these boundaries.
 
-**documents and test reports created in this job** 
-  -  (Updated throughout)
+**documents and test reports created in this job**
+  -  (Previous job)
 
 **Last 10 User Messages and any pending HUMAN messages** 
- 1. User requested removal of small grey text below progress bars. (Done)
- 2. User reported audit trail was blank despite recording/speaker label changes. (Fixed asyncpg JSONB bug).
- 3. User uploaded context source (previous supervision), getting undefined error. (Fixed  typo).
- 4. User requested changing text from AI is generating questions to 1two.one is generating questions. (Done)
- 5. User requested adding company/ICO details to login footer. (Done)
- 6. User reported CQC evidence scan performed poorly on Caring domain, and re-scan killed Care Cert evidence. (Fixed AI prompt for CQC, updated re-scan merge logic).
- 7. User asked if similar needed adding for other jurisdictions. (Added dynamically injected per-jurisdiction prompts).
- 8. User reported re-scan reset speaker labels and still reduced care cert evidence. (Renamed misleading UI button to Re-transcribe Audio, added confirmation).
- 9. User reported speaker labels keep being reset, the save does nothing. (Fixed silent save failure in  where  hit 0 rows due to RLS mismatch. Added rowcount check).
- 10. User asked about implications of forking the chat. (Agent explained).
+ - *Agent identified root cause*: Traced the Org Structure UI bug back to the backend endpoint . It strips  out of the response if the manager making the request is scoped (restricted to a specific setting/team).
+ - *(PENDING HUMAN MESSAGE)*: The agent provided three clarifying questions asking the user what account they were logged in as during the issue, and what business logic they prefer for the fix: A) Auto-attach invited users to the scoped manager's setting/team, B) Expose the org's unassigned pool to scoped managers, or C) Another solution. The next agent must await/process the user's reply to implement the appropriate fix.
 
 **Project Health Check:**
 Healthy.
 
-**3rd Party Integrations** 
- - OpenAI (Analysis/Extraction) — requires User API Key
- - AssemblyAI (Transcription) — requires User API Key (EU endpoint)
+**3rd Party Integrations**
+ - Google Cloud Vertex AI (Gemini 2.5 Flash) — requires User GCP Service JSON Key
  - Supabase (Database & Storage) — requires User Connection String
  - Resend (Emails) — requires User API Key
 
 **Testing status**
-  - Testing agent used after significant changes: NO (Tested manually via curl & bash scripts).
+  - Testing agent used after significant changes: NO (Pending implementation of fix)
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: None
   - Known regressions: None
 
 **Credentials to test flow:**
-Check  
+Check  for standard and superadmin login.
 
 **What agent forgot to execute**
-Nothing was overlooked, but we are awaiting the user to deploy the speaker label fix to production and confirm if the saving now works or if the new 500 error () surfaces, which would indicate a deeper RLS row issue.
+The agent correctly halted execution to ask for the user's business requirement via . Nothing was missed. 
 
 **Debugging checklist for current issue**
-    Issue: Speaker Labels Save failure / RLS Mismatch check
-    Action: 
-    1. Wait for user feedback on whether the Speaker Labels are now saving on production, or if they receive a 500 error toast.
-    2. If a 500 error occurs, inspect the RLS policy on the  table in .
-    3. Ensure  is being properly mapped and saved when a transcript is created in  and matches the user's  in the  database context.</analysis>
+    Issue: test add user not visible to a scoped manager on the Org Structure page.
+    
+    Backend files to check:
+    -  (specifically  logic around  and  default assignments based on requester's scope).
+    
+    Frontend files to check: 
+    - 
+
+    Next Steps:
+    1. Read the user's response regarding the proposed fix (auto-assigning users to the inviter's setting vs showing the unassigned pool).
+    2. Implement the backend route changes in .
+    3. Ensure  correctly renders the newly returned data structures based on the chosen path.
+    4. Call testing_agent to verify the end-to-end functionality.</analysis>

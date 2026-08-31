@@ -17,7 +17,7 @@ import uuid
 
 def _get_base_url():
     """Try public URL first; fall back to localhost if 502/unreachable."""
-    public = (os.environ.get("REACT_APP_BACKEND_URL") or "https://evidence-link-4.preview.emergentagent.com").rstrip("/")
+    public = (os.environ.get("REACT_APP_BACKEND_URL") or "https://supervision-preview.preview.emergentagent.com").rstrip("/")
     try:
         r = requests.get(f"{public}/api/auth/login", timeout=5)
         if r.status_code != 502:

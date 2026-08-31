@@ -4,7 +4,7 @@
     "critical": [],
     "minor": [
       {
-        "endpoint": "https://evidence-link-4.preview.emergentagent.com",
+        "endpoint": "https://supervision-preview.preview.emergentagent.com",
         "issue": "Public URL returned 502 Bad Gateway from Cloudflare at test time (2026-08-08 20:02 UTC). Backend was healthy on localhost:8001. Likely a transient routing/deployment issue."
       }
     ]
