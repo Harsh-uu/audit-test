@@ -480,9 +480,7 @@ CREATE POLICY supervision_uploads_rls ON supervision_uploads FOR ALL
     WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 -- ── Indexes ───────────────────────────────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_meetings_org_id ON meetings(org_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_created_at ON meetings(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
 CREATE INDEX IF NOT EXISTS idx_users_org_id ON users(org_id);
 CREATE INDEX IF NOT EXISTS idx_transcripts_meeting_id ON transcripts(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_meeting_id ON analyses(meeting_id);

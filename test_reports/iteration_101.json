@@ -1,0 +1,23 @@
+{
+  "summary": "Backend-only regression testing of the init_db.py change that removed the two dead CREATE INDEX statements on meetings (idx_meetings_org_id, idx_meetings_status). Created a new pytest suite (17 tests) covering: pg_indexes inventory on meetings, init_db.py source assertions, planner EXPLAIN on (org_id, status, created_at DESC), meetings list for admin/manager/attendee (org scoping, created_at DESC ordering, no dupes, API-vs-DB row and per-status count parity, pagination consistency), meeting create -> appears first in list -> detail load -> DB persistence, status flips through draft/in_review/reviewed/signed_off/shared verified in list, 404 for unknown id, IDOR check (jane blocked from unrelated meeting), delete (403 for attendee, 200 for admin, then 404 + DB row gone), dashboard for all 3 roles, /api/admin/stats and /api/admin/meetings-brief (status IN ('signed_off','shared') count matched DB exactly). Also restarted the backend and re-ran the index-inventory + list tests: the two removed indexes were NOT recreated and meetings still only has meetings_pkey, idx_meetings_created_at, idx_meetings_org_status_date. Result: 17/17 passed, no 500s, no functional regression.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter101_meetings_index_regression.py",
+    "/app/test_reports/pytest/iter101_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "init_db.py verified: only the two CREATE INDEX lines were removed; DROP INDEX IF EXISTS idx_meetings_org_id/idx_meetings_status retained (correct for prod DBs that still physically hold them). Composite idx_meetings_org_status_date intact.",
+    "Non-blocking (test-harness only, not app code): running these tests under pytest-xdist causes MFA-code races (parallel workers overwrite users.mfa_code for the same admin account -> 401 'Invalid code'). Run MFA-dependent suites with -n 0.",
+    "Non-blocking observation: GET /api/meetings/ has no server-side status filter param; status filtering is done client-side, so the composite index's status column is only exercised by admin.py aggregate queries. Fine as-is, but a status query param would let the list endpoint use the full index."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter101_meetings_index_regression.py"],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only change)"},
+  "seed_data_creation": "One temporary meeting 'TEST_iter101_<tag>' created via API and deleted at the end of the run (verified gone from DB). No seeded data modified.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! (MFA bypassed via DB mfa_code override), manager@supervision.com / Manager123!, jane@supervision.com / Jane123!",
+  "context_for_next_testing_agent": "Reusable suite: /app/backend/tests/test_iter101_meetings_index_regression.py — run with `cd /app/backend && python3 -m pytest tests/test_iter101_meetings_index_regression.py -n 0 -q` (MUST use -n 0; xdist parallelism breaks the shared-account MFA override). Note meetings.id is a TEXT column, not uuid — do not cast $1::uuid in raw asyncpg queries. Backend error log tracebacks are benign uvicorn lifespan CancelledErrors from restarts.",
+  "rca_of_the_issue": "No issue found. The two removed indexes were dead code: created early in init_db.py and dropped later in the same script on every startup, so they never served live traffic. All real meetings queries filter org_id (via RLS) + optionally status and sort by created_at DESC, which the retained composite index idx_meetings_org_status_date covers."
+}
