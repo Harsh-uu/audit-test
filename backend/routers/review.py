@@ -1474,15 +1474,25 @@ async def share_meeting(meeting_id: str, data: ShareRequest, current_user=Depend
 
     now = datetime.now(timezone.utc).isoformat()
     shared_with = _ensure_list(m_row["shared_with"])
+    already_shared = {s.get("user_id") for s in shared_with}
+    new_uids = list(dict.fromkeys(uid for uid in data.user_ids if uid not in already_shared))
+
+    # Batched: one query for all new recipients instead of one per user_id.
+    users_by_id = {}
+    if new_uids:
+        async with database.with_org(org_id) as conn:
+            u_rows = await conn.fetch(
+                "SELECT id, name, email, role FROM users WHERE id = ANY($1::text[]) AND org_id=$2", new_uids, org_id,
+            )
+        users_by_id = {r["id"]: r for r in u_rows}
+
     added = []
-    for uid in data.user_ids:
-        if not any(s.get("user_id") == uid for s in shared_with):
-            async with database.with_org(org_id) as conn:
-                u_row = await conn.fetchrow("SELECT id, name, email, role FROM users WHERE id=$1 AND org_id=$2", uid, org_id)
-            if u_row and u_row["role"] in ("manager", "admin", "shared_reviewer"):
-                entry = {"user_id": uid, "name": u_row["name"], "email": u_row["email"], "shared_at": now}
-                shared_with.append(entry)
-                added.append(entry)
+    for uid in new_uids:
+        u_row = users_by_id.get(uid)
+        if u_row and u_row["role"] in ("manager", "admin", "shared_reviewer"):
+            entry = {"user_id": uid, "name": u_row["name"], "email": u_row["email"], "shared_at": now}
+            shared_with.append(entry)
+            added.append(entry)
 
     async with database.with_org(org_id) as conn:
         await conn.execute(

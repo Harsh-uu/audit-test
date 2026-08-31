@@ -1492,9 +1492,14 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
 
         where = " AND ".join(conditions)
         mtg_rows = await conn.fetch(f"SELECT * FROM meetings WHERE {where} ORDER BY date DESC", *params)
-        for mtg_row in mtg_rows:
-            mtg = dict(mtg_row)
-            a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", mtg["analysis_id"])
+        mtg_dicts = [dict(r) for r in mtg_rows]
+        analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
+        analyses_by_id = {}
+        if analysis_ids:
+            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::text[])", analysis_ids)
+            analyses_by_id = {r["id"]: dict(r) for r in a_rows}
+        for mtg in mtg_dicts:
+            a_row = analyses_by_id.get(mtg["analysis_id"])
             if not a_row:
                 continue
             adoc = dict(a_row)
@@ -1544,9 +1549,14 @@ async def export_cqc_excerpts(current_user=Depends(get_current_user)):
         mtg_rows = await conn.fetch(
             "SELECT * FROM meetings WHERE status IN ('in_review','reviewed','signed_off','shared') AND analysis_id IS NOT NULL ORDER BY date DESC"
         )
-        for mtg_row in mtg_rows:
-            mtg = dict(mtg_row)
-            a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", mtg["analysis_id"])
+        mtg_dicts = [dict(r) for r in mtg_rows]
+        analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
+        analyses_by_id = {}
+        if analysis_ids:
+            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::text[])", analysis_ids)
+            analyses_by_id = {r["id"]: dict(r) for r in a_rows}
+        for mtg in mtg_dicts:
+            a_row = analyses_by_id.get(mtg["analysis_id"])
             if not a_row: continue
             adoc = dict(a_row)
             redactions = _jlist(mtg.get("pii_redactions"))
@@ -1582,11 +1592,16 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
         mtg_rows = await conn.fetch(
             "SELECT * FROM meetings WHERE status IN ('in_review','reviewed','signed_off','shared') AND analysis_id IS NOT NULL ORDER BY date DESC"
         )
-        for mtg_row in mtg_rows:
-            mtg = dict(mtg_row)
-            if selected_ids and not any(a.get("user_id") in selected_ids for a in _jlist(mtg.get("attendees"))):
-                continue
-            a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", mtg["analysis_id"])
+        mtg_dicts = [dict(r) for r in mtg_rows]
+        if selected_ids:
+            mtg_dicts = [m for m in mtg_dicts if any(a.get("user_id") in selected_ids for a in _jlist(m.get("attendees")))]
+        analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
+        analyses_by_id = {}
+        if analysis_ids:
+            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::text[])", analysis_ids)
+            analyses_by_id = {r["id"]: dict(r) for r in a_rows}
+        for mtg in mtg_dicts:
+            a_row = analyses_by_id.get(mtg["analysis_id"])
             if not a_row: continue
             adoc = dict(a_row)
             redactions = _jlist(mtg.get("pii_redactions"))
@@ -1675,9 +1690,16 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
 
         where = " AND ".join(conditions)
         mtg_rows = await conn.fetch(f"SELECT * FROM meetings WHERE {where} ORDER BY date DESC", *params)
-        for mtg_row in mtg_rows:
-            mtg = dict(mtg_row)
-            t_row = await conn.fetchrow("SELECT speaker_text, text FROM transcripts WHERE id=$1", mtg["transcript_id"])
+        mtg_dicts = [dict(r) for r in mtg_rows]
+        transcript_ids = list({m["transcript_id"] for m in mtg_dicts if m.get("transcript_id")})
+        transcripts_by_id = {}
+        if transcript_ids:
+            t_rows = await conn.fetch(
+                "SELECT id, speaker_text, text FROM transcripts WHERE id = ANY($1::text[])", transcript_ids,
+            )
+            transcripts_by_id = {r["id"]: r for r in t_rows}
+        for mtg in mtg_dicts:
+            t_row = transcripts_by_id.get(mtg["transcript_id"])
             if not t_row: continue
             speaker_text = t_row["speaker_text"] or ""
             transcript_text = t_row["text"] or ""

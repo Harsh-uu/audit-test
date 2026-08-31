@@ -22,6 +22,18 @@ credentials for — schema changes here do NOT propagate there automatically; th
 direct DB password access or a real deploy of this backend pointed at that DB.
 
 ### DB audit fixes completed this session (all verified via testing_agent, 0 regressions)
+5. **N+1 query patterns (6 locations)** — batched into single `WHERE id = ANY($1::text[])` queries
+   or correlated subqueries: `super_admin.py list_orgs()` (2 counts/org → 1 query),
+   `admin.py export_evidence/export_cqc_excerpts/export_cc_excerpts` (analyses fetched per-meeting →
+   batched), `admin.py export_transcripts` (transcripts fetched per-meeting → batched),
+   `dashboard.py fetch_structure()` (teams fetched per-setting → batched), `review.py
+   share_meeting()` (user lookup per user_id → batched, also fixed a duplicate-user_id edge case).
+   `org.py get_structure()` N+1 was already fixed in item 2 above. Verified row-level output
+   identical (dangling analysis/transcript ids, shared analysis_id across meetings, PII redaction
+   stays per-meeting, role filters, scope-correct dashboards) — 31/31 tests, iteration_102.
+   - Noted but not fixed (pre-existing, out of scope): export PDF attendee/manager name lines are
+     not PII-redacted even though the analysis/transcript body is; orphan `teams` row with NULL
+     `setting_id` stays invisible in dashboard dropdown (same as before the fix, not a regression).
 1. **Missing index on `audio_files.meeting_id`** — added (meeting deletion was a full table scan).
 2. **7 missing indexes on daily filters** — added: `teams(org_id, setting_id)`,
    `org_settings(org_id)`, `focus_topics(org_id)`, `standards_documents(org_id)`,

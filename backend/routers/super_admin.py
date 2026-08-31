@@ -65,18 +65,22 @@ class UpdateOrgUserRequest(BaseModel):
 async def list_orgs(current_user=Depends(get_current_user)):
     _require_super_admin(current_user)
     async with database.with_admin() as conn:
-        org_rows = await conn.fetch("SELECT * FROM organisations ORDER BY name ASC")
+        # Batched: one query with per-org counts as correlated subqueries,
+        # instead of 2 extra round-trips per org (was 2N+1 queries total).
+        org_rows = await conn.fetch(
+            """SELECT o.*,
+                      (SELECT COUNT(*) FROM users u WHERE u.org_id = o.id) AS user_count,
+                      (SELECT COUNT(*) FROM meetings m WHERE m.org_id = o.id) AS meeting_count
+               FROM organisations o ORDER BY o.name ASC"""
+        )
         result = []
         for org in org_rows:
-            org_id = org["id"]
-            user_count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE org_id = $1", org_id)
-            meeting_count = await conn.fetchval("SELECT COUNT(*) FROM meetings WHERE org_id = $1", org_id)
             result.append({
-                "id": org_id, "name": org["name"], "slug": org["slug"],
+                "id": org["id"], "name": org["name"], "slug": org["slug"],
                 "status": org["status"], "jurisdiction": org.get("jurisdiction") or "england",
                 "service_type": org.get("service_type"),
                 "created_at": org["created_at"],
-                "user_count": user_count, "meeting_count": meeting_count,
+                "user_count": org["user_count"], "meeting_count": org["meeting_count"],
             })
     return result
 

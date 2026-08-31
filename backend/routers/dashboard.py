@@ -93,19 +93,27 @@ async def get_dashboard(current_user=Depends(get_current_user)):
                 s_rows = await conn.fetch(
                     "SELECT id, name FROM org_settings WHERE id=$1", scope["setting_id"]
                 )
+            s_dicts = [dict(r) for r in s_rows]
+            setting_ids = [s["id"] for s in s_dicts]
+
+            # Batched: one teams query for all settings instead of one per setting.
+            if scope["level"] == "team":
+                t_rows = await conn.fetch(
+                    "SELECT id, name, setting_id FROM teams WHERE setting_id = ANY($1::text[]) AND id=$2 ORDER BY name ASC",
+                    setting_ids, scope["team_id"],
+                )
+            else:
+                t_rows = await conn.fetch(
+                    "SELECT id, name, setting_id FROM teams WHERE setting_id = ANY($1::text[]) ORDER BY name ASC",
+                    setting_ids,
+                )
+            teams_by_setting = {sid: [] for sid in setting_ids}
+            for t in t_rows:
+                teams_by_setting.setdefault(t["setting_id"], []).append({"id": t["id"], "name": t["name"]})
+
             settings = []
-            for s_row in s_rows:
-                s = dict(s_row)
-                if scope["level"] == "team":
-                    t_rows = await conn.fetch(
-                        "SELECT id, name FROM teams WHERE setting_id=$1 AND id=$2 ORDER BY name ASC",
-                        s["id"], scope["team_id"],
-                    )
-                else:
-                    t_rows = await conn.fetch(
-                        "SELECT id, name FROM teams WHERE setting_id=$1 ORDER BY name ASC", s["id"]
-                    )
-                s["teams"] = [dict(t) for t in t_rows]
+            for s in s_dicts:
+                s["teams"] = teams_by_setting.get(s["id"], [])
                 settings.append(s)
         return {"settings": settings, "unassigned_users": []}
 
