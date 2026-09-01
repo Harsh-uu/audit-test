@@ -26,7 +26,7 @@ async def _audit(conn, meeting_id: str, org_id: str, action: str, user_id: str, 
         "INSERT INTO audit_logs (id, meeting_id, org_id, action, user_id, user_name, detail, timestamp) "
         "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
         str(uuid.uuid4()), meeting_id, org_id, action, user_id, user_name, detail,
-        datetime.now(timezone.utc).isoformat(),
+        datetime.now(timezone.utc),
     )
 
 
@@ -121,7 +121,7 @@ async def create_user(data: CreateUserRequest, current_user=Depends(get_current_
     role = data.role if data.role in ["admin", "manager", "attendee", "shared_reviewer"] else "attendee"
     user_id = str(uuid.uuid4())
     org_id = current_user.get("org_id", "")
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     async with database.with_admin() as conn:
         existing = await conn.fetchrow("SELECT id FROM users WHERE email = $1", data.email.lower())
         if existing:
@@ -209,7 +209,7 @@ async def reset_user_password(user_id: str, data: ResetPasswordRequest, current_
     from routers.auth import hash_password, validate_password_strength
     validate_password_strength(data.new_password)
     org_id = current_user.get("org_id", "")
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     async with database.with_admin() as conn:
         u = await conn.fetchrow("SELECT id FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
         if not u:
@@ -291,7 +291,7 @@ async def create_standard(data: CreateStandardRequest, current_user=Depends(get_
     if current_user["role"] != "admin":
         raise HTTPException(403, "Admin only")
     std_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         await conn.execute(
@@ -367,7 +367,7 @@ async def upload_document(
         actual_path = storage_path
 
     doc_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         await conn.execute(
@@ -399,7 +399,7 @@ async def parse_document_background(doc_id: str, file_data: bytes, filename: str
                 """UPDATE standards_documents SET parse_status='parsed', extracted_text=$1,
                    document_summary=$2, extracted_criteria=$3::jsonb, criteria_count=$4, parsed_at=$5 WHERE id=$6""",
                 text[:5000], doc_summary, criteria, len(criteria),
-                datetime.now(timezone.utc).isoformat(), doc_id,
+                datetime.now(timezone.utc), doc_id,
             )
         logger.info(f"Document {doc_id} parsed: {len(criteria)} criteria extracted")
         await rescan_meetings_background(doc_id, org_id)
@@ -2339,7 +2339,7 @@ async def repair_add_attendee(meeting_id: str, data: AddAttendeeRequest, current
         await conn.execute(
             "UPDATE meetings SET attendees=$1::jsonb, updated_at=$2 WHERE id=$3",
             existing,
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now(timezone.utc),
             meeting_id,
         )
 
