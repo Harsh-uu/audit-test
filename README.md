@@ -91,7 +91,8 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 │   ├── server.py              # FastAPI app entry point, CORS, security headers, startup
 │   ├── deps.py                # get_current_user(), role guards (access token type enforced)
 │   ├── database.py            # asyncpg pool, with_admin() / with_org() context managers
-│   ├── init_db.py             # Schema creation and idempotent migrations
+│   ├── init_db.py             # Runs the versioned migration ledger on startup
+│   ├── migrations/            # Numbered schema chunks (RLS, FKs, indexes) + schema_migrations ledger
 │   ├── loki_logging.py        # Non-blocking Grafana Loki log handler
 │   ├── routers/
 │   │   ├── auth.py            # Login, register, logout, invite flow, 2FA, password change
@@ -112,8 +113,6 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 │       ├── redaction.py       # PII redaction helpers
 │       ├── file_security.py   # Upload validation and sanitisation
 │       └── storage.py         # Supabase Storage integration
-│
-├── supabase_rls_policy.sql    # Row Level Security policies for all 25 tables
 │
 └── frontend/src/
     ├── App.js                 # Routes with ProtectedRoute
@@ -212,13 +211,7 @@ pip install -r requirements.txt
 uvicorn server:app --reload --port 8001
 ```
 
-The schema, admin account, and all CQC/Care Certificate standards are created and seeded automatically on first startup.
-
-After first run, apply Row Level Security policies in Supabase SQL Editor:
-
-```bash
-# Copy contents of supabase_rls_policy.sql into Supabase Dashboard → SQL Editor
-```
+The schema, RLS policies, admin account, and all CQC/Care Certificate standards are created and seeded automatically on first startup — no manual SQL step required.
 
 ### Frontend
 

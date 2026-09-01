@@ -11,6 +11,19 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Dead/dangerous manual RLS script removed (Sep 2026)
+`/app/backend/supabase_rls_policy.sql` was a stale "run by hand in Supabase Dashboard" script
+(referenced in README.md) that had drifted from the real automatic schema (`migrations/`):
+it granted/created RLS on `refresh_tokens`, a table `m003_grants_indexes.py` intentionally
+`DROP TABLE IF EXISTS`'d — confirmed not present live. Worse, its policies compared
+`org_id = current_setting(...)` as plain text against columns that are now native `UUID`
+(Phase 2 migration), missing the `NULLIF(...,'')::uuid` cast the real policies use — would
+throw `operator does not exist: uuid = text` on nearly every `CREATE POLICY` if run today.
+Deleted the file (no code imports/references it — grep-confirmed) and removed the
+README "apply RLS manually" step + file-tree entries; RLS is fully applied automatically by
+`create_schema()`/`migrations/` on backend startup, so the manual step was both broken and
+redundant. Zero functional change — backend/frontend confirmed still healthy after removal.
+
 ## Schema Migration Ledger Refactor (Sep 2026) — COMPLETE, verified
 Replaced the monolithic 1095-line `init_db.py` (156 idempotent SQL statements re-evaluated on
 every backend boot) with a versioned migration system:
