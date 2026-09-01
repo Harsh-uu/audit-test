@@ -116,7 +116,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                WHERE org_id = $1
                  AND status IN ('signed_off', 'shared')
                  AND analysis_id IS NOT NULL
-                 AND (sign_off_manager_id IS NULL OR sign_off_manager_id != $2)
+                 AND (sign_off_manager_id IS NULL OR sign_off_manager_id != $2::uuid)
                  AND EXISTS (
                      SELECT 1 FROM jsonb_array_elements(
                          CASE
@@ -125,7 +125,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
                              ELSE '[]'::jsonb
                          END
                      ) elem
-                     WHERE elem->>'user_id' = $2
+                     WHERE elem->>'user_id' = $2::text
                  )
                ORDER BY date DESC
                LIMIT 500""",
@@ -139,7 +139,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
     if analysis_ids:
         async with database.with_admin() as conn:
             analysis_rows = await conn.fetch(
-                "SELECT * FROM analyses WHERE id = ANY($1::text[])",
+                "SELECT * FROM analyses WHERE id = ANY($1::uuid[])",
                 analysis_ids,
             )
         analyses_map = {r["id"]: dict(r) for r in analysis_rows}

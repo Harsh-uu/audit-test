@@ -166,14 +166,14 @@ async def delete_org(org_id: str, current_user=Depends(get_current_user)):
         if meeting_ids:
             audio_paths = [
                 r["storage_path"] for r in await conn.fetch(
-                    "SELECT storage_path FROM audio_files WHERE meeting_id = ANY($1) AND storage_path IS NOT NULL",
+                    "SELECT storage_path FROM audio_files WHERE meeting_id = ANY($1::uuid[]) AND storage_path IS NOT NULL",
                     meeting_ids,
                 )
             ]
 
         if meeting_ids:
             for table in ["transcripts", "analyses", "audit_logs", "reviewer_comments", "review_edits", "audio_files", "evidence_feedback"]:
-                result = await conn.execute(f"DELETE FROM {table} WHERE meeting_id = ANY($1)", meeting_ids)
+                result = await conn.execute(f"DELETE FROM {table} WHERE meeting_id = ANY($1::uuid[])", meeting_ids)
                 totals[table] = int(result.split()[-1])
 
         for table in ["meetings", "users", "schedules", "meeting_types", "standards_documents",

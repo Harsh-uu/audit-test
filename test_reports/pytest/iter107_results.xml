@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="24" time="337.390" timestamp="2026-09-01T09:16:40.514603+00:00" hostname="agent-env-93542dae-df0b-4464-99dc-51eb3c5932f3"><testcase classname="tests.test_iter107_timestamptz_regression.TestMeetings" name="test_rapid_creates_rate_limited_path" time="44.460" /><testcase classname="tests.test_iter107_timestamptz_regression.TestMeetings" name="test_list_ordering_desc_by_created_at" time="1.578" /><testcase classname="tests.test_iter107_timestamptz_regression.TestMeetings" name="test_create_get_delete_cascade" time="15.819" /><testcase classname="tests.test_iter107_timestamptz_regression.TestRecording" name="test_full_recording_flow" time="18.783" /><testcase classname="tests.test_iter107_timestamptz_regression.TestProcessingJobs" name="test_upload_creates_job_and_status_endpoint" time="30.984" /><testcase classname="tests.test_iter107_timestamptz_regression.TestReviewFlow" name="test_get_review" time="14.782"><failure message="KeyError: 'meeting'">self = &lt;test_iter107_timestamptz_regression.TestReviewFlow object at 0xfc06f11aced0&gt;
+manager_s = &lt;requests.sessions.Session object at 0xfc06f11ac290&gt;
+review_meeting = {'id': 'TEST_iter107_dfaab87b023c4dbab1f4aac5cf4a434f', 'transcript_id': 'TEST_iter107_t1086ff3274c84cba98d18b2409f268be', 'analysis_id': 'TEST_iter107_a40cc5c827e224f4ebee16646866c0d2a'}
+
+    def test_get_review(self, manager_s, review_meeting):
+        r = manager_s.get(f"{BASE}/review/{review_meeting['id']}", timeout=90)
+        assert r.status_code == 200, f"{r.status_code}: {r.text[:400]}"
+&gt;       assert r.json()["meeting"]["id"] == review_meeting["id"]
+               ^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'meeting'
+
+tests/test_iter107_timestamptz_regression.py:431: KeyError</failure></testcase><testcase classname="tests.test_iter107_timestamptz_regression.TestReviewFlow" name="test_update_summary_writes_review_edit" time="4.838" /><testcase classname="tests.test_iter107_timestamptz_regression.TestReviewFlow" name="test_speaker_text_edit_and_backup" time="3.276"><failure message="AssertionError: 500: Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code">self = &lt;test_iter107_timestamptz_regression.TestReviewFlow object at 0xfc06f11adad0&gt;
+manager_s = &lt;requests.sessions.Session object at 0xfc06f11ac290&gt;
+review_meeting = {'id': 'TEST_iter107_dfaab87b023c4dbab1f4aac5cf4a434f', 'transcript_id': 'TEST_iter107_t1086ff3274c84cba98d18b2409f268be', 'analysis_id': 'TEST_iter107_a40cc5c827e224f4ebee16646866c0d2a'}
+
+    def test_speaker_text_edit_and_backup(self, manager_s, review_meeting):
+        mid = review_meeting["id"]
+        r = manager_s.patch(f"{BASE}/review/{mid}/speaker-text",
+                            json={"speaker_text": "Manager: how are you\nStaff: fine, hand hygiene training done",
+                                  "speaker_colors": {"Manager": "#111111"}}, timeout=90)
+&gt;       assert r.status_code == 200, f"{r.status_code}: {r.text[:400]}"
+E       AssertionError: 500: Internal Server Error
+E       assert 500 == 200
+E        +  where 500 = &lt;Response [500]&gt;.status_code
+
+tests/test_iter107_timestamptz_regression.py:449: AssertionError</failure></testcase><testcase classname="tests.test_iter107_timestamptz_regression.TestReviewFlow" name="test_evidence_update_writes_evidence_feedback" time="4.008" /><testcase classname="tests.test_iter107_timestamptz_regression.TestReviewFlow" name="test_comments_post_and_get" time="4.945"><failure message="AttributeError: 'list' object has no attribute 'get'">self = &lt;test_iter107_timestamptz_regression.TestReviewFlow object at 0xfc06f11ae710&gt;
+manager_s = &lt;requests.sessions.Session object at 0xfc06f11ac290&gt;
+review_meeting = {'id': 'TEST_iter107_dfaab87b023c4dbab1f4aac5cf4a434f', 'transcript_id': 'TEST_iter107_t1086ff3274c84cba98d18b2409f268be', 'analysis_id': 'TEST_iter107_a40cc5c827e224f4ebee16646866c0d2a'}
+
+    def test_comments_post_and_get(self, manager_s, review_meeting):
+        mid = review_meeting["id"]
+        r = manager_s.post(f"{BASE}/review/{mid}/comments", json={"text": "iter107 comment"}, timeout=90)
+        assert r.status_code in (200, 201), f"{r.status_code}: {r.text[:400]}"
+        g = manager_s.get(f"{BASE}/review/{mid}/comments", timeout=90)
+        assert g.status_code == 200, g.text[:300]
+&gt;       assert any("iter107" in c.get("text", "") for c in g.json().get("comments", g.json() if isinstance(g.json(), list) else []))
+                                                           ^^^^^^^^^^^^
+E       AttributeError: 'list' object has no attribute 'get'
+
+tests/test_iter107_timestamptz_regression.py:470: AttributeError</failure></testcase><testcase classname="tests.test_iter107_timestamptz_regression.TestReviewFlow" name="test_audit_trail" time="2.653"><failure message="AssertionError: {&quot;events&quot;:[{&quot;type&quot;:&quot;comment_added&quot;,&quot;label&quot;:&quot;Comment added&quot;,&quot;actor&quot;:&quot;Demo Manager&quot;,&quot;timestamp&quot;:&quot;2026-09-01T09:19:00.743923+00:00&quot;,&quot;detail&quot;:&quot;iter107 comment&quot;},{&quot;type&quot;:&quot;edit_evidence&quot;,&quot;label&quot;:&quot;Evidence item updated&quot;,&quot;actor&quot;:&quot;Demo Manager&quot;,&quot;timestamp&quot;:&quot;2026-09-01T09:18:56.926497+00:00&quot;,&quot;detail&quot;:&quot;notes updated; status changed from 'pending' to 'accepted'&quot;,&quot;flagged&quot;:false},{&quot;type&quot;:&quot;edit_summary&quot;,&quot;label&quot;&#10;assert (True and 0 &gt; 0)&#10; +  where True = isinstance([], list)&#10; +  and   0 = len([])">self = &lt;test_iter107_timestamptz_regression.TestReviewFlow object at 0xfc06f11aed10&gt;
+manager_s = &lt;requests.sessions.Session object at 0xfc06f11ac290&gt;
+review_meeting = {'id': 'TEST_iter107_dfaab87b023c4dbab1f4aac5cf4a434f', 'transcript_id': 'TEST_iter107_t1086ff3274c84cba98d18b2409f268be', 'analysis_id': 'TEST_iter107_a40cc5c827e224f4ebee16646866c0d2a'}
+
+    def test_audit_trail(self, manager_s, review_meeting):
+        r = manager_s.get(f"{BASE}/review/{review_meeting['id']}/audit-trail", timeout=90)
+        assert r.status_code == 200, f"{r.status_code}: {r.text[:400]}"
+        entries = r.json().get("entries", r.json() if isinstance(r.json(), list) else [])
+&gt;       assert isinstance(entries, list) and len(entries) &gt; 0, r.text[:400]
+E       AssertionError: {"events":[{"type":"comment_added","label":"Comment added","actor":"Demo Manager","timestamp":"2026-09-01T09:19:00.743923+00:00","detail":"iter107 comment"},{"type":"edit_evidence","label":"Evidence item updated","actor":"Demo Manager","timestamp":"2026-09-01T09:18:56.926497+00:00","detail":"notes updated; status changed from 'pending' to 'accepted'","flagged":false},{"type":"edit_summary","label"
+E       assert (True and 0 &gt; 0)
+E        +  where True = isinstance([], list)
+E        +  and   0 = len([])
+
+tests/test_iter107_timestamptz_regression.py:479: AssertionError</failure></testcase><testcase classname="tests.test_iter107_timestamptz_regression.TestReviewFlow" name="test_mark_reviewed_then_signoff_and_reopen" time="13.757"><failure message="AssertionError: request-reopen 403: {&quot;detail&quot;:&quot;Only managers can request a re-open&quot;}&#10;assert 403 == 200&#10; +  where 403 = &lt;Response [403]&gt;.status_code">self = &lt;test_iter107_timestamptz_regression.TestReviewFlow object at 0xfc06f11af350&gt;
+manager_s = &lt;requests.sessions.Session object at 0xfc06f11ac290&gt;
+staff_s = &lt;requests.sessions.Session object at 0xfc06f0094650&gt;
+review_meeting = {'id': 'TEST_iter107_dfaab87b023c4dbab1f4aac5cf4a434f', 'transcript_id': 'TEST_iter107_t1086ff3274c84cba98d18b2409f268be', 'analysis_id': 'TEST_iter107_a40cc5c827e224f4ebee16646866c0d2a'}
+
+    def test_mark_reviewed_then_signoff_and_reopen(self, manager_s, staff_s, review_meeting):
+        mid = review_meeting["id"]
+        r1 = staff_s.post(f"{BASE}/review/{mid}/mark-reviewed", timeout=90)
+        assert r1.status_code == 200, f"staff mark-reviewed {r1.status_code}: {r1.text[:300]}"
+        r2 = manager_s.post(f"{BASE}/review/{mid}/mark-reviewed", timeout=90)
+        assert r2.status_code == 200, f"manager mark-reviewed {r2.status_code}: {r2.text[:300]}"
+        assert r2.json()["status"] == "reviewed", r2.json()
+        so = manager_s.post(f"{BASE}/review/{mid}/signoff", timeout=120)
+        assert so.status_code == 200, f"signoff {so.status_code}: {so.text[:400]}"
+        row = db(lambda c: c.fetchrow(
+            "SELECT status, audio_grace_period_started_at FROM meetings WHERE id=$1", mid))
+        assert row["status"] == "signed_off", dict(row)
+        assert isinstance(row["audio_grace_period_started_at"], datetime), type(row["audio_grace_period_started_at"])
+        rr = staff_s.post(f"{BASE}/review/{mid}/request-reopen",
+                          json={"reason": "iter107 reopen test"}, timeout=90)
+&gt;       assert rr.status_code == 200, f"request-reopen {rr.status_code}: {rr.text[:400]}"
+E       AssertionError: request-reopen 403: {"detail":"Only managers can request a re-open"}
+E       assert 403 == 200
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+
+tests/test_iter107_timestamptz_regression.py:496: AssertionError</failure></testcase><testcase classname="tests.test_iter107_timestamptz_regression.TestReviewFlow" name="test_export_transcript_and_pdf" time="10.580" /><testcase classname="tests.test_iter107_timestamptz_regression.TestOrg" name="test_setting_team_crud_and_invite" time="21.943" /><testcase classname="tests.test_iter107_timestamptz_regression.TestOrg" name="test_branding_get_put" time="5.634" /><testcase classname="tests.test_iter107_timestamptz_regression.TestSchedules" name="test_meeting_type_and_schedule_crud" time="16.427" /><testcase classname="tests.test_iter107_timestamptz_regression.TestPrep" name="test_focus_topics_crud" time="6.449" /><testcase classname="tests.test_iter107_timestamptz_regression.TestPrep" name="test_prep_context_and_get" time="15.929" /><testcase classname="tests.test_iter107_timestamptz_regression.TestPrep" name="test_prep_generate_and_share" time="40.768" /><testcase classname="tests.test_iter107_timestamptz_regression.TestAdminSurface" name="test_read_endpoints" time="24.376" /><testcase classname="tests.test_iter107_timestamptz_regression.TestAdminSurface" name="test_admin_user_lifecycle" time="10.950" /><testcase classname="tests.test_iter107_timestamptz_regression.TestAdminSurface" name="test_standards_document_upload" time="4.636" /><testcase classname="tests.test_iter107_timestamptz_regression.TestSuperAdmin" name="test_org_lifecycle" time="18.486"><failure message="AssertionError: None&#10;assert (None is not None)">self = &lt;test_iter107_timestamptz_regression.TestSuperAdmin object at 0xfc06f11be250&gt;
+super_s = &lt;requests.sessions.Session object at 0xfc06f084a450&gt;
+
+    def test_org_lifecycle(self, super_s):
+        lst = super_s.get(f"{BASE}/super-admin/orgs", timeout=120)
+        assert lst.status_code == 200, f"orgs list {lst.status_code}: {lst.text[:300]}"
+        suffix = uuid.uuid4().hex[:8]
+        c = super_s.post(f"{BASE}/super-admin/orgs",
+                         json={"name": f"{P}Org_{suffix}", "jurisdiction": "england"}, timeout=120)
+        assert c.status_code in (200, 201), f"create org {c.status_code}: {c.text[:400]}"
+        oid = c.json().get("id") or c.json().get("org", {}).get("id")
+        row = db(lambda x: x.fetchrow("SELECT created_at, updated_at FROM organisations WHERE id=$1", oid))
+        assert isinstance(row["created_at"], datetime), dict(row)
+        p = super_s.patch(f"{BASE}/super-admin/orgs/{oid}",
+                          json={"name": f"{P}Org2_{suffix}"}, timeout=120)
+        assert p.status_code == 200, f"patch org {p.status_code}: {p.text[:400]}"
+        assert isinstance(db(lambda x: x.fetchval(
+            "SELECT updated_at FROM organisations WHERE id=$1", oid)), datetime)
+        email = f"{P}orgadmin_{uuid.uuid4().hex[:6]}@example.com"
+        inv = super_s.post(f"{BASE}/super-admin/orgs/{oid}/invite",
+                           json={"email": email, "name": P + "OrgAdmin"}, timeout=120)
+        assert inv.status_code in (200, 201), f"org invite {inv.status_code}: {inv.text[:400]}"
+        irow = db(lambda x: x.fetchrow(
+            """SELECT i.expires_at, i.created_at FROM invitations i
+               JOIN users u ON u.id = i.user_id WHERE u.email=$1""", email))
+&gt;       assert irow is not None and isinstance(irow["expires_at"], datetime), irow and dict(irow)
+E       AssertionError: None
+E       assert (None is not None)
+
+tests/test_iter107_timestamptz_regression.py:719: AssertionError</failure></testcase><testcase classname="tests.test_iter107_timestamptz_regression" name="test_no_test_residue" time="1.092"><failure message="AssertionError: {'m': 0, 't': 0, 'a': 0, 'u': 0, ...}&#10;assert 1 == 0&#10; +  where 1 = sum(dict_values([0, 0, 0, 0, 1, 0]))&#10; +    where dict_values([0, 0, 0, 0, 1, 0]) = &lt;built-in method values of dict object at 0xfc06f009b780&gt;()&#10; +      where &lt;built-in method values of dict object at 0xfc06f009b780&gt; = {'m': 0, 't': 0, 'a': 0, 'u': 0, ...}.values&#10; +        where {'m': 0, 't': 0, 'a': 0, 'u': 0, ...} = dict(&lt;Record m=0 t=0 a=0 u=0 o=1 i=0&gt;)">def test_no_test_residue():
+        counts = db(lambda c: c.fetchrow(
+            """SELECT (SELECT count(*) FROM meetings WHERE title LIKE $1) m,
+                      (SELECT count(*) FROM transcripts WHERE id LIKE $1) t,
+                      (SELECT count(*) FROM analyses WHERE id LIKE $1) a,
+                      (SELECT count(*) FROM users WHERE email LIKE $1) u,
+                      (SELECT count(*) FROM organisations WHERE name LIKE $1) o,
+                      (SELECT count(*) FROM invitations i2 JOIN users u2 ON u2.id=i2.user_id
+                       WHERE u2.email LIKE $1) i""", P + "%"))
+        print("residue:", dict(counts))
+&gt;       assert sum(dict(counts).values()) == 0, dict(counts)
+E       AssertionError: {'m': 0, 't': 0, 'a': 0, 'u': 0, ...}
+E       assert 1 == 0
+E        +  where 1 = sum(dict_values([0, 0, 0, 0, 1, 0]))
+E        +    where dict_values([0, 0, 0, 0, 1, 0]) = &lt;built-in method values of dict object at 0xfc06f009b780&gt;()
+E        +      where &lt;built-in method values of dict object at 0xfc06f009b780&gt; = {'m': 0, 't': 0, 'a': 0, 'u': 0, ...}.values
+E        +        where {'m': 0, 't': 0, 'a': 0, 'u': 0, ...} = dict(&lt;Record m=0 t=0 a=0 u=0 o=1 i=0&gt;)
+
+tests/test_iter107_timestamptz_regression.py:739: AssertionError</failure></testcase></testsuite></testsuites>

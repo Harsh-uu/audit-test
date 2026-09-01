@@ -11,6 +11,149 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Post-Phase-2 fixes (Sep 2026) — Edit Setting race, FK indexes, date validation
+Follow-up to Phase 2, 4 items requested together:
+1. **Edit Setting/Team stale-form race condition — FIXED**: `OrgStructure.js`'s
+   `refreshData()` is now `async` and every mutation handler (`saveSetting`, `saveTeam`,
+   `saveEditUser`, `inviteUser`, `deleteSetting`, `deleteTeam`) `await`s it before closing its
+   modal. Previously the modal closed immediately after the PUT/POST resolved while the
+   background refetch was still in flight (~seconds); reopening Edit on the same row in that
+   window prefilled stale pre-save data, and saving again silently reverted the change.
+2. **18 missing FK-supporting indexes — ADDED** in `init_db.py` (analyses/audio_files/
+   audit_logs/evidence_feedback/invitations/meeting_prep/review_edits/reviewer_comments/
+   standards_entries/transcripts `.org_id`, `meetings.setting_id/team_id/schedule_id`,
+   `org_settings.manager_user_id`, `schedules.meeting_type_id/staff_user_id`,
+   `teams.supervisor_user_id`, `evidence_feedback.meeting_id`) — without these, deleting a
+   referenced row (org/user/meeting) forced a full table scan of the referencing table to
+   find CASCADE/SET NULL matches. Also un-reverted a previously-dropped
+   `idx_schedules_staff_user_id` (was dropped for an unrelated SELECT-query-pattern reason;
+   re-added here for the FK/cascade-performance reason instead — documented in-file).
+3. **Meeting date validation — ADDED**: `CreateMeetingRequest.date` now has a Pydantic
+   `field_validator` requiring `datetime.fromisoformat()` to parse it; garbage dates get a
+   clean 422 instead of being silently stored or (previously) sometimes crashing.
+4. **Bug found by testing_agent (iteration_110) + fixed**: `org.py` `create_team`/
+   `update_team` inserted a raw `""` (not `None`) for `supervisor_user_id` when the field was
+   omitted/blank, which the UUID column now rejects (500). Normalized to `sup_id =
+   data.supervisor_user_id or None` (matching the existing `manager_user_id` pattern used for
+   Settings). Proactively found + fixed the identical pattern in `meetings.py` create_meeting
+   (`sign_off_manager_id`, `schedule_id` could also be raw `""`).
+- **Verified via testing_agent** (iteration_110): Playwright repro of the exact race (edit →
+  save → reopen within ~1s → save again) confirmed fixed for both Settings and Teams; date
+  validator confirmed rejecting garbage with 422 and accepting valid dates normally; no
+  startup errors from the new indexes.
+- **Known minor items not fixed** (low priority): malformed-UUID path params still log a full
+  traceback to `backend.err.log` before the global 404 handler catches it (cosmetic log noise
+  only); `GET /api/admin/standards` 403s for attendees viewing their own portfolio (pre-existing,
+  unrelated).
+
+## Phase 2 Data-Type Migration (Sep 2026) — TEXT -> UUID, COMPLETE, verified
+Migrated ~75 id/foreign-key columns to native UUID across 22 tables, rebuilding all
+39 FK constraints and 21 RLS policies atomically. Same "text-format codec" technique as
+Phase 1: `database.py` registers a UUID codec so every `str(uuid.uuid4())` call site
+keeps working unchanged, while Postgres now validates/stores real UUIDs at rest.
+- **Migration mechanics** (`init_db.py`, new DO block after the Phase 1 block): captures
+  every FK's exact definition from `pg_constraint` before dropping (so they're rebuilt
+  byte-identical), drops all 21 RLS policies (Postgres refuses to retype a column a policy
+  depends on), converts columns, rebuilds FKs + policies (uuid-aware
+  `NULLIF(current_setting(...),'')::uuid` cast). All-or-nothing: a DO block failing anywhere
+  rolls the whole thing back automatically — safe to retry.
+- **Deliberately excluded** (confirmed not uuid-shaped by inspecting both code and live
+  data first): `login_attempts.identifier` (composite string), `password_reset_tokens.token`
+  / `invitations.token` (`secrets.token_urlsafe(32)`), `evidence_feedback.evidence_item_id`
+  (`str(uuid4())[:8]`, truncated), and **`settings.id`/`settings.org_id`** — settings.id is a
+  composite string key (`"supervision_template:{org_id}"`), not a UUID at all; found this the
+  hard way (see bugs below), so its RLS policy stays a static TEXT-comparison policy and it
+  has no FK to organisations.
+- **Safety**: dry-ran the full migration SQL in an explicit `BEGIN/ROLLBACK` against the real
+  DB first (validated column types, FK/policy counts, RLS filtering) before ever writing it
+  into `init_db.py`. Backup from Phase 1 reused to verify zero row loss after (761 rows).
+- **Real bugs found (by testing_agent iteration_108) + fixed**:
+  1. **Critical**: `settings.id`/`org_id` were wrongly included in the migration (composite
+     key, not UUID) — broke `GET/PUT /api/admin/template`. Reverted to TEXT, dropped the
+     now-permanently-incompatible `fk_settings_org_id`, restored a static TEXT `settings_rls`.
+  2. **Critical**: `routers/portfolio.py` — one bind param ($2) used against both a UUID
+     column (`sign_off_manager_id`) and a JSONB `->>'user_id'` text extraction in the same
+     query, so Postgres couldn't infer one consistent type. Fixed with explicit `::uuid` /
+     `::text` casts per usage. Same pattern found+fixed in `admin.py` (meetings-brief,
+     export-evidence, export-transcripts, export-cc-excerpts — 4 endpoints) and
+     `super_admin.py` (org-deletion cascade deletes).
+  3. Several `= ANY($1::text[])` array casts against now-UUID columns (`teams.setting_id`,
+     `users.id`, `users.team_id`, `analyses.id`, `transcripts.id`) across `org.py`, `admin.py`,
+     `dashboard.py`, `meetings.py`, `portfolio.py`, `review.py` — changed to `::uuid[]`.
+     Left `elem->>'user_id' = ANY($::text[])` (prep.py/transcription_pipeline.py) unchanged —
+     those extract from JSONB as text regardless of the referenced column's type.
+  4. `org.py` — `team_id IS NULL OR team_id=''` is now structurally invalid (a UUID column can
+     never hold `''`); simplified to `team_id IS NULL`.
+  5. Minor: malformed-UUID path params (e.g. `GET /api/meetings/not-a-uuid`) 500'd instead of
+     404ing — added a global FastAPI `exception_handler` for asyncpg's
+     `InvalidTextRepresentationError` → 404.
+  6. Hardened `init_db.py`'s Phase-2 column loop: a NOT NULL/primary-key column with non-uuid
+     values now `RAISE EXCEPTION`s loudly (caught by the outer handler, whole migration rolls
+     back cleanly) instead of silently nulling it and hitting a confusing NOT NULL violation.
+- **Verified via testing_agent** (iteration_108 found the bugs above; iteration_109 confirmed
+  all 4 fixed — 32/32 regression + 12/12 new confirmation tests, Playwright UI pass for
+  Settings→Template full CRUD, My Portfolio for admin+attendee, cross-org RLS isolation
+  re-confirmed clean). Cleaned up test-data residue left by testing_agent runs (leftover
+  `TEST_iter107` schedules/meeting_types, a `TEST_iter108`-overwritten supervision template,
+  two stray `test add`/`TEST Invitee` demo users).
+- **Known minor items not fixed** (low priority, logged for later): `GET /api/admin/standards`
+  403s for attendees viewing their own portfolio (silently falls back to a 0 count, pre-existing,
+  unrelated to this migration); malformed-id paths still emit a full traceback to
+  `backend.err.log` before the 404 handler catches it (cosmetic/log-noise only — could type path
+  params as `uuid.UUID` for a clean 422 instead).
+
+## Phase 1 Data-Type Migration (Sep 2026) — TEXT -> TIMESTAMPTZ, COMPLETE, verified
+Migrated 52 date/time columns across 22 tables from TEXT to TIMESTAMPTZ (organisations,
+users, meetings, transcripts, analyses, audio_files, review_edits, reviewer_comments,
+standards_entries, standards_documents, login_attempts, password_reset_tokens, invitations,
+jobs, audit_logs, org_settings, teams, schedules, meeting_types, meeting_prep,
+supervision_uploads, evidence_feedback). Deliberately EXCLUDED (kept TEXT, not full
+timestamps): `meetings.date`, `schedules.start_date` (code comment already says "keep as
+str"), `supervision_uploads.meeting_date` (date-only), `focus_topics.active_month`
+("YYYY-MM" only).
+- **Approach** (lower-risk than the original ~90-call-site `.isoformat()` rewrite plan):
+  registered a custom asyncpg **text-format codec** for `timestamptz`/`timestamp`
+  (`database.py::_encode_timestamp`/`_decode_timestamp`) — encoder passes an ISO-8601 string
+  straight through (Postgres's own parser accepts it), decoder normalizes Postgres's text
+  output ('YYYY-MM-DD HH:MI:SS+TZ') back to Python's isoformat ('...T...'). Net effect: every
+  existing `.isoformat()` string call site keeps working completely unchanged, while the
+  column is a real TIMESTAMPTZ at rest — correct chronological sorting, and Postgres itself
+  now rejects malformed values at the DB level instead of silently storing bad text.
+- **Migration mechanics** (`init_db.py`, new DO block after the FK-constraints section):
+  idempotent (checks `information_schema.columns` first, skips if already migrated or column
+  doesn't exist), nulls out any value that doesn't match a `YYYY-MM-DD[ T]HH:MI:SS` shape
+  before the ALTER (logged via `RAISE WARNING`), and catches any other cast failure per-column
+  (warns, leaves that one column as TEXT) so one bad column can't abort the whole migration.
+- **Safety**: took a full pre-migration JSON backup of all 22 tables (761 rows) to
+  `/app/backups/pre_phase1_timestamptz_backup.json` before running; verified row-count parity
+  (761/761) and zero unexpected NULLs after.
+- **Real bug found + fixed**: `utils/rate_limit.py` — `locked_until = CASE WHEN ... THEN $4
+  ELSE NULL END` lost Postgres's type inference once the column became TIMESTAMPTZ (bare
+  parameter + untyped NULL inside a CASE branch defaults to `text`), causing a 500
+  (`DatatypeMismatchError`) on every rate-limited endpoint (e.g. `POST /api/meetings/`). Fixed
+  with explicit `::timestamptz` casts on both branches (both `check_rate_limit` and
+  `record_failed_attempt`). Also fixed the same class of bug in `tests/get_tokens.py` (test
+  helper opens its own unpooled connection without the codec).
+- **Second bug found by testing_agent + fixed**: `routers/review.py` `update_speaker_text` —
+  `existing_t.get("speaker_text_edited_at") or ""` wrote `''` into the now-TIMESTAMPTZ
+  `transcripts.speaker_text_backup_at`, 500ing on every speaker-label edit/rename/flip/split
+  save (permanently broken from the first edit onward, since the backup path always fires
+  once a transcript has any speaker_text). Fixed: `or None`.
+- **Verified via testing_agent** (iteration_107): full auth+MFA, failed-login lockout, rapid
+  meeting creates through the fixed rate limiter, meetings list ordering/date filters, review
+  edits/comments/audit-trail/signoff/reopen, org settings/teams/invitations, schedules,
+  super-admin org+invite lifecycle, dashboard/admin reads — all clean after the two fixes.
+  Manually re-verified the review.py fix directly against a real seeded transcript (both first
+  and second speaker-text edits now 200); restored that transcript's original content
+  afterward from the pre-migration backup so no seed/demo data was left mutated.
+- **Explicitly NOT done this round** (per user instruction — stop after Phase 1 for review):
+  Phase 2 (TEXT -> UUID for ID columns + RLS policy rewrites), and all previously-logged P2/P3
+  backlog items below.
+- Minor items surfaced but not fixed (low priority, logged for later): `meetings.date` accepts
+  any garbage string (pre-existing gap, unrelated to this migration, would need Pydantic-level
+  validation before ever converting that column); malformed `date_from`/`date_to` query params
+  are silently ignored rather than 422 (no 500s, just a correctness smell).
+
 ## Session note (Aug 2026): Supabase DB audit mode
 User is running a deliberate, field-by-field Supabase/Postgres audit — reports one issue at a time,
 requires confirmation + RCA + recommended fix BEFORE any change, then explicit "go ahead" before

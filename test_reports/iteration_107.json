@@ -1,0 +1,71 @@
+{
+  "summary": "Regression pass focused on the Phase 1 TEXT->TIMESTAMPTZ migration (52 columns / 22 tables). Ran the existing 33-test suite (tests/test_iter107_timestamptz_regression.py), then a shape/role-corrected follow-up suite (test_iter107b_ts_followup.py) and a bad-date-input fuzz suite (test_iter107c_bad_date_inputs.py). Frontend: attendee UI login (no MFA) -> dashboard/meetings list, and admin (cookie-injected) -> dashboard, New Meeting create, Organisation, Schedules, Team Themes, Settings. Result: exactly ONE real regression of the same class as the rate_limit.py bug — PATCH /api/review/{id}/speaker-text 500s because an empty string is written to the now-TIMESTAMPTZ transcripts.speaker_text_backup_at. Everything else (auth+MFA, lockout, rapid meeting creates through the fixed rate limiter, meetings list ordering/date filters, review edits/comments/audit-trail/signoff/reopen, org settings/teams/invitations, schedules, super-admin org+invite lifecycle, dashboard/admin reads) passed. All 6 remaining failures in the pre-existing iter107 suite were test-script assumptions (response shape, reopen role, email lower-casing), reproved green in 107b.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "PATCH /api/review/{meeting_id}/speaker-text",
+        "issue": "500 on EVERY call. routers/review.py:1075 `values.append(existing_t.get(\"speaker_text_edited_at\") or \"\")` passes '' into transcripts.speaker_text_backup_at, which is now TIMESTAMPTZ -> asyncpg.exceptions.InvalidDatetimeFormatError: invalid input syntax for type timestamp with time zone: \"\" (traceback at routers/review.py line 1083, repeated in /var/log/supervisor/backend.err.log lines 15924/16599/16995/17352). Breaks all speaker-label editing / rename / Flip-From-Here / split-turn saves. Fix: `or None` (and equally consider the sibling `speaker_text_backup_by` which is fine as text).",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/meetings/",
+        "issue": "meetings.date is still TEXT and accepts arbitrary garbage: date='' , 'not-a-date', '2026-13-45' all return 201 and persist verbatim (pre-existing validation gap, not caused by the migration, but it will block any future date->DATE conversion)."
+      },
+      {
+        "endpoint": "GET /api/meetings/?date_from=..., GET /api/admin/team-insights?date_from=...",
+        "issue": "Malformed/empty date_from/date_to are silently ignored (200 with unfiltered data) instead of 422. No 500s, so migration-safe, but silent filter drop is a correctness smell."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Review screen -> edit speaker labels / transcript turns",
+        "issue": "Backed by PATCH /api/review/{id}/speaker-text which returns 500 for every request (see backend critical). Any UI speaker rename/split/flip save will fail.",
+        "affected_selectors": []
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Team Themes (/admin/team) date range filter",
+        "issues": ["Uses native browser date inputs (placeholder 'dd/mm/yyyy') rather than the shadcn calendar/date-picker used elsewhere — inconsistent with the rest of the app."]
+      },
+      {
+        "screen": "Attendee dashboard (/dashboard) meetings list",
+        "issues": ["Pre-existing seed/test residue visible to users: 5 meetings titled 'Test 1'..'Test 5' dated 1 Jan 2026 created 16 Aug 2026 by Demo User — not created by this test round; consider purging."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter107_timestamptz_regression.py",
+    "/app/backend/tests/test_iter107b_ts_followup.py",
+    "/app/backend/tests/test_iter107c_bad_date_inputs.py",
+    "/app/backend/tests/_iter107b_cleanup.py",
+    "/app/test_reports/pytest/iter107_ts.xml"
+  ],
+  "action_items": [
+    "CRITICAL: routers/review.py:1075 — replace `existing_t.get(\"speaker_text_edited_at\") or \"\"` with `... or None` so speaker_text_backup_at (TIMESTAMPTZ) gets NULL, not ''. Re-run tests/test_iter107b_ts_followup.py::TestReviewFollowUp to confirm both first and second speaker-text edits return 200.",
+    "Optional hardening: validate/reject non-ISO meetings.date at the Pydantic layer before any future date column conversion.",
+    "Optional: purge the 'Test 1'..'Test 5' legacy demo meetings from the Test Company org."
+  ],
+  "critical_code_review_comments": [
+    "database.py's text-format timestamptz codec normalises Postgres output back to ISO ('YYYY-MM-DDTHH:MM:SS+00:00'), so all existing string comparisons (e.g. routers/auth.py:370/428 mfa_code_expires_at < now().isoformat()) still behave — verified working via MFA login + expired-code tests. Caveat: ISO string comparison is only lexicographically safe because the codec always emits UTC offsets; if a column ever returns a non-UTC offset the string compare will silently mis-order. Prefer comparing datetimes.",
+    "The `X or \"\"` idiom is the exact footgun that caused both the rate_limit.py and review.py 500s. A repo-wide grep now shows only review.py:1075 remaining for timestamp columns; consider a lint rule / helper (_ts_or_none) to prevent regressions.",
+    "utils/rate_limit.py CASE ... THEN $4::timestamptz ELSE NULL::timestamptz fix verified under load: login_attempts row for create_meeting reached count=3 with locked_until NULL and no 500s across 4 back-to-back meeting creates plus a 6-failure login lockout run."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter107b_ts_followup.py",
+    "/app/backend/tests/test_iter107c_bad_date_inputs.py",
+    "/app/backend/tests/_iter107b_cleanup.py"
+  ],
+  "success_rate": {"backend": "97% (42/43 assertions green; 1 real 500 + its dependent second-edit case)", "frontend": "100% of screens exercised loaded clean (no console/API errors)"},
+  "seed_data_creation": "All test data prefixed TEST_iter107*. Fully purged afterwards (verified: 0 residual users/meetings/orgs/teams/org_settings, and the UI-created meeting 741289b6 removed). No seeded/production data modified.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Used /app/memory/test_credentials.md as-is: admin@supervision.com/Admin123! (MFA bypassed via DB override in test helper), manager@supervision.com/Manager123!, user@supervision.com/Staff123! (UI login, no MFA), superadmin@1two.one/NewPass123!. All valid.",
+  "context_for_next_testing_agent": "Phase 1 TIMESTAMPTZ migration is essentially clean. Only outstanding defect: PATCH /api/review/{id}/speaker-text 500 (empty string -> TIMESTAMPTZ, review.py:1075). Regression suites to reuse: tests/test_iter107_timestamptz_regression.py (33 tests, ~7 min, run with -n 0; note 6 of its assertions encode wrong response shapes/roles — the corrected versions live in test_iter107b_ts_followup.py: GET /review/{id} returns meeting fields at top level, GET comments returns a bare list, audit-trail returns {events:[...]}, request-reopen is manager/admin-only and approve-reopen is the attendee, and super-admin invite lower-cases emails). test_iter107c covers bad-date input fuzzing (no 500s). Not re-tested this round: recording/processing/AI pipeline beyond what iter107 already covers, portfolio deep flows.",
+  "rca_of_the_issue": "Root cause: routers/review.py update_speaker_text builds a dynamic UPDATE and, when a prior transcript exists, backs up the previous edit metadata with `existing_t.get('speaker_text_edited_at') or ''`. Before Phase 1 that column was TEXT so '' was accepted; it is now TIMESTAMPTZ, so Postgres raises InvalidDatetimeFormatError and FastAPI returns 500. Reproduction: seed/pick any meeting whose transcript has speaker_text but a NULL speaker_text_edited_at, then PATCH /api/review/{id}/speaker-text -> 500 (test_iter107b_ts_followup.py::test_speaker_text_edit_no_500). Because the first edit never persists speaker_text_edited_at, the second edit fails identically — the endpoint is permanently broken, not just on first use. Mitigation: pass None instead of ''."
+}

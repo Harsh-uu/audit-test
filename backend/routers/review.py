@@ -1072,7 +1072,7 @@ async def update_speaker_text(meeting_id: str, data: SpeakerTextUpdateRequest, c
         values.append(existing_t["speaker_text"])
         idx += 1
         set_parts.append(f"speaker_text_backup_at=${idx}")
-        values.append(existing_t.get("speaker_text_edited_at") or "")
+        values.append(existing_t.get("speaker_text_edited_at") or None)
         idx += 1
         set_parts.append(f"speaker_text_backup_by=${idx}")
         values.append(existing_t.get("speaker_text_edited_by_name") or "")
@@ -1492,7 +1492,7 @@ async def share_meeting(meeting_id: str, data: ShareRequest, current_user=Depend
     if new_uids:
         async with database.with_org(org_id) as conn:
             u_rows = await conn.fetch(
-                "SELECT id, name, email, role FROM users WHERE id = ANY($1::text[]) AND org_id=$2", new_uids, org_id,
+                "SELECT id, name, email, role FROM users WHERE id = ANY($1::uuid[]) AND org_id=$2", new_uids, org_id,
             )
         users_by_id = {r["id"]: r for r in u_rows}
 
@@ -1665,7 +1665,7 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
             if rec_user_ids:
                 try:
                     user_rows = await conn.fetch(
-                        "SELECT id, name FROM users WHERE id = ANY($1::text[])", rec_user_ids
+                        "SELECT id, name FROM users WHERE id = ANY($1::uuid[])", rec_user_ids
                     )
                     rec_users = {r["id"]: r["name"] for r in user_rows}
                 except Exception:

@@ -1420,12 +1420,12 @@ async def list_meetings_brief(current_user=Depends(get_current_user)):
             rows = await conn.fetch(
                 """SELECT id, title, date, attendees FROM meetings
                    WHERE status IN ('signed_off','shared')
-                     AND (created_by = ANY($1)
-                          OR sign_off_manager_id = ANY($1)
+                     AND (created_by = ANY($1::uuid[])
+                          OR sign_off_manager_id = ANY($1::uuid[])
                           OR EXISTS (SELECT 1 FROM jsonb_array_elements(
                                          CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
                                               THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a
-                                     WHERE a->>'user_id' = ANY($1)))
+                                     WHERE a->>'user_id' = ANY($1::text[])))
                    ORDER BY date DESC""",
                 scoped_ids,
             )
@@ -1474,15 +1474,15 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
             scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
             scoped_ids = list(set(scoped_ids) | {current_user["id"]})
             params.append(scoped_ids)
-            conditions.append(f"(created_by = ANY(${len(params)}) OR sign_off_manager_id = ANY(${len(params)}) OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)})))")
+            conditions.append(f"(created_by = ANY(${len(params)}::uuid[]) OR sign_off_manager_id = ANY(${len(params)}::uuid[]) OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}::text[])))")
 
         if meeting_ids:
             params.append(meeting_ids)
-            conditions.append(f"id = ANY(${len(params)})")
+            conditions.append(f"id = ANY(${len(params)}::uuid[])")
         else:
             if staff_ids:
                 params.append(staff_ids)
-                conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}))")
+                conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}::text[]))")
             if date_from:
                 params.append(date_from)
                 conditions.append(f"date >= ${len(params)}")
@@ -1496,7 +1496,7 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
         analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
         analyses_by_id = {}
         if analysis_ids:
-            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::text[])", analysis_ids)
+            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
         for mtg in mtg_dicts:
             a_row = analyses_by_id.get(mtg["analysis_id"])
@@ -1553,7 +1553,7 @@ async def export_cqc_excerpts(current_user=Depends(get_current_user)):
         analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
         analyses_by_id = {}
         if analysis_ids:
-            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::text[])", analysis_ids)
+            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
         for mtg in mtg_dicts:
             a_row = analyses_by_id.get(mtg["analysis_id"])
@@ -1598,7 +1598,7 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
         analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
         analyses_by_id = {}
         if analysis_ids:
-            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::text[])", analysis_ids)
+            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
         for mtg in mtg_dicts:
             a_row = analyses_by_id.get(mtg["analysis_id"])
@@ -1627,7 +1627,7 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
     staff_label = "All staff"
     if selected_ids:
         async with database.with_admin() as conn:
-            u_rows = await conn.fetch("SELECT name FROM users WHERE id = ANY($1)", selected_ids)
+            u_rows = await conn.fetch("SELECT name FROM users WHERE id = ANY($1::uuid[])", selected_ids)
         names = [r["name"] for r in u_rows]
         staff_label = ", ".join(sorted(names)) if names else "Selected staff"
     else:
@@ -1672,15 +1672,15 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
             scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
             scoped_ids = list(set(scoped_ids) | {current_user["id"]})
             params.append(scoped_ids)
-            conditions.append(f"(created_by = ANY(${len(params)}) OR sign_off_manager_id = ANY(${len(params)}) OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)})))")
+            conditions.append(f"(created_by = ANY(${len(params)}::uuid[]) OR sign_off_manager_id = ANY(${len(params)}::uuid[]) OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}::text[])))")
 
         if meeting_ids:
             params.append(meeting_ids)
-            conditions.append(f"id = ANY(${len(params)})")
+            conditions.append(f"id = ANY(${len(params)}::uuid[])")
         else:
             if staff_ids:
                 params.append(staff_ids)
-                conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}))")
+                conditions.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array' THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END) a WHERE a->>'user_id' = ANY(${len(params)}::text[]))")
             if date_from:
                 params.append(date_from)
                 conditions.append(f"date >= ${len(params)}")
@@ -1695,7 +1695,7 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
         transcripts_by_id = {}
         if transcript_ids:
             t_rows = await conn.fetch(
-                "SELECT id, speaker_text, text FROM transcripts WHERE id = ANY($1::text[])", transcript_ids,
+                "SELECT id, speaker_text, text FROM transcripts WHERE id = ANY($1::uuid[])", transcript_ids,
             )
             transcripts_by_id = {r["id"]: r for r in t_rows}
         for mtg in mtg_dicts:

@@ -21,7 +21,7 @@ email, password = sys.argv[1], sys.argv[2]
 async def override(mail):
     conn = await asyncpg.connect(DSN, ssl="require")
     h = bcrypt.hashpw(b"123456", bcrypt.gensalt()).decode()
-    exp = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    exp = datetime.now(timezone.utc) + timedelta(minutes=10)
     await conn.execute(
         "UPDATE users SET mfa_code=$1, mfa_code_expires_at=$2, mfa_code_attempts=0 WHERE email=$3",
         h, exp, mail)

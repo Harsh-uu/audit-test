@@ -104,8 +104,8 @@ async def check_rate_limit(
                SET count       = login_attempts.count + 1,
                    locked_until = CASE
                        WHEN login_attempts.count + 1 > $3
-                       THEN $4
-                       ELSE NULL
+                       THEN $4::timestamptz
+                       ELSE NULL::timestamptz
                    END,
                    updated_at  = $2
            RETURNING count, locked_until
@@ -166,8 +166,8 @@ async def record_failed_attempt(
                SET count       = login_attempts.count + 1,
                    locked_until = CASE
                        WHEN login_attempts.count + 1 > $3
-                       THEN $4
-                       ELSE NULL
+                       THEN $4::timestamptz
+                       ELSE NULL::timestamptz
                    END,
                    updated_at  = $2
            RETURNING count, locked_until

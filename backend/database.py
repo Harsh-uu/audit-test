@@ -7,19 +7,76 @@ import json
 import os
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 pool: asyncpg.Pool | None = None
 
 
+def _encode_timestamp(value):
+    """Accept either a datetime object or an ISO-8601 string as a query param for
+    TIMESTAMPTZ/TIMESTAMP columns — Postgres's own input parser accepts ISO-8601
+    text natively, so a plain string passes through unchanged."""
+    if value is None:
+        return None
+    return value.isoformat() if isinstance(value, datetime) else value
+
+
+def _decode_timestamp(value):
+    """Normalize Postgres's text output ('YYYY-MM-DD HH:MI:SS+TZ') back to Python's
+    isoformat ('...T...+HH:MM') so every existing string comparison / JSON payload
+    built from a fetched timestamp column is completely unaffected by the
+    TEXT -> TIMESTAMPTZ migration (Phase 1)."""
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace(" ", "T", 1)).isoformat()
+    except ValueError:
+        return value
+
+
+def _encode_uuid(value):
+    """A plain string UUID (str(uuid.uuid4())) passes straight through — Postgres's
+    own input parser accepts standard UUID text natively, no wrapping needed."""
+    return value
+
+
+def _decode_uuid(value):
+    """Postgres's text output for uuid is already lowercase-hyphenated, identical
+    to Python's str(uuid.uuid4()) — return as-is so every id stays a plain str,
+    exactly as before the TEXT -> UUID migration (Phase 2)."""
+    return value
+
+
 async def _init_connection(conn: asyncpg.Connection) -> None:
-    """Register JSONB/JSON codecs so asyncpg returns Python objects, not strings."""
+    """Register JSONB/JSON codecs so asyncpg returns Python objects, not strings.
+    Also register TIMESTAMPTZ/TIMESTAMP and UUID codecs in text format: this lets
+    columns migrated from TEXT to TIMESTAMPTZ/UUID keep accepting/returning plain
+    strings, so none of the existing `.isoformat()` / `str(uuid.uuid4())` call
+    sites across routers need to change, while Postgres now stores, sorts and
+    validates real timestamps/UUIDs at rest (and rejects malformed values at the
+    DB level) instead of comparing opaque text."""
     await conn.set_type_codec(
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
     )
     await conn.set_type_codec(
         "json", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
+    )
+    for typename in ("timestamptz", "timestamp"):
+        await conn.set_type_codec(
+            typename,
+            encoder=_encode_timestamp,
+            decoder=_decode_timestamp,
+            schema="pg_catalog",
+            format="text",
+        )
+    await conn.set_type_codec(
+        "uuid",
+        encoder=_encode_uuid,
+        decoder=_decode_uuid,
+        schema="pg_catalog",
+        format="text",
     )
 
 

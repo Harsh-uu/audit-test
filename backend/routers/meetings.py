@@ -2,7 +2,7 @@ import json
 import uuid
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime, timezone
 from typing import Optional, List
 from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
@@ -33,6 +33,15 @@ class CreateMeetingRequest(BaseModel):
     attendee_ids: List[str] = []
     sign_off_manager_id: Optional[str] = None
     schedule_id: Optional[str] = None
+
+    @field_validator("date")
+    @classmethod
+    def _date_must_be_a_real_date(cls, v: str) -> str:
+        try:
+            datetime.fromisoformat(v)
+        except ValueError:
+            raise ValueError("date must be a valid ISO-8601 date/datetime string")
+        return v
 
 
 class UpdateAttendeesRequest(BaseModel):
@@ -133,7 +142,7 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
         # selection as before. This also fixes a downstream bug where a
         # never-selected sign_off_manager_id let a co-attending manager be
         # mistaken for a "shared supervisee" between two different meetings.
-        sign_off_manager_id = data.sign_off_manager_id
+        sign_off_manager_id = data.sign_off_manager_id or None
         if not sign_off_manager_id:
             manager_attendees = [a for a in attendees if a.get("role") in ("manager", "admin")]
             if len(manager_attendees) == 1:
@@ -160,7 +169,7 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
             sign_off_manager_id, manager_name,
             attendees,
             current_user.get("team_id"), current_user.get("setting_id"),
-            data.schedule_id, "draft",
+            data.schedule_id or None, "draft",
             [], [], 0, "none", now,
         )
 
@@ -396,7 +405,7 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
             all_uids = list({uid for uid in attendee_uids + ([created_by_id] if created_by_id else [])})
 
             user_rows = await conn.fetch(
-                "SELECT id, email, name FROM users WHERE id = ANY($1::text[])", all_uids
+                "SELECT id, email, name FROM users WHERE id = ANY($1::uuid[])", all_uids
             ) if all_uids else []
             user_map = {str(r["id"]): r for r in user_rows}
 

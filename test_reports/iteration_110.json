@@ -1,0 +1,48 @@
+{
+  "summary": "Tested the 3 items from this round: (1) OrgStructure Edit-Setting/Edit-Team stale-form race fix, (2) 18 new FK indexes, (3) meetings date field_validator. Backend: 19 pytest tests (18 pass). All 8 garbage date strings + missing/wrong-type date now return 422; all 5 valid ISO formats create + persist correctly; all 18 expected FK indexes exist in Postgres; backend startup clean. Frontend: race-condition repro executed with network timing instrumentation. IMPORTANT: the race fix initially appeared BROKEN because /app/frontend runs `vite build && vite preview` (NO hot reload) — the served bundle predated the fix. After `supervolctl restart frontend` (rebuild) the fix is CONFIRMED WORKING for both Setting and Team: refetch GET /org/structure completes BEFORE the modal closes, reopened Edit form shows the just-saved value, and re-saving does not revert. Found one NEW CRITICAL unrelated bug: creating/editing a Team from the UI fails with 404 whenever Supervisor is left as 'None' (UI sends supervisor_user_id: \"\" -> asyncpg InvalidTextRepresentationError -> global 404 handler). NewMeeting UI create with a valid date works (no regression). Dashboard loads. All TEST_ data created was cleaned up, plus the orphaned 'TEST_ Supervision with Connor Repro' meeting from a prior round.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/org/settings/{setting_id}/teams", "issue": "supervisor_user_id=\"\" (exactly what OrgStructure's inline 'Add Team' form always sends when no supervisor is picked) is passed raw into an INSERT on a native uuid column -> asyncpg InvalidTextRepresentationError -> caught by server.py global handler -> 404 {\"detail\":\"Not found\"}. Team creation from the UI is completely broken. Fix: sup_id = data.supervisor_user_id or None (same pattern already used for manager_user_id in create_setting), or coerce empty strings to None in TeamCreate via a validator.", "priority": "CRITICAL"},
+      {"endpoint": "PUT /api/org/teams/{team_id}", "issue": "Same empty-string UUID bug: editing a team with Supervisor='None' returns 404 'Not found' and the rename is silently lost (modal stays open, red 'Not found' banner). Lines routers/org.py:293-296 use data.supervisor_user_id raw.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "global 404 handler (server.py:58-60)", "issue": "Mapping InvalidTextRepresentationError to a bare 404 {\"detail\":\"Not found\"} masks genuine bad-input bugs (this is exactly how the team bug hid). Consider 400/422 with a field-specific message, and log the offending value."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OrgStructure – inline Add Team form / Edit Team modal", "issue": "Sends supervisor_user_id: \"\" instead of null when Supervisor='None', causing the 404 above; team create/edit unusable without selecting a supervisor. Also the inline Add Team input has no data-testid.", "selector": "[data-testid=\"team-name-input\"], [data-testid^=\"edit-team-\"]", "priority": "CRITICAL"},
+      {"component": "OrgStructure error surfacing", "issue": "Backend failure shows only a generic top-of-page red 'Not found' banner; the Edit Team modal shows no inline error, so the user cannot tell which field failed.", "selector": "flash banner", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Any frontend source change", "issue": "frontend package.json start = 'vite build && vite preview' — there is NO hot reload. Source edits are invisible until `sudo supervisorctl restart frontend` (≈60s rebuild). The Edit-Setting race fix measurably still had the OLD behaviour (modal closed 4ms after PUT, refetch landed 2s later, reopened form stale) until I rebuilt. Main agent MUST restart frontend after every frontend edit before self-testing.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter110_date_validator_and_indexes.py",
+    "/app/test_reports/pytest/iter110.xml"
+  ],
+  "action_items": [
+    "CRITICAL: coerce empty-string UUID fields to None in routers/org.py create_team (line 272/275) and update_team (line 291-296) — or add a Pydantic validator on TeamCreate.supervisor_user_id. Team create/edit from the UI is currently broken.",
+    "Audit other routers for the same raw empty-string-into-uuid pattern (grep for data.<x>_id passed to a uuid column without 'or None').",
+    "Restart the frontend (supervisorctl restart frontend) after any frontend change — no hot reload in this repo.",
+    "Optionally return 400/422 with a field name instead of a bare 404 for InvalidTextRepresentationError so bad-input bugs are not masked."
+  ],
+  "critical_code_review_comments": [
+    "routers/org.py create_setting/update_setting correctly normalise manager_user_id with `or None`, but create_team/update_team do not do the same for supervisor_user_id — inconsistency is the root cause of the 404.",
+    "OrgStructure.js refreshData()/await ordering is correct and verified: refetch resolves before setEditingSetting(null)/setEditingTeam(null); the reopen-stale-form and silent-revert defect no longer reproduces.",
+    "utils/apiCache.cachedGet has no in-flight request dedupe; two concurrent GETs to the same URL can resolve out of order (last-response-wins). Not observed as a defect after the rebuild, but worth hardening since fetchData can be triggered concurrently by mount + mutation.",
+    "OrgStructure.js is 930 lines — above the 700-line guideline; consider splitting Settings/Teams/Users sections."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter110_date_validator_and_indexes.py"
+  ],
+  "success_rate": {"backend": "95% (18/19 pytest; only failure is the genuine team empty-supervisor bug)", "frontend": "80% (setting + team race fix pass, meeting create + dashboard pass; team create/edit-without-supervisor fails)"},
+  "seed_data_creation": "Temporary only: TEST_iter110_* org settings/teams and 5 TEST_good_date meetings + 1 UI-created meeting — all deleted. Also deleted the orphaned prior-round meeting 'TEST_ Supervision with Connor Repro' (11111111-2222-3333-4444-555555555555). Org structure is back to 'Team one' / 'Team Two' with 0 teams; 16 meetings remain (all pre-existing).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@supervision.com / Admin123! via python3 /app/backend/tests/get_tokens.py (cookie injection used for Playwright)",
+  "context_for_next_testing_agent": "Race-condition fix (item 1) VERIFIED for Setting and Team — do not retest unless OrgStructure.js changes; verification method: log page.on('response') timestamps for PUT /api/org/settings|teams and GET /api/org/structure, then assert the structure GET lands BEFORE the modal input detaches, and that reopening Edit prefills the new name. Date validator (item 3) and FK indexes (item 2) VERIFIED — regression suite at /app/backend/tests/test_iter110_date_validator_and_indexes.py (run with `cd /app/backend && python3 -m pytest tests/test_iter110_date_validator_and_indexes.py -q`; do not pass -n, pytest.ini already sets xdist). ONLY open item: empty-string UUID -> 404 on team create/update (test_team_create_with_empty_supervisor_string). Remember to rebuild the frontend (supervisorctl restart frontend, ~60s) before any UI retest. Route for New Meeting is /meetings/new (not /new-meeting).",
+  "rca_of_the_issue": "Race fix false-negative RCA: /app/frontend is served from a production Vite build (`vite build && vite preview`), and the frontend process had been running since before OrgStructure.js was edited, so the browser executed the pre-fix bundle. Instrumented timeline on the stale bundle: PUT 200 at t=12.512s, modal closed t=12.516s, refetch GET landed t=14.507s, reopened form showed the OLD name and re-saving reverted the row in the DB. After rebuilding: PUT 200 t=12.489s, refetch GET t=14.503s, modal closed t=15.004s, reopened form showed the new name — fix confirmed. Team 404 RCA: routers/org.py:272/293 pass data.supervisor_user_id straight into a native-uuid column; the UI's teamForm initialises supervisor_user_id to \"\", asyncpg raises InvalidTextRepresentationError on '', and server.py's exception handler converts it to a generic 404, so the mutation silently fails."
+}

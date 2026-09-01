@@ -1,0 +1,63 @@
+{
+  "summary": "Targeted fix-confirmation pass for the 4 Phase-2 UUID-migration defects reported in iteration_108. Verified at code level (init_db.py settings.id/org_id back to TEXT + static TEXT settings_rls + RAISE EXCEPTION hardening in Phase-2 step 4; portfolio.py ::uuid/::text casts; admin.py ::uuid[]/::text[] casts at 1423/1477/1675 and the cc-excerpts region; super_admin.py ::uuid[] deletes; server.py InvalidTextRepresentationError handler) and at runtime. Re-ran the 32 relevant tests from tests/test_iter108_uuid_migration_regression.py (all 8 previously-failing IDs + all 5 cross-org RLS isolation tests + admin/scoped-manager/template/portfolio groups): 32/32 PASS. Added tests/test_iter109_fix_confirmation.py (12 new tests): portfolio GET + PDF export for admin/manager/attendee on their own portfolio (PDF magic bytes asserted), export-evidence/export-transcripts/export-cc-excerpts + meetings-brief as manager, malformed-UUID paths on /meetings, /review, /portfolio -> 404 (no 500), and a real template GET->PUT->GET persistence round trip with restore. 12/12 PASS. Playwright (admin via cookie injection, attendee via real UI login): Settings -> Supervision Template loads with NO 'Failed to load settings' banner, add-step + Save Template returns 'Supervision template saved', value persists across reload, delete+save also persists (full CRUD round trip, zero >=400 API calls). My Portfolio renders for both admin and attendee with export-portfolio-btn visible (no 'Portfolio not found'). Organisation -> Structure and Team Themes render clean. Confirmed a fresh backend restart runs init_db.py cleanly (schema idempotent). ALL 4 DEFECTS CONFIRMED FIXED. No new backend 500s found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/admin/standards?type=care_cert (called by StaffPortfolio)",
+        "issue": "Returns 403 when the portfolio page is opened by an attendee (user@supervision.com). The page still renders, but the 'Care Cert Standards' counter silently falls back to 0 instead of showing real data. Either relax the endpoint for self-portfolio reads or stop the frontend firing it for non-admin roles. Pre-existing, unrelated to the UUID migration."
+      },
+      {
+        "endpoint": "GET /api/meetings/{bad-id} (global InvalidTextRepresentationError handler)",
+        "issue": "Handler correctly returns 404, but the full asyncpg traceback is still emitted to backend.err.log via Starlette's ErrorMiddleware for every malformed id. Cosmetic, but it makes real errors harder to spot and is trivially log-floodable by bots. Consider typing the path params as uuid.UUID (clean 422, no traceback) instead of relying on the DB error."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Team Themes (/admin/team) date range filter",
+        "issues": ["Still uses native browser date inputs ('dd/mm/yyyy') instead of the shadcn calendar used elsewhere (carried over unchanged from iterations 107/108)."]
+      },
+      {
+        "screen": "Organisation -> Structure / People & Usage",
+        "issues": ["Legacy demo/test residue still visible to users in the Unassigned Staff panel: 'test add' (x2), 'TEST Invitee'; dashboard still lists 'TEST_iter101_9c83c78e'. Not created this round — still worth the one-off purge flagged in iter108."]
+      },
+      {
+        "screen": "Settings -> Supervision Template",
+        "issues": ["The org's LIVE supervision template is currently named 'TEST template' with a single step 'TEST step' — data pollution left by iteration_108's destructive test_save_template (it PUT test values and never restored). The tab renders and saves perfectly; only the stored content is wrong. Main agent should reset it to the intended default template. (I patched the test itself to snapshot+restore so it cannot recur.)"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter109_fix_confirmation.py",
+    "/app/backend/tests/test_iter108_uuid_migration_regression.py",
+    "/app/test_reports/pytest/iter109_targeted.xml",
+    "/app/test_reports/pytest/iter109_confirm.xml"
+  ],
+  "action_items": [
+    "Reset the org's supervision template content — it currently reads 'TEST template'/'TEST step' (iter108 test residue overwrote real org data). Functionality is fine; only the stored value needs restoring.",
+    "Optional: purge legacy demo residue users/meetings still visible in the UI ('test add' x2, 'TEST Invitee', 'TEST_iter101_9c83c78e').",
+    "Optional (minor): stop StaffPortfolio calling /api/admin/standards?type=care_cert for attendees (403 -> silent 0 count), or allow it for self-portfolio.",
+    "Optional (minor): type id path params as uuid.UUID so malformed ids 422 before hitting the DB, avoiding the asyncpg traceback spam that the new 404 handler still lets through."
+  ],
+  "critical_code_review_comments": [
+    "All four fixes match the correct idiom and are consistent across the codebase now — a repo-wide grep for `->>'user_id' = ANY($` / `->>'user_id' = $` shows every remaining site either has an explicit ::text[]/::text cast or binds a text-only param. No further offenders found.",
+    "init_db.py Phase-2 step 4 now RAISE EXCEPTIONs (line ~933) when a NOT NULL column holds non-uuid values, which converts the previous silent-rollback deployment landmine into a loud failure — good. Verified a cold backend restart re-runs the whole schema block idempotently ('Schema created/verified successfully').",
+    "settings_rls being a hand-written static TEXT policy while the other 20 are generated by the dynamic loop is a latent divergence risk: add a comment-linked assertion (or a startup check) that settings.org_id is still TEXT, so a future 'let's normalise all org_id columns' change fails fast instead of silently breaking the template again.",
+    "backend.err.log contains a historical 'Application startup failed: operator does not exist: uuid = text' during SCHEMA_SQL at ~11:07 today — transient mid-edit hot-reload state, the following reload and my explicit restart both succeeded. No action needed, noted for the record."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter109_fix_confirmation.py (new — 12 confirmation tests)",
+    "/app/backend/tests/test_iter108_uuid_migration_regression.py (made TestSupervisionTemplate::test_save_template non-destructive: snapshots the template and restores it in a finally block, so the suite stops overwriting the org's real template)"
+  ],
+  "success_rate": {"backend": "100% (32/32 re-run iter108 tests + 12/12 new iter109 tests)", "frontend": "100% (Settings->Template full CRUD round trip, My Portfolio for admin + attendee, Organisation->Structure, Team Themes — all clean, zero >=400 API calls on authenticated pages)"},
+  "seed_data_creation": "No persistent seed data. Template round-trip test snapshots and restores the template; the UI test's 'TEST_iter109 UI step' was added, verified persisted, then deleted and re-saved (verified gone after reload). DB check confirms 0 rows matching TEST_iter109 in meetings/users. No orphaned rows left by this pass.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Used /app/memory/test_credentials.md as-is. admin@supervision.com/Admin123! and manager@supervision.com/Manager123! via tests/get_tokens.py (MFA bypass), user@supervision.com/Staff123! via real UI login. All valid.",
+  "context_for_next_testing_agent": "Iteration_108's 4 UUID-migration defects are all CONFIRMED FIXED (backend + UI). Reusable suites: tests/test_iter108_uuid_migration_regression.py (78 tests, ~6 min full run, now non-destructive w.r.t. the org template) and tests/test_iter109_fix_confirmation.py (12 tests, ~1 min — portfolio all roles + PDF, scoped-manager exports incl. export-cc-excerpts, malformed-uuid 404s, template persistence). Cross-org RLS isolation re-verified clean (5 tests incl. SET ROLE app_rls_user db-level probe). Do NOT re-test Phase 1 TIMESTAMPTZ (iter107) or Phase 2 schema invariants again unless init_db.py changes. Still not covered by anyone: real audio/AI transcription, deep doc-upload flows, super-admin org deletion cascade beyond create+detail (super_admin.py got new ::uuid[] casts on the meeting_id deletes this round — code-reviewed only, NOT executed).",
+  "rca_of_the_issue": "Both iter108 root causes are resolved. (1) settings.id/org_id are confirmed TEXT in the live DB (information_schema check) and were removed from init_db.py's Phase-2 id_columns, the incompatible fk_settings_org_id FK was dropped, and settings_rls is now a static TEXT-comparison policy — so the composite key 'supervision_template:{org_id}' binds cleanly again (GET/PUT /admin/template 200, direct DB lookup by composite key succeeds, UI save persists). Phase-2 step 4 now RAISE EXCEPTIONs on non-uuid values in NOT NULL columns instead of silently NULLing them and rolling back with a warning, closing the deployment landmine. (2) Every mixed-type predicate that bound one param to both a uuid column and a jsonb ->> text expression now has explicit per-side casts (portfolio.py ::uuid/::text; admin.py meetings-brief/export-evidence/export-transcripts/export-cc-excerpts ::uuid[]/::text[]), so Postgres no longer infers a single uuid type — 'operator does not exist: text = uuid' is gone from all 6 endpoints. (3) The new app-level exception_handler for asyncpg InvalidTextRepresentationError maps malformed id paths to 404 (verified on /meetings, /review, /portfolio and a numeric id)."
+}

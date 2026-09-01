@@ -48,6 +48,17 @@ from starlette.middleware.gzip import GZipMiddleware
 
 app = FastAPI(title="Supervision 2.0 API")
 
+# A malformed id in a path/query param (e.g. GET /api/meetings/not-a-uuid) now
+# hits Postgres's uuid parser directly since id columns are native UUID
+# (Phase 2 migration) — map that to a clean 404 instead of a 500.
+from fastapi.responses import JSONResponse  # noqa: E402
+from asyncpg.exceptions import InvalidTextRepresentationError  # noqa: E402
+
+
+@app.exception_handler(InvalidTextRepresentationError)
+async def _invalid_uuid_handler(request: Request, exc: InvalidTextRepresentationError):
+    return JSONResponse(status_code=404, content={"detail": "Not found"})
+
 # ── Path-aware request body size limits ───────────────────────────────────────
 # Checked via Content-Length header BEFORE the body is read — zero memory cost.
 # Handlers that read files already apply their own in-memory guards, but this

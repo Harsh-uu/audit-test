@@ -1,0 +1,88 @@
+{
+  "summary": "Focused Phase 2 (TEXT->UUID, ~75 columns / 22 tables / 39 FKs / 21 RLS policies) regression. Ran the 78-test suite tests/test_iter108_uuid_migration_regression.py (schema invariants, auth for all 4 roles incl. MFA, dashboard, meetings CRUD+cascade delete, org structure/settings/teams/invites, recording lifecycle, review edits+comments+audit+signoff/reopen, prep, schedules, admin, portfolio, super-admin, scoped-manager, template, rescan, plus 5 dedicated cross-org RLS isolation tests) and a Playwright pass as admin (cookie-injected) + attendee (real UI login) over Dashboard, Organisation People/Structure, Settings, Schedules, Admin Library, Team Themes, New Meeting create, Dashboard delete-meeting, My Portfolio. Result: 70/78 backend tests green. RLS isolation is CLEAN (zero foreign-org rows visible at both API and db-role level, empty org context fails closed, cross-org write denied). Org structure page (the endpoint that broke twice) now renders settings/teams/unassigned staff correctly. Meeting create/delete-cascade, review sign-off/reopen, schedules, team/setting creation, admin users, dashboard all pass. 4 genuine UUID-migration defects remain, 2 of them user-facing on every load.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/admin/template, PUT /api/admin/template (+ POST /api/review/{id}/rescan, transcription pipeline)",
+        "issue": "500 asyncpg.exceptions.InvalidTextRepresentationError: invalid input syntax for type uuid: \"supervision_template:b00bf04f-...\". init_db.py Phase 2 converted settings.id to UUID (id_columns list line ~825: ARRAY['settings','id']) but that column is a COMPOSITE STRING KEY, not a uuid — admin.py:484/501, review.py:1270 and utils/transcription_pipeline.py:262 all key rows as f\"supervision_template:{org_id}\". Same class of key that was correctly EXCLUDED for login_attempts.identifier. Impact: (a) Settings -> Supervision Template tab shows red 'Failed to load settings. Please refresh.' banner on every load, template cannot be read or saved; (b) backend log: 'Rescan failed for meeting c20802af...: invalid input syntax for type uuid'; (c) AI analysis pipeline can no longer load the org supervision template. Also a DEPLOYMENT LANDMINE: settings.id is NOT NULL PRIMARY KEY, so on any environment where the settings table is non-empty, migration step 4 (UPDATE %I SET %I = NULL WHERE ... !~ uuid-regex) raises a not-null violation and the whole DO block silently rolls back (only a RAISE WARNING) -> prod would keep TEXT columns while code assumes UUID. Fix: remove ARRAY['settings','id'] (and probably ARRAY['settings','org_id'] is fine) from id_columns, revert settings.id to TEXT, and make step 4 refuse to NULL a column that participates in a primary key instead of doing it silently.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "GET /api/portfolio/{user_id} and GET /api/portfolio/{user_id}/export-pdf",
+        "issue": "500 asyncpg.exceptions.UndefinedFunctionError: operator does not exist: text = uuid (traceback: routers/portfolio.py line 299 get_portfolio -> line 114 _build_portfolio_data). The same bind param $2 is used against a uuid column AND a jsonb text expression in one query: `sign_off_manager_id != $2` (uuid) together with `elem->>'user_id' = $2` (text) — Postgres resolves $2 as uuid, so the text comparison fails. Impact: 'My Portfolio' page is broken for EVERY user; UI renders the misleading message 'Portfolio not found' (masking a 500) and PDF export 500s. Fix: `elem->>'user_id' = $2::text` (the pattern already used correctly in meetings.py:297 `created_by::text = ANY($1)`). Same bug at portfolio.py:128.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "GET /api/admin/meetings-brief (scoped/team-level manager only)",
+        "issue": "500 operator does not exist: text = uuid — routers/admin.py:1420-1428. One param $1 (scoped_ids) is compared to created_by/sign_off_manager_id (uuid) AND to a->>'user_id' (text). Org-level admins/managers take the else-branch so this only 500s for managers with a team/setting scope. Fix: `created_by = ANY($1::uuid[]) OR sign_off_manager_id = ANY($1::uuid[]) OR ... a->>'user_id' = ANY($1::text[])`.",
+        "priority": "HIGH"
+      },
+      {
+        "endpoint": "POST /api/admin/export-evidence (scoped/team-level manager only)",
+        "issue": "500 operator does not exist: text = uuid — routers/admin.py:1494 (SEC-002 scope clause, same mixed uuid/text param as meetings-brief). Scoped managers cannot export evidence at all. Fix: separate ::uuid[] / ::text[] casts.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/meetings/{meeting_id} (and any /{id} route) with a non-UUID path segment",
+        "issue": "GET /api/meetings/not-a-uuid returns 500 (asyncpg InvalidTextRepresentationError: invalid input syntax for type uuid: \"not-a-uuid\") instead of 404/422. Pre-migration this was a clean 404. Recommend typing the path params as uuid.UUID in FastAPI (auto 422) or validating before query — otherwise every id route is a trivially reachable 500 for any bot/typo."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Settings -> Supervision Template",
+        "issue": "Red banner 'Failed to load settings. Please refresh.' on every load; template steps cannot be loaded or saved. Caused by GET/PUT /api/admin/template 500 (settings.id UUID conversion).",
+        "affected_selectors": ["Save Template button", "Supervision Template tab"]
+      },
+      {
+        "flow": "My Portfolio (/portfolio and /portfolio/:userId)",
+        "issue": "Page renders only 'Portfolio not found' for all roles — GET /api/portfolio/{user_id} returns 500. The UI swallows the 500 and shows a not-found message, hiding a server error from the user; it should surface an error state with retry.",
+        "affected_selectors": ["export-portfolio-btn", "portfolio-meeting-*"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Team Themes (/admin/team) date range filter",
+        "issues": ["Still uses native browser date inputs ('dd/mm/yyyy') instead of the shadcn calendar used elsewhere (carried over from iteration 107, unchanged)."]
+      },
+      {
+        "screen": "Organisation People & Usage / Schedules / Team Themes",
+        "issues": ["Legacy demo/test residue visible to users: staff rows named 'test add' (x2), 'Sec Test', 'TEST Invitee', plus older meetings 'TEST_ Supervision with Connor Repro' and 'TEST_iter101_9c83c78e'. Not created this round (iter108 residue purged) — worth a one-off purge."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter108_uuid_migration_regression.py",
+    "/app/backend/tests/_iter108_cleanup.py",
+    "/app/test_reports/pytest/iter108_results.xml",
+    "/app/test_reports/pytest/iter108_rerun.xml"
+  ],
+  "action_items": [
+    "CRITICAL: settings.id must NOT be UUID — it stores composite keys 'supervision_template:{org_id}'. Remove ARRAY['settings','id'] from init_db.py Phase 2 id_columns and convert the live column back to TEXT (ALTER TABLE settings ALTER COLUMN id TYPE TEXT). Then re-verify GET/PUT /api/admin/template, POST /api/review/{id}/rescan and the transcription pipeline template lookup.",
+    "CRITICAL: harden init_db.py Phase 2 step 4 — it silently NULLs non-UUID values in ANY listed column, including primary keys. On a non-empty settings table this raises a not-null violation and rolls the entire migration back with only a RAISE WARNING, leaving prod on TEXT while the code expects UUID. Make PK columns a hard failure (or pre-flight audit) rather than a silent NULL/rollback.",
+    "CRITICAL: routers/portfolio.py:118+128 — cast the jsonb comparison: `elem->>'user_id' = $2::text` (param is also bound to uuid column sign_off_manager_id). Fixes /portfolio/{id} and /portfolio/{id}/export-pdf 500s (My Portfolio broken for all users).",
+    "HIGH: routers/admin.py:1420-1428 (meetings-brief) and :1494 (export-evidence) — split the shared array param into `= ANY($n::uuid[])` for uuid columns and `= ANY($n::text[])` for a->>'user_id'. Currently 500 for team/setting-scoped managers.",
+    "MINOR: type id path params as uuid.UUID (or validate) so malformed ids return 422/404 instead of 500.",
+    "Optional: purge legacy demo residue ('test add', 'Sec Test', 'TEST Invitee', 'TEST_ Supervision with Connor Repro', 'TEST_iter101_*')."
+  ],
+  "critical_code_review_comments": [
+    "The correct idiom for these mixed-type predicates already exists in routers/meetings.py:297 (`created_by::text = ANY($1)` with a text[] param). portfolio.py and admin.py were not updated to it — worth a repo-wide grep for `->>'user_id' = ` / `->>'user_id' = ANY(` where the same $n also touches a uuid column (remaining offenders: portfolio.py:128, admin.py:1428, admin.py:1485 region). admin.py:2121/2166 are safe (text-only param).",
+    "Any column listed in the Phase 2 id_columns array must be proven uuid-shaped; the exclusion comment block correctly reasons about login_attempts.identifier / tokens / evidence_item_id but missed settings.id, which is the same composite-string-key shape. A cheap guard: before the ALTER, assert `count(*) FILTER (WHERE col !~ uuid_regex) = 0` for any column that is part of a PK/unique index and RAISE EXCEPTION with the table/column name.",
+    "Frontend StaffPortfolio maps a 500 to 'Portfolio not found'; error handling should distinguish 4xx-not-found from 5xx so genuine server faults are visible instead of looking like empty data."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter108_uuid_migration_regression.py (replaced a hardcoded meeting-count assertion of 17 with an invariant check — absolute count drifts as tests seed data; the RLS foreign-row==0 assertions are unchanged)",
+    "/app/backend/tests/_iter108_cleanup.py (new residue purge helper)"
+  ],
+  "success_rate": {"backend": "90% (70/78 tests; 8 failures = 4 distinct defects)", "frontend": "83% (10 of 12 screens/flows clean; Settings->Template and My Portfolio broken by backend 500s)"},
+  "seed_data_creation": "All API-created data prefixed TEST_iter108_ and purged via tests/_iter108_cleanup.py (verified 0 residual iter108 meetings/users/teams/org_settings). Also removed the 5 orphaned TEST_iter108_delete_me meetings and the TEST Invitee user left by the earlier aborted run, and deleted the UI-created meeting c5b20cbe via the UI delete flow (verified gone from DB). Older residue from iterations <=101 left untouched.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Used /app/memory/test_credentials.md as-is: admin@supervision.com/Admin123! (MFA bypassed via DB override in tests/get_tokens.py), manager@supervision.com/Manager123!, user@supervision.com/Staff123! (real UI login, no MFA), superadmin@1two.one/NewPass123!. All valid, all four logged in successfully.",
+  "context_for_next_testing_agent": "Reuse tests/test_iter108_uuid_migration_regression.py (78 tests, ~6 min, run `cd /app/backend && python3 -m pytest tests/test_iter108_uuid_migration_regression.py -n 0 -q`). After the main agent's fixes, the 8 tests that must flip green are: TestMeetings::test_malformed_uuid_path_is_not_500, TestAdmin::test_admin_get_endpoints[/admin/template], TestPortfolioAndDocs::test_portfolio, TestScopedManager::test_scoped_manager_get_endpoints[/admin/meetings-brief], TestScopedManager::test_scoped_manager_export_batches, TestSupervisionTemplate::{test_get_template,test_save_template,test_template_lookup_used_by_pipeline}. Everything else already passes — RLS isolation (5 tests, incl. db-role-level probe with SET ROLE app_rls_user) is clean, and the org-structure endpoint that broke twice is verified fixed at both API and UI level. Do NOT re-test Phase 1 TIMESTAMPTZ (iteration_107). Note the iteration_107 CRITICAL (review.py speaker_text_backup_at '') is now fixed — speaker-text edit passes. Not covered this round: real audio/AI transcription, doc-upload deep flows, super-admin org deletion beyond create+detail.",
+  "rca_of_the_issue": "Two independent root causes. (1) settings.id was wrongly included in the Phase 2 TEXT->UUID column list even though the application uses composite string primary keys ('supervision_template:{org_id}') for that table (admin.py:484/501, review.py:1270, transcription_pipeline.py:262). Every read/write now aborts at bind time with 'invalid input syntax for type uuid'. In this preview env the table happened to be empty (0 rows) so the ALTER succeeded; on any environment with rows, migration step 4's blanket `SET col = NULL WHERE col !~ uuid_regex` would violate the NOT NULL PRIMARY KEY and roll the whole DO block back with only a warning — silently leaving the schema on TEXT. (2) Several queries bind one parameter to both a now-UUID column and a jsonb `->>` text expression (portfolio.py:118/128, admin.py:1428, admin.py:1485). Postgres infers the param type from the uuid comparison, so the text comparison fails with 'operator does not exist: text = uuid'. Before the migration both sides were TEXT so a single param worked. Reproduction: GET /api/admin/template (500), GET /api/portfolio/831bdaef-14ca-49ed-8fb0-9b8d36bc1ef6 (500), and, as a manager whose scope is team-level, GET /api/admin/meetings-brief and POST /api/admin/export-evidence (500). Mitigation: exclude settings.id from the migration (revert to TEXT) and add explicit per-side casts (::uuid[] / ::text[] / ::text) to the mixed-type predicates."
+}

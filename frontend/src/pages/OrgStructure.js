@@ -190,10 +190,14 @@ export default function OrgStructure({ embedded = false }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
 
-  // Bust org caches then re-fetch — call this after any mutation.
-  const refreshData = useCallback(() => {
+  // Bust org caches then re-fetch — call this after any mutation, and AWAIT it
+  // before closing an edit modal. Without the await, a save closed the modal
+  // immediately while structure was still stale (~a few hundred ms round trip);
+  // reopening "Edit" on that same row during that window prefilled the OLD
+  // pre-save values, and clicking Save again silently reverted the change.
+  const refreshData = useCallback(async () => {
     invalidateCache("/org/structure", "/admin/users");
-    fetchData();
+    await fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchData]);
 
@@ -238,17 +242,18 @@ export default function OrgStructure({ embedded = false }) {
     try {
       if (editingSetting) {
         await axios.put(`${API}/org/settings/${editingSetting.id}`, settingForm, getAuthConfig());
+        await refreshData();
         flash("Setting updated");
         setEditingSetting(null);
       } else {
         const res = await axios.post(`${API}/org/settings`, settingForm, getAuthConfig());
+        await refreshData();
         flash("Setting created");
         setShowAddSetting(false);
         // Auto-expand new setting
         setExpandedSettings(prev => new Set([...prev, res.data?.id].filter(Boolean)));
       }
       setSettingForm({ name: "", description: "", manager_user_id: "" });
-      refreshData();
     } catch (err) { flash(err.response?.data?.detail || "Failed to save", true); }
     setSaving(false);
   };
@@ -257,8 +262,8 @@ export default function OrgStructure({ embedded = false }) {
     if (!window.confirm(`Delete "${s.name}"? All teams will also be removed.`)) return;
     try {
       await axios.delete(`${API}/org/settings/${s.id}`, getAuthConfig());
+      await refreshData();
       flash("Setting deleted");
-      refreshData();
     } catch (err) { flash(err.response?.data?.detail || "Delete failed", true); }
   };
 
@@ -269,15 +274,16 @@ export default function OrgStructure({ embedded = false }) {
     try {
       if (editingTeam) {
         await axios.put(`${API}/org/teams/${editingTeam.id}`, teamForm, getAuthConfig());
+        await refreshData();
         flash("Team updated");
         setEditingTeam(null);
       } else {
         await axios.post(`${API}/org/settings/${settingId}/teams`, teamForm, getAuthConfig());
+        await refreshData();
         flash("Team created");
         setShowAddTeamFor(null);
       }
       setTeamForm({ name: "", description: "", supervisor_user_id: "" });
-      refreshData();
     } catch (err) { flash(err.response?.data?.detail || "Failed to save", true); }
     setSaving(false);
   };
@@ -286,8 +292,8 @@ export default function OrgStructure({ embedded = false }) {
     if (!window.confirm(`Delete team "${t.name}"? Members will be unassigned.`)) return;
     try {
       await axios.delete(`${API}/org/teams/${t.id}`, getAuthConfig());
+      await refreshData();
       flash("Team deleted");
-      refreshData();
     } catch (err) { flash(err.response?.data?.detail || "Delete failed", true); }
   };
 
@@ -311,9 +317,9 @@ export default function OrgStructure({ embedded = false }) {
       if (showPwdReset && newPassword.trim()) {
         await axios.post(`${API}/admin/users/${editingUser.id}/reset-password`, { new_password: newPassword }, getAuthConfig());
       }
+      await refreshData();
       flash("User updated");
       setEditingUser(null);
-      refreshData();
     } catch (err) { setEditUserError(err.response?.data?.detail || "Failed to save"); }
     setSavingUser(false);
   };
@@ -326,10 +332,10 @@ export default function OrgStructure({ embedded = false }) {
     setInviteError("");
     try {
       await axios.post(`${API}/org/invite-user`, inviteForm, getAuthConfig());
+      await refreshData();
       flash("User added successfully");
       setShowInviteUser(false);
       setInviteForm({ name: "", email: "", password: "", role: "attendee" });
-      refreshData();
     } catch (err) { setInviteError(err.response?.data?.detail || "Failed to add user"); }
     setSavingInvite(false);
   };

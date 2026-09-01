@@ -118,12 +118,12 @@ async def get_structure(current_user=Depends(get_current_user)):
         # Determine which teams to show, in a single batched query (avoids N+1 per setting)
         if scope["level"] == "team":
             t_rows = await conn.fetch(
-                "SELECT * FROM teams WHERE setting_id = ANY($1::text[]) AND id=$2 ORDER BY name ASC",
+                "SELECT * FROM teams WHERE setting_id = ANY($1::uuid[]) AND id=$2 ORDER BY name ASC",
                 setting_ids, scope["team_id"],
             )
         else:
             t_rows = await conn.fetch(
-                "SELECT * FROM teams WHERE setting_id = ANY($1::text[]) ORDER BY name ASC", setting_ids,
+                "SELECT * FROM teams WHERE setting_id = ANY($1::uuid[]) ORDER BY name ASC", setting_ids,
             )
         t_dicts = [dict(r) for r in t_rows]
         team_ids = [t["id"] for t in t_dicts]
@@ -134,14 +134,14 @@ async def get_structure(current_user=Depends(get_current_user)):
         name_ids = list(mgr_ids | sup_ids)
         names_by_id = {}
         if name_ids:
-            n_rows = await conn.fetch("SELECT id, name FROM users WHERE id = ANY($1::text[])", name_ids)
+            n_rows = await conn.fetch("SELECT id, name FROM users WHERE id = ANY($1::uuid[])", name_ids)
             names_by_id = {r["id"]: r["name"] for r in n_rows}
 
         # Batch-load all team members in one query instead of one per team
         members_by_team = {tid: [] for tid in team_ids}
         if team_ids:
             m_rows = await conn.fetch(
-                "SELECT id, name, email, role, team_id FROM users WHERE team_id = ANY($1::text[]) AND is_active=TRUE ORDER BY name ASC",
+                "SELECT id, name, email, role, team_id FROM users WHERE team_id = ANY($1::uuid[]) AND is_active=TRUE ORDER BY name ASC",
                 team_ids,
             )
             for m in m_rows:
@@ -164,7 +164,7 @@ async def get_structure(current_user=Depends(get_current_user)):
         # Unassigned users — only relevant for org-level managers
         if scope["level"] == "org":
             unassigned_rows = await conn.fetch(
-                "SELECT id, name, email, role FROM users WHERE org_id=$1 AND is_active=TRUE AND (team_id IS NULL OR team_id='') ORDER BY name ASC",
+                "SELECT id, name, email, role FROM users WHERE org_id=$1 AND is_active=TRUE AND team_id IS NULL ORDER BY name ASC",
                 org_id,
             )
             unassigned = [dict(r) for r in unassigned_rows]
@@ -263,16 +263,17 @@ async def create_team(setting_id: str, data: TeamCreate, current_user=Depends(ge
     org_id = current_user.get("org_id", "")
     team_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    sup_id = data.supervisor_user_id or None
     async with database.with_org(org_id) as conn:
         setting = await conn.fetchrow("SELECT id FROM org_settings WHERE id=$1", setting_id)
         if not setting:
             raise HTTPException(404, "Setting not found")
         await conn.execute(
             "INSERT INTO teams (id, org_id, setting_id, name, description, supervisor_user_id, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-            team_id, org_id, setting_id, data.name.strip(), data.description or "", data.supervisor_user_id, now,
+            team_id, org_id, setting_id, data.name.strip(), data.description or "", sup_id, now,
         )
-        if data.supervisor_user_id:
-            await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", team_id, setting_id, data.supervisor_user_id)
+        if sup_id:
+            await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", team_id, setting_id, sup_id)
     return {"id": team_id, "org_id": org_id, "setting_id": setting_id, "name": data.name.strip(), "description": data.description or ""}
 
 
@@ -282,18 +283,19 @@ async def update_team(team_id: str, data: TeamCreate, current_user=Depends(get_c
         raise HTTPException(403, "Insufficient permissions")
     org_id = current_user.get("org_id", "")
     scope = get_manager_scope(current_user)
+    sup_id = data.supervisor_user_id or None
     async with database.with_org(org_id) as conn:
         existing = await conn.fetchrow("SELECT * FROM teams WHERE id=$1", team_id)
         if not existing:
             raise HTTPException(404, "Team not found")
         _assert_team_scope(scope, dict(existing).get("setting_id"), team_id)
         old_sup = dict(existing).get("supervisor_user_id")
-        if old_sup and old_sup != data.supervisor_user_id:
+        if old_sup and old_sup != sup_id:
             await conn.execute("UPDATE users SET team_id=NULL WHERE id=$1 AND team_id=$2", old_sup, team_id)
-        await conn.execute("UPDATE teams SET name=$1, description=$2, supervisor_user_id=$3 WHERE id=$4", data.name.strip(), data.description or "", data.supervisor_user_id, team_id)
-        if data.supervisor_user_id:
+        await conn.execute("UPDATE teams SET name=$1, description=$2, supervisor_user_id=$3 WHERE id=$4", data.name.strip(), data.description or "", sup_id, team_id)
+        if sup_id:
             setting_id = dict(existing).get("setting_id")
-            await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", team_id, setting_id, data.supervisor_user_id)
+            await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", team_id, setting_id, sup_id)
     return {"message": "Team updated"}
 
 

@@ -274,7 +274,7 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
                     """SELECT id, label, filename, doc_type, meeting_date, status, full_text
                        FROM supervision_uploads
                        WHERE org_id=$1
-                         AND staff_id = ANY($2::text[])
+                         AND staff_id = ANY($2::uuid[])
                          AND status IN ('text_ready','done')
                        ORDER BY meeting_date DESC LIMIT 10""",
                     org_id, supervisee_ids,
@@ -420,7 +420,7 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
                     """SELECT id, label, doc_type, full_text
                        FROM supervision_uploads
                        WHERE org_id=$1
-                         AND staff_id = ANY($2::text[])
+                         AND staff_id = ANY($2::uuid[])
                          AND status IN ('text_ready','done')
                        ORDER BY meeting_date DESC LIMIT 6""",
                     org_id, supervisee_ids,

@@ -99,12 +99,12 @@ async def get_dashboard(current_user=Depends(get_current_user)):
             # Batched: one teams query for all settings instead of one per setting.
             if scope["level"] == "team":
                 t_rows = await conn.fetch(
-                    "SELECT id, name, setting_id FROM teams WHERE setting_id = ANY($1::text[]) AND id=$2 ORDER BY name ASC",
+                    "SELECT id, name, setting_id FROM teams WHERE setting_id = ANY($1::uuid[]) AND id=$2 ORDER BY name ASC",
                     setting_ids, scope["team_id"],
                 )
             else:
                 t_rows = await conn.fetch(
-                    "SELECT id, name, setting_id FROM teams WHERE setting_id = ANY($1::text[]) ORDER BY name ASC",
+                    "SELECT id, name, setting_id FROM teams WHERE setting_id = ANY($1::uuid[]) ORDER BY name ASC",
                     setting_ids,
                 )
             teams_by_setting = {sid: [] for sid in setting_ids}

@@ -37,12 +37,13 @@ CREATE TABLE IF NOT EXISTS organisations (
 );
 -- RLS: with_org() connections can only see their own org row.
 -- with_admin() bypasses via SET LOCAL row_security = off.
+-- NOTE: the actual policy (DROP+CREATE POLICY) for every RLS-enabled table is
+-- defined in the "Phase 2 id/FK data-type migration" block near the end of
+-- this script, not here — it has to run AFTER the id-column type migration
+-- (Postgres refuses to change a column's type while a policy depends on it),
+-- so all 21 policies are dropped/recreated together in that one atomic block.
 ALTER TABLE organisations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE organisations FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS organisations_rls ON organisations;
-CREATE POLICY organisations_rls ON organisations FOR ALL
-    USING      (id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -64,12 +65,9 @@ CREATE TABLE IF NOT EXISTS users (
     mfa_code_attempts INTEGER NOT NULL DEFAULT 0
 );
 -- RLS: each org can only see its own users; auth ops (login, invite) use with_admin()
+-- Policy defined in the "Phase 2" block near the end of this script.
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS users_rls ON users;
-CREATE POLICY users_rls ON users FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
 
 CREATE TABLE IF NOT EXISTS meetings (
     id TEXT PRIMARY KEY,
@@ -111,10 +109,7 @@ CREATE TABLE IF NOT EXISTS meetings (
 );
 ALTER TABLE meetings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meetings FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS meetings_rls ON meetings;
-CREATE POLICY meetings_rls ON meetings FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS transcripts (
     id TEXT PRIMARY KEY,
@@ -128,10 +123,7 @@ CREATE TABLE IF NOT EXISTS transcripts (
 );
 ALTER TABLE transcripts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transcripts FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS transcripts_rls ON transcripts;
-CREATE POLICY transcripts_rls ON transcripts FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS analyses (
     id TEXT PRIMARY KEY,
@@ -151,10 +143,7 @@ CREATE TABLE IF NOT EXISTS analyses (
 );
 ALTER TABLE analyses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analyses FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS analyses_rls ON analyses;
-CREATE POLICY analyses_rls ON analyses FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS audio_files (
     id TEXT PRIMARY KEY,
@@ -173,10 +162,7 @@ CREATE TABLE IF NOT EXISTS audio_files (
 );
 ALTER TABLE audio_files ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audio_files FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS audio_files_rls ON audio_files;
-CREATE POLICY audio_files_rls ON audio_files FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS review_edits (
     id TEXT PRIMARY KEY,
@@ -190,10 +176,7 @@ CREATE TABLE IF NOT EXISTS review_edits (
 );
 ALTER TABLE review_edits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE review_edits FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS review_edits_rls ON review_edits;
-CREATE POLICY review_edits_rls ON review_edits FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS reviewer_comments (
     id TEXT PRIMARY KEY,
@@ -207,10 +190,7 @@ CREATE TABLE IF NOT EXISTS reviewer_comments (
 );
 ALTER TABLE reviewer_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviewer_comments FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS reviewer_comments_rls ON reviewer_comments;
-CREATE POLICY reviewer_comments_rls ON reviewer_comments FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 -- Standards entries: system CQC/CareCert (org_id IS NULL) are visible to all orgs.
 -- Custom org standards are scoped to the owning org.
@@ -234,13 +214,8 @@ CREATE TABLE IF NOT EXISTS standards_entries (
 );
 ALTER TABLE standards_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE standards_entries FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS standards_entries_rls ON standards_entries;
-CREATE POLICY standards_entries_rls ON standards_entries FOR ALL
-    USING (
-        org_id IS NULL                                                                          -- system-wide (CQC / Care Cert)
-        OR org_id = (SELECT current_setting('app.current_org_id', TRUE))                       -- org-custom standards
-    )
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE))); -- writes always scoped to org
+-- Policy (with its "system-wide rows visible to all orgs" clause) defined in
+-- the "Phase 2" block near the end of this script.
 
 -- Standards documents (org-uploaded custom docs)
 CREATE TABLE IF NOT EXISTS standards_documents (
@@ -265,10 +240,7 @@ CREATE TABLE IF NOT EXISTS standards_documents (
 );
 ALTER TABLE standards_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE standards_documents FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS standards_documents_rls ON standards_documents;
-CREATE POLICY standards_documents_rls ON standards_documents FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 -- Brute-force protection — no RLS
 CREATE TABLE IF NOT EXISTS login_attempts (
@@ -299,10 +271,7 @@ CREATE TABLE IF NOT EXISTS invitations (
 );
 ALTER TABLE invitations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invitations FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS invitations_rls ON invitations;
-CREATE POLICY invitations_rls ON invitations FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 -- Settings key-value — RLS: org can only see its own settings
 CREATE TABLE IF NOT EXISTS settings (
@@ -312,6 +281,12 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings FORCE ROW LEVEL SECURITY;
+-- NOTE: unlike every other table, settings.id/org_id are deliberately NEVER
+-- migrated to UUID in Phase 2 below — this table uses composite string keys
+-- (e.g. "supervision_template:{org_id}") as its primary key, not real UUIDs
+-- (admin.py get_template/save_template, review.py, transcription_pipeline.py).
+-- So this policy is static (plain TEXT comparison), not part of the dynamic
+-- rebuild the other 20 policies get.
 DROP POLICY IF EXISTS settings_rls ON settings;
 CREATE POLICY settings_rls ON settings FOR ALL
     USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
@@ -342,10 +317,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS audit_logs_rls ON audit_logs;
-CREATE POLICY audit_logs_rls ON audit_logs FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 -- Org settings (teams hierarchy)
 CREATE TABLE IF NOT EXISTS org_settings (
@@ -358,10 +330,7 @@ CREATE TABLE IF NOT EXISTS org_settings (
 );
 ALTER TABLE org_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org_settings FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS org_settings_rls ON org_settings;
-CREATE POLICY org_settings_rls ON org_settings FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS teams (
     id TEXT PRIMARY KEY,
@@ -375,10 +344,7 @@ CREATE TABLE IF NOT EXISTS teams (
 );
 ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teams FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS teams_rls ON teams;
-CREATE POLICY teams_rls ON teams FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS schedules (
     id TEXT PRIMARY KEY,
@@ -393,10 +359,7 @@ CREATE TABLE IF NOT EXISTS schedules (
 );
 ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schedules FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS schedules_rls ON schedules;
-CREATE POLICY schedules_rls ON schedules FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS meeting_types (
     id TEXT PRIMARY KEY,
@@ -409,10 +372,7 @@ CREATE TABLE IF NOT EXISTS meeting_types (
 );
 ALTER TABLE meeting_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meeting_types FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS meeting_types_rls ON meeting_types;
-CREATE POLICY meeting_types_rls ON meeting_types FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS meeting_prep (
     id TEXT PRIMARY KEY,
@@ -429,10 +389,7 @@ CREATE TABLE IF NOT EXISTS meeting_prep (
 );
 ALTER TABLE meeting_prep ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meeting_prep FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS meeting_prep_rls ON meeting_prep;
-CREATE POLICY meeting_prep_rls ON meeting_prep FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS focus_topics (
     id TEXT PRIMARY KEY,
@@ -445,10 +402,7 @@ CREATE TABLE IF NOT EXISTS focus_topics (
 );
 ALTER TABLE focus_topics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE focus_topics FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS focus_topics_rls ON focus_topics;
-CREATE POLICY focus_topics_rls ON focus_topics FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 CREATE TABLE IF NOT EXISTS supervision_uploads (
     id TEXT PRIMARY KEY,
@@ -474,10 +428,7 @@ CREATE TABLE IF NOT EXISTS supervision_uploads (
 );
 ALTER TABLE supervision_uploads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE supervision_uploads FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS supervision_uploads_rls ON supervision_uploads;
-CREATE POLICY supervision_uploads_rls ON supervision_uploads FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_meetings_created_at ON meetings(created_at DESC);
@@ -610,10 +561,7 @@ CREATE TABLE IF NOT EXISTS evidence_feedback (
 );
 ALTER TABLE evidence_feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evidence_feedback FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS evidence_feedback_rls ON evidence_feedback;
-CREATE POLICY evidence_feedback_rls ON evidence_feedback FOR ALL
-    USING      (org_id = (SELECT current_setting('app.current_org_id', TRUE)))
-    WITH CHECK (org_id = (SELECT current_setting('app.current_org_id', TRUE)));
+-- Policy defined in the "Phase 2" block near the end of this script.
 
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_at TEXT;
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS pii_reviewed_by TEXT;
@@ -668,11 +616,12 @@ DROP INDEX IF EXISTS idx_meetings_org_id;
 DROP INDEX IF EXISTS idx_meetings_status;
 
 -- Staff-scoped schedule queries
--- NOTE: idx_schedules_staff_user_id dropped — all live queries filter by org_id
--- first (via RLS), so the planner never picks a standalone staff_user_id index.
--- A composite (org_id, staff_user_id) would be added here if that query pattern
--- becomes hot enough to warrant one.
-DROP INDEX IF EXISTS idx_schedules_staff_user_id;
+-- idx_schedules_staff_user_id was previously dropped here because SELECT
+-- queries always filter by org_id first (via RLS), so a standalone index
+-- was never chosen by the planner for that access pattern. It's since been
+-- re-added below in the "FK-supporting indexes" section for a different
+-- reason: without it, deleting a user forces a full table scan of schedules
+-- to find rows to SET NULL via the fk_schedules_staff_user_id FK constraint.
 
 -- Audit trail queries filter and sort by org + time
 -- NOTE: idx_audit_logs_org_date dropped — the only SELECT on audit_logs filters
@@ -758,7 +707,10 @@ DO $$ BEGIN ALTER TABLE teams ADD CONSTRAINT fk_teams_supervisor_user_id FOREIGN
 DO $$ BEGIN ALTER TABLE standards_entries ADD CONSTRAINT fk_standards_entries_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
 DO $$ BEGIN ALTER TABLE standards_documents ADD CONSTRAINT fk_standards_documents_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
 DO $$ BEGIN ALTER TABLE invitations ADD CONSTRAINT fk_invitations_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
-DO $$ BEGIN ALTER TABLE settings ADD CONSTRAINT fk_settings_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
+-- NOTE: no FK from settings.org_id -> organisations(id): settings.org_id is
+-- deliberately kept TEXT forever (see Phase 2 comments below — settings.id
+-- is a composite string key, not a real relational row), so it can never
+-- have a type-matching FK to organisations(id), which is UUID.
 DO $$ BEGIN ALTER TABLE meeting_types ADD CONSTRAINT fk_meeting_types_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
 DO $$ BEGIN ALTER TABLE focus_topics ADD CONSTRAINT fk_focus_topics_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
 
@@ -774,6 +726,275 @@ DO $$ BEGIN ALTER TABLE supervision_uploads ADD CONSTRAINT fk_supervision_upload
 
 DO $$ BEGIN ALTER TABLE evidence_feedback ADD CONSTRAINT fk_evidence_feedback_meeting_id FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
 DO $$ BEGIN ALTER TABLE evidence_feedback ADD CONSTRAINT fk_evidence_feedback_org_id FOREIGN KEY (org_id) REFERENCES organisations(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; WHEN foreign_key_violation THEN RAISE WARNING 'FK constraint skipped - existing orphan rows violate it, needs data cleanup first'; END $$;
+
+-- ── FK-supporting indexes ────────────────────────────────────────────────────
+-- Every FK column above needs a supporting index so that deleting/updating the
+-- REFERENCED row (e.g. deleting an org, a user, a meeting) doesn't force a full
+-- table scan of the referencing table to find rows to CASCADE/SET NULL. This is
+-- a distinct concern from the composite query-pattern indexes elsewhere in this
+-- file (e.g. idx_meetings_org_status_date already covers meetings.org_id for
+-- SELECT filtering) — some FK columns had no index at all for either purpose.
+CREATE INDEX IF NOT EXISTS idx_analyses_org_id ON analyses(org_id);
+CREATE INDEX IF NOT EXISTS idx_audio_files_org_id ON audio_files(org_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org_id ON audit_logs(org_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_feedback_org_id ON evidence_feedback(org_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_feedback_meeting_id ON evidence_feedback(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_org_id ON invitations(org_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_prep_org_id ON meeting_prep(org_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_setting_id ON meetings(setting_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_team_id ON meetings(team_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_schedule_id ON meetings(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_org_settings_manager_user_id ON org_settings(manager_user_id);
+CREATE INDEX IF NOT EXISTS idx_review_edits_org_id ON review_edits(org_id);
+CREATE INDEX IF NOT EXISTS idx_reviewer_comments_org_id ON reviewer_comments(org_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_meeting_type_id ON schedules(meeting_type_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_staff_user_id ON schedules(staff_user_id);
+CREATE INDEX IF NOT EXISTS idx_standards_entries_org_id ON standards_entries(org_id);
+CREATE INDEX IF NOT EXISTS idx_teams_supervisor_user_id ON teams(supervisor_user_id);
+CREATE INDEX IF NOT EXISTS idx_transcripts_org_id ON transcripts(org_id);
+
+-- ── Phase 1 data-type migration: TEXT -> TIMESTAMPTZ for true date/time columns ──
+-- Scoped to the columns that always hold a full ISO-8601 UTC timestamp written via
+-- datetime.now(timezone.utc).isoformat() (database.py registers a text-format
+-- TIMESTAMPTZ/TIMESTAMP codec so those call sites keep working unchanged — see
+-- _encode_timestamp/_decode_timestamp). Deliberately EXCLUDED, left as TEXT
+-- (different semantics, not full timestamps): meetings.date (plain user-supplied
+-- date), schedules.start_date (code comment already says "keep as str — DB column
+-- is text"), supervision_uploads.meeting_date (date-only), focus_topics.
+-- active_month ("YYYY-MM" only).
+-- Idempotent: skips columns that are already TIMESTAMPTZ or don't exist (safe on
+-- a fresh DB or one already migrated). Malformed values (don't look like
+-- YYYY-MM-DD[ T]HH:MI:SS) are nulled out first — logged via RAISE WARNING — so the
+-- ALTER can succeed; if a column still can't be cast for any other reason it's
+-- left as TEXT with a loud warning for manual inspection rather than aborting the
+-- whole migration.
+DO $$
+DECLARE
+    migrations TEXT[][] := ARRAY[
+        ARRAY['organisations','created_at'], ARRAY['organisations','updated_at'],
+        ARRAY['users','password_changed_at'], ARRAY['users','created_at'], ARRAY['users','updated_at'], ARRAY['users','mfa_code_expires_at'],
+        ARRAY['meetings','recording_notice_shown_at'], ARRAY['meetings','audio_grace_period_started_at'], ARRAY['meetings','audio_deleted_at'],
+        ARRAY['meetings','retranscribed_at'], ARRAY['meetings','created_at'], ARRAY['meetings','updated_at'],
+        ARRAY['meetings','pii_reviewed_at'], ARRAY['meetings','reopen_requested_at'], ARRAY['meetings','reopen_approved_at'],
+        ARRAY['transcripts','retranscribed_at'], ARRAY['transcripts','created_at'], ARRAY['transcripts','updated_at'],
+        ARRAY['transcripts','speaker_text_backup_at'], ARRAY['transcripts','speaker_text_edited_at'],
+        ARRAY['analyses','created_at'], ARRAY['analyses','last_edited_at'], ARRAY['analyses','rescanned_at'],
+        ARRAY['audio_files','deleted_at'], ARRAY['audio_files','created_at'],
+        ARRAY['review_edits','timestamp'], ARRAY['reviewer_comments','created_at'],
+        ARRAY['standards_entries','created_at'], ARRAY['standards_documents','parsed_at'], ARRAY['standards_documents','created_at'],
+        ARRAY['login_attempts','locked_until'], ARRAY['login_attempts','updated_at'],
+        ARRAY['password_reset_tokens','expires_at'],
+        ARRAY['invitations','expires_at'], ARRAY['invitations','used_at'], ARRAY['invitations','created_at'],
+        ARRAY['jobs','created_at'], ARRAY['jobs','updated_at'],
+        ARRAY['audit_logs','timestamp'],
+        ARRAY['org_settings','created_at'], ARRAY['org_settings','updated_at'],
+        ARRAY['teams','created_at'], ARRAY['schedules','created_at'], ARRAY['meeting_types','created_at'],
+        ARRAY['meeting_prep','generated_at'], ARRAY['meeting_prep','coverage_checked_at'], ARRAY['meeting_prep','shared_at'],
+        ARRAY['meeting_prep','created_at'], ARRAY['meeting_prep','updated_at'],
+        ARRAY['supervision_uploads','processed_at'], ARRAY['supervision_uploads','created_at'],
+        ARRAY['evidence_feedback','timestamp']
+    ];
+    m TEXT[];
+    tbl TEXT;
+    col TEXT;
+    col_type TEXT;
+    bad_count INT;
+BEGIN
+    FOREACH m SLICE 1 IN ARRAY migrations LOOP
+        tbl := m[1];
+        col := m[2];
+        SELECT data_type INTO col_type FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = tbl AND column_name = col;
+        IF col_type IS NULL OR col_type = 'timestamp with time zone' THEN
+            CONTINUE;
+        END IF;
+        EXECUTE format(
+            'UPDATE %I SET %I = NULL WHERE %I IS NOT NULL AND %I !~ %L',
+            tbl, col, col, col, '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}'
+        );
+        GET DIAGNOSTICS bad_count = ROW_COUNT;
+        IF bad_count > 0 THEN
+            RAISE WARNING 'Phase-1 migration: nulled % malformed value(s) in %.% before TIMESTAMPTZ conversion', bad_count, tbl, col;
+        END IF;
+        BEGIN
+            EXECUTE format('ALTER TABLE %I ALTER COLUMN %I TYPE TIMESTAMPTZ USING %I::timestamptz', tbl, col, col);
+        EXCEPTION WHEN OTHERS THEN
+            RAISE WARNING 'Phase-1 migration: could not convert %.% to TIMESTAMPTZ (%) - left as TEXT for manual inspection', tbl, col, SQLERRM;
+        END;
+    END LOOP;
+END $$;
+
+-- ── Phase 2 data-type migration: TEXT -> UUID for id / foreign-key columns ──────
+-- Every id/foreign-key column that always holds an app-generated UUID
+-- (str(uuid.uuid4()) or gen_random_uuid()) is converted from TEXT to native
+-- UUID. database.py registers a text-format UUID codec (_encode_uuid/_decode_uuid)
+-- so every existing string-based id comparison / f-string / JSON payload is
+-- completely unaffected — this is the same technique used for the Phase 1
+-- TIMESTAMPTZ migration above.
+-- Deliberately EXCLUDED (kept TEXT — confirmed NOT uuid-shaped by inspecting
+-- both the generating code and the live data before writing this migration):
+--   • login_attempts.identifier — composite string ("login_ip:1.2.3.4", "create_meeting:<uid>", email, etc.)
+--   • password_reset_tokens.token / invitations.token — secrets.token_urlsafe(32)
+--   • evidence_feedback.evidence_item_id — str(uuid.uuid4())[:8], truncated to 8 chars, not a full UUID
+--   • settings.id / settings.org_id — settings.id is a COMPOSITE STRING key
+--     ("supervision_template:{org_id}", or the bare literal "supervision_template")
+--     used by admin.py get_template/save_template, review.py and
+--     transcription_pipeline.py — not a UUID at all, and org_id on that same
+--     table can be '' (falsy org_id fallback), not just NULL/uuid.
+--   • meetings.date / schedules.start_date / supervision_uploads.meeting_date / focus_topics.active_month
+--     — unrelated date-only fields already excluded from Phase 1 above, not id columns anyway.
+-- This is ONE all-or-nothing block: RLS policies (which Postgres refuses to let
+-- you change a column's type underneath) and every FK constraint are dropped
+-- first, columns are converted, then both are rebuilt from what was captured/
+-- known before the drop. If ANYTHING fails partway, the whole block rolls back
+-- automatically (a DO block is an implicit subtransaction) — the schema, its
+-- FKs and its RLS policies all revert to exactly what they were, safe to retry
+-- on the next restart once whatever caused the failure is fixed.
+DO $$
+DECLARE
+    id_columns TEXT[][] := ARRAY[
+        ARRAY['organisations','id'],
+        ARRAY['users','id'], ARRAY['users','org_id'], ARRAY['users','team_id'], ARRAY['users','setting_id'],
+        ARRAY['meetings','id'], ARRAY['meetings','org_id'], ARRAY['meetings','team_id'], ARRAY['meetings','setting_id'],
+        ARRAY['meetings','schedule_id'], ARRAY['meetings','created_by'], ARRAY['meetings','sign_off_manager_id'],
+        ARRAY['meetings','audio_file_id'], ARRAY['meetings','transcript_id'], ARRAY['meetings','analysis_id'],
+        ARRAY['transcripts','id'], ARRAY['transcripts','meeting_id'], ARRAY['transcripts','org_id'],
+        ARRAY['analyses','id'], ARRAY['analyses','meeting_id'], ARRAY['analyses','org_id'],
+        ARRAY['audio_files','id'], ARRAY['audio_files','meeting_id'], ARRAY['audio_files','org_id'],
+        ARRAY['review_edits','id'], ARRAY['review_edits','meeting_id'], ARRAY['review_edits','org_id'], ARRAY['review_edits','user_id'],
+        ARRAY['reviewer_comments','id'], ARRAY['reviewer_comments','meeting_id'], ARRAY['reviewer_comments','org_id'], ARRAY['reviewer_comments','user_id'],
+        ARRAY['standards_entries','id'], ARRAY['standards_entries','org_id'], ARRAY['standards_entries','created_by'],
+        ARRAY['standards_documents','id'], ARRAY['standards_documents','org_id'], ARRAY['standards_documents','uploaded_by'],
+        ARRAY['invitations','id'], ARRAY['invitations','org_id'], ARRAY['invitations','user_id'],
+        ARRAY['audit_logs','id'], ARRAY['audit_logs','meeting_id'], ARRAY['audit_logs','org_id'], ARRAY['audit_logs','user_id'],
+        ARRAY['org_settings','id'], ARRAY['org_settings','org_id'], ARRAY['org_settings','manager_user_id'],
+        ARRAY['teams','id'], ARRAY['teams','org_id'], ARRAY['teams','setting_id'], ARRAY['teams','supervisor_user_id'],
+        ARRAY['schedules','id'], ARRAY['schedules','org_id'], ARRAY['schedules','staff_user_id'], ARRAY['schedules','meeting_type_id'], ARRAY['schedules','created_by'],
+        ARRAY['meeting_types','id'], ARRAY['meeting_types','org_id'],
+        ARRAY['meeting_prep','id'], ARRAY['meeting_prep','meeting_id'], ARRAY['meeting_prep','org_id'], ARRAY['meeting_prep','created_by'],
+        ARRAY['focus_topics','id'], ARRAY['focus_topics','org_id'], ARRAY['focus_topics','created_by'],
+        ARRAY['supervision_uploads','id'], ARRAY['supervision_uploads','org_id'], ARRAY['supervision_uploads','staff_id'], ARRAY['supervision_uploads','uploader_id'],
+        ARRAY['evidence_feedback','id'], ARRAY['evidence_feedback','meeting_id'], ARRAY['evidence_feedback','org_id'], ARRAY['evidence_feedback','user_id'],
+        ARRAY['password_reset_tokens','id'],
+        ARRAY['jobs','id'], ARRAY['jobs','meeting_id']
+    ];
+    org_policies TEXT[][] := ARRAY[
+        ARRAY['organisations','organisations_rls','id'],
+        ARRAY['users','users_rls','org_id'], ARRAY['meetings','meetings_rls','org_id'],
+        ARRAY['transcripts','transcripts_rls','org_id'], ARRAY['analyses','analyses_rls','org_id'],
+        ARRAY['audio_files','audio_files_rls','org_id'], ARRAY['review_edits','review_edits_rls','org_id'],
+        ARRAY['reviewer_comments','reviewer_comments_rls','org_id'], ARRAY['standards_documents','standards_documents_rls','org_id'],
+        ARRAY['invitations','invitations_rls','org_id'],
+        ARRAY['audit_logs','audit_logs_rls','org_id'], ARRAY['org_settings','org_settings_rls','org_id'],
+        ARRAY['teams','teams_rls','org_id'], ARRAY['schedules','schedules_rls','org_id'],
+        ARRAY['meeting_types','meeting_types_rls','org_id'], ARRAY['meeting_prep','meeting_prep_rls','org_id'],
+        ARRAY['focus_topics','focus_topics_rls','org_id'], ARRAY['supervision_uploads','supervision_uploads_rls','org_id'],
+        ARRAY['evidence_feedback','evidence_feedback_rls','org_id']
+    ];
+    m TEXT[];
+    tbl TEXT;
+    col TEXT;
+    pol TEXT;
+    col_type TEXT;
+    not_null BOOLEAN;
+    bad_count INT;
+    fk RECORD;
+    already_uuid BOOLEAN;
+    cast_expr TEXT := 'NULLIF((SELECT current_setting(''app.current_org_id'', TRUE)), '''')::uuid';
+BEGIN
+    -- Idempotent short-circuit: if organisations.id is already uuid, a prior
+    -- run already fully committed this migration (all-or-nothing, so every
+    -- other column/FK/policy is guaranteed to be uuid-aware too) — skip.
+    SELECT (data_type = 'uuid') INTO already_uuid FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'organisations' AND column_name = 'id';
+    IF already_uuid THEN
+        RETURN;
+    END IF;
+
+    -- 1. Capture every existing FK constraint's exact definition, then drop
+    --    them all (Postgres refuses to change a column's type while a FK
+    --    with a different type still references/uses it).
+    CREATE TEMP TABLE IF NOT EXISTS _phase2_fk_backup (conname text, tbl text, def text);
+    DELETE FROM _phase2_fk_backup;
+    INSERT INTO _phase2_fk_backup
+        SELECT conname, conrelid::regclass::text, pg_get_constraintdef(oid)
+        FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace;
+    FOR fk IN SELECT * FROM _phase2_fk_backup LOOP
+        EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', fk.tbl, fk.conname);
+    END LOOP;
+
+    -- 2. Drop the 21 RLS policies (must happen before ALTER COLUMN TYPE —
+    --    Postgres refuses to change the type of a column a policy depends on).
+    FOREACH m SLICE 1 IN ARRAY org_policies LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', m[2], m[1]);
+    END LOOP;
+    EXECUTE 'DROP POLICY IF EXISTS standards_entries_rls ON standards_entries';
+
+    -- 3. password_reset_tokens.id has a TEXT-cast default that can't be
+    --    auto-cast to uuid; drop it before the type conversion, then set the
+    --    native equivalent back afterwards (step 6).
+    ALTER TABLE password_reset_tokens ALTER COLUMN id DROP DEFAULT;
+
+    -- 4. Convert every id/FK column. Non-UUID values (only ever seen on
+    --    nullable historical-snapshot columns — e.g. 4 pre-existing ''
+    --    rows in meetings.sign_off_manager_id) are nulled first, logged via
+    --    RAISE WARNING, so the ALTER can succeed. If the column is NOT NULL
+    --    (i.e. a primary/composite key — e.g. settings.id, which is why that
+    --    table is excluded above), silently nulling it would just hit a
+    --    confusing NOT NULL violation a moment later — instead we RAISE
+    --    EXCEPTION with a clear message so it's obvious the column was
+    --    wrongly added to id_columns, caught by the outer EXCEPTION below.
+    FOREACH m SLICE 1 IN ARRAY id_columns LOOP
+        tbl := m[1];
+        col := m[2];
+        SELECT data_type, (is_nullable = 'NO') INTO col_type, not_null FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = tbl AND column_name = col;
+        IF col_type IS NULL OR col_type = 'uuid' THEN
+            CONTINUE;
+        END IF;
+        EXECUTE format(
+            'SELECT count(*) FROM %I WHERE %I IS NOT NULL AND %I !~ %L',
+            tbl, col, col, '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        ) INTO bad_count;
+        IF bad_count > 0 AND not_null THEN
+            RAISE EXCEPTION 'Phase-2 migration: %.% is NOT NULL and has % non-UUID value(s) — this column is not uuid-shaped and must not be in id_columns', tbl, col, bad_count;
+        ELSIF bad_count > 0 THEN
+            EXECUTE format(
+                'UPDATE %I SET %I = NULL WHERE %I IS NOT NULL AND %I !~ %L',
+                tbl, col, col, col, '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+            );
+            RAISE WARNING 'Phase-2 migration: nulled % non-UUID value(s) in %.% before UUID conversion', bad_count, tbl, col;
+        END IF;
+        EXECUTE format('ALTER TABLE %I ALTER COLUMN %I TYPE UUID USING %I::uuid', tbl, col, col);
+    END LOOP;
+
+    -- 5. Re-add every FK exactly as captured (types now match on both sides).
+    FOR fk IN SELECT * FROM _phase2_fk_backup LOOP
+        EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I %s', fk.tbl, fk.conname, fk.def);
+    END LOOP;
+
+    -- 6. Recreate the 21 RLS policies, now uuid-aware. NULLIF(...,'') guards
+    --    the empty-string default app.current_org_id gets when unset —
+    --    casting NULL to uuid is always NULL (never errors), so it just
+    --    fails closed (matches TEXT-era behavior of comparing against '').
+    FOREACH m SLICE 1 IN ARRAY org_policies LOOP
+        tbl := m[1]; pol := m[2]; col := m[3];
+        EXECUTE format('CREATE POLICY %I ON %I FOR ALL USING (%I = %s) WITH CHECK (%I = %s)',
+            pol, tbl, col, cast_expr, col, cast_expr);
+    END LOOP;
+    EXECUTE format(
+        'CREATE POLICY standards_entries_rls ON standards_entries FOR ALL USING (org_id IS NULL OR org_id = %s) WITH CHECK (org_id = %s)',
+        cast_expr, cast_expr
+    );
+
+    -- 7. Native uuid default (previously cast through TEXT because the
+    --    column itself was TEXT).
+    ALTER TABLE password_reset_tokens ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+    RAISE NOTICE 'Phase-2 migration: all id/FK columns converted TEXT -> UUID successfully';
+EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Phase-2 UUID migration failed and was fully rolled back (schema unchanged): %', SQLERRM;
+END $$;
 """
 
 
