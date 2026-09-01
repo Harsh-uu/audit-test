@@ -11,6 +11,28 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Multi-instance cache staleness fix (Sep 2026)
+`utils/standards_cache.py`'s `_org_info` (org jurisdiction/service_type) was the only cache in
+the app with **no TTL** — comment literally said "cached indefinitely," invalidated only via an
+explicit `invalidate_org()` call from the request that made the change. On a single-instance
+deployment this is harmless; on 2+ replicas behind a load balancer, an admin's jurisdiction
+change only clears the replica that handled the click — every other replica keeps mapping
+meeting evidence to the wrong regulatory framework (CQC vs CIW vs SSSC vs RQIA) forever, since
+there's no cross-process invalidation signal (no Redis/pub-sub/LISTEN-NOTIFY).
+Confirmed this was an inconsistency, not a deliberate design choice: every sibling cache in the
+same app already had a TTL backstop for exactly this reason (`_custom_docs` 5min — "backstop in
+case invalidation is missed"; `schedules._meeting_types_cache` 5min — "TTL ensures stale data
+auto-expires **across workers**"; `admin._stats_cache` 60s).
+**Fix**: gave `_org_info` the same TTL-backstop pattern (5 min, matching `_custom_docs`) — stores
+`(fetched_at, info)` tuples now, `get_org_info()` self-expires stale entries. `set_org_info()`/
+`invalidate_org()` callers and both real consumers (`review.py::_run_rescan_background`,
+`utils/transcription_pipeline.py`) needed zero changes — `get_org_info()`'s return shape
+(`{"jurisdiction":..., "service_type":...}` or `None`) is unchanged. No new infra — matches the
+existing in-process-cache-with-TTL-backstop pattern already used everywhere else in this file.
+Verified: immediate get returns fresh data, simulated 301s-old entry self-expires and is popped,
+explicit `invalidate_org()` still works, backend restarts clean (`/api/health` 200, standards
+cache warms 239 entries as before).
+
 ## Dead/dangerous manual RLS script removed (Sep 2026)
 `/app/backend/supabase_rls_policy.sql` was a stale "run by hand in Supabase Dashboard" script
 (referenced in README.md) that had drifted from the real automatic schema (`migrations/`):

@@ -4,8 +4,12 @@ In-process cache for standards and org context.
 Standards data is seeded once and never changes — loaded at startup and
 held in memory for the process lifetime with zero DB reads thereafter.
 
-Org jurisdiction/service_type almost never changes — cached indefinitely
-per org_id, invalidated explicitly when an admin updates org settings.
+Org jurisdiction/service_type almost never changes — cached per org_id with a
+5-minute TTL, invalidated explicitly when an admin updates org settings. The TTL
+is a backstop for multi-instance deployments: invalidate_org() only clears the
+process that handled the admin's request, so other replicas behind a load
+balancer would otherwise keep serving the old jurisdiction forever (same
+pattern used by _custom_docs/_meeting_types_cache below).
 
 Custom standards documents change only when an admin uploads/toggles one —
 cached per org_id, invalidated on any write to standards_documents.
@@ -67,17 +71,26 @@ def get_system(type_: str, jurisdiction: str | None = None) -> list[dict]:
 
 
 # ── Org jurisdiction / service_type ──────────────────────────────────────────
-# {org_id: {"jurisdiction": str, "service_type": str}}
-_org_info: dict[str, dict] = {}
+# {org_id: (fetched_at_ts, {"jurisdiction": str, "service_type": str})}
+_org_info: dict[str, tuple[float, dict]] = {}
+_ORG_INFO_TTL = 300  # 5 minutes — backstop in case invalidate_org() is missed
+                     # (e.g. a different replica handled the admin's update)
 
 
 def get_org_info(org_id: str) -> dict | None:
-    return _org_info.get(org_id)
+    entry = _org_info.get(org_id)
+    if entry is None:
+        return None
+    fetched_at, info = entry
+    if time.monotonic() - fetched_at > _ORG_INFO_TTL:
+        _org_info.pop(org_id, None)
+        return None
+    return info
 
 
 def set_org_info(org_id: str, jurisdiction: str, service_type: str) -> None:
-    _org_info[org_id] = {"jurisdiction": jurisdiction or "england",
-                          "service_type": service_type or ""}
+    _org_info[org_id] = (time.monotonic(), {"jurisdiction": jurisdiction or "england",
+                                             "service_type": service_type or ""})
 
 
 def invalidate_org(org_id: str) -> None:
