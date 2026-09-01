@@ -19,6 +19,18 @@ BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "https://supervision-prev
 ADMIN_EMAIL = "admin@supervision.com"
 ADMIN_PASS = "Admin123!"
 
+BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..")
+
+
+def _load_schema_source():
+    """Concatenate init_db.py + every migrations/*.py chunk (schema SQL now lives there)."""
+    content = open(os.path.join(BACKEND_DIR, "init_db.py"), "r").read()
+    migrations_dir = os.path.join(BACKEND_DIR, "migrations")
+    for fname in sorted(os.listdir(migrations_dir)):
+        if fname.endswith(".py"):
+            content += open(os.path.join(migrations_dir, fname), "r").read()
+    return content
+
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -240,72 +252,63 @@ class TestInitDbGuards:
 
     def test_init_db_has_supervision_uploads_full_text_guard(self):
         """init_db.py must have ALTER TABLE guard for supervision_uploads.full_text"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "supervision_uploads ADD COLUMN IF NOT EXISTS full_text" in content, (
             "Missing ALTER TABLE guard for supervision_uploads.full_text in init_db.py"
         )
 
     def test_init_db_has_supervision_uploads_doc_type_guard(self):
         """init_db.py must have ALTER TABLE guard for supervision_uploads.doc_type"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "supervision_uploads ADD COLUMN IF NOT EXISTS doc_type" in content, (
             "Missing ALTER TABLE guard for supervision_uploads.doc_type in init_db.py"
         )
 
     def test_init_db_has_supervision_uploads_meeting_date_guard(self):
         """init_db.py must have ALTER TABLE guard for supervision_uploads.meeting_date"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "supervision_uploads ADD COLUMN IF NOT EXISTS meeting_date" in content, (
             "Missing ALTER TABLE guard for supervision_uploads.meeting_date in init_db.py"
         )
 
     def test_init_db_has_supervision_uploads_label_guard(self):
         """init_db.py must have ALTER TABLE guard for supervision_uploads.label"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "supervision_uploads ADD COLUMN IF NOT EXISTS label" in content, (
             "Missing ALTER TABLE guard for supervision_uploads.label in init_db.py"
         )
 
     def test_init_db_has_standards_documents_extracted_text_guard(self):
         """init_db.py must have ALTER TABLE guard for standards_documents.extracted_text"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "standards_documents ADD COLUMN IF NOT EXISTS extracted_text" in content, (
             "Missing ALTER TABLE guard for standards_documents.extracted_text in init_db.py"
         )
 
     def test_init_db_has_standards_documents_parse_status_guard(self):
         """init_db.py must have ALTER TABLE guard for standards_documents.parse_status"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "standards_documents ADD COLUMN IF NOT EXISTS parse_status" in content, (
             "Missing ALTER TABLE guard for standards_documents.parse_status in init_db.py"
         )
 
     def test_init_db_has_standards_documents_is_active_guard(self):
         """init_db.py must have ALTER TABLE guard for standards_documents.is_active"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "standards_documents ADD COLUMN IF NOT EXISTS is_active" in content, (
             "Missing ALTER TABLE guard for standards_documents.is_active in init_db.py"
         )
 
     def test_init_db_has_focus_topics_active_month_guard(self):
         """init_db.py must have ALTER TABLE guard for focus_topics.active_month"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "focus_topics ADD COLUMN IF NOT EXISTS active_month" in content, (
             "Missing ALTER TABLE guard for focus_topics.active_month in init_db.py"
         )
 
     def test_init_db_has_focus_topics_created_by_guard(self):
         """init_db.py must have ALTER TABLE guard for focus_topics.created_by"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "focus_topics ADD COLUMN IF NOT EXISTS created_by" in content, (
             "Missing ALTER TABLE guard for focus_topics.created_by in init_db.py"
         )
@@ -362,8 +365,7 @@ class TestInitDbAnalysesGuards:
 
     def test_init_db_has_analyses_edited_summary_guard(self):
         """init_db.py must have ALTER TABLE guard for analyses.edited_summary"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "analyses ADD COLUMN IF NOT EXISTS edited_summary" in content, (
             "Missing ALTER TABLE guard for analyses.edited_summary in init_db.py — "
             "this was the root cause: edited_summary column not in production DB"
@@ -371,8 +373,7 @@ class TestInitDbAnalysesGuards:
 
     def test_init_db_has_analyses_last_edited_at_guard(self):
         """init_db.py must have ALTER TABLE guard for analyses.last_edited_at"""
-        with open("/app/backend/init_db.py", "r") as f:
-            content = f.read()
+        content = _load_schema_source()
         assert "analyses ADD COLUMN IF NOT EXISTS last_edited_at" in content, (
             "Missing ALTER TABLE guard for analyses.last_edited_at in init_db.py"
         )

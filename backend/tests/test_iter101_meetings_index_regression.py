@@ -130,6 +130,10 @@ class TestIndexInventory:
 
     def test_init_db_source_has_no_dead_creates(self):
         src = open("/app/backend/init_db.py", encoding="utf-8").read()
+        migrations_dir = "/app/backend/migrations"
+        for fname in sorted(os.listdir(migrations_dir)):
+            if fname.endswith(".py"):
+                src += open(os.path.join(migrations_dir, fname), encoding="utf-8").read()
         assert "CREATE INDEX IF NOT EXISTS idx_meetings_org_id" not in src
         assert "CREATE INDEX IF NOT EXISTS idx_meetings_status" not in src
         assert "DROP INDEX IF EXISTS idx_meetings_org_id;" in src

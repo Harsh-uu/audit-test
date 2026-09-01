@@ -26,10 +26,20 @@ ADMIN_EMAIL = "admin@supervision.com"
 ADMIN_PASS = "Admin123!"
 
 PROCESSING_PY = os.path.join(os.path.dirname(__file__), "..", "routers", "processing.py")
-INIT_DB_PY = os.path.join(os.path.dirname(__file__), "..", "init_db.py")
+BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..")
 MEETING_REPORT_JS = os.path.join(
     os.path.dirname(__file__), "..", "..", "frontend", "src", "pages", "MeetingReport.js"
 )
+
+
+def _load_schema_source():
+    """Concatenate init_db.py + every migrations/*.py chunk (schema SQL now lives there)."""
+    content = open(os.path.join(BACKEND_DIR, "init_db.py"), "r").read()
+    migrations_dir = os.path.join(BACKEND_DIR, "migrations")
+    for fname in sorted(os.listdir(migrations_dir)):
+        if fname.endswith(".py"):
+            content += open(os.path.join(migrations_dir, fname), "r").read()
+    return content
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -320,7 +330,7 @@ class TestInitDbAlterTableGuards:
 
     def test_alter_meetings_processing_error_exists(self):
         """init_db.py must have: ALTER TABLE meetings ADD COLUMN IF NOT EXISTS processing_error TEXT"""
-        content = self._load_file(INIT_DB_PY)
+        content = _load_schema_source()
 
         match = re.search(
             r'ALTER TABLE meetings ADD COLUMN IF NOT EXISTS processing_error\s+TEXT',
@@ -335,7 +345,7 @@ class TestInitDbAlterTableGuards:
 
     def test_alter_analyses_custom_mappings_exists(self):
         """init_db.py must have: ALTER TABLE analyses ADD COLUMN IF NOT EXISTS custom_mappings"""
-        content = self._load_file(INIT_DB_PY)
+        content = _load_schema_source()
 
         match = re.search(
             r'ALTER TABLE analyses ADD COLUMN IF NOT EXISTS custom_mappings',
@@ -350,7 +360,7 @@ class TestInitDbAlterTableGuards:
 
     def test_alter_analyses_pii_redactions_exists(self):
         """init_db.py must have: ALTER TABLE analyses ADD COLUMN IF NOT EXISTS pii_redactions"""
-        content = self._load_file(INIT_DB_PY)
+        content = _load_schema_source()
 
         match = re.search(
             r'ALTER TABLE analyses ADD COLUMN IF NOT EXISTS pii_redactions',

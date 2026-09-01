@@ -1,0 +1,54 @@
+{
+  "summary": "Regression-tested the init_db.py -> migrations/ ledger refactor (iteration 111). Backend: 27/27 pytest tests pass in a new suite covering the schema_migrations ledger, schema objects rebuilt by the 7-way split (25 tables, 21 RLS policies, 38 FK constraints, idx_meetings_org_status_date, native-uuid id columns), auth/login, dashboard, meeting create->GET->delete, org settings/teams CRUD, portfolio/standards, malformed-UUID handling and transcript/analysis round-trip. Independently verified the split is a FAITHFUL copy: an AST-based diff of every SQL string literal in git HEAD's monolithic init_db.py vs the new migrations/ package found ZERO missing or altered SQL statements and zero duplicates (only docstrings/comments differ). Ledger contains exactly the 7 expected versions; a real supervisorctl restart re-logs 'Schema created/verified successfully' with NO 'Applied migration' lines, and an in-process second create_schema() call adds no rows. Frontend: real UI login (attendee) reaches the dashboard; with admin cookies, Dashboard (15 meetings/3 in review/3 signed off), Organisation People+Structure tabs, Settings, Portfolio, Supervision Matrix, Standards Library (CQC 47 / CareCert 16 / Users 8) and an existing meeting report (summary + transcript + analysis intact) all render with ZERO 4xx/5xx API calls. UI meeting creation works end-to-end (navigated to /prepare). Also re-confirmed iteration_110's CRITICAL bug is FIXED: creating a team from the Structure UI with Supervisor='None' now returns 200. NO regression attributable to this refactor was found. All test data was cleaned up.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "migrations/ (schema) — meetings.processing_error", "issue": "PRE-EXISTING SCHEMA DRIFT (not a regression; confirmed 0 occurrences in git HEAD's old init_db.py too). The live DB has meetings.processing_error TEXT, but no migration chunk creates it, so a FRESH database bootstrapped only by the ledger would lack the column and routers/processing.py's failure-path UPDATE would break. An automated scan of every column of all 24 app tables against the migrations source found this as the ONLY drift item. Recommend adding 'ALTER TABLE meetings ADD COLUMN IF NOT EXISTS processing_error TEXT' to m002_schema_patches.py — this also fixes the long-standing test_alter_meetings_processing_error_exists failure."},
+      {"endpoint": "tests/test_processing_error_iter58.py, test_prep_context_bug_fix.py, test_iter101_meetings_index_regression.py", "issue": "PRE-EXISTING TEST DRIFT, unrelated to this refactor (the refactor commit only touched init_db.py + these files' schema-source loader). 13 failures + 32 errors from two causes: (1) admin@supervision.com now has MFA ENABLED, so these fixtures' plain password login gets {requires_mfa: true} and assert 'No token in response' — they need the MFA-bypass helper in tests/get_tokens.py; (2) their direct asyncpg connections insert ISO-8601 strings into TIMESTAMPTZ columns without registering the text codec that database.py registers, giving asyncpg DataError 'expected a datetime.date or datetime.datetime instance, got str'. App code is unaffected (API create/list/report all verified working)."},
+      {"endpoint": "startup logs", "issue": "Benign: /var/log/supervisor/backend.err.log shows 'ERROR: Traceback ... asyncio.exceptions.CancelledError' in starlette lifespan on every reload/shutdown. Pre-existing uvicorn reloader noise, present in logs long before this refactor."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Any frontend source change", "issue": "CARRIED FORWARD from iteration_110 and re-confirmed: frontend package.json start = 'vite build && vite preview', so there is NO hot reload. Source edits are invisible until 'sudo supervisorctl restart frontend'. Main agent must restart the frontend before self-testing any UI change.", "affected_selectors": []}
+    ],
+    "design_issues": [
+      {"screen": "New Meeting (/meetings/new)", "issues": ["Date and time use native browser inputs (data-testid meeting-date-input / meeting-time-input) rather than the shadcn calendar component, so the picker look-and-feel differs per browser/OS. Pre-existing, cosmetic, not caused by this refactor."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter111_migration_ledger_regression.py",
+    "/app/test_reports/pytest/iter111.xml",
+    "/app/backend/tests/_iter111_verbatim_diff.py",
+    "/app/backend/tests/_iter111_fresh_db_drift.py",
+    "/app/backend/tests/_iter111_ledger_probe.py",
+    "/app/backend/tests/_iter111_cleanup.py"
+  ],
+  "action_items": [
+    "LOW/OPTIONAL: add 'ALTER TABLE meetings ADD COLUMN IF NOT EXISTS processing_error TEXT' to migrations/m002_schema_patches.py so a fresh database matches the live DB (only fresh-DB drift item found; pre-existing, not a regression).",
+    "OPTIONAL housekeeping: update the 3 stale test files to use the MFA-bypass login helper (tests/get_tokens.py) and to register the asyncpg TIMESTAMPTZ text codec on their direct connections, so their 13 failures/32 errors stop masking real regressions.",
+    "No action required for the refactor itself — it is verified functionally equivalent."
+  ],
+  "critical_code_review_comments": [
+    "migrations/__init__.py correctly wraps each chunk's up(conn) + the ledger INSERT in a single conn.transaction(), so a mid-chunk failure cannot record a half-applied version. Good.",
+    "run_migrations() records only the version string and has no checksum/hash of the chunk contents. If a future edit modifies an already-applied mNNN file, the change will silently never run on existing databases. Consider storing a content hash and warning on mismatch.",
+    "There is no down()/rollback path and no advisory lock. Two backend replicas booting simultaneously would both try to apply unapplied chunks; the PRIMARY KEY on version prevents duplicate rows but the loser will crash on a unique violation. A pg_advisory_lock around run_migrations() would make multi-replica boots safe.",
+    "init_db.py opens its own asyncpg.connect() instead of borrowing from database.py's pool; acceptable for a one-shot boot step but duplicates the jsonb/json codec registration already in database.py (DRY).",
+    "File sizes are all now well under the 700-line guideline (largest chunk m001_core_tables.py at 449 lines) — a real improvement over the 1095-line monolith."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter111_migration_ledger_regression.py",
+    "/app/backend/tests/_iter111_verbatim_diff.py",
+    "/app/backend/tests/_iter111_fresh_db_drift.py",
+    "/app/backend/tests/_iter111_ledger_probe.py",
+    "/app/backend/tests/_iter111_cleanup.py"
+  ],
+  "success_rate": {"backend": "100% (27/27 new regression tests)", "frontend": "100% (all 8 tested routes render, 0 API 4xx/5xx, login + meeting create + team create flows pass)"},
+  "seed_data_creation": "None persisted. Temporarily created and then deleted: 1 API meeting ('TEST_iter111 migration refactor meeting'), 1 API org_setting + 1 API team, 1 UI-created meeting (41ef4495-194b-4925-84ef-5ee2282f74a8) and 1 UI-created team ('TEST_iter111_ui Team'). Verified 0 rows remaining for all TEST_iter111 patterns; schema_migrations still has exactly 7 rows.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Used /app/memory/test_credentials.md. admin@supervision.com / Admin123! (NOTE: MFA is now ENABLED on this account — password login returns requires_mfa; use tests/get_tokens.py to bypass). user@supervision.com / Staff123! logs in with no MFA and was used for the real UI login flow.",
+  "context_for_next_testing_agent": "New reusable regression suite: /app/backend/tests/test_iter111_migration_ledger_regression.py (27 tests, all passing, self-cleaning, worker-unique test data for xdist). It asserts the schema_migrations ledger has exactly the 7 expected versions, so if a new migration chunk mNNN is added, EXPECTED_VERSIONS at the top of that file must be updated. pytest.ini forces xdist (-n --dist loadscope), so do not pass -p no:xdist. IMPORTANT: editing any file under /app/backend triggers a uvicorn watchfiles reload; API tests run within ~20s of a file write will see 502s from the ingress — sleep ~20s after editing before running API tests. Frontend has NO hot reload (vite build && vite preview) — restart frontend after UI edits. admin@supervision.com now requires MFA; use tests/get_tokens.py <email> <pw> to obtain supervision_access/supervision_refresh cookies for Playwright context.add_cookies (access token lives only 30 min, regenerate per run). Verified working UI selectors: login-email-input/login-password-input/login-submit-btn, new-team-name-input + 'Save' button for the inline Add Team form, meeting-location-input + 'Create & Prepare' on /meetings/new. Org Structure 'Add Team' has a separate 'search-staff-input' in the right rail — do not target inputs by position, use the testid.",
+  "rca_of_the_issue": "No defect found in the refactor. Two failures seen during this round were both in MY OWN test harness and were fixed: (1) an '_id' leak assertion using substring matching on the whole response body, which false-positived on the legitimate 'org_id'/'team_id' keys — changed to a key-level check; (2) a session-scoped teardown that deleted rows matching 'TEST_iter111%' while a parallel xdist worker was mid-test on its own setting, producing a spurious 404 'Setting not found' on team create — replaced with per-test cleanup plus worker-unique names. Equivalence of the refactor was proven structurally rather than only behaviourally: an AST walk extracted every string literal containing CREATE/ALTER/DROP/GRANT/INSERT/UPDATE/DELETE/SELECT from git HEAD's 1095-line init_db.py and from all 7 new chunks; the set difference is empty in the SQL direction (the only 'missing' entries are two prose docstrings, and the only 'extra' entries are the new ledger DDL plus per-chunk docstrings). The single genuine finding, meetings.processing_error existing in the live DB but in no migration, was proven pre-existing by grepping the old init_db.py at git HEAD (0 occurrences), so it is inherited drift rather than a copy error introduced by the split."
+}

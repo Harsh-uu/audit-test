@@ -11,6 +11,43 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Schema Migration Ledger Refactor (Sep 2026) — COMPLETE, verified
+Replaced the monolithic 1095-line `init_db.py` (156 idempotent SQL statements re-evaluated on
+every backend boot) with a versioned migration system:
+- **New `/app/backend/migrations/` package**: 7 ordered chunks (`m001_core_tables` ..
+  `m007_data_cleanup`), each exposing `VERSION` + `async def up(conn)`. Every SQL statement was
+  copied **verbatim** from the old monolithic script (AST-diff-verified zero drift by
+  testing_agent) — this was a pure structural refactor, no functional/business-logic change.
+- **`schema_migrations` ledger table** (`version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ`):
+  `migrations/__init__.py::run_migrations()` creates it, reads applied versions, and only runs
+  chunks not yet in the ledger (each chunk's `up()` + its ledger INSERT share one
+  `conn.transaction()`, so a mid-chunk failure can't record a half-applied version).
+  `init_db.py::create_schema()` keeps its exact signature (`server.py`'s `from init_db import
+  create_schema` untouched) — it now just calls `run_migrations(conn)` internally.
+- **First-boot catch-up**: since this DB already had every statement applied historically, all 7
+  chunks ran once more on first boot after deploy (safe — fully idempotent) and got recorded;
+  every boot since then applies zero chunks (confirmed via 2 consecutive real supervisor
+  restarts — no "Applied migration" log lines, `schema_migrations` still has exactly 7 rows).
+- **4 pre-existing static tests** (`test_processing_error_iter58.py`,
+  `test_prep_context_bug_fix.py`, `test_iter101_meetings_index_regression.py`) that did raw
+  string-search assertions against `init_db.py`'s source were updated to scan the new
+  `migrations/` directory instead, so their schema-guard checks keep working.
+- **Drift fix while here**: `meetings.processing_error` existed live in the DB but was never
+  created by any migration statement (pre-existing gap, inherited from the old script, not
+  introduced by this refactor) — added `ALTER TABLE meetings ADD COLUMN IF NOT EXISTS
+  processing_error TEXT` to `m002_schema_patches.py` so a fresh database now matches.
+- **Verified via testing_agent** (iteration_111): 27/27 new regression tests (ledger contents,
+  25 tables/21 RLS policies/38 FK constraints/composite index all present, auth, dashboard,
+  meeting create/get/delete, org settings/teams CRUD, portfolio/standards, malformed-UUID 404,
+  transcript/analysis round-trip) + full UI smoke (login, dashboard, org structure, settings,
+  portfolio, standards library, meeting report, meeting creation, team creation) — zero
+  regressions attributable to the refactor. `pytest --collect-only` across all 1158 backend
+  tests found zero import errors from the new `migrations` package.
+- **Not actioned** (code-review suggestions, low priority): no content-hash/checksum on applied
+  migrations (editing an already-applied chunk silently never re-runs on existing DBs — by
+  design for this lightweight ledger, but worth a checksum warning later); no `pg_advisory_lock`
+  around `run_migrations()` (fine for single-replica boots, would matter for multi-replica).
+
 ## Post-Phase-2 fixes (Sep 2026) — Edit Setting race, FK indexes, date validation
 Follow-up to Phase 2, 4 items requested together:
 1. **Edit Setting/Team stale-form race condition — FIXED**: `OrgStructure.js`'s
