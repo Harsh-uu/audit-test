@@ -11,6 +11,52 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Supabase Auth Migration — Phases 1-4 COMPLETE (Sep 2026), fully tested
+Full replacement of bcrypt password storage/verification with Supabase Auth, per explicit user
+choice: (1) session/JWT layer stays 100% our own (deps.py, cookies, RLS untouched) — only
+password identity moved to Supabase; (2) forced password reset for all existing users, no hash
+carryover; (3) MFA made optional for admin/manager (was mandatory), kept mandatory for
+super_admin only.
+- **Phase 1**: `utils/supabase_auth.py` (create_user/verify_login/set_password/generate_recovery_link),
+  `users.supabase_migrated` column, all 4 user-creation endpoints (`admin.py::create_user`,
+  `org.py::invite_user_to_org`, `super_admin.py::create_org_user`/`invite_org_admin`) provision a
+  Supabase identity (same UUID as `users.id`). Backfilled all 13 existing users, idempotent.
+- **Phase 2**: `/api/auth/login` credential check routes to Supabase when `supabase_password_set`
+  is true, else bcrypt fallback — added this SECOND flag after catching a real bug mid-build:
+  gating on `supabase_migrated` alone (identity exists) would have locked out every real user,
+  since Phase 1's backfill creates identities with NO password. MFA-optional 1-line gating fix
+  (`_mfa_required_for_user`: super_admin always True, admin/manager check `mfa_enabled`).
+  Replaced the Supabase SDK's `sign_in_with_password` (intermittent multi-second latency, one
+  observed timeout) with a direct, stateless httpx POST to `/auth/v1/token?grant_type=password`
+  — consistently ~0.3-0.6s, verified under concurrent load.
+- **Phase 3**: `reset-password`, `change-password`, `accept-invite` all dual-write bcrypt +
+  Supabase; `change-password`'s current-password check branches Supabase-or-bcrypt correctly.
+- **Phase 4**: batch-sent forced-reset email to all 9 real remaining users (2 synthetic
+  `@example.com` fixtures correctly rejected by Resend, harmless) via
+  `scripts/send_supabase_migration_emails.py` — reuses the same token/endpoint as
+  forgot-password. `jane@supervision.com` (JaneNew456!) and `user@supervision.com`
+  (AnotherNew789!) fully migrated as live verification; everyone else has a pending, unexpired
+  reset link and still logs in via bcrypt until they use it.
+- **Post-testing fixes** (iteration_112 → 113, all verified): `deps.py::get_current_user`'s
+  SELECT was missing `must_change_password`/`mfa_enabled` (broke the force-password-change
+  redirect for ALL users, pre-existing bug surfaced by this work) — fixed. `OrgSettings.js`
+  Security tab hardcoded MFA as mandatory/undisableable for admin+manager — now shows the real
+  toggle and status. `reset-password`/`change-password` now return 503 instead of silently
+  succeeding if an already-migrated user's Supabase write fails. `verify_login` maps 429/403 to
+  a service-unavailable error instead of "wrong password". Fixed inconsistent "8 characters" vs
+  actual 10-char policy copy on `/reset-password` and `/accept-invite`.
+- **Known environment quirk (important for future work)**: frontend does NOT hot-reload —
+  `yarn start` runs `vite build && vite preview`, so `sudo supervisorctl restart frontend` is
+  required after every frontend source edit (~60s rebuild), otherwise the browser keeps serving
+  the previous build. This caused a false "fix didn't work" signal during this session.
+- **Not done (backlog, low priority, out of migration scope)**: stale "8 characters" copy in
+  `UsersTab.js`, `SuperAdminDashboard.js`, `OrgStructure.js`, `PeopleHub.js` (same class of bug as
+  the reset-password fix, just in admin-creates-user forms); unreachable super_admin branch in
+  `OrgSettings.js` SecurityTab (super_admin never sees this panel — dead code, not a bug); missing
+  `minLength={10}` on `AcceptInvite.js`'s password input (copy/JS validation already correct).
+  Also not done: bcrypt fallback cleanup (removing bcrypt entirely once confidence is high) and
+  native Supabase session tokens (deliberately kept out of scope per user's explicit choice).
+
 ## Multi-instance cache staleness fix (Sep 2026)
 `utils/standards_cache.py`'s `_org_info` (org jurisdiction/service_type) was the only cache in
 the app with **no TTL** — comment literally said "cached indefinitely," invalidated only via an

@@ -57,7 +57,8 @@ async def get_current_user(
 
     async with database.with_admin() as conn:
         row = await conn.fetchrow(
-            "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at "
+            "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
+            "must_change_password, mfa_enabled "
             "FROM users WHERE id = $1 AND is_active = TRUE", user_id
         )
 

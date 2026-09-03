@@ -5,7 +5,7 @@ import { Eye, EyeOff, CheckCircle, AlertCircle, Loader2, Building2, HelpCircle }
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 const PW_REQS = [
-  "At least 8 characters",
+  "At least 10 characters",
   "One uppercase letter (A–Z)",
   "One lowercase letter (a–z)",
   "One number (0–9)",
@@ -58,7 +58,7 @@ export default function AcceptInvite() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (form.password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (form.password.length < 10) { setError("Password must be at least 10 characters"); return; }
     if (form.password !== form.confirm) { setError("Passwords do not match"); return; }
     setSubmitting(true);
     try {
@@ -201,7 +201,7 @@ export default function AcceptInvite() {
                       value={form.password}
                       onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
-                      placeholder="Min. 8 characters"
+                      placeholder="Min. 10 characters"
                     />
                     <button
                       type="button"

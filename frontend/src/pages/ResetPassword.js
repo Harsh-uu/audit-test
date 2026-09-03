@@ -55,7 +55,7 @@ export default function ResetPassword() {
   const handle = async (e) => {
     e.preventDefault();
     if (password !== confirm) { setError("Passwords do not match."); return; }
-    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password.length < 10) { setError("Password must be at least 10 characters."); return; }
     setLoading(true);
     setError("");
     try {
@@ -130,9 +130,9 @@ export default function ResetPassword() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="At least 8 characters"
+                    placeholder="At least 10 characters"
                     required
-                    minLength={8}
+                    minLength={10}
                     autoComplete="new-password"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                     data-testid="reset-password-input"

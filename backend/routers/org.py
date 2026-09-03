@@ -383,6 +383,7 @@ async def invite_user_to_org(data: InviteUserRequest, current_user=Depends(get_c
         raise HTTPException(403, "Insufficient permissions")
     from routers.auth import hash_password
     from utils.rate_limit import check_rate_limit
+    from utils import supabase_auth
     allowed_roles = ["attendee", "manager", "shared_reviewer"]
     if current_user["role"] == "admin":
         allowed_roles.append("admin")
@@ -406,6 +407,12 @@ async def invite_user_to_org(data: InviteUserRequest, current_user=Depends(get_c
             "INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, must_change_password, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
             user_id, data.email.lower(), hash_password(data.password), data.name, role, org_id, True, True, now,
         )
+        try:
+            await supabase_auth.create_user(user_id, data.email.lower())
+            await supabase_auth.set_password(user_id, data.password)
+            await conn.execute("UPDATE users SET supabase_migrated=TRUE, supabase_password_set=TRUE WHERE id=$1", user_id)
+        except Exception as exc:
+            logger.error("Supabase Auth provisioning failed for invited user %s: %s", data.email, exc)
     return {"id": user_id, "name": data.name, "email": data.email.lower(), "role": role}
 
 

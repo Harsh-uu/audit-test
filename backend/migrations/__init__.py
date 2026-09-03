@@ -16,6 +16,8 @@ from . import (
     m005_phase1_timestamptz,
     m006_phase2_uuid,
     m007_data_cleanup,
+    m008_supabase_auth,
+    m009_supabase_password_set,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,8 @@ MIGRATIONS = [
     m005_phase1_timestamptz,
     m006_phase2_uuid,
     m007_data_cleanup,
+    m008_supabase_auth,
+    m009_supabase_password_set,
 ]
 
 

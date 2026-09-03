@@ -156,9 +156,16 @@ class MfaConfirmRequest(BaseModel):
 
 # ── MFA helpers ──────────────────────────────────────────────────────────────
 
-def _mfa_required_for_role(role: str) -> bool:
-    """super_admin, admin, and manager always require MFA — mandatory, not opt-in."""
-    return role in ("super_admin", "admin", "manager")
+def _mfa_required_for_user(user: dict) -> bool:
+    """super_admin always requires MFA (single highest-privilege, cross-org account).
+    admin/manager: opt-in via users.mfa_enabled (toggled through /toggle-mfa) — no
+    longer mandatory, so accounts that don't want an authenticator/email OTP step
+    aren't forced into one."""
+    if user.get("role") == "super_admin":
+        return True
+    if user.get("role") in ("admin", "manager"):
+        return bool(user.get("mfa_enabled"))
+    return False
 
 
 def create_mfa_session_token(user_id: str) -> str:
@@ -254,7 +261,23 @@ async def login(data: LoginRequest, request: Request, response: Response):
     async with database.with_admin() as conn:
         user = await conn.fetchrow("SELECT * FROM users WHERE email = $1", email)
 
-    password_ok = bool(user and verify_password(data.password, user["password_hash"] or ""))
+    # Supabase Auth is the source of truth for password verification once a
+    # user has been migrated (see utils/supabase_auth.py); bcrypt is the
+    # fallback for anyone not yet migrated (defensive — Phase 1's backfill
+    # already covers every existing user, but new rows created between
+    # deploys must not get locked out).
+    # Supabase Auth is the password source of truth only once a user has an
+    # ACTUAL Supabase password set (supabase_password_set) — supabase_migrated
+    # alone just means an identity was provisioned with no password yet
+    # (Phase 1's backfill), which must still fall back to bcrypt.
+    if user and user["supabase_password_set"]:
+        from utils.supabase_auth import verify_login, SupabaseAuthUnavailable
+        try:
+            password_ok = await verify_login(email, data.password)
+        except SupabaseAuthUnavailable:
+            raise HTTPException(status_code=503, detail="Sign-in is temporarily unavailable. Please try again shortly.")
+    else:
+        password_ok = bool(user and verify_password(data.password, user["password_hash"] or ""))
 
     # ── Step 3: record failed attempt (committed separately so rollback can't undo it)
     if not password_ok:
@@ -314,7 +337,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
     user_id = user["id"]
 
     # ── MFA gate ──────────────────────────────────────────────────────────────
-    if _mfa_required_for_role(user["role"]):
+    if _mfa_required_for_user(user):
         async with database.with_admin() as conn2:
             await _generate_and_send_mfa(conn2, user)
         mfa_session = create_mfa_session_token(user_id)
@@ -614,11 +637,32 @@ async def reset_password(data: ResetPasswordRequest):
         if record["expires_at"] < datetime.now(timezone.utc).isoformat():
             raise HTTPException(status_code=400, detail="This reset link has expired.")
 
+        user = await conn.fetchrow("SELECT id FROM users WHERE email=$1", record["email"])
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        from utils import supabase_auth
+        try:
+            await supabase_auth.create_user(str(user["id"]), record["email"])  # no-op if already provisioned
+            await supabase_auth.set_password(str(user["id"]), data.new_password)
+            supabase_ok = True
+        except Exception as exc:
+            logger.error("Supabase Auth password set failed for %s: %s", record["email"], exc)
+            supabase_ok = False
+
+        already_on_supabase = await conn.fetchval("SELECT supabase_password_set FROM users WHERE email=$1", record["email"])
+        if already_on_supabase and not supabase_ok:
+            # Login for this user checks Supabase first — silently updating only
+            # bcrypt here would strand them on their OLD Supabase password while
+            # telling them the reset succeeded. Fail loudly instead.
+            raise HTTPException(status_code=503, detail="Unable to reset your password right now. Please try again shortly.")
+
         now = datetime.now(timezone.utc).isoformat()
         await conn.execute(
             """UPDATE users SET password_hash=$1, must_change_password=FALSE,
-               password_changed_at=$2 WHERE email=$3""",
-            hash_password(data.new_password), now, record["email"],
+               password_changed_at=$2, supabase_migrated=(supabase_migrated OR $4),
+               supabase_password_set=(supabase_password_set OR $4) WHERE email=$3""",
+            hash_password(data.new_password), now, record["email"], supabase_ok,
         )
         await conn.execute("UPDATE password_reset_tokens SET used=TRUE WHERE token=$1", data.token)
     return {"message": "Password updated successfully. You can now log in."}
@@ -636,15 +680,40 @@ async def change_password(data: ChangePasswordRequest, current_user=Depends(get_
         user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", current_user["id"])
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        if not verify_password(data.current_password, user["password_hash"] or ""):
+
+        if user["supabase_password_set"]:
+            from utils.supabase_auth import verify_login, SupabaseAuthUnavailable
+            try:
+                current_ok = await verify_login(user["email"], data.current_password)
+            except SupabaseAuthUnavailable:
+                raise HTTPException(status_code=503, detail="Unable to verify your password right now. Please try again shortly.")
+        else:
+            current_ok = verify_password(data.current_password, user["password_hash"] or "")
+        if not current_ok:
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         if data.current_password == data.new_password:
             raise HTTPException(status_code=400, detail="New password must be different from the current one")
+
+        from utils import supabase_auth
+        try:
+            await supabase_auth.create_user(str(user["id"]), user["email"])  # no-op if already provisioned
+            await supabase_auth.set_password(str(user["id"]), data.new_password)
+            supabase_ok = True
+        except Exception as exc:
+            logger.error("Supabase Auth password set failed for %s: %s", user["email"], exc)
+            supabase_ok = False
+
+        if user["supabase_password_set"] and not supabase_ok:
+            # Same reasoning as reset-password: don't silently strand the user
+            # on their old Supabase password while claiming success.
+            raise HTTPException(status_code=503, detail="Unable to change your password right now. Please try again shortly.")
+
         now = datetime.now(timezone.utc).isoformat()
         await conn.execute(
             """UPDATE users SET password_hash=$1, must_change_password=FALSE,
-               password_changed_at=$2 WHERE id=$3""",
-            hash_password(data.new_password), now, current_user["id"],
+               password_changed_at=$2, supabase_migrated=(supabase_migrated OR $3),
+               supabase_password_set=(supabase_password_set OR $3) WHERE id=$4""",
+            hash_password(data.new_password), now, supabase_ok, current_user["id"],
         )
     return {"message": "Password changed successfully"}
 
@@ -694,10 +763,20 @@ async def accept_invite(data: AcceptInviteRequest, response: Response):
             raise HTTPException(status_code=404, detail="User not found")
 
         name = data.name.strip() or user["name"]
+        from utils import supabase_auth
+        try:
+            await supabase_auth.create_user(str(invite["user_id"]), user["email"])  # no-op if already provisioned
+            await supabase_auth.set_password(str(invite["user_id"]), data.password)
+            supabase_ok = True
+        except Exception as exc:
+            logger.error("Supabase Auth password set failed for invited user %s: %s", user["email"], exc)
+            supabase_ok = False
         await conn.execute(
             """UPDATE users SET password_hash=$1, name=$2, org_id=$3, is_active=TRUE,
-               must_change_password=FALSE, password_changed_at=$5 WHERE id=$4""",
-            hash_password(data.password), name, invite["org_id"], invite["user_id"], now,
+               must_change_password=FALSE, password_changed_at=$5,
+               supabase_migrated=(supabase_migrated OR $6),
+               supabase_password_set=(supabase_password_set OR $6) WHERE id=$4""",
+            hash_password(data.password), name, invite["org_id"], invite["user_id"], now, supabase_ok,
         )
         await conn.execute("UPDATE invitations SET used_at=$1 WHERE token=$2", now, data.token)
 

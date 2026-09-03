@@ -1,0 +1,47 @@
+{
+  "summary": "Fix-verification follow-up to iteration_112. Built a new 14-test pytest suite (/app/backend/tests/test_iter113_fix_verification.py) — 14/14 passed — plus 5 Playwright runs on the public preview URL. ALL 5 FIXES VERIFIED: (1) GET /api/auth/me now returns must_change_password + mfa_enabled, and a freshly admin-created user logging in through the real UI now lands on /set-password (was /dashboard in iter112); (2) Settings > Security now shows a 'Disabled' badge + a visible 'Enable 2FA' button for BOTH admin and manager, no 'mandatory/cannot be disabled' copy, and with mfa_enabled=true it correctly flips to 'Enabled' + 'Disable 2FA' + OTP confirm step (full toggle round trip enable->disable exercised via UI + API, admin restored to mfa_enabled=false); (3) reset-password and change-password happy paths fully work (forgot -> reset -> old pw 401 -> new pw login -> change-password -> old pw 401 -> new pw login), supabase_password_set flips TRUE, weak (9-char) password rejected 400, wrong current_password rejected; (5) both /reset-password and /accept-invite now consistently say 10 characters (placeholder 'At least 10 characters' + minLength=10 on reset; 'Min. 10 characters' + inline 'Password must be at least 10 characters' on invite) — no '8 characters' copy anywhere on those two pages. Fix 4 (429/403 mapping) not testable without simulating Supabase rate-limiting — skipped as instructed. All iter112 regression scenarios re-pass. ONE ENVIRONMENT BLOCKER FOUND: the frontend has NO hot reload (frontend supervisor runs `yarn start` = `vite build && vite preview`), so the served bundle was a stale 11:07 build while the source fixes were 13:31 — Fix 2 and Fix 5 initially appeared UNFIXED in the browser until I ran `sudo supervisorctl restart frontend`. That is almost certainly why the main agent's own Playwright trace looked wrong.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/auth/me", "issue": "VERIFIED FIXED — must_change_password and mfa_enabled now present and correctly typed (bool) for admin, manager, super_admin and a new admin-created user; no _id/password_hash leakage."},
+      {"endpoint": "POST /api/auth/reset-password, /api/auth/change-password", "issue": "Happy path verified end to end. The new 503-on-Supabase-failure branch for already-migrated users could NOT be exercised (no way to simulate a Supabase-side write failure from the preview env) — code was read and looks correct, but it remains UNTESTED."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OrgSettings.js SecurityTab (super_admin branch)", "issue": "Dead code: super_admin can never reach this panel — /settings redirects super_admin to the Super Admin dashboard (only a 'Change password' item in the sidebar), so the isMandatory === 'super_admin' branch never renders. Fix 2(c) is therefore satisfied only vacuously; MFA mandatoriness for super_admin was confirmed at the API level (login returns requires_mfa:true, no access token). Either drop the branch or give super_admin a real security panel.", "selector": "[data-testid=\"mfa-toggle-btn\"]", "priority": "LOW"},
+      {"component": "AcceptInvite.js", "issue": "Password input has no minLength attribute (ResetPassword.js has minLength=10). Copy + JS validation are correct, only the native constraint is missing — cosmetic inconsistency.", "selector": "input[type=password] on /accept-invite", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin/manager password-set forms (NOT part of the 5 fixes)", "issues": ["Password copy still says 8 characters while the backend enforces 10 in: components/admin/UsersTab.js:64,213 ('Min. 8 characters'), pages/SuperAdminDashboard.js:780, pages/OrgStructure.js:312,330,849, pages/PeopleHub.js:381. An admin typing a 9-char password there passes client validation and gets a 400 from the API. Same class of bug Fix 5 addressed — should be fixed for consistency."]},
+      {"screen": "/reset-password", "issues": ["The form renders fully for an obviously invalid token (?token=dummy) and only fails on submit; no upfront token validation like /accept-invite does. Pre-existing, low priority."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter113_fix_verification.py",
+    "/app/backend/tests/_iter113_mfa_toggle.py",
+    "/app/test_reports/pytest/iter113.xml",
+    "/app/test_reports/pytest/iter113_regression.xml"
+  ],
+  "action_items": [
+    "IMPORTANT WORKFLOW: the frontend does NOT hot-reload (yarn start = vite build && vite preview). Run `sudo supervisorctl restart frontend` (takes ~60s to rebuild) after every frontend source edit, otherwise you and the test agent both see the previous build. This is why your Playwright verification of Fix 2/Fix 5 failed.",
+    "Optional consistency follow-up: update the remaining '8 characters' password copy/validation in UsersTab.js, SuperAdminDashboard.js, OrgStructure.js, PeopleHub.js to 10 characters (see design_issues).",
+    "Optional: remove or repurpose the unreachable super_admin isMandatory branch in OrgSettings SecurityTab, and add minLength={10} to the AcceptInvite password input."
+  ],
+  "critical_code_review_comments": [
+    "deps.get_current_user's explicit column allow-list remains a silent contract with the frontend — consider a shared constant / Pydantic response model so future user flags cannot silently disappear from /auth/me again (this was the root cause of iter112's must_change_password regression).",
+    "The 503 hardening in reset_password/change_password is inherently untestable in this environment; consider a dev-only env flag (e.g. SUPABASE_FORCE_FAIL) so the stranded-user path can be regression-tested."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter113_fix_verification.py",
+    "/app/backend/tests/_iter113_mfa_toggle.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "5 disposable users (test_iter113_*@example.com) created by pytest and 2 for UI/invite testing — all purged from Postgres AND Supabase Auth (verified: SELECT email LIKE 'test_iter11%' returns 0 rows). admin@supervision.com's mfa_enabled was toggled TRUE then restored to FALSE. login_attempts cleared. No real account passwords rotated — /app/memory/test_credentials.md remains accurate.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "All credentials from /app/memory/test_credentials.md verified working: admin@supervision.com/Admin123! (bcrypt, no MFA), manager@supervision.com/Manager123! (no MFA), superadmin@1two.one/NewPass123! (MFA mandatory), user@supervision.com/AnotherNew789! and jane@supervision.com/JaneNew456! (both Supabase-backed).",
+  "context_for_next_testing_agent": "Run `python3 -m pytest tests/test_iter113_fix_verification.py -n 0 -q` from /app/backend (~2 min; -n 0 required because the failed-login tests share the per-IP rate limiter — the suite clears login_attempts itself). Helper tests/_iter113_mfa_toggle.py enable|disable|state toggles admin MFA via the real API (bypasses OTP by writing bcrypt('123456') into users.mfa_code) and prints usable supervision_access/refresh cookies for Playwright cookie injection. tests/_iter112_ui_fixture.py purge <email> cleans Postgres + Supabase. REMEMBER: restart the frontend supervisor after any frontend source change — there is no hot reload. Still untested: the Supabase-outage 503 branch and the verify_login 429/403 mapping (Fix 4).",
+  "rca_of_the_issue": "No new product defects. The only real finding is environmental: /app/frontend is served as a Vite production build (`yarn start` = `vite build && vite preview`), so source edits are invisible until the frontend supervisor process is restarted and rebuilds. The main agent's inability to confirm Fix 2/Fix 5 in the browser was caused by the browser being served the 11:07 build while the fixes landed at 13:31; after `supervisorctl restart frontend` all frontend fixes rendered correctly."
+}

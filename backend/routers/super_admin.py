@@ -208,6 +208,7 @@ async def list_org_users(org_id: str, current_user=Depends(get_current_user)):
 async def create_org_user(org_id: str, data: CreateOrgUserRequest, current_user=Depends(get_current_user)):
     _require_super_admin(current_user)
     from routers.auth import hash_password, validate_password_strength
+    from utils import supabase_auth
     validate_password_strength(data.password)
     role = data.role if data.role in ["admin", "manager", "attendee", "shared_reviewer"] else "manager"
     user_id = str(uuid.uuid4())
@@ -226,6 +227,12 @@ async def create_org_user(org_id: str, data: CreateOrgUserRequest, current_user=
             user_id, data.email.lower(), hash_password(data.password),
             data.name.strip(), role, org_id, True, True, now,
         )
+        try:
+            await supabase_auth.create_user(user_id, data.email.lower())
+            await supabase_auth.set_password(user_id, data.password)
+            await conn.execute("UPDATE users SET supabase_migrated=TRUE, supabase_password_set=TRUE WHERE id=$1", user_id)
+        except Exception as exc:
+            logger.error("Supabase Auth provisioning failed for org user %s: %s", data.email, exc)
     return {"id": user_id, "email": data.email.lower(), "name": data.name.strip(), "role": role, "org_id": org_id}
 
 
@@ -346,6 +353,7 @@ async def invite_org_admin(org_id: str, data: InviteAdminRequest, current_user=D
             raise HTTPException(status_code=400, detail="An account with this email already exists")
 
         from routers.auth import hash_password
+        from utils import supabase_auth
         await conn.execute(
             """INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, created_at)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)""",
@@ -356,6 +364,12 @@ async def invite_org_admin(org_id: str, data: InviteAdminRequest, current_user=D
             "INSERT INTO invitations (id, org_id, user_id, token, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
             invite_id, org_id, user_id, token, expires_at, now,
         )
+        # No password set yet — real password is set in accept-invite below.
+        try:
+            await supabase_auth.create_user(user_id, data.email.lower())
+            await conn.execute("UPDATE users SET supabase_migrated=TRUE WHERE id=$1", user_id)
+        except Exception as exc:
+            logger.error("Supabase Auth provisioning failed for invited admin %s: %s", data.email, exc)
 
     frontend_url = os.environ.get("FRONTEND_URL", "")
     invite_link = f"{frontend_url}/accept-invite?token={token}"

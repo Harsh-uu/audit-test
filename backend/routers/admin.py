@@ -118,6 +118,7 @@ async def create_user(data: CreateUserRequest, current_user=Depends(get_current_
     if current_user["role"] != "admin":
         raise HTTPException(403, "Admin only")
     from routers.auth import hash_password
+    from utils import supabase_auth
     role = data.role if data.role in ["admin", "manager", "attendee", "shared_reviewer"] else "attendee"
     user_id = str(uuid.uuid4())
     org_id = current_user.get("org_id", "")
@@ -130,6 +131,14 @@ async def create_user(data: CreateUserRequest, current_user=Depends(get_current_
             "INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, must_change_password, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
             user_id, data.email.lower(), hash_password(data.password), data.name, role, org_id, True, True, now,
         )
+        try:
+            await supabase_auth.create_user(user_id, data.email.lower())
+            await supabase_auth.set_password(user_id, data.password)
+            await conn.execute("UPDATE users SET supabase_migrated=TRUE, supabase_password_set=TRUE WHERE id=$1", user_id)
+        except Exception as exc:
+            # Non-fatal: user can still log in via the bcrypt fallback until
+            # this is retried (see routers/auth.py login's supabase_password_set check).
+            logger.error("Supabase Auth provisioning failed for new user %s: %s", data.email, exc)
     return {"id": user_id, "email": data.email.lower(), "name": data.name, "role": role}
 
 

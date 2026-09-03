@@ -177,7 +177,7 @@ function SecurityTab({ API, getAuthConfig, user, updateMfaStatus }) {
   const [success, setSuccess] = useState("");
 
   const isMfaOn    = Boolean(user?.mfa_enabled);
-  const isMandatory = ["admin", "manager"].includes(user?.role);
+  const isMandatory = user?.role === "super_admin";
 
   const requestCode = async (enable) => {
     setError("");
@@ -224,8 +224,13 @@ function SecurityTab({ API, getAuthConfig, user, updateMfaStatus }) {
                   : "Add an extra layer of security. You will be emailed a code each time you sign in."}
             </p>
             <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-                Enabled
+              <span
+                className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+                  isMfaOn ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500"
+                }`}
+                data-testid="mfa-status-badge"
+              >
+                {isMfaOn ? "Enabled" : "Disabled"}
               </span>
               {isMandatory && (
                 <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">

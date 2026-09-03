@@ -1,0 +1,57 @@
+{
+  "summary": "Full backend + frontend verification of the Supabase Auth migration (Phases 1-4). Built a new 41-test pytest regression suite (/app/backend/tests/test_iter112_supabase_auth.py) covering both credential paths (bcrypt fallback vs Supabase), old-password invalidation, rate-limit/lockout, the MFA gate change, all 3 user-provisioning endpoints, the token invite flow, forgot/reset/change-password round trips and non-auth regression endpoints — 41/41 passed. UI verified via Playwright: admin/manager log in with no MFA prompt, Supabase-backed user (jane) logs in, super_admin still hits the 2FA screen (wrong code -> 'Invalid code'), forgot-password + /reset-password?token=... -> login all work end to end, and all admin nav pages load clean. Two genuine defects found, both OUTSIDE the auth-storage layer but directly contradicting the migration's stated behaviour: (1) Settings -> Security still hard-codes 'Mandatory for admins / 2FA cannot be disabled' and a hard-coded 'Enabled' badge, so admin/manager cannot opt into or out of MFA from the UI even though the backend now treats it as optional; (2) deps.get_current_user's SELECT omits must_change_password and mfa_enabled, so /api/auth/me drops both flags — the forced-password-change gate in ProtectedRoute never fires (a freshly admin-created user with must_change_password=TRUE went straight to /dashboard instead of /set-password) and the Security tab has no real MFA state to render.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/auth/me", "issue": "deps.py::get_current_user selects only id/org_id/email/name/role/team_id/setting_id/password_changed_at, so /auth/me omits must_change_password and mfa_enabled. Frontend overwrites the login-response user with the /me profile, so the force-password-change redirect is bypassed and the Security tab cannot show real MFA state. Add both columns to the SELECT."},
+      {"endpoint": "POST /api/auth/reset-password, POST /api/auth/change-password", "issue": "If Supabase set_password raises, supabase_ok=False but the endpoint still returns 200 and only updates the bcrypt hash. For a user already at supabase_password_set=TRUE, login keeps verifying against Supabase -> the user is told the password changed but only the OLD password works (silent divergence). Recommend: if supabase_password_set was already TRUE and the Supabase write fails, return 503 and do not update the bcrypt hash."},
+      {"endpoint": "POST /api/auth/reset-password", "issue": "Token row is trusted for its email without any additional binding/verification; a valid unused token for email A always resets A (OK today) but there is no per-user single-use/one-active-token invariant beyond the DELETE-on-issue. Low risk, noted for review."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OrgSettings.js — Settings > Security tab", "issue": "Stale MFA copy/logic: isMandatory = ['admin','manager'].includes(role) still renders 'Mandatory for admins' + '2FA cannot be disabled for managers and admins' and HIDES the Enable/Disable 2FA button. Backend now makes MFA optional for admin/manager (only super_admin mandatory), and admin's mfa_enabled is FALSE, so the panel is factually wrong and there is no UI path to opt in/out via /api/auth/toggle-mfa (endpoint itself works — verified by API test).", "selector": "[data-testid=\"mfa-toggle-btn\"] (not rendered for admin/manager)", "priority": "HIGH"},
+      {"component": "OrgSettings.js — Security tab status badge", "issue": "The green 'Enabled' badge is rendered unconditionally (not gated on isMfaOn), so any role sees '2FA Enabled' even when mfa_enabled is false.", "selector": ".bg-emerald-50 status pill in Security tab", "priority": "MEDIUM"},
+      {"component": "ProtectedRoute.js / SetPassword.js", "issue": "must_change_password gate never triggers: admin-created user (must_change_password=TRUE, confirmed in DB and in the /auth/login response body) logged in through the UI and landed on /dashboard instead of /set-password, because AuthContext.login replaces the login payload with the /auth/me profile which omits the flag. Root cause is the backend SELECT (see backend_issues).", "selector": "[data-testid=\"set-password-submit\"] (page never reached)", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/reset-password (Set a new password)", "issues": ["New-password placeholder says 'At least 8 characters' while the enforced policy is 10 chars + upper/lower/number/special — misleading copy; users only learn the real rule from the 400 error."]},
+      {"screen": "Settings > Security", "issues": ["Panel wording/badges contradict actual backend MFA state (see ui_bugs)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter112_supabase_auth.py",
+    "/app/backend/tests/_iter112_state.py",
+    "/app/backend/tests/_iter112_ui_fixture.py",
+    "/app/test_reports/pytest/iter112_full.xml",
+    "/app/test_reports/pytest/iter112_login.xml",
+    "/app/test_reports/pytest/iter112_mfa_prov.xml",
+    "/app/test_reports/pytest/iter112_pwd_regr.xml"
+  ],
+  "action_items": [
+    "Add must_change_password and mfa_enabled to the SELECT in /app/backend/deps.py::get_current_user so /api/auth/me carries them (restores the /set-password gate and lets the Security tab render true MFA state).",
+    "Update /app/frontend/src/pages/OrgSettings.js Security tab: drop isMandatory for admin/manager (keep it only for super_admin), gate the 'Enabled' badge on isMfaOn, and expose the Enable/Disable 2FA button to admin/manager so they can use /api/auth/toggle-mfa.",
+    "Harden /auth/reset-password and /auth/change-password: when the user is already supabase_password_set=TRUE and the Supabase write fails, fail the request (503) instead of returning 200 after updating only bcrypt.",
+    "Fix the /reset-password placeholder copy to state the real 10-char + complexity policy."
+  ],
+  "critical_code_review_comments": [
+    "routers/auth.py login/reset/change dual-write: the (supabase_migrated OR $n) pattern is right for the fallback direction, but there is no downgrade/repair path — once supabase_password_set=TRUE, a Supabase-side failure silently strands the account on the stale Supabase password while bcrypt is updated.",
+    "utils/supabase_auth.py::verify_login treats every <500 response as 'wrong credentials'; a 429 (Supabase rate limit) or 403 config error would surface to users as 'Invalid credentials' and also increments our lockout counter. Consider mapping 429/403 to SupabaseAuthUnavailable (503).",
+    "verify_login sends the SERVICE key as the apikey header for a password grant — works, but a token-endpoint call should use the anon key; leaking service-key usage into the sign-in path is unnecessary privilege.",
+    "routers/auth.py is large (>800 lines) and login now mixes rate limiting, credential routing, MFA and cookie issuance in one handler — worth extracting the credential-check branch into a small helper for testability.",
+    "deps.py::get_current_user's column allow-list is a silent contract with the frontend; any new user flag must be added there too (this migration's must_change_password/mfa_enabled are the current casualties)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter112_supabase_auth.py",
+    "/app/backend/tests/_iter112_state.py",
+    "/app/backend/tests/_iter112_ui_fixture.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "80%"},
+  "seed_data_creation": "All test users were disposable (test_iter112_*@example.com) and purged from Postgres + Supabase Auth after each test (fixtures + _iter112_ui_fixture.py purge). login_attempts cleared. No seeded/real account passwords were rotated — password lifecycle tests ran only on disposable users, so /app/memory/test_credentials.md remains accurate.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Used /app/memory/test_credentials.md as-is; all listed passwords verified working (admin/manager/superadmin via bcrypt fallback, jane + user@supervision.com via Supabase). user@supervision.com's old password Staff123! correctly rejected (401).",
+  "context_for_next_testing_agent": "Run `python3 -m pytest tests/test_iter112_supabase_auth.py -n 0 -q` from /app/backend (takes ~5 min; needs -n 0 because failed-login tests share the per-IP rate limiter — the suite clears login_attempts itself). Helpers: tests/_iter112_state.py [clear] dumps migration flags + clears rate limits; tests/_iter112_ui_fixture.py create|purge <email> makes/removes a disposable user with a live reset token for UI testing. MFA is bypassed by writing bcrypt('123456') into users.mfa_code — note mfa_code_expires_at is timestamptz, pass a datetime (not isoformat string) when connecting with raw asyncpg. Not yet covered: Supabase-outage 503 path (no way to simulate), Resend delivery for real domains, and the admin/manager MFA opt-in through the UI (blocked by the OrgSettings bug).",
+  "rca_of_the_issue": "MFA-optional migration was completed in the backend (_mfa_required_for_user now checks users.mfa_enabled for admin/manager) but the corresponding frontend gate was not updated: OrgSettings.js still derives 'mandatory' purely from role and hard-codes the Enabled badge. Separately, the force-password-change regression traces to deps.py::get_current_user's explicit column list (introduced during the iteration-103 current_user SELECT optimisation) which never included must_change_password/mfa_enabled; /auth/me therefore returns a user object without them and AuthContext.login overwrites the richer login payload with that profile, so ProtectedRoute's `user.must_change_password` is always undefined."
+}
