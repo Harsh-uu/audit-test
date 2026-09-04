@@ -1507,26 +1507,29 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
         if analysis_ids:
             a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
-        for mtg in mtg_dicts:
-            a_row = analyses_by_id.get(mtg["analysis_id"])
-            if not a_row:
+
+    # Pure Python from here (redaction + CSV row building) — done after the
+    # transaction/connection is released, not while holding it open.
+    for mtg in mtg_dicts:
+        a_row = analyses_by_id.get(mtg["analysis_id"])
+        if not a_row:
+            continue
+        adoc = dict(a_row)
+        redactions = _jlist(mtg.get("pii_redactions"))
+        if redactions:
+            adoc = _apply_redactions_deep(adoc, redactions)
+        mtg_analyses.append({"meeting": mtg, "analysis": adoc})
+        sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
+        for attendee in _jlist(mtg.get("attendees")):
+            if sign_off_mgr_id and attendee.get("user_id") == sign_off_mgr_id:
                 continue
-            adoc = dict(a_row)
-            redactions = _jlist(mtg.get("pii_redactions"))
-            if redactions:
-                adoc = _apply_redactions_deep(adoc, redactions)
-            mtg_analyses.append({"meeting": mtg, "analysis": adoc})
-            sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
-            for attendee in _jlist(mtg.get("attendees")):
-                if sign_off_mgr_id and attendee.get("user_id") == sign_off_mgr_id:
-                    continue
-                staff_name = attendee.get("name", "Unknown")
-                for m in _jlist(adoc.get("cqc_mappings")):
-                    rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "CQC", m.get("regulation_ref", ""), m.get("regulation_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
-                for m in _jlist(adoc.get("care_cert_mappings")):
-                    rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "Care Cert", m.get("standard_ref", ""), m.get("standard_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
-                for m in _jlist(adoc.get("custom_mappings")):
-                    rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "Organisational", m.get("criterion_ref", ""), m.get("criterion_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
+            staff_name = attendee.get("name", "Unknown")
+            for m in _jlist(adoc.get("cqc_mappings")):
+                rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "CQC", m.get("regulation_ref", ""), m.get("regulation_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
+            for m in _jlist(adoc.get("care_cert_mappings")):
+                rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "Care Cert", m.get("standard_ref", ""), m.get("standard_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
+            for m in _jlist(adoc.get("custom_mappings")):
+                rows_csv.append([staff_name, mtg.get("title", ""), mtg.get("date", "")[:10], "Organisational", m.get("criterion_ref", ""), m.get("criterion_name", ""), m.get("confidence", ""), m.get("status", "pending"), (m.get("edited_evidence_summary") or m.get("evidence_summary", ""))[:200]])
 
     if fmt == "csv":
         import csv, io
@@ -1564,21 +1567,24 @@ async def export_cqc_excerpts(current_user=Depends(get_current_user)):
         if analysis_ids:
             a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
-        for mtg in mtg_dicts:
-            a_row = analyses_by_id.get(mtg["analysis_id"])
-            if not a_row: continue
-            adoc = dict(a_row)
-            redactions = _jlist(mtg.get("pii_redactions"))
-            if redactions:
-                adoc = _apply_redactions_deep(adoc, redactions)
-            attendees = ", ".join(a.get("name", "") for a in _jlist(mtg.get("attendees")))
-            ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees, "manager": mtg.get("sign_off_manager_name", "")}
-            for m in _jlist(adoc.get("cqc_mappings")):
-                if m.get("status") == "rejected": continue
-                ref = m.get("regulation_ref", "")
-                if not ref: continue
-                if ref not in reg_names: reg_names[ref] = m.get("regulation_name", ref)
-                reg_map[ref].append({**ctx, **m})
+
+    # Pure Python from here (redaction + regulation grouping) — after the
+    # transaction/connection is released.
+    for mtg in mtg_dicts:
+        a_row = analyses_by_id.get(mtg["analysis_id"])
+        if not a_row: continue
+        adoc = dict(a_row)
+        redactions = _jlist(mtg.get("pii_redactions"))
+        if redactions:
+            adoc = _apply_redactions_deep(adoc, redactions)
+        attendees = ", ".join(a.get("name", "") for a in _jlist(mtg.get("attendees")))
+        ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees, "manager": mtg.get("sign_off_manager_name", "")}
+        for m in _jlist(adoc.get("cqc_mappings")):
+            if m.get("status") == "rejected": continue
+            ref = m.get("regulation_ref", "")
+            if not ref: continue
+            if ref not in reg_names: reg_names[ref] = m.get("regulation_name", ref)
+            reg_map[ref].append({**ctx, **m})
 
     if not reg_map:
         raise HTTPException(404, "No CQC evidence found in any meetings")
@@ -1609,24 +1615,27 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
         if analysis_ids:
             a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
-        for mtg in mtg_dicts:
-            a_row = analyses_by_id.get(mtg["analysis_id"])
-            if not a_row: continue
-            adoc = dict(a_row)
-            redactions = _jlist(mtg.get("pii_redactions"))
-            if redactions:
-                adoc = _apply_redactions_deep(adoc, redactions)
-            sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
-            include = [a for a in _jlist(mtg.get("attendees")) if str(a.get("user_id", "")) != sign_off_mgr_id and (not selected_ids or a.get("user_id") in selected_ids)]
-            if not include: continue
-            attendees_str = ", ".join(a.get("name", "") for a in include)
-            ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees_str, "manager": mtg.get("sign_off_manager_name", "")}
-            for m in _jlist(adoc.get("care_cert_mappings")):
-                if m.get("status") == "rejected": continue
-                ref = m.get("standard_ref", "")
-                if not ref: continue
-                if ref not in std_names: std_names[ref] = m.get("standard_name", ref)
-                std_map[ref].append({**ctx, **m})
+
+    # Pure Python from here (redaction + standard grouping) — after the
+    # transaction/connection is released.
+    for mtg in mtg_dicts:
+        a_row = analyses_by_id.get(mtg["analysis_id"])
+        if not a_row: continue
+        adoc = dict(a_row)
+        redactions = _jlist(mtg.get("pii_redactions"))
+        if redactions:
+            adoc = _apply_redactions_deep(adoc, redactions)
+        sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
+        include = [a for a in _jlist(mtg.get("attendees")) if str(a.get("user_id", "")) != sign_off_mgr_id and (not selected_ids or a.get("user_id") in selected_ids)]
+        if not include: continue
+        attendees_str = ", ".join(a.get("name", "") for a in include)
+        ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees_str, "manager": mtg.get("sign_off_manager_name", "")}
+        for m in _jlist(adoc.get("care_cert_mappings")):
+            if m.get("status") == "rejected": continue
+            ref = m.get("standard_ref", "")
+            if not ref: continue
+            if ref not in std_names: std_names[ref] = m.get("standard_name", ref)
+            std_map[ref].append({**ctx, **m})
 
     if not std_map:
         raise HTTPException(404, "No Care Certificate evidence found for the selected staff")
@@ -1707,17 +1716,20 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
                 "SELECT id, speaker_text, text FROM transcripts WHERE id = ANY($1::uuid[])", transcript_ids,
             )
             transcripts_by_id = {r["id"]: r for r in t_rows}
-        for mtg in mtg_dicts:
-            t_row = transcripts_by_id.get(mtg["transcript_id"])
-            if not t_row: continue
-            speaker_text = t_row["speaker_text"] or ""
-            transcript_text = t_row["text"] or ""
-            redactions = _jlist(mtg.get("pii_redactions"))
-            if redactions:
-                from utils.redaction import apply_redactions_to_text as _art
-                if speaker_text: speaker_text = _art(speaker_text, redactions)
-                if transcript_text: transcript_text = _art(transcript_text, redactions)
-            meetings_data.append({"meeting": mtg, "speaker_text": speaker_text, "transcript_text": transcript_text})
+
+    # Pure Python from here (PII redaction of transcript text) — after the
+    # transaction/connection is released.
+    for mtg in mtg_dicts:
+        t_row = transcripts_by_id.get(mtg["transcript_id"])
+        if not t_row: continue
+        speaker_text = t_row["speaker_text"] or ""
+        transcript_text = t_row["text"] or ""
+        redactions = _jlist(mtg.get("pii_redactions"))
+        if redactions:
+            from utils.redaction import apply_redactions_to_text as _art
+            if speaker_text: speaker_text = _art(speaker_text, redactions)
+            if transcript_text: transcript_text = _art(transcript_text, redactions)
+        meetings_data.append({"meeting": mtg, "speaker_text": speaker_text, "transcript_text": transcript_text})
 
     if not meetings_data:
         raise HTTPException(404, "No transcripts found for the selected filters")

@@ -11,6 +11,26 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Transaction-duration fix (Sep 2026)
+Verified report: `idle_in_transaction_session_timeout`/`idle_session_timeout`/`lock_timeout` were
+all `0` (disabled) on the live DB, and `with_org()`/`with_admin()` (306 usages) wrap their whole
+`async with` block in one transaction — a stalled request would hold its connection+locks with
+nothing to reclaim them. The specific example cited ("Structure tab holds dozens of queries")
+was already stale — all 6 known N+1 sites were fixed in a prior session. Found 2 additional
+endpoints with the same underlying pattern while verifying (not originally reported):
+`export_cqc_excerpts`/`export_cc_excerpts` also ran their Python redaction/grouping loop inside
+`with_org`, same as the 2 originally-flagged `export_evidence`/`export_transcripts`.
+**Fix**: (1) `migrations/m010_idle_timeout.py` — `ALTER DATABASE ... SET
+idle_in_transaction_session_timeout='30s'` at the database level (applies uniformly to both
+`with_org`/`app_rls_user` and `with_admin`/postgres sessions); confirmed via 2 restarts that the
+app's own connection pool now enforces it. (2) All 4 export endpoints in `admin.py` now fetch
+rows inside `with_org`, then release the transaction BEFORE the Python-side
+redaction/CSV-row/PDF-context-building loop runs — mirrors the pattern those same functions
+already used correctly for PDF/CSV generation itself. Verified all 4 still produce correct
+output (2 populated PDFs, 1 correctly-empty CSV/PDF pair, 1 correct 404) against real seeded
+data — confirmed the empty/404 cases trace to each endpoint's pre-existing status-filter logic
+and this dataset, not the refactor (only fetch/process ordering changed, not what's queried).
+
 ## Supabase Auth Migration — Phases 1-4 COMPLETE (Sep 2026), fully tested
 Full replacement of bcrypt password storage/verification with Supabase Auth, per explicit user
 choice: (1) session/JWT layer stays 100% our own (deps.py, cookies, RLS untouched) — only
