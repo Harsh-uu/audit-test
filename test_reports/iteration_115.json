@@ -1,0 +1,53 @@
+{
+  "summary": "Regression pass for the least-privilege DB connection-role change (m011: main pool = app_default / admin_pool = postgres, plus meetings.py + portfolio.py moved from with_admin() to with_org()). Backend: re-ran the full iter114 suite (59 tests) — 100% pass — and added a new focused isolation suite (5 tests, 100% pass) that asserts exact row ownership on both /api/meetings/ and the combined /api/dashboard/ endpoint. Frontend: verified attendee (user@), same-org non-attendee (jane@) and admin flows end-to-end on the public preview URL — login, dashboard meeting list, opening a meeting (record + report screens), own portfolio, admin org-wide list (15), admin create-meeting → prepare → delete round trip, People/Organisation hub, Settings, Admin Library, Team Themes, Schedules, Supervision Matrix, and admin viewing a staff member's portfolio. No 500s and no InsufficientPrivilege/'role does not exist'/pool errors in backend logs after the current backend start (10:35). Cross-tenant and same-org isolation confirmed correct: jane sees exactly her 1 meeting (API + UI after a clean login), attendee sees exactly her 7, zero overlap, admin list is a superset.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StaffPortfolio", "issue": "Portfolio page calls GET /api/admin/standards?type=care_cert while logged in as an attendee → 403 'Admin/Manager only' + red console error on every visit to /portfolio. Care-Cert grouped view silently cannot render for attendees. Gate the call by role or move it to a non-admin endpoint.", "selector": "/portfolio (attendee)", "priority": "MEDIUM"},
+      {"component": "NewMeeting", "issue": "Date/time use native browser inputs (data-testid=meeting-date-input / meeting-time-input) rather than the shadcn calendar/time components used elsewhere — inconsistent look and locale-dependent format (04/09/2026).", "selector": "[data-testid=\"meeting-date-input\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "User switch without logout (login as B while A's session is still live in the same tab)", "issue": "apiCache (frontend/src/utils/apiCache.js) is only wiped in clearCache() on logout. In one reproduction run, logging in as jane@ while the attendee session's /api/dashboard/ entry was still warm (30s TTL) rendered the PREVIOUS user's 7 meetings and stat cards under jane's header (Total 7 / In Review 1). Backend was verified correct in that window (/api/meetings/ and /api/dashboard/ both returned jane's single meeting). After a clean logout→login, or a hard reload, jane correctly sees only her 1 meeting. Fix: call clearCache() on successful login (and on /auth/me identity change), not just on logout. Not caused by the pool change, but it is a cross-user data-display leak on shared devices.", "affected_selectors": ["[data-testid^=\"meeting-item-\"]", "/api/dashboard/"]}
+    ],
+    "design_issues": [
+      {"screen": "Attendee portfolio", "issues": ["'Export Portfolio PDF' button renders in a low-contrast muted/disabled-looking state even though it works (API returns a valid PDF) — reads as disabled to users"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter114_least_privilege_regression.py",
+    "/app/backend/tests/test_iter115_isolation_regression.py",
+    "/app/backend/tests/_iter115_isolation_probe.py",
+    "/app/backend/tests/_iter115_dashboard_probe.py",
+    "/app/backend/tests/_iter115_edge_probe.py",
+    "/app/test_reports/pytest/iter115_iter114rerun.xml",
+    "/app/test_reports/pytest/iter115_isolation.xml"
+  ],
+  "action_items": [
+    "Call clearCache() from AuthContext on successful login / identity change so a user switch in the same tab cannot render the previous user's cached /dashboard, /admin/* or /org/* data",
+    "Stop calling /api/admin/standards from StaffPortfolio for attendee/shared_reviewer roles (403 + console error on every portfolio visit)",
+    "Optional cleanup: leftover test fixtures still in Test Company org (users 'TEST pw' test_iter114_pw_48ea40d1@supervision.com, 'Sec Test' sectest-aug26@example.com) inflate People & Usage counts"
+  ],
+  "critical_code_review_comments": [
+    "database.py: with_org() acquires from `pool` (app_default) and then SET LOCAL ROLE app_rls_user with a hard-fail guard — correct, no silent RLS bypass. with_admin() is the only path on admin_pool. No remaining code path uses the raw pool without an org context.",
+    "create_pool() is documented to run only AFTER init_db.create_schema(); startup order in server.py matches (schema verified 10:35:58, pools created 10:36:02). Keep this ordering constraint in mind for any future startup refactor — reversing it would fail with 'role app_default does not exist'.",
+    "Pre-fix log noise (09:59) shows InsufficientPrivilegeError 'must be owner of table organisations' and 'query would be affected by RLS policy for standards_entries' from seed_all() while it ran on the limited role — confirm seeding/standards-cache warmup stays exclusively on with_admin(); it does today (no such errors after the 10:35 start).",
+    "iter114's test_jane_sees_fewer_or_different_meetings used a weak `not issubset` assertion that would pass even with a partial leak; iter115 replaces it with exact per-row ownership checks on both endpoints."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter115_isolation_regression.py",
+    "/app/backend/tests/_iter115_isolation_probe.py",
+    "/app/backend/tests/_iter115_dashboard_probe.py",
+    "/app/backend/tests/_iter115_edge_probe.py",
+    "/app/test_reports/iteration_115.json"
+  ],
+  "success_rate": {"backend": "100% (64/64: 59 iter114 + 5 iter115)", "frontend": "95% (all core flows pass; 1 cache-related cross-user display leak + 1 attendee 403 call)"},
+  "seed_data_creation": "No persistent seed data. Transient TEST_iter114_* users/orgs/meetings created and deleted by the suites; one UI-created meeting (833a3677…) created and deleted via the dashboard delete flow.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@supervision.com/Admin123! (no MFA prompt observed), user@supervision.com/AnotherNew789!, jane@supervision.com/JaneNew456! — all valid. manager@supervision.com and superadmin@1two.one require MFA and were exercised backend-only via the DB mfa_code override in the pytest suites.",
+  "context_for_next_testing_agent": "The m011 two-pool change is regression-clean: /app/backend/tests/test_iter114_least_privilege_regression.py (59 tests, ~2.5 min) is the broad suite and test_iter115_isolation_regression.py (5 tests, 40s) is the fast isolation gate — run both after any database.py/with_org/with_admin edit. Jane = 1 meeting, user@ = 7, admin = 15 in Test Company (counts as of this run). UI login is form-based with HttpOnly cookies; note that navigating to /login while already authenticated redirects to /dashboard, so log out via the user menu (header last button → 'Sign out') before switching accounts, otherwise you may hit the apiCache stale-data path described in integration_issues. Backend logs: privilege errors before 10:35 in backend.err.log are pre-fix, ignore them.",
+  "rca_of_the_issue": "No regression found from the connection-role change itself. The one UI anomaly (jane briefly showing another user's 7 meetings) roots in frontend/src/utils/apiCache.js: the in-memory Map is only cleared in clearCache() which is called on logout. Logging in as a second user in the same JS context within a cached entry's TTL (/dashboard = 30s) serves the first user's response. Verified backend-side that both /api/meetings/ and /api/dashboard/ return only jane's own row, and that a hard reload or a clean logout→login shows the correct single meeting."
+}

@@ -136,6 +136,10 @@ export function AuthProvider({ children }) {
     const { data } = await axios.post(`${API}/auth/login`, { email, password });
     if (data.requires_mfa) return data; // MFA pending — caller handles OTP flow
     // P3b: server sets HttpOnly cookies; no localStorage writes needed
+    // Wipe any cached /dashboard, /admin/*, /org/* responses from a previous
+    // user's session in this same tab BEFORE prewarming — otherwise a stale
+    // cache entry (e.g. /dashboard's 30s TTL) can render the wrong user's data.
+    clearCache();
     isLoggingIn.current = true;
     setUser(data);
     // Fetch full profile (includes org_branding, org_name) via cookie
@@ -156,6 +160,9 @@ export function AuthProvider({ children }) {
 
   const completeLogin = async (data) => {
     // P3b: server set cookies during verify-mfa; just update state
+    // Same cache-wipe rationale as login() above — MFA-gated logins go
+    // through this path instead.
+    clearCache();
     isLoggingIn.current = true;
     setUser(data);
     try {

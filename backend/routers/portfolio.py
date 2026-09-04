@@ -110,7 +110,10 @@ async def _build_portfolio_data(user_id: str, org_id: str):
 
     # Signed-off meetings where this user is an attendee (supervisee, not supervisor).
     # Filtered by effective_org_id (tenant-scoped) AND the attendee user_id match.
-    async with database.with_admin() as conn:
+    # with_org(): the explicit WHERE org_id=$1 filter already matches
+    # effective_org_id exactly, so RLS adds defence-in-depth without hiding
+    # any row this query would otherwise return.
+    async with database.with_org(effective_org_id) as conn:
         meetings_rows = await conn.fetch(
             """SELECT * FROM meetings
                WHERE org_id = $1
@@ -137,7 +140,10 @@ async def _build_portfolio_data(user_id: str, org_id: str):
     analysis_ids = [m["analysis_id"] for m in meetings_list if m.get("analysis_id")]
     analyses_map = {}
     if analysis_ids:
-        async with database.with_admin() as conn:
+        # analyses.org_id is always set to the parent meeting's org_id at
+        # creation (utils/transcription_pipeline.py), so these ids are
+        # already scoped to effective_org_id — with_org() enforces the same.
+        async with database.with_org(effective_org_id) as conn:
             analysis_rows = await conn.fetch(
                 "SELECT * FROM analyses WHERE id = ANY($1::uuid[])",
                 analysis_ids,

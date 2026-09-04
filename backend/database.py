@@ -12,6 +12,11 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 pool: asyncpg.Pool | None = None
+# Separate pool authenticated as the RLS-exempt admin role (see m011).
+# with_admin() acquires from here; every other code path (with_org(), and
+# there is nothing else — see database.py module docstring) uses `pool`,
+# which now authenticates as the least-privilege `app_default` role.
+admin_pool: asyncpg.Pool | None = None
 
 
 def _encode_timestamp(value):
@@ -81,10 +86,11 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
 
 
 async def create_pool() -> asyncpg.Pool:
-    global pool
-    dsn = os.environ["DATABASE_URL"]
+    """Create both pools. Must be called AFTER migrations (init_db.create_schema())
+    have run at least once, since app_default (m011) doesn't exist before that."""
+    global pool, admin_pool
     pool = await asyncpg.create_pool(
-        dsn,
+        os.environ["APP_DATABASE_URL"],
         ssl="require",
         min_size=2,
         max_size=15,
@@ -98,15 +104,27 @@ async def create_pool() -> asyncpg.Pool:
         # direct connection (port 5432).
         statement_cache_size=0,
     )
-    logger.info("PostgreSQL pool created")
+    logger.info("PostgreSQL pool created (app_default, RLS-enforced by default)")
+
+    admin_pool = await asyncpg.create_pool(
+        os.environ["DATABASE_URL"],
+        ssl="require",
+        min_size=1,
+        max_size=10,
+        init=_init_connection,
+        statement_cache_size=0,
+    )
+    logger.info("PostgreSQL admin pool created (postgres, RLS bypass — with_admin() only)")
     return pool
 
 
 async def close_pool() -> None:
-    global pool
+    global pool, admin_pool
     if pool:
         await pool.close()
-        logger.info("PostgreSQL pool closed")
+    if admin_pool:
+        await admin_pool.close()
+    logger.info("PostgreSQL pools closed")
 
 
 def get_pool() -> asyncpg.Pool:
@@ -162,14 +180,20 @@ async def with_org(org_id: str):
 @asynccontextmanager
 async def with_admin():
     """
-    Acquire a connection as postgres (superuser) with RLS explicitly off.
-    Use for: seeding, super-admin operations, auth, job worker.
+    Acquire a connection from the separate admin_pool, authenticated as
+    `postgres` (BYPASSRLS) with RLS explicitly off.
+    Use for: seeding, super-admin operations, auth, job worker — i.e. paths
+    that are genuinely cross-org or run before an org context exists.
+    This is a distinct pool/credential from `pool` (see m011): the main
+    pool authenticates as the least-privilege `app_default` role, so this
+    bypass is now an explicit, separately-provisioned escalation rather
+    than the default identity every connection starts with.
 
     Note: JSONB columns can still be returned as strings in some connection-
     pooler configurations. Apply the same _ensure_list/_jdict guards as
     with_org() when reading JSONB fields. See /app/CONTRIBUTING.md.
     """
-    async with pool.acquire() as conn:
+    async with admin_pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute("SET LOCAL row_security = off")
             yield conn

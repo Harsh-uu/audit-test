@@ -299,12 +299,16 @@ export default function StaffPortfolio() {
   }, [evidenceTab]);
 
   useEffect(() => {
+    // /admin/standards is admin/manager only (backend-gated) — the gap-analysis
+    // sub_outcomes lookup it provides is optional; attendees viewing their own
+    // portfolio simply render without gap counts (handled gracefully below).
+    if (me?.role !== "admin" && me?.role !== "manager") return;
     // Embed the param in the URL so the cache key is unique per request type
     cachedGet(`${API}/admin/standards?type=care_cert`, getAuthConfig())
       .then(r => setCcStandards(r.data))
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [me?.role]);
 
   useEffect(() => {
     if (!canViewUploads || !effectiveUserId) return;

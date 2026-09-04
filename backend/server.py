@@ -190,6 +190,12 @@ def _validate_startup_secrets():
 async def startup():
     _validate_startup_secrets()
 
+    # Run schema creation/migration BEFORE the pool is created — m011 creates
+    # the app_default role that the pool's DSN authenticates as, so on a
+    # fresh database that role doesn't exist yet until this runs.
+    await create_schema()
+    logger.info("Schema verified")
+
     pool = await database.create_pool()
     app.state.pool = pool
     logger.info("PostgreSQL pool ready")
@@ -199,10 +205,6 @@ async def startup():
     # Previously this ran before seed_all() which left the cache stale if
     # new system standards were inserted on first boot after a fix.
     from utils.standards_cache import warm as warm_standards
-
-    # Run schema creation/migration on every startup (all statements are idempotent)
-    await create_schema()
-    logger.info("Schema verified")
 
     try:
         await seed_all()

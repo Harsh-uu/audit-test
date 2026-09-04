@@ -11,6 +11,52 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Least-Privilege DB Connection Role — COMPLETE (Sep 2026), fully tested
+Security review flagged: the app's ONE connection pool authenticated as Supabase's `postgres`
+role, which has `rolbypassrls=true` — every `with_admin()` call (123 sites) and, by extension,
+the entire app's default connection identity, could silently bypass RLS with no DB-level
+defence-in-depth if a Python-level org_id filter were ever missing. Verified live via direct
+pg_roles queries before fixing (not just code-reading): `postgres` → `rolbypassrls: true`;
+proved the bypass empirically (`with_admin()` returned 16 rows across 2 orgs in one query;
+`with_org()` on a bogus org_id returned 0).
+- **Fix (`migrations/m011_least_privilege_role.py`)**: new Postgres role `app_default`
+  (LOGIN, `NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`), granted membership in
+  `app_rls_user` ONLY. Password generated via `secrets.token_urlsafe`, stored in
+  `backend/.env` as `APP_DB_PASSWORD`/`APP_DATABASE_URL` (never hardcoded in the migration).
+- **`database.py`**: now creates TWO pools — `pool` (main, authenticates as `app_default`,
+  used exclusively by `with_org()`) and `admin_pool` (authenticates as `postgres`/BYPASSRLS,
+  used exclusively by `with_admin()`). The RLS bypass is now a separately-provisioned
+  escalation, not the app's default identity.
+- **`server.py`**: startup order changed — `create_schema()` (migrations, incl. m011 creating
+  `app_default`) now runs BEFORE `database.create_pool()`, since the pool's DSN depends on
+  that role already existing. Reversing this order breaks boot with "role app_default does
+  not exist".
+- **Narrowed 2 of the 15 files that called `with_admin()`**: `routers/meetings.py`
+  (`_list_meetings_data`'s non-admin/manager branch WITH a valid org_id) and
+  `routers/portfolio.py` (`_build_portfolio_data`'s 2 org-scoped meetings/analyses lookups)
+  moved to `with_org()`. Left the null-org_id edge-case branches in both files on
+  `with_admin()` — genuinely needs the bypass (legacy/invited accounts with missing org_id;
+  RLS would silently hide their own data). No RLS *policy* changes were needed — the
+  existing `org_id = current_org_id` policy already matches what Python's explicit WHERE
+  clauses were already filtering by.
+- **Testing**: `testing_agent` iteration_115 — 64/64 backend tests pass (iter114 broad
+  regression suite + iter115 exact-ownership isolation suite), all core frontend flows pass
+  (login/dashboard/meeting-CRUD/portfolio/admin/super-admin across admin/attendee/manager
+  roles). Cross-tenant and same-org isolation confirmed correct (no regression).
+- **2 pre-existing bugs found & fixed during this pass (unrelated to the RLS change itself)**:
+  (1) `frontend/src/utils/apiCache.js`'s cache was only cleared on logout, not on login — a
+  user switch in the same tab within a cached endpoint's TTL could render the previous user's
+  data. Fixed: `AuthContext.js`'s `login()`/`completeLogin()` now call `clearCache()` before
+  prewarming. (2) `StaffPortfolio.js` called the admin/manager-only `/admin/standards`
+  endpoint unconditionally, causing a 403 + console error for attendees viewing their own
+  portfolio (gap-analysis sub_outcomes just don't render for them, harmless). Fixed: gated
+  the fetch by `role === admin/manager`.
+- **Remaining, NOT fixed (low priority, logged for later)**: `admin.py` (19 `with_admin()`
+  calls) and `review.py` (11 calls) were classified as "needs review" during RCA but not
+  audited line-by-line or migrated — most are likely legitimately org-scoped and could also
+  move to `with_org()` in a future pass, same pattern as this session's fix.
+
+
 ## Transaction-duration fix (Sep 2026)
 Verified report: `idle_in_transaction_session_timeout`/`idle_session_timeout`/`lock_timeout` were
 all `0` (disabled) on the live DB, and `with_org()`/`with_admin()` (306 usages) wrap their whole

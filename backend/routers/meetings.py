@@ -237,14 +237,16 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
     if not org_id:
         return []
 
-    # ── Attendees / shared-reviewers — bypass RLS, explicit ownership check ──
+    # ── Attendees / shared-reviewers — RLS-enforced, explicit ownership check ──
     # Security: user can only see meetings where their user_id appears in the
     # attendees or shared_with array OR they created the meeting.
-    # org_id is added as an explicit SQL filter for defence-in-depth.
-    # We intentionally avoid with_org() / RLS here because any org_id mismatch
-    # (invited user, null race, legacy account) silently hides valid meetings.
+    # org_id is guaranteed non-empty here (the null-org_id case is handled by
+    # the with_admin() branch above), so with_org(org_id) enforces the exact
+    # same org scope as the WHERE org_id=$2 filter below — RLS just adds
+    # defence-in-depth on top of the explicit ownership check, it can't hide
+    # any row this query would otherwise return.
     if role not in ("admin", "manager"):
-        async with database.with_admin() as conn:
+        async with database.with_org(org_id) as conn:
             rows = await conn.fetch(
                 f"""SELECT {_LIST_COLS} FROM meetings
                    WHERE org_id = $2
