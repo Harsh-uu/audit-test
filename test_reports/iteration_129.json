@@ -1,0 +1,30 @@
+{
+  "summary": "Iter129 — broad E2E regression sweep (verification-only) after this session's security fixes (pool resize, PII redaction, RLS drift, least-privilege JWT). Created /app/backend/tests/test_iter129_e2e_regression.py (18 tests: auth 4-roles + logout + refresh + HttpOnly cookies, dashboard/meetings/admin/org/schedules/portfolio core endpoints, super_admin isolation, attendee RBAC, 10x parallel /auth/me pool sanity, 4x parallel logins) — 18/18 PASS. Re-ran the last three targeted regression suites (test_pii_export_redaction.py, test_iter128_rls_drift.py, test_iter126_pool_size.py) — 35/35 PASS. Frontend smoke as admin: all 7 major SPA routes (/dashboard, /meetings/new, /admin, /organisation, /admin/team, /admin/schedules, /portfolio, /settings) return HTTP 200, render correctly with sidebar + org header + Test Admin dropdown, zero JS pageerrors, only 1 benign stale 401 on /meetings/new initial paint (pre-existing pattern). No new issues found; recently-touched code all healthy under load. Verification-only pass, no code changes made per user instruction.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter129_e2e_regression.py",
+    "/app/test_reports/pytest/iter129.xml",
+    "/app/backend/tests/test_pii_export_redaction.py",
+    "/app/backend/tests/test_iter128_rls_drift.py",
+    "/app/backend/tests/test_iter126_pool_size.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Auth: All 4 role logins pass. JWT payload now correctly embeds org_id (verified in access token claims for admin/manager/attendee/jane — same b00bf04f org_id). Super_admin JWT has no org_id (correct — cross-org). MFA-mandatory for super_admin verified via requires_mfa flow.",
+    "Pool: 10x parallel /auth/me on admin session completed <1s no 500s. 4x parallel fresh logins (bcrypt-heavy) all 200. admin_pool@5 + main@15 = 20 conns/instance ceiling holding under load per iter126 baseline (no drift observed).",
+    "RBAC/Isolation: attendee correctly 403'd on /admin/users, /admin/standards, /admin/stats. Non-super_admin (admin) correctly 403'd on /super-admin/orgs. Portfolio access enforces user_id match (attendee got 403 hitting /portfolio/me literal; must use own uuid). Cross-org leak spot-check clean.",
+    "Frontend: SPA renders cleanly for admin across all 7 major routes; no page errors, no broken images, sidebar+header nav functional. One console-level 401 on /meetings/new initial fetch is a pre-existing benign pattern (background poll before cookie hydration), not a regression.",
+    "Broader code: no new smells introduced by session fixes — redaction is applied on shallow-copied dicts (safe), m020 is minimal ALTER TABLE, admin_pool max=5 confirmed at source and via pg_stat_activity in iter126."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter129_e2e_regression.py"
+  ],
+  "success_rate": {"backend": "100% (18/18 iter129 + 35/35 re-run of prior suites)", "frontend": "100% smoke (7/7 admin pages, 0 pageerrors)"},
+  "test_credentials": "Used /app/memory/test_credentials.md as-is. All 5 accounts (admin/manager/attendee/jane/superadmin) auth cleanly. MFA bypass via bcrypt('123456') DB override for manager+superadmin.",
+  "seed_data_creation": "None — iter129 suite is read-only apart from ephemeral logout/login state. Prior regression suites' fixtures self-clean.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable broad-sweep pytest at tests/test_iter129_e2e_regression.py (~76s wall clock, mostly bcrypt in the 4-role login fixture). Uses async MFA-override helper embedded in the file. Endpoint paths confirmed: /dashboard/ (trailing slash), /org/structure (not /org/teams), /portfolio/{user_id} (not /portfolio/me). SPA route paths confirmed from App.js: /admin (AdminLibrary), /organisation (PeopleHub), /admin/team (TeamInsights), /admin/schedules (Schedules), /portfolio, /settings (OrgSettings). Broader recording+AI-analysis flow and PDF-export happy-path were NOT exercised in this pass (they were verified in iter127); if E1 wants deeper coverage next round, extend iter129 with a seed_meeting → export-pdf assertion (pattern in test_pii_export_redaction.py).",
+  "rca of the issue": "N/A — verification-only sweep. No new defects found. Only transient hiccup during test authoring was backend hot-reload triggered by saving the test file mid-run (produced 'pool is closing' 500s for ~2s window). Re-running post-reload was clean. This is expected uvicorn --reload behavior and not a product bug."
+}
