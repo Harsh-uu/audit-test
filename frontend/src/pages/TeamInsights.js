@@ -9,7 +9,7 @@ import { UkDatePicker } from "@/components/ui/uk-date-picker";
 import {
   Grid3x3, TrendingUp, AlertTriangle, ClipboardList, Shield, Award,
   FileText, Users, RefreshCw, ChevronRight, Building2, Check, X, Download,
-  BookOpen, Search, ExternalLink,
+  BookOpen, Search, ExternalLink, Sparkles, ThumbsDown,
 } from "lucide-react";
 
 // ── Cell rendering ──────────────────────────────────────────────────────────
@@ -1017,6 +1017,165 @@ function RegisterView({ type, items = [], loading, onToggle }) {
 }
 
 
+// ── AI Accuracy (Evidence Feedback) ─────────────────────────────────────────
+// Read-only report over evidence_feedback — every accept/reject/edit a
+// manager makes on an AI-suggested mapping is captured there but had no
+// screen anywhere. Self-contained: fetches its own data, doesn't touch the
+// page's shared `data`/`registers` state or their load functions.
+const EVIDENCE_TYPE_LABEL = { cqc: "CQC", care_cert: "Induction", custom: "Organisational" };
+const CONFIDENCE_LABEL = { likely_evidence: "Likely evidence", possible_evidence: "Possible evidence" };
+const ACTION_LABEL = { accepted: "Accepted", rejected: "Rejected", needs_followup: "Needs follow-up", edited_summary: "Edited", viewed: "Viewed", pending: "Pending" };
+
+function AiAccuracyView({ API, getAuthConfig }) {
+  const [stats, setStats] = useState(null);
+  const [feedback, setFeedback] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      cachedGet(`${API}/admin/evidence-feedback/stats`, getAuthConfig()),
+      cachedGet(`${API}/admin/evidence-feedback`, { ...getAuthConfig(), params: { limit: 200 } }),
+    ])
+      .then(([s, f]) => {
+        if (cancelled) return;
+        setStats(s.data);
+        setFeedback(f.data || []);
+      })
+      .catch(err => console.error("AI accuracy load error", err.message))
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API]);
+
+  const exportCSV = () => {
+    const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const headers = ["Date", "Meeting", "Reviewer", "Type", "Standard Ref", "Standard Name", "AI Confidence", "Manager Action"];
+    const rows = feedback.map(f => [
+      (f.timestamp || "").slice(0, 10), f.meeting_title || "", f.user_name || "",
+      EVIDENCE_TYPE_LABEL[f.evidence_type] || f.evidence_type, f.standard_ref, f.standard_name,
+      CONFIDENCE_LABEL[f.ai_confidence] || f.ai_confidence, ACTION_LABEL[f.manager_action] || f.manager_action,
+    ]);
+    const csv = [headers.map(esc).join(","), ...rows.map(r => r.map(esc).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "ai-accuracy-feedback.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48" data-testid="ai-accuracy-loading">
+        <div className="flex items-center gap-3 text-gray-400">
+          <div className="w-5 h-5 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm">Loading AI accuracy report…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!stats || stats.total === 0) {
+    return (
+      <div className="text-center py-16 text-gray-400" data-testid="ai-accuracy-empty">
+        <Sparkles className="w-10 h-10 mx-auto mb-2 opacity-30" />
+        <p className="text-sm">No evidence feedback recorded yet</p>
+        <p className="text-xs mt-1">Accept or reject a suggested evidence mapping in a meeting report to start building this report</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="ai-accuracy-view">
+      {/* Stat strip */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-white border border-gray-200 rounded-lg p-4" style={{ borderLeft: "3px solid #7C3AED" }} data-testid="ai-accuracy-stat-total">
+          <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+          <div className="text-xs text-gray-500 mt-0.5">Total reviewed</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4" data-testid="ai-accuracy-stat-rate">
+          <div className="text-2xl font-bold" style={{ color: stats.acceptance_rate == null ? "#111827" : stats.acceptance_rate >= 70 ? "#059669" : "#D97706" }}>
+            {stats.acceptance_rate == null ? "—" : `${stats.acceptance_rate}%`}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">Acceptance rate</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4" data-testid="ai-accuracy-stat-rejected">
+          <div className="text-2xl font-bold text-red-500">{stats.by_action?.rejected || 0}</div>
+          <div className="text-xs text-gray-500 mt-0.5">Rejected</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4" data-testid="ai-accuracy-stat-followup">
+          <div className="text-2xl font-bold text-amber-500">{stats.by_action?.needs_followup || 0}</div>
+          <div className="text-xs text-gray-500 mt-0.5">Needs follow-up</div>
+        </div>
+      </div>
+
+      {/* Top rejected standards */}
+      {stats.top_rejected_standards?.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4" data-testid="ai-accuracy-top-rejected">
+          <div className="flex items-center gap-2 mb-3">
+            <ThumbsDown className="w-3.5 h-3.5 text-red-500" />
+            <h3 className="text-sm font-semibold text-gray-900">Standards the AI misses on most</h3>
+          </div>
+          <div className="space-y-2">
+            {stats.top_rejected_standards.map(s => (
+              <div key={`${s.standard_ref}-${s.standard_name}`} className="flex items-center justify-between text-sm">
+                <span className="text-gray-700 truncate">
+                  <span className="font-medium text-gray-900 mr-1.5">{s.standard_ref}</span>
+                  {s.standard_name}
+                </span>
+                <span className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full flex-shrink-0 ml-2">
+                  {s.count} rejected
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent feedback list */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden" data-testid="ai-accuracy-feedback-list">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-900">Recent evidence decisions</h3>
+          <button
+            onClick={exportCSV}
+            disabled={feedback.length === 0}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
+            data-testid="ai-accuracy-export-btn"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+        </div>
+        <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-100">
+          {feedback.map((f, i) => (
+            <div key={f.id} className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`} data-testid={`ai-accuracy-row-${f.id}`}>
+              <div className="min-w-0 flex-1">
+                <p className="text-gray-900 truncate">
+                  <span className="font-medium">{f.standard_ref}</span> — {f.standard_name}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5 truncate">
+                  {f.meeting_title || "Meeting deleted"} · {f.user_name} · {(f.timestamp || "").slice(0, 10)}
+                </p>
+              </div>
+              <span className="text-xs text-gray-400 flex-shrink-0">{CONFIDENCE_LABEL[f.ai_confidence] || f.ai_confidence}</span>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                f.manager_action === "accepted" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : f.manager_action === "rejected" ? "bg-red-50 text-red-700 border border-red-200"
+                : f.manager_action === "needs_followup" ? "bg-amber-50 text-amber-700 border border-amber-200"
+                : "bg-gray-100 text-gray-500 border border-gray-200"
+              }`}>
+                {ACTION_LABEL[f.manager_action] || f.manager_action}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function TeamInsights() {
   const { getAuthConfig, API, user } = useAuth();
@@ -1026,7 +1185,7 @@ export default function TeamInsights() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(() => {
     const t = searchParams.get("tab");
-    const valid = ["matrix","themes","achievements","learning_needs","risks","actions"];
+    const valid = ["matrix","themes","achievements","learning_needs","risks","actions","ai_accuracy"];
     return valid.includes(t) ? t : "matrix";
   });
   const [orgStructure, setOrgStructure] = useState({ settings: [] });
@@ -1223,6 +1382,7 @@ export default function TeamInsights() {
     { key: "learning_needs", label: "Learning Needs",     icon: BookOpen,      accent: "#0D9488" },
     { key: "risks",          label: "Attention",          icon: AlertTriangle, accent: "#DC2626" },
     { key: "actions",        label: "Actions",            icon: ClipboardList, accent: "#D97706" },
+    { key: "ai_accuracy",    label: "AI Accuracy",        icon: Sparkles,      accent: "#7C3AED" },
   ];
 
   return (
@@ -1461,6 +1621,9 @@ export default function TeamInsights() {
               onToggle={handleRegisterToggle}
             />
           )}
+
+          {/* AI Accuracy tab — independent data source, own loading state */}
+          {tab === "ai_accuracy" && <AiAccuracyView API={API} getAuthConfig={getAuthConfig} />}
         </div>
       </div>
       {drillDown && (

@@ -90,6 +90,33 @@ retry/reconciliation mechanism if Supabase provisioning fails after the local ro
 add a retry cron later.
 
 
+## Evidence Feedback — "write-only" table given a read path (Aug 2026), fully tested
+Audit finding: `evidence_feedback` (written by `review.py`'s `update_evidence`/`bulk_update_evidence`
+on every AI-evidence accept/reject/edit, comment says "Training data") had 194 rows and genuinely
+zero read path anywhere — not in any router, not in the frontend. User chose Option C: keep the
+writes untouched, add a minimal read-only admin report instead of deleting the data or building a
+full ML pipeline.
+- **Backend** (`admin.py`, 2 new endpoints, admin/manager only, `with_org()` + explicit `WHERE
+  org_id=$1` + explicit column lists, no `SELECT *`): `GET /admin/evidence-feedback/stats`
+  (total, breakdown by manager_action/evidence_type/ai_confidence, acceptance_rate =
+  accepted/(accepted+rejected)*100 rounded 1dp or null if nothing decided yet, top 10 most-rejected
+  standards) and `GET /admin/evidence-feedback` (raw list, LEFT JOIN meetings for title, optional
+  `limit`/`date_from`/`date_to`, capped at 1000 rows).
+- **Frontend**: new 7th "AI Accuracy" tab on Team Themes (`TeamInsights.js`) — self-contained
+  `AiAccuracyView` component with its own fetch/loading state (does not touch the page's shared
+  `data`/`registers` state or `load()`/`loadRegisters()`). Stat strip (total/acceptance
+  rate/rejected/needs-follow-up), "standards the AI misses on most" list, scrollable recent-decisions
+  list with client-side CSV export. Added as pure appends: one lucide-react import addition, one
+  `MAIN_TABS` array entry, one `valid` tabs array entry, one new conditional render block — zero
+  lines changed in the other 6 tabs.
+- `review.py`'s write side was deliberately NOT touched.
+- **Tested via `testing_agent`** iteration_120: 10/10 backend tests (stats math, list schema, limit
+  cap, 403 for attendee, 401 unauth, date filters, org isolation) + frontend verified end-to-end
+  (cookie-injection login, tab renders real data: 194 total/99.3% acceptance/1 rejected/1
+  needs-follow-up/top-rejected standard shown, CSV export works) — all 6 pre-existing Team Themes
+  tabs confirmed unaffected, zero regressions.
+
+
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
 Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
 (stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully

@@ -1059,6 +1059,102 @@ async def get_action_stats(current_user=Depends(get_current_user)):
     return {"outstanding": outstanding, "overdue": overdue}
 
 
+# ── Evidence Feedback (AI Accuracy) ───────────────────────────────────────────
+# Read-only view over evidence_feedback — written by review.py's evidence
+# accept/reject/bulk-action handlers on every manager decision, but had no
+# consumer anywhere in the app. Surfaces it as an AI-accuracy report without
+# changing what/when review.py writes.
+
+@router.get("/evidence-feedback/stats")
+async def get_evidence_feedback_stats(current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+
+    async with database.with_org(org_id) as conn:
+        rows = await conn.fetch(
+            "SELECT evidence_type, ai_confidence, manager_action, standard_ref, standard_name "
+            "FROM evidence_feedback WHERE org_id=$1",
+            org_id,
+        )
+
+    by_action: dict = {}
+    by_type: dict = {}
+    by_confidence: dict = {}
+    rejected_by_standard: dict = {}
+
+    for r in rows:
+        action = r["manager_action"] or "pending"
+        confidence = r["ai_confidence"] or "unknown"
+        etype = r["evidence_type"] or "unknown"
+
+        by_action[action] = by_action.get(action, 0) + 1
+        by_type[etype] = by_type.get(etype, 0) + 1
+        conf_bucket = by_confidence.setdefault(confidence, {})
+        conf_bucket[action] = conf_bucket.get(action, 0) + 1
+
+        if action == "rejected":
+            key = (r["standard_ref"] or "", r["standard_name"] or "")
+            rejected_by_standard[key] = rejected_by_standard.get(key, 0) + 1
+
+    accepted = by_action.get("accepted", 0)
+    rejected = by_action.get("rejected", 0)
+    decided = accepted + rejected
+    acceptance_rate = round((accepted / decided) * 100, 1) if decided else None
+
+    top_rejected = sorted(
+        [{"standard_ref": k[0], "standard_name": k[1], "count": v} for k, v in rejected_by_standard.items()],
+        key=lambda x: x["count"], reverse=True,
+    )[:10]
+
+    return {
+        "total": len(rows),
+        "by_action": by_action,
+        "by_type": by_type,
+        "by_confidence": by_confidence,
+        "acceptance_rate": acceptance_rate,
+        "top_rejected_standards": top_rejected,
+    }
+
+
+@router.get("/evidence-feedback")
+async def list_evidence_feedback(
+    limit: int = 200,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user=Depends(get_current_user),
+):
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    org_id = current_user.get("org_id", "")
+    limit = max(1, min(limit, 1000))
+
+    conds = ["ef.org_id=$1"]
+    params: list = [org_id]
+    if date_from:
+        params.append(date_from)
+        conds.append(f"ef.timestamp >= ${len(params)}")
+    if date_to:
+        params.append(date_to + "T23:59:59")
+        conds.append(f"ef.timestamp <= ${len(params)}")
+    params.append(limit)
+
+    async with database.with_org(org_id) as conn:
+        rows = await conn.fetch(
+            f"""SELECT ef.id, ef.meeting_id, m.title AS meeting_title, ef.user_name,
+                       ef.evidence_type, ef.standard_ref, ef.standard_name,
+                       ef.ai_confidence, ef.manager_action, ef.timestamp
+                FROM evidence_feedback ef
+                LEFT JOIN meetings m ON m.id = ef.meeting_id
+                WHERE {' AND '.join(conds)}
+                ORDER BY ef.timestamp DESC
+                LIMIT ${len(params)}""",
+            *params,
+        )
+
+    return [dict(r) for r in rows]
+
+
 async def _reg_resolve_staff(conn, org_id: str, current_user: dict, team_id: Optional[str], setting_id: Optional[str]) -> list:
     """Resolve the staff list in scope for this Registers request (mirrors Team Insights scoping)."""
     if team_id:
