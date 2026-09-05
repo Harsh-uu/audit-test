@@ -486,6 +486,10 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
             ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
             name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
             try:
+                # evidence_item_id stays TEXT (never UUID): it's the AI's own prompt-generated
+                # id like "cqc_69"/"cc_26"/"custom_3" (see utils/ai.py's mapping prompts),
+                # matched against the mapping JSON's own "id" field — not a foreign key to
+                # any UUID-keyed table.
                 async with database.with_admin() as fb_conn:
                     await fb_conn.execute(
                         """INSERT INTO evidence_feedback

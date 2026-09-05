@@ -24,6 +24,10 @@ from . import (
     m013_not_null_constraints,
     m014_jobs_fk_cascade,
     m015_supervision_uploads_storage_path,
+    m016_focus_topics_created_at,
+    m017_meeting_type_id_uuid,
+    m018_date_columns_phase2,
+    m019_meetings_date_timestamp,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,6 +49,10 @@ MIGRATIONS = [
     m013_not_null_constraints,
     m014_jobs_fk_cascade,
     m015_supervision_uploads_storage_path,
+    m016_focus_topics_created_at,
+    m017_meeting_type_id_uuid,
+    m018_date_columns_phase2,
+    m019_meetings_date_timestamp,
 ]
 
 

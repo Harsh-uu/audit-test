@@ -54,6 +54,23 @@ def _decode_uuid(value):
     return value
 
 
+def _encode_date(value):
+    """Accept either a date object or a plain 'YYYY-MM-DD' string as a query
+    param for DATE columns — Postgres's own input parser accepts ISO-8601 date
+    text natively, so a plain string passes through unchanged."""
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
+def _decode_date(value):
+    """Postgres's text output for date is already plain 'YYYY-MM-DD', identical
+    to what every existing call site (date.fromisoformat(...), string slicing,
+    JSON payloads) already expects — return as-is so nothing downstream needs
+    to change after the TEXT -> DATE migration (Phase 2)."""
+    return value
+
+
 async def _init_connection(conn: asyncpg.Connection) -> None:
     """Register JSONB/JSON codecs so asyncpg returns Python objects, not strings.
     Also register TIMESTAMPTZ/TIMESTAMP and UUID codecs in text format: this lets
@@ -80,6 +97,13 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
         "uuid",
         encoder=_encode_uuid,
         decoder=_decode_uuid,
+        schema="pg_catalog",
+        format="text",
+    )
+    await conn.set_type_codec(
+        "date",
+        encoder=_encode_date,
+        decoder=_decode_date,
         schema="pg_catalog",
         format="text",
     )

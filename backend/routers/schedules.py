@@ -254,6 +254,10 @@ async def list_schedules(current_user=Depends(get_current_user)):
 async def bulk_create_schedules(data: ScheduleBulkCreate, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
+    try:
+        date.fromisoformat(data.start_date)
+    except ValueError:
+        raise HTTPException(422, f"Invalid start_date format: {data.start_date!r}")
     org_id = current_user["org_id"]
 
     # Rate limit: 5 bulk schedule operations per org / 60 min
@@ -303,6 +307,10 @@ async def bulk_create_schedules(data: ScheduleBulkCreate, current_user=Depends(g
 async def create_schedule(data: ScheduleCreate, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403)
+    try:
+        date.fromisoformat(data.start_date)
+    except ValueError:
+        raise HTTPException(422, f"Invalid start_date format: {data.start_date!r}")
     org_id = current_user["org_id"]
     scope = get_manager_scope(current_user)
     now = datetime.now(timezone.utc).isoformat()

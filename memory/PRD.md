@@ -207,6 +207,38 @@ AI-extracted text, never the original bytes.
   `tests/test_supervision_upload_storage.py`.
 
 
+## Date/UUID Column Type Fixes — FIXED (Aug 2026), fully tested
+Audit found 6 columns still stored as plain TEXT. Investigation found the blanket "convert all 6"
+suggestion was only safe for 5 — `evidence_feedback.evidence_item_id` is proven (live values like
+`'cqc_69'`/`'cc_26'`, traced to `utils/ai.py`'s prompt templates) to be an AI-generated
+type-prefixed string, not a UUID; converting it would break every future insert. Correctly left as
+TEXT with a documented code comment in `review.py` explaining why.
+- **4 new migrations** (`m016`-`m019`, registered in `migrations/__init__.py`, applied via
+  `init_db.py`): `focus_topics.created_at` → `TIMESTAMPTZ` (plain oversight, same pattern as
+  `m005`'s other 40+ columns); `meetings.meeting_type_id` → `UUID` + FK to `meeting_types.id`
+  `ON DELETE SET NULL` (verified 100% NULL, zero writers anywhere in the codebase — passive,
+  zero-risk); `schedules.start_date` + `supervision_uploads.meeting_date` → `DATE`;
+  `meetings.date` → `TIMESTAMP` (deliberately **not** `TIMESTAMPTZ` — the column holds a naive
+  local wall-clock value from `NewMeeting.js`'s combined date+time picker with no timezone
+  attached, so `TIMESTAMPTZ` would silently misinterpret it as UTC).
+- New `_encode_date`/`_decode_date` codec pair added to `database.py` (mirrors the existing
+  timestamp codec exactly) so `DATE` columns keep returning plain `'YYYY-MM-DD'` strings —
+  required for `schedules.py::next_due_date()`'s `date.fromisoformat()` call to keep working
+  unchanged.
+- Verified zero data loss: all 18 pre-existing `meetings.date` values (including messy mixed
+  formats — some full timestamps with microseconds, some `HH:MM`-without-seconds, some pure
+  dates) cast cleanly with a bespoke lenient regex, confirmed via direct DB query before/after.
+- Tested via `testing_agent` iteration_124: 12/12 backend tests (schema types, zero data loss,
+  meetings TIMESTAMP round-trip across 3 input formats, schedules/doc-uploads DATE codec
+  read+write paths, date-filtered endpoints) + frontend E2E (NewMeeting.js date+time picker →
+  API round-trip → Dashboard display), 100%/100%. New regression suite:
+  `tests/test_iter124_date_uuid_migration.py`.
+- Applied 1 non-blocking code-review fix: added the same `date.fromisoformat()` 422 validation
+  already present on `PUT /schedules/{id}` to the two schedule-creation endpoints
+  (`POST /schedules/` and `POST /schedules/bulk`), which previously would have 500'd on a
+  malformed `start_date` instead of returning a clean validation error.
+
+
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
 Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
 (stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully
