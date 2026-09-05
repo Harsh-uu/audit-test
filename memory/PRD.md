@@ -649,6 +649,34 @@ the metadata even though their name was redacted from the body text right below 
   endpoints, control meeting's exports are byte-for-byte unaffected (no regression). New
   regression suite: `tests/test_pii_export_redaction.py`.
 
+## Manual RLS Drift on 4 System Tables — FIXED (Sep 2026), fully tested
+Audit item 3.3: `jobs`, `login_attempts`, `password_reset_tokens`, `schema_migrations` had RLS
+enabled live (`relrowsecurity=true`) with `relforcerowsecurity=false` and zero policies — the
+exact signature of someone toggling Supabase Dashboard's "Enable RLS" switch by hand (never sets
+FORCE), not this codebase's own migration pattern (every table the code *does* manage always
+pairs `ENABLE`+`FORCE` in one statement). None of these 4 are legitimate RLS candidates: the first
+two are looked up by raw email/token pre-auth (no org context exists yet), `jobs` is a
+background-worker/system table, `schema_migrations` is an internal ledger touched only by the
+bootstrap connection.
+- **Found a live (not just theoretical) consequence while investigating**: `app_rls_user` (used
+  by `with_org()`) already has full table grants on all 4 tables via `m003`, so RLS-with-no-policy
+  was the only thing blocking it — and it WAS actively blocking a real code path.
+  `meetings.py::delete_meeting()`'s defense-in-depth `DELETE FROM jobs WHERE meeting_id=...`
+  (runs inside `with_org()`) was silently a no-op: reproduced directly (seeded a job row, ran the
+  exact delete, got `DELETE 0` despite the row existing). Not a data-loss bug — `m014`'s
+  `ON DELETE CASCADE` FK (which bypasses RLS by design) was doing the real cleanup — but it proved
+  the gap was already live, not just a future risk.
+- **Fix**: new migration `m020_disable_rls_drift.py` — `ALTER TABLE ... DISABLE ROW LEVEL
+  SECURITY` on all 4, with an in-file comment explaining why so it can't silently drift back.
+  Zero new access granted (grants already existed); this only removes a row filter.
+- **Verified via `testing_agent`** (iteration_128): 13/13 tests — live schema state (`relrowsecurity=
+  false` confirmed on all 4, `auth.schema_migrations` correctly untouched as it's a different
+  Supabase-managed table), migration ledger idempotent (re-run applies 0 new rows), full 4-role
+  auth regression, `login_attempts` writes + lockout still correct, forgot-password still writes
+  `password_reset_tokens` correctly, meeting-delete's `jobs` cleanup now genuinely deletes the row
+  (previously silent no-op), `super_admin::delete_org`'s totals now correctly counts it. Zero
+  regressions. New regression suite: `tests/test_iter128_rls_drift.py`.
+
 ## Session note (Aug 2026): Supabase DB audit mode
 User is running a deliberate, field-by-field Supabase/Postgres audit — reports one issue at a time,
 requires confirmation + RCA + recommended fix BEFORE any change, then explicit "go ahead" before

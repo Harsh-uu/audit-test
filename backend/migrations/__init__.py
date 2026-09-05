@@ -28,6 +28,7 @@ from . import (
     m017_meeting_type_id_uuid,
     m018_date_columns_phase2,
     m019_meetings_date_timestamp,
+    m020_disable_rls_drift,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ MIGRATIONS = [
     m017_meeting_type_id_uuid,
     m018_date_columns_phase2,
     m019_meetings_date_timestamp,
+    m020_disable_rls_drift,
 ]
 
 

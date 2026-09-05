@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 128 — regression testing for Issue 3.3 (RLS drift fix via m020_disable_rls_drift). All 13 pytest cases pass, covering the DB state, migration ledger/idempotency, auth regression (4 roles), login_attempts writes + lockout, forgot-password writing to password_reset_tokens, meeting-delete cascading to jobs (the previously-silent-no-op), and super_admin org-delete jobs totals. Zero backend errors observed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter128_rls_drift.py",
+    "/app/test_reports/pytest/iter128_rls_drift.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "m020_disable_rls_drift.py is minimal and correct — plain ALTER TABLE ... DISABLE ROW LEVEL SECURITY x4, no policies to drop (there were none). Registered in migrations/__init__.py MIGRATIONS list in correct final position (20).",
+    "Confirmed via pg_class query: public.jobs / public.login_attempts / public.password_reset_tokens / public.schema_migrations all now have relrowsecurity=false, relforcerowsecurity=false. auth.schema_migrations (Supabase-managed) is a separate table in a different schema and correctly out of scope for m020.",
+    "Verified the previously-silent-no-op path (meetings.delete_meeting's `DELETE FROM jobs ...` under with_org()) now actually removes the row — seeded meeting+job, called DELETE /api/meetings/{id} as admin, jobs row confirmed gone. FK ON DELETE CASCADE from m014 would also have removed it, so this is defence-in-depth working as intended.",
+    "super_admin.delete_org's totals dict now includes jobs>=1 when a matching row exists (previously would have reported 0 because the delete was silent). Confirmed via throwaway-org test.",
+    "Migration ledger idempotent: rerunning run_migrations() on an already-migrated DB inserted zero new rows (count remained 20)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter128_rls_drift.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "skipped"},
+  "test_credentials": "Used /app/memory/test_credentials.md — all 4 role logins passing (admin, manager, attendee, super_admin). MFA bypass via DB code override for super_admin.",
+  "seed_data_creation": "Tests create their own throwaway meetings/jobs/orgs (all prefixed TEST_ and cleaned up by the delete endpoints under test). No residual seed data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter128 fix (m020_disable_rls_drift) is fully verified. Regression suite at tests/test_iter128_rls_drift.py covers the 4 affected tables end-to-end. Run with `python3 -m pytest tests/test_iter128_rls_drift.py -n 0` (needs -n 0 because of shared login_attempts state; xdist would race on the lockout-clear step).",
+  "rca of the issue": "N/A — no bugs found in the fix. The fix itself was the RCA and mitigation of the pre-existing latent bug in meetings.delete_meeting's cascade-delete loop (RLS-enabled-with-no-policy silently returned 0 rows for app_rls_user even with grants). Verification confirms behavior is now correct."
+}
