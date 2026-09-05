@@ -71,12 +71,18 @@ def _to_pwd_ts(user: dict) -> float:
     return 0.0
 
 
-def create_access_token(user_id: str, email: str, pwd_ts: float = 0.0) -> str:
+def create_access_token(user_id: str, email: str, org_id, pwd_ts: float = 0.0) -> str:
     """
     pwd_ts: Unix timestamp of the user's last password change.
     Embedding this lets get_current_user reject a stolen/cached access token
     the moment a password is reset or changed, instead of waiting out its
     30-minute lifetime (mirrors the same protection already on refresh tokens).
+    org_id: the user's org, or None for super_admin (who has no single org).
+    Lets get_current_user look itself up via the least-privilege, org-scoped
+    connection instead of the admin/RLS-bypass one on every request — see
+    SEC-DB-001. A token minted before this fix has no "org_id" key at all
+    (see get_current_user's payload.get sentinel check), which is distinct
+    from a super_admin's legitimate org_id=None.
     """
     payload = {
         "sub": user_id,
@@ -84,6 +90,7 @@ def create_access_token(user_id: str, email: str, pwd_ts: float = 0.0) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
         "type": "access",
         "pwd_ts": pwd_ts,
+        "org_id": org_id,
     }
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
 
@@ -261,7 +268,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
     async with database.with_admin() as conn:
         user = await conn.fetchrow(
             "SELECT id, email, name, role, must_change_password, supabase_password_set, "
-            "password_hash, mfa_enabled, password_changed_at FROM users WHERE email = $1", email
+            "password_hash, mfa_enabled, password_changed_at, org_id FROM users WHERE email = $1", email
         )
 
     # Supabase Auth is the source of truth for password verification once a
@@ -350,7 +357,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
             "email": _mask_email(user["email"]),
         }
 
-    access_token = create_access_token(user_id, user["email"], _to_pwd_ts(user))
+    access_token = create_access_token(user_id, user["email"], user.get("org_id"), _to_pwd_ts(user))
     refresh_token = create_refresh_token(user_id, _to_pwd_ts(user))
     # P3b: set HttpOnly cookies; tokens no longer returned in body
     _set_auth_cookies(response, access_token, refresh_token)
@@ -387,7 +394,7 @@ async def verify_mfa(data: VerifyMfaRequest, response: Response):
     async with database.with_admin() as conn:
         user = await conn.fetchrow(
             "SELECT is_active, mfa_code_attempts, mfa_code_expires_at, mfa_code, email, name, "
-            "role, must_change_password, password_changed_at FROM users WHERE id=$1", user_id
+            "role, must_change_password, password_changed_at, org_id FROM users WHERE id=$1", user_id
         )
         if not user or not user["is_active"]:
             raise HTTPException(status_code=401, detail="User not found or inactive")
@@ -413,7 +420,7 @@ async def verify_mfa(data: VerifyMfaRequest, response: Response):
             user_id,
         )
 
-    access_token = create_access_token(user_id, user["email"], _to_pwd_ts(user))
+    access_token = create_access_token(user_id, user["email"], user.get("org_id"), _to_pwd_ts(user))
     refresh_token = create_refresh_token(user_id, _to_pwd_ts(user))
     # P3b: set HttpOnly cookies; tokens no longer returned in body
     _set_auth_cookies(response, access_token, refresh_token)
@@ -536,7 +543,7 @@ async def refresh_token(request: Request, response: Response):
 
         async with database.with_admin() as conn:
             user = await conn.fetchrow(
-                "SELECT id, email, is_active, password_changed_at FROM users WHERE id = $1", payload["sub"]
+                "SELECT id, email, is_active, password_changed_at, org_id FROM users WHERE id = $1", payload["sub"]
             )
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
@@ -548,7 +555,7 @@ async def refresh_token(request: Request, response: Response):
             raise HTTPException(status_code=401, detail="Password changed — please sign in again.")
 
         user_id = user["id"]
-        new_access = create_access_token(user_id, user["email"], db_pwd_ts)
+        new_access = create_access_token(user_id, user["email"], user["org_id"], db_pwd_ts)
         new_refresh = create_refresh_token(user_id, db_pwd_ts)
         # P3b: rotate both cookies on every refresh; tokens stay in HttpOnly cookies only
         _set_auth_cookies(response, new_access, new_refresh)
@@ -795,7 +802,7 @@ async def accept_invite(data: AcceptInviteRequest, response: Response):
     # password_changed_at was just set to `now` in the UPDATE above — use it as
     # pwd_ts so the refresh token is valid immediately (pwd_ts=0.0 would be
     # rejected by the refresh endpoint because 0.0 < now).
-    access_token = create_access_token(user_id, email, _to_pwd_ts({"password_changed_at": now}))
+    access_token = create_access_token(user_id, email, invite["org_id"], _to_pwd_ts({"password_changed_at": now}))
     refresh_token_val = create_refresh_token(user_id, _to_pwd_ts({"password_changed_at": now}))
     # P3b: set HttpOnly cookies; tokens no longer returned in body
     _set_auth_cookies(response, access_token, refresh_token_val)

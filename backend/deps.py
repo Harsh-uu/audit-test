@@ -55,12 +55,35 @@ async def get_current_user(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
-    async with database.with_admin() as conn:
-        row = await conn.fetchrow(
-            "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
-            "must_change_password, mfa_enabled "
-            "FROM users WHERE id = $1 AND is_active = TRUE", user_id
-        )
+    # SEC-DB-001: use the least-privilege, org-scoped connection for this
+    # self-lookup instead of the RLS-bypass admin connection — this dependency
+    # runs on nearly every request, so it was previously the single biggest
+    # consumer of the admin/bypass pool. A token minted before this fix has no
+    # "org_id" key at all (distinct from a super_admin's legitimate org_id=None)
+    # — treat that the same as the existing pwd_ts upgrade path: a clean 401
+    # that the frontend's axios interceptor silently turns into a refresh,
+    # which mints a new token carrying the claim.
+    _SENTINEL = object()
+    org_id = payload.get("org_id", _SENTINEL)
+    if org_id is _SENTINEL:
+        raise HTTPException(status_code=401, detail="Session expired — please sign in again.")
+
+    if org_id is None:
+        # super_admin has no single org to scope to — this is the exact
+        # "handful of operations that genuinely need it" exception.
+        async with database.with_admin() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
+                "must_change_password, mfa_enabled "
+                "FROM users WHERE id = $1 AND is_active = TRUE", user_id
+            )
+    else:
+        async with database.with_org(org_id) as conn:
+            row = await conn.fetchrow(
+                "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
+                "must_change_password, mfa_enabled "
+                "FROM users WHERE id = $1 AND org_id = $2 AND is_active = TRUE", user_id, org_id
+            )
 
     if not row:
         raise HTTPException(status_code=401, detail="User not found or inactive")

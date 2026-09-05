@@ -239,6 +239,37 @@ TEXT with a documented code comment in `review.py` explaining why.
   malformed `start_date` instead of returning a clean validation error.
 
 
+## SEC-DB-001: get_current_user Least-Privilege Fix — FIXED (Aug 2026), fully tested
+Security audit (HIGH) found `deps.py::get_current_user` — the dependency injected into 142 of
+~150 route handlers — opened the RLS-bypass `admin_pool` on EVERY authenticated request, exactly
+backward from the earlier least-privilege DB role fix's intent. Root cause: `get_current_user`
+only has a user_id (JWT `sub`), and `with_org()` needs org_id (which wasn't in the JWT) before it
+can safely query — a genuine chicken-and-egg problem, plus a hard constraint discovered mid-fix:
+`super_admin` accounts have `org_id = NULL` (confirmed live), so a naive "always use `with_org()`"
+fix would have permanently locked out super-admin login.
+- `org_id` added as a JWT claim at all 4 token-issuance sites in `auth.py` (login, verify-mfa,
+  refresh, accept-invite) — `create_access_token()` now requires it.
+- `deps.py::get_current_user` branches on the claim: **missing key** (pre-fix token) → clean 401
+  "Session expired", self-healed by the frontend's existing axios auto-refresh (same pattern
+  already used for the `pwd_ts` claim); **`org_id: null`** (super_admin — no single org) →
+  legitimately keeps `with_admin()`, exactly the audit's own named exception; **real org_id** →
+  now uses `with_org(org_id)` with an explicit `WHERE org_id=$2` predicate.
+- `create_refresh_token`/`/auth/refresh`'s own lookup deliberately left untouched (audit names
+  "sign-in" as an acceptable exception; it's not per-request).
+- Verified end-to-end via curl before testing: all 3 normal roles get a correct org_id claim;
+  super_admin gets `null` and still works; a hand-crafted pre-fix token gets a clean 401, not a
+  crash; refresh mints a new token with org_id.
+- Tested via `testing_agent` iteration_125: 14/14 backend pytest pass + live browser
+  confirmation that the axios interceptor's silent refresh-and-retry works exactly as designed
+  (overwrote a session cookie with a pre-fix token, page kept working, user never saw
+  login/error). RBAC unaffected (attendee still 403 on admin endpoints). New regression suite:
+  `tests/test_org_id_jwt_claim.py` (run with `-n 0` — parallel workers race on the shared MFA
+  code column, unrelated to this fix).
+- accept-invite's org_id claim was verified once via curl by the main agent, not re-tested
+  end-to-end by the testing agent (would require a real invite record) — noted for future
+  verification if that flow is touched again.
+
+
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
 Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
 (stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully

@@ -1,0 +1,26 @@
+{
+  "summary": "SEC-DB-001 (org_id JWT claim) regression tests — full pass. Verified via pytest (14/14) that access tokens minted at /login, /verify-mfa, /refresh contain the correct org_id claim for admin/manager/attendee (=b00bf04f-a1b9-4673-8430-b4a08ba15d6c) and null for super_admin. Confirmed a hand-crafted pre-fix token (valid signature, valid sub/pwd_ts/type, but no org_id key) returns a clean 401 with detail 'Session expired — please sign in again.' — no 500, no bypass. Verified in a real browser that this exact scenario self-heals silently: overwrote the admin's supervision_access cookie with a pre-fix crafted token, navigated to /dashboard, axios interceptor caught the 401, refreshed, replayed, and the newly issued cookie contains org_id=b00bf04f-a1b9-4673-8430-b4a08ba15d6c — user was never kicked to /login. RBAC unchanged: attendee still 403 on /api/super-admin/orgs. Frontend smoke: admin, manager, super_admin, attendee all successfully loaded their protected UI (dashboard, super-admin org list) via cookie injection. get_current_user code (backend/deps.py lines 58-90) reviewed: correctly branches on _SENTINEL for missing key vs None for super_admin, and uses with_org(org_id) with an explicit AND org_id=$2 predicate for regular users — matches the audit intent.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_org_id_jwt_claim.py",
+    "/app/test_reports/pytest/pytest_org_id.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/deps.py get_current_user uses a _SENTINEL to distinguish missing org_id key (pre-fix token → 401) from org_id=None (super_admin → with_admin). This is correct and matches audit intent.",
+    "All 4 create_access_token call sites (login, verify-mfa, refresh, accept-invite) pass org_id — verified via grep.",
+    "create_refresh_token intentionally NOT modified (refresh flow's own DB lookup still uses with_admin — legitimately named as an acceptable exception by the audit).",
+    "Note (not this fix's fault): pytest.ini fixes -n 2 --dist loadscope which caused a burst of 6× HTTP 500 on parallel /login (likely rate-limit or MFA-code race between workers writing to the same user row). Serial runs (-n 0) are 100% green. Not a regression of this change but worth noting: parallel login on the same test user is racy because _force_mfa_code() updates the same DB row concurrently. Left the pytest.ini alone (agent instruction) — run this new suite with `-n 0`."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_org_id_jwt_claim.py"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% (all smoke navs succeeded, axios silent-refresh confirmed live)"},
+  "test_credentials": "Used credentials from /app/memory/test_credentials.md — all still valid",
+  "seed_data_creation": "None — only wrote/read the mfa_code column temporarily for MFA bypass (standard test helper pattern).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "New regression suite at /app/backend/tests/test_org_id_jwt_claim.py covers the org_id JWT claim invariant. Run with `python -m pytest tests/test_org_id_jwt_claim.py -n 0` (parallel workers race on the shared MFA code row). Suite covers: (1) org_id claim on login for admin/manager/attendee, (2) super_admin login → org_id=null + /super-admin/orgs works, (3) refresh mints new token with correct org_id for all 4 roles, (4) crafted pre-fix token (no org_id key) → 401 session-expired, (5) attendee still 403 on admin endpoints (RBAC intact), (6) smoke of /auth/me + /meetings + /teams for each role. accept-invite flow was NOT tested end-to-end (would need to create/consume a real invite record); main agent's earlier curl-based confirmation is the source of truth there.",
+  "rca of the issue": "N/A — this iteration is a regression-verification pass on an already-shipped fix, not a bug reproduction. Fix summary: get_current_user was previously opening admin_pool on every authenticated request (audit HIGH). Fix embeds org_id in the JWT (login/mfa/refresh/accept-invite) so get_current_user can call with_org(org_id) instead. Pre-fix tokens (no org_id key) get a clean 401 that the axios interceptor silently turns into a refresh, mirroring the pwd_ts self-heal pattern. Super_admin (org_id=NULL in DB) legitimately continues to use with_admin(). All verified end-to-end above."
+}
