@@ -1,0 +1,24 @@
+{
+  "summary": "Verified admin_pool max_size shrink (10 -> 5) in backend/database.py. All 10 tests pass in /app/backend/tests/test_iter126_pool_size.py: source-config checks (admin_pool max=5/min=1, main pool max=15/min=2 unchanged), 4-role login regression (admin/manager/attendee/super_admin all succeed with MFA bypass where required), token refresh + super-admin org list (both with_admin()-dependent flows), 10-concurrent-login burst (0 failures, slowest 6.37s — dominated by bcrypt not queueing, well under 15s threshold), and live pg_stat_activity sampling under sustained load (app_default peak = 15 = main pool max_size, postgres user delta = 0 during the burst — admin_pool reused its warm connections and never exceeded its 5-slot cap). Backend logs clean throughout: no pool-exhausted errors, no 500s, no timeouts. The 20-connection per-instance ceiling (15 main + 5 admin) is fully respected under realistic concurrent load. Fix is safe.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter126_pool_size.py",
+    "/app/test_reports/pytest/iter126.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "admin_pool max_size=5 is safe given the SEC-DB-001 fix restricted with_admin() usage to a small number of code paths (super_admin, login/MFA/refresh identity lookup, delete/org-admin, job worker). Grep-confirmed no asyncio.gather/create_task fan-out over with_admin() within a single request handler, so a single request cannot self-deadlock against the 5-slot pool.",
+    "Baseline observation: main pool sits at max_size=15 connections at steady state (probably due to background job worker + warm HTTP traffic keeping connections in use / not idle-timed-out). This is expected behavior — pool grows to max_size but never above. Not an issue but worth noting: the effective steady-state per-instance is ~15 (main) + 1-5 (admin, on demand) = 16-20, which fits the 60-conn DB ceiling at 3 concurrent instances with margin."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter126_pool_size.py (new)"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "not tested (backend only per request)"},
+  "test_credentials": "used /app/memory/test_credentials.md as-is (admin/manager/user/superadmin) with MFA bypass helper (bcrypt-override of mfa_code to '123456' + 10 min expiry)",
+  "seed_data_creation": "none — read-only login + /auth/me + /auth/refresh + /super-admin/orgs GET only",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter126 confirmed connection-pool tuning fix (admin_pool max_size 10 -> 5). Reusable pytest at tests/test_iter126_pool_size.py can be re-run for any future pool config changes; it covers regression + burst + live pg_stat_activity sampling. Prior iter119-125 all green.",
+  "rca of the issue": "Not an active bug — this iteration verified a preventative fix. Prior state: pool(15) + admin_pool(10) = 25 conns/instance vs DB max_connections=60 => only 2 safe concurrent app instances. Fix: reduce admin_pool max_size 10 -> 5, giving 20 conns/instance => 3 safe concurrent instances. Verified: (a) source shows 5, (b) 10 concurrent admin_pool-touching requests all return 200, (c) postgres-user connection delta = 0 during 3s sustained 20-worker burst, confirming admin_pool queue behavior when saturated (asyncpg queues, never rejects)."
+}

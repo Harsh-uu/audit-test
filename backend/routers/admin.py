@@ -13,6 +13,7 @@ from fastapi.responses import Response as _Response
 from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
 from utils.supabase_storage import put_document, get_document as _storage_get_document, delete_document as _storage_delete_document
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
+from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
 import database
 
 # ── Admin stats cache ─────────────────────────────────────────────────────────
@@ -1657,9 +1658,17 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
         redactions = _jlist(mtg.get("pii_redactions"))
         if redactions:
             adoc = _apply_redactions_deep(adoc, redactions)
-        mtg_analyses.append({"meeting": mtg, "analysis": adoc})
+        # SEC-PII-001: redact attendee/manager names too — not just the
+        # analysis body — since these are printed verbatim in the PDF/CSV.
+        mtg_for_pdf = mtg
+        if redactions:
+            mtg_for_pdf = dict(mtg)
+            mtg_for_pdf["attendees"] = _apply_redactions_deep(mtg.get("attendees") or [], redactions)
+            if mtg.get("sign_off_manager_name"):
+                mtg_for_pdf["sign_off_manager_name"] = _apply_redactions_to_text(mtg["sign_off_manager_name"], redactions)
+        mtg_analyses.append({"meeting": mtg_for_pdf, "analysis": adoc})
         sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
-        for attendee in _jlist(mtg.get("attendees")):
+        for attendee in _jlist(mtg_for_pdf.get("attendees")):
             if sign_off_mgr_id and attendee.get("user_id") == sign_off_mgr_id:
                 continue
             staff_name = attendee.get("name", "Unknown")
@@ -1720,8 +1729,14 @@ async def export_cqc_excerpts(current_user=Depends(get_current_user)):
         redactions = _jlist(mtg.get("pii_redactions"))
         if redactions:
             adoc = _apply_redactions_deep(adoc, redactions)
-        attendees = ", ".join(a.get("name", "") for a in _jlist(mtg.get("attendees")))
-        ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees, "manager": mtg.get("sign_off_manager_name", "")}
+        # SEC-PII-001: attendee/manager names are printed in the excerpt
+        # metadata line, so redact them the same as the evidence body.
+        attendee_list = _apply_redactions_deep(_jlist(mtg.get("attendees")), redactions) if redactions else _jlist(mtg.get("attendees"))
+        attendees = ", ".join(a.get("name", "") for a in attendee_list)
+        manager_name = mtg.get("sign_off_manager_name", "")
+        if redactions and manager_name:
+            manager_name = _apply_redactions_to_text(manager_name, redactions)
+        ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees, "manager": manager_name}
         for m in _jlist(adoc.get("cqc_mappings")):
             if m.get("status") == "rejected": continue
             ref = m.get("regulation_ref", "")
@@ -1775,8 +1790,15 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
         sign_off_mgr_id = str(mtg.get("sign_off_manager_id") or "")
         include = [a for a in _jlist(mtg.get("attendees")) if str(a.get("user_id", "")) != sign_off_mgr_id and (not selected_ids or a.get("user_id") in selected_ids)]
         if not include: continue
+        # SEC-PII-001: attendee/manager names are printed in the excerpt
+        # metadata line, so redact them the same as the evidence body.
+        if redactions:
+            include = _apply_redactions_deep(include, redactions)
         attendees_str = ", ".join(a.get("name", "") for a in include)
-        ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees_str, "manager": mtg.get("sign_off_manager_name", "")}
+        manager_name = mtg.get("sign_off_manager_name", "")
+        if redactions and manager_name:
+            manager_name = _apply_redactions_to_text(manager_name, redactions)
+        ctx = {"meeting_title": mtg.get("title", "Meeting"), "meeting_date": mtg.get("date", ""), "meeting_id": mtg["id"], "attendees": attendees_str, "manager": manager_name}
         for m in _jlist(adoc.get("care_cert_mappings")):
             if m.get("status") == "rejected": continue
             ref = m.get("standard_ref", "")
@@ -1877,10 +1899,17 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
         transcript_text = t_row["text"] or ""
         redactions = _jlist(mtg.get("pii_redactions"))
         if redactions:
-            from utils.redaction import apply_redactions_to_text as _art
-            if speaker_text: speaker_text = _art(speaker_text, redactions)
-            if transcript_text: transcript_text = _art(transcript_text, redactions)
-        meetings_data.append({"meeting": mtg, "speaker_text": speaker_text, "transcript_text": transcript_text})
+            if speaker_text: speaker_text = _apply_redactions_to_text(speaker_text, redactions)
+            if transcript_text: transcript_text = _apply_redactions_to_text(transcript_text, redactions)
+        # SEC-PII-001: attendee/manager names are printed in the PDF header
+        # for every session, so redact them the same as the transcript body.
+        mtg_for_pdf = mtg
+        if redactions:
+            mtg_for_pdf = dict(mtg)
+            mtg_for_pdf["attendees"] = _apply_redactions_deep(mtg.get("attendees") or [], redactions)
+            if mtg.get("sign_off_manager_name"):
+                mtg_for_pdf["sign_off_manager_name"] = _apply_redactions_to_text(mtg["sign_off_manager_name"], redactions)
+        meetings_data.append({"meeting": mtg_for_pdf, "speaker_text": speaker_text, "transcript_text": transcript_text})
 
     if not meetings_data:
         raise HTTPException(404, "No transcripts found for the selected filters")

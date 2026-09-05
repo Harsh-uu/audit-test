@@ -611,6 +611,44 @@ str"), `supervision_uploads.meeting_date` (date-only), `focus_topics.active_mont
   validation before ever converting that column); malformed `date_from`/`date_to` query params
   are silently ignored rather than 422 (no 500s, just a correctness smell).
 
+## Connection Pool Scaling Fix — FIXED (Sep 2026), fully tested
+Audit item 3.2: `pool` (15) + `admin_pool` (10) = 25 connections/instance vs the DB's 60-connection
+ceiling meant only 2 safe concurrent app instances. Confirmed (via `SEC-DB-001` above) that
+`with_admin()` is now only a handful of genuinely-brief operations (super_admin requests,
+login/MFA/refresh identity lookup, delete/org-admin flows, the job worker) — never held several
+at once per request (grep-confirmed no `asyncio.gather`/`create_task` fan-out over `with_admin()`
+within a single request handler), so shrinking its pool can't self-deadlock a request.
+- **Fix**: `database.py`'s `admin_pool` `max_size` reduced 10 → 5. New per-instance ceiling:
+  15 (main) + 5 (admin) = 20, restoring 3 safe concurrent instances under the 60-connection cap
+  (up from 2).
+- **Verified via `testing_agent`** (iteration_126): 10/10 tests — source-config checks, 4-role
+  login regression, token refresh + super-admin org list (both `with_admin()`-dependent flows),
+  10-concurrent-login burst (0 failures), live `pg_stat_activity` sampling under sustained load
+  confirming `admin_pool` never exceeded its 5-slot cap and `app_default` (main pool) peaked at
+  exactly 15. No pool-exhausted errors, no 500s, no timeouts. New regression suite:
+  `tests/test_iter126_pool_size.py`.
+
+## Export PDF/CSV PII Redaction — FIXED (Sep 2026), fully tested
+Audit item (Issue 1, P1): every export endpoint correctly redacted the transcript body and AI
+analysis text using a meeting's saved `pii_redactions`, but the attendee names and manager name
+printed in the PDF/CSV header/metadata rows were pulled from the RAW (unredacted)
+`meeting.attendees`/`sign_off_manager_name` fields — so a person's identity could still leak via
+the metadata even though their name was redacted from the body text right below it.
+- **Fix**: all 6 export functions now build a redacted COPY of the attendee list/manager
+  name/signed-by name (via the existing `utils/redaction.py::apply_redactions_deep`/
+  `apply_redactions_to_text` helpers, same ones already used for the body) before rendering,
+  leaving the original DB row dict untouched: `admin.py`'s `export_evidence` (PDF+CSV),
+  `export_cqc_excerpts`, `export_cc_excerpts`, `export_transcripts`; `review.py`'s `export_pdf`
+  (also covers `sign_off_record.signed_by_name`) and `export_transcript`.
+- **Deliberately unchanged**: `admin.py::export_cc_excerpts`'s `staff_label` (built from a
+  separate `/users` query when a `staff_ids` filter is passed) — that's a UI filter label from a
+  different data source, not meeting-specific redacted content.
+- **Verified via `testing_agent`** (iteration_127): seeded a meeting with `pii_redactions`
+  targeting the manager/attendee name and a control meeting with none; 12/12 tests pass — redacted
+  meeting shows `[Redacted]` (not the raw name) in every PDF/CSV metadata field across all 6
+  endpoints, control meeting's exports are byte-for-byte unaffected (no regression). New
+  regression suite: `tests/test_pii_export_redaction.py`.
+
 ## Session note (Aug 2026): Supabase DB audit mode
 User is running a deliberate, field-by-field Supabase/Postgres audit — reports one issue at a time,
 requires confirmation + RCA + recommended fix BEFORE any change, then explicit "go ahead" before
@@ -769,10 +807,11 @@ direct DB password access or a real deploy of this backend pointed at that DB.
   a rare concurrent-duplicate-email race (flagged by testing_agent, low likelihood).
 - Refresh stale `tests/test_idor_sec001.py` fixtures (hardcoded passwords/meeting IDs are outdated)
   — explicitly deferred by user this session, skip until asked again.
-- Export PDFs don't redact PII from attendee/manager names (only transcript/analysis body is
-  redacted) — logged, not yet fixed.
 - Password-hint copy still says "8 characters" in a few admin user-creation screens (actual policy
   is 10) — same class of bug already fixed on reset-password/accept-invite, not yet done here.
+- Unreachable `super_admin` UI branch in `OrgSettings.js` SecurityTab; "Export Portfolio PDF"
+  button styling looks disabled; lighter loading state needed on Team Themes page.
+- Orphan `teams` row with `setting_id=NULL` stays invisible in dashboard filters/dropdown.
 - Extract `_DETAIL_COLS`/`_MEETING_DETAIL_COLS` duplication (meetings.py vs review.py) into a
   shared columns module — non-blocking code-review suggestion from iteration_119.
 - Admin/Review router `with_admin()` audit: 19 calls in `admin.py` + 11 in `review.py` not yet

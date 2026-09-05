@@ -134,7 +134,14 @@ async def create_pool() -> asyncpg.Pool:
         os.environ["DATABASE_URL"],
         ssl="require",
         min_size=1,
-        max_size=10,
+        # Kept small on purpose: with_admin() is now only a handful of
+        # operations (super_admin requests, login/MFA/refresh's identity
+        # lookup, delete/org-admin flows, the job worker) — each acquires
+        # briefly and releases, never holds several at once per request.
+        # 15 (pool) + 10 (admin_pool) = 25/instance meant only 2 safe copies
+        # under this DB's 60-connection ceiling (was 4 before admin_pool
+        # existed). 15 + 5 = 20/instance restores 3 safe copies with margin.
+        max_size=5,
         init=_init_connection,
         statement_cache_size=0,
     )

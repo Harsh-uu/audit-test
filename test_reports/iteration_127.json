@@ -1,0 +1,24 @@
+{
+  "summary": "Verified P1 PII-redaction fix for export endpoints. Seeded two signed-off TEST_PII_EXPORT_* meetings (one with pii_redactions targeting 'Demo Manager'/'Demo User' -> [Redacted], one with []). Hit all 6 export endpoints (review.py: export-pdf, export-transcript; admin.py: export-evidence [PDF+CSV], export-cqc-excerpts, export-cc-excerpts, export-transcripts), extracted PDF text with pypdf, and asserted (a) raw attendee/manager names ABSENT + [Redacted] PRESENT for redacted meeting, (b) raw names PRESENT for the no-redaction regression meeting. All 12 test cases pass. No 500s, all correct content-types (application/pdf, text/csv).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_pii_export_redaction.py",
+    "/app/test_reports/pytest/pii_export_redaction.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Redaction is applied consistently via apply_redactions_deep/apply_redactions_to_text on a shallow-copied meeting dict (mtg_for_pdf / pdf_meeting / attendee_list) in all 6 endpoints — the raw mtg/meeting dict is preserved so the original DB row isn't mutated in memory. Good pattern.",
+    "admin.export-evidence CSV: staff_name is pulled from mtg_for_pdf.attendees (the redacted list), so CSV 'Staff Member' column is redacted correctly. Verified.",
+    "admin.export-cc-excerpts: correctly redacts the 'attendees' metadata line via _apply_redactions_deep(include, redactions) but the separate staff_label built from /users when staff_ids filter is passed is (intentionally) NOT redacted — matches the review-request spec.",
+    "Minor: no unit test for the case where a redaction 'original' partially overlaps a name (e.g. only first name). Existing implementation handles this via case-insensitive substring regex — could be worth an explicit test in future."
+  ],
+  "updated_files": ["/app/backend/tests/test_pii_export_redaction.py"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "N/A (backend-only scope)"},
+  "test_credentials": "manager@supervision.com/Manager123!, admin@supervision.com/Admin123! (MFA bypassed via bcrypt('123456') override in get_tokens helper pattern)",
+  "seed_data_creation": "Created 2 TEST_PII_EXPORT_with / TEST_PII_EXPORT_without signed_off meetings with attendees, transcripts, analyses (with CQC + Care Cert mappings). Auto-cleaned by module-scoped pytest fixture on teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable regression suite is at /app/backend/tests/test_pii_export_redaction.py (run with `python -m pytest tests/test_pii_export_redaction.py -v -o addopts=''`). Uses direct asyncpg to seed + module-scope cleanup. If the backend has restarted very recently, first login can 500 with 'pool is closing' — re-run once and it passes.",
+  "rca of the issue": "N/A — this iteration verified an already-applied fix; all 12 assertions pass, so no bug reproduction/mitigation needed."
+}

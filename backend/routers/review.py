@@ -1981,7 +1981,20 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
         if analysis:
             analysis = _apply_redactions_deep(analysis, redactions)
 
-    pdf_bytes = _generate_pdf(meeting, analysis, transcript_text, speaker_text,
+    # SEC-PII-001: attendee/manager names are printed in the PDF metadata
+    # table, so redact them the same as the transcript body/analysis
+    # (unconditionally — this mirrors speaker_text/analysis above, not the
+    # privileged-only exception which applies solely to the raw transcript).
+    pdf_meeting = meeting
+    if redactions:
+        pdf_meeting = dict(meeting)
+        pdf_meeting["attendees"] = _apply_redactions_deep(meeting.get("attendees") or [], redactions)
+        if meeting.get("sign_off_manager_name"):
+            pdf_meeting["sign_off_manager_name"] = _apply_redactions_to_text(meeting["sign_off_manager_name"], redactions)
+        if meeting.get("sign_off_record"):
+            pdf_meeting["sign_off_record"] = _apply_redactions_deep(meeting["sign_off_record"], redactions)
+
+    pdf_bytes = _generate_pdf(pdf_meeting, analysis, transcript_text, speaker_text,
                               jurisdiction=org_jurisdiction, service_type=org_service_type)
     async with database.with_org(org_id) as conn:
         await _audit(conn, meeting_id, org_id, "pdf_exported", current_user["id"], current_user.get("name", ""),
@@ -2329,7 +2342,16 @@ async def export_transcript(meeting_id: str, current_user=Depends(get_current_us
         if transcript_text:
             transcript_text = _apply_redactions_to_text(transcript_text, redactions)
 
-    pdf_bytes = _generate_transcript_pdf(meeting, speaker_text, transcript_text)
+    # SEC-PII-001: attendee/manager names are printed in the PDF header, so
+    # redact them the same as the transcript body.
+    pdf_meeting = meeting
+    if redactions:
+        pdf_meeting = dict(meeting)
+        pdf_meeting["attendees"] = _apply_redactions_deep(meeting.get("attendees") or [], redactions)
+        if meeting.get("sign_off_manager_name"):
+            pdf_meeting["sign_off_manager_name"] = _apply_redactions_to_text(meeting["sign_off_manager_name"], redactions)
+
+    pdf_bytes = _generate_transcript_pdf(pdf_meeting, speaker_text, transcript_text)
     async with database.with_org(org_id) as conn:
         await _audit(conn, meeting_id, org_id, "transcript_exported", current_user["id"], current_user.get("name", ""), "")
     safe_title = "".join(c for c in (meeting.get("title") or "transcript") if c.isalnum() or c in " _-")
