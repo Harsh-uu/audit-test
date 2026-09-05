@@ -21,6 +21,7 @@ from . import (
     m010_idle_timeout,
     m011_least_privilege_role,
     m012_idle_session_timeout,
+    m013_not_null_constraints,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ MIGRATIONS = [
     m010_idle_timeout,
     m011_least_privilege_role,
     m012_idle_session_timeout,
+    m013_not_null_constraints,
 ]
 
 
