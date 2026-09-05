@@ -172,7 +172,7 @@ async def delete_org(org_id: str, current_user=Depends(get_current_user)):
             ]
 
         if meeting_ids:
-            for table in ["transcripts", "analyses", "audit_logs", "reviewer_comments", "review_edits", "audio_files", "evidence_feedback"]:
+            for table in ["transcripts", "analyses", "audit_logs", "reviewer_comments", "review_edits", "audio_files", "evidence_feedback", "jobs"]:
                 result = await conn.execute(f"DELETE FROM {table} WHERE meeting_id = ANY($1::uuid[])", meeting_ids)
                 totals[table] = int(result.split()[-1])
 

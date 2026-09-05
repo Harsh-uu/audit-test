@@ -524,7 +524,7 @@ async def delete_meeting(meeting_id: str, current_user=Depends(get_current_user)
             raise HTTPException(status_code=404, detail="Meeting not found")
         # Cascade deletes — redundant with the FK ON DELETE CASCADE constraints now in
         # place, kept here as a defence-in-depth safety net matching existing convention.
-        for table in ["transcripts", "analyses", "audio_files", "reviewer_comments", "review_edits", "audit_logs", "evidence_feedback"]:
+        for table in ["transcripts", "analyses", "audio_files", "reviewer_comments", "review_edits", "audit_logs", "evidence_feedback", "jobs"]:
             await conn.execute(f"DELETE FROM {table} WHERE meeting_id = $1", meeting_id)
     for path in audio_paths:
         try:

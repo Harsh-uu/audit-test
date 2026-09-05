@@ -22,6 +22,7 @@ from . import (
     m011_least_privilege_role,
     m012_idle_session_timeout,
     m013_not_null_constraints,
+    m014_jobs_fk_cascade,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ MIGRATIONS = [
     m011_least_privilege_role,
     m012_idle_session_timeout,
     m013_not_null_constraints,
+    m014_jobs_fk_cascade,
 ]
 
 

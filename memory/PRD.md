@@ -117,6 +117,27 @@ full ML pipeline.
   tabs confirmed unaffected, zero regressions.
 
 
+## Jobs Table Orphan Cleanup — FIXED (Aug 2026), fully tested
+Audit finding: `jobs.meeting_id` had no FK and wasn't in either `delete_meeting()`'s or
+`delete_org()`'s manual cascade-delete list — a **deliberate** decision from the original
+`m004_fk_constraints.py` audit ("app intentionally keeps job history after a meeting is
+deleted"). Live DB check showed 5 of 10 rows (50%) were already orphaned, and grep confirmed
+nothing anywhere ever reads `jobs` for display — the "history" rationale was never realized, so
+the decision was reversed with user approval.
+- New migration `m014_jobs_fk_cascade.py`: deletes pre-existing orphans, adds
+  `fk_jobs_meeting_id FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE` (same
+  idempotent DO-block pattern as the other 7 meeting-child tables), adds `idx_jobs_meeting_id`.
+  Migrations run via manual `python3 init_db.py` (not auto-run on boot) — already executed.
+- Added `"jobs"` to the manual cascade-delete table list in both `meetings.py::delete_meeting()`
+  and `super_admin.py::delete_org()`, matching the existing belt-and-suspenders convention.
+  `job_worker.py`'s insert/update logic was NOT touched.
+- Tested via `testing_agent` iteration_121: 10/10 pass (FK+index existence, zero orphans, real
+  API-level meeting delete cascades the job row, org delete cascades too, 403/404 guards, normal
+  job insert/update lifecycle unaffected). New regression suite: `tests/test_jobs_fk_cascade.py`.
+- Non-blocking hygiene note from testing agent: the cascade-delete table list is now duplicated
+  verbatim in `meetings.py` and `super_admin.py` — could extract to a shared constant later.
+
+
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
 Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
 (stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully
