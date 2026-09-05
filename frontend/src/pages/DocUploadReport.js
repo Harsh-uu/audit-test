@@ -7,7 +7,7 @@ import { ComplianceTab } from "@/components/report/ComplianceTab";
 import { invalidateCache } from "@/utils/apiCache";
 import {
   ArrowLeft, FileText, User, Calendar, Upload, Loader2, AlertCircle,
-  CheckCircle, Clock
+  CheckCircle, Clock, Download
 } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -108,6 +108,18 @@ export default function DocUploadReport() {
     });
   };
 
+  const handleDownload = async () => {
+    try {
+      const res = await axios.get(`${API}/doc-uploads/${uploadId}/download`, { ...getAuthConfig(), responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = upload.filename || "document"; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.error("Download failed:", err.message);
+    }
+  };
+
   const analysis = {
     cqc_mappings: upload.cqc_mappings || [],
     care_cert_mappings: upload.care_cert_mappings || [],
@@ -159,13 +171,25 @@ export default function DocUploadReport() {
             </div>
           </div>
 
-          <button
-            onClick={() => navigate(`/portfolio/${upload.staff_id}`)}
-            className="flex items-center gap-2 text-sm text-[#1E3A8A] font-medium hover:underline flex-shrink-0 ml-4"
-            data-testid="view-portfolio-btn"
-          >
-            View portfolio
-          </button>
+          <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+            {upload.storage_path && (
+              <button
+                onClick={handleDownload}
+                className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 hover:bg-gray-50 rounded-md px-3 py-1.5 transition-colors"
+                data-testid="download-upload-btn"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download original
+              </button>
+            )}
+            <button
+              onClick={() => navigate(`/portfolio/${upload.staff_id}`)}
+              className="flex items-center gap-2 text-sm text-[#1E3A8A] font-medium hover:underline flex-shrink-0"
+              data-testid="view-portfolio-btn"
+            >
+              View portfolio
+            </button>
+          </div>
         </div>
 
         {/* ── Status banner ────────────────────────────────────── */}

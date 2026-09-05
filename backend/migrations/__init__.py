@@ -23,6 +23,7 @@ from . import (
     m012_idle_session_timeout,
     m013_not_null_constraints,
     m014_jobs_fk_cascade,
+    m015_supervision_uploads_storage_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ MIGRATIONS = [
     m012_idle_session_timeout,
     m013_not_null_constraints,
     m014_jobs_fk_cascade,
+    m015_supervision_uploads_storage_path,
 ]
 
 

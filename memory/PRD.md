@@ -183,6 +183,30 @@ manually as part of this fix.
   these); blob URL revoke timing tightened to `setTimeout(1000ms)` per review comment.
 
 
+## Supervision Upload Download + Storage-Leak Fix — FIXED (Aug 2026), fully tested
+Sibling fix to the standards-documents fix above, applied to the staff-facing "supervision
+upload" path (`doc_uploads.py` — managers backfill evidence by uploading a staff member's
+previous supervision PDF/DOCX). Confirmed the original file was discarded entirely after text
+extraction — `supervision_uploads` had no `storage_path` column, and `full_text` only stored the
+AI-extracted text, never the original bytes.
+- New migration `m015_supervision_uploads_storage_path.py`: adds `storage_path TEXT` column.
+  Applied via `init_db.py`.
+- `doc_uploads.py`: `upload_supervision_doc()` now calls the existing `put_document()` (same
+  function/bucket the standards-documents path uses, different prefix:
+  `supervision/uploads/{uuid}.{ext}` vs `standards/docs/`) before inserting the row. New
+  `GET /{upload_id}/download` endpoint. `delete_upload()` now fetches `storage_path` before the
+  DB delete and best-effort removes the file after — added proactively (not explicitly requested)
+  to avoid reintroducing the exact orphan-file bug just fixed on the sibling table.
+- Frontend: new "Download original" button on `DocUploadReport.js`'s top bar, hidden for legacy
+  uploads with no `storage_path` (pre-migration rows never had a file to download — testing agent
+  caught this edge case, fixed by conditionally rendering the button + adding `storage_path` to
+  `get_upload()`'s column list so the frontend can check it).
+- Tested via `testing_agent` iteration_123: 8/8 backend tests (PDF+DOCX upload-then-download
+  byte-identical, 403/404 guards, delete cleans storage, full AI lifecycle + evidence-update
+  regression unaffected) + frontend spot-check, 100%/100%. New regression suite:
+  `tests/test_supervision_upload_storage.py`.
+
+
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
 Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
 (stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully

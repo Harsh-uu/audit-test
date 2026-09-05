@@ -1,0 +1,28 @@
+{
+  "summary": "Verified new storage_path feature on /api/doc-uploads/ (supervision uploads). Wrote pytest suite (8 tests, all passing) covering: DOCX + PDF upload persist file to storage BEFORE background AI task; download endpoint returns byte-identical file with correct filename/content-type; 403 for attendee role; 403 for attendee upload; 404 for nonexistent upload_id (download & delete); delete removes DB row + best-effort storage cleanup; full AI lifecycle (processing -> text_ready -> done, evidence PUT still works). Frontend spot-checked: DocUploadReport.js shows 'Download original' button (data-testid=download-upload-btn) next to 'View portfolio' — button is visible, click handler wired, and existing ComplianceTab evidence view renders as before.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Download original on legacy upload", "issue": "Uploads created BEFORE m015 migration have storage_path=NULL, so clicking 'Download original' returns 404 (silent console error, no user-visible toast/alert). Not a regression — the file legitimately doesn't exist for those rows — but consider hiding the button (or showing a disabled 'Original file not available' state) when upload.storage_path is null / for uploads created before the migration date. New uploads work perfectly.", "affected_selectors": ["[data-testid=download-upload-btn]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_supervision_upload_storage.py", "/app/test_reports/pytest/iter123.xml"],
+  "action_items": [
+    "Optional UX polish: gray out / hide the Download original button when upload.storage_path is null (legacy uploads from before m015). Currently the button is always shown, and legacy uploads produce a silent 404 + console error on click.",
+    "Consider surfacing download errors to the user (toast/alert) instead of only console.error — right now handleDownload() swallows failures silently."
+  ],
+  "critical_code_review_comments": [
+    "doc_uploads.py:107-113 — put_document() failure is swallowed and actual_path set to None, meaning the DB row is still created with storage_path=NULL and the upload proceeds. Users would only find out at download time. Acceptable per current design (background AI still runs), but worth logging a warning-severity error visible in ops.",
+    "doc_uploads.py:296-300 — delete_document() error is caught and only logged; DB row is already deleted so orphan file is possible on storage-provider outage. Matches the standards_documents pattern per spec, but this is best-effort, not guaranteed cleanup."
+  ],
+  "updated_files": ["/app/backend/tests/test_supervision_upload_storage.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (button renders + click wired; legacy-upload 404 is data-state, not a bug)"},
+  "test_credentials": "admin@supervision.com/Admin123! (used for backend + frontend tests), manager@supervision.com/Manager123! (backend only — MFA didn't trigger this session but may in future), user@supervision.com/AnotherNew789! (attendee 403 checks)",
+  "seed_data_creation": "None persistent — all TEST_ prefixed uploads created during test runs are deleted in finally/teardown blocks.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_supervision_upload_storage.py requires REACT_APP_BACKEND_URL env var (pytest.ini uses xdist so run with `cd /app/backend && REACT_APP_BACKEND_URL=https://supervision-preview.preview.emergentagent.com python -m pytest tests/test_supervision_upload_storage.py -v`). Manager MFA was NOT enforced this session (login returned no mfa_required) — if future test agents hit MFA, use the get_tokens.py helper documented in /app/memory/test_credentials.md. The 'cross-org 404' case from the review request is covered indirectly by the org-scoped WHERE clause (all queries include AND org_id=$2); a dedicated multi-org test would need a second seeded org and was not written this iteration.",
+  "rca of the issue": "N/A — no bugs found. The one integration observation (legacy uploads produce silent 404 on download) is expected behavior given the migration was additive (m015 only adds the column; it doesn't backfill files that never existed) and is a UX-polish suggestion, not a regression."
+}

@@ -13,6 +13,7 @@ import uuid
 import logging
 
 from deps import get_current_user
+from utils.supabase_storage import put_document, get_document, delete_document
 import database
 
 router = APIRouter()
@@ -97,11 +98,19 @@ async def upload_supervision_doc(
     # Magic-byte validation — consistent with standards/logo upload endpoints
     from utils.file_security import validate_upload, guard_zip_bomb
     try:
-        validate_upload(file_data, file_ext)
+        canonical_mime = validate_upload(file_data, file_ext)
         if file_ext == "docx":
             guard_zip_bomb(file_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    storage_path = f"supervision/uploads/{uuid.uuid4()}.{file_ext}"
+    try:
+        result = await put_document(storage_path, file_data, canonical_mime)
+        actual_path = result.get("path", storage_path)
+    except Exception as e:
+        logger.error(f"Supervision upload storage failed: {e}")
+        actual_path = None
 
     upload_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -111,15 +120,15 @@ async def upload_supervision_doc(
             """INSERT INTO supervision_uploads
                (id, org_id, uploader_id, uploader_name, staff_id, staff_name,
                 filename, label, doc_type, meeting_date, file_ext, size_bytes,
-                status, cqc_mappings, care_cert_mappings, custom_mappings, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16::jsonb,$17)""",
+                status, cqc_mappings, care_cert_mappings, custom_mappings, created_at, storage_path)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16::jsonb,$17,$18)""",
             upload_id, org_id,
             current_user["id"], current_user.get("name", ""),
             staff_id, staff["name"],
             file.filename, (label.strip() or file.filename),
             (doc_type.strip() or "other"), (meeting_date or now[:10]),
             file_ext, len(file_data),
-            "processing", "[]", "[]", "[]", now,
+            "processing", "[]", "[]", "[]", now, actual_path,
         )
 
     background_tasks.add_task(process_upload_background, upload_id, file_data, file.filename, org_id)
@@ -177,13 +186,42 @@ async def get_upload(
         row = await conn.fetchrow(
             "SELECT id,org_id,uploader_id,uploader_name,staff_id,staff_name,filename,label,"
             "doc_type,meeting_date,file_ext,size_bytes,status,cqc_mappings,care_cert_mappings,"
-            "custom_mappings,error,processed_at,created_at "
+            "custom_mappings,error,processed_at,created_at,storage_path "
             "FROM supervision_uploads WHERE id=$1 AND org_id=$2",
             upload_id, org_id,
         )
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
     return _upload_dict(row)
+
+
+@router.get("/{upload_id}/download")
+async def download_upload(
+    upload_id: str,
+    current_user=Depends(get_current_user),
+):
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
+    org_id = current_user.get("org_id")
+    async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow(
+            "SELECT filename, storage_path FROM supervision_uploads WHERE id=$1 AND org_id=$2",
+            upload_id, org_id,
+        )
+    if not row or not row["storage_path"]:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        file_data, content_type = await get_document(row["storage_path"])
+    except Exception as e:
+        logger.error(f"Supervision upload download failed for {upload_id}: {e}")
+        raise HTTPException(status_code=404, detail="File not found in storage")
+    from fastapi.responses import Response as _Response
+    filename = row["filename"] or "document"
+    return _Response(
+        content=file_data,
+        media_type=content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.put("/{upload_id}/evidence/{evidence_id}")
@@ -245,12 +283,21 @@ async def delete_upload(
         raise HTTPException(status_code=403, detail="Admin/Manager only")
     org_id = current_user.get("org_id")
     async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow(
+            "SELECT storage_path FROM supervision_uploads WHERE id=$1 AND org_id=$2",
+            upload_id, org_id,
+        )
         result = await conn.execute(
             "DELETE FROM supervision_uploads WHERE id=$1 AND org_id=$2",
             upload_id, org_id,
         )
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Not found")
+    if row and row["storage_path"]:
+        try:
+            await delete_document(row["storage_path"])
+        except Exception as e:
+            logger.error(f"Failed to delete supervision upload file from storage for {upload_id}: path={row['storage_path']} error={e}")
     return {"message": "Deleted"}
 
 
