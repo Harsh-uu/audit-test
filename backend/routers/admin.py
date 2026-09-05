@@ -257,7 +257,7 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
             # NI: RQIA standards filtered by service_type, NISCC (service_type=NULL) always shown
             if type:
                 rows = await conn.fetch(
-                    """SELECT * FROM standards_entries
+                    """SELECT id, type, reference, name, description, sub_outcomes FROM standards_entries
                        WHERE type=$1 AND is_active=TRUE
                        AND ((is_system=TRUE AND jurisdiction='northern_ireland'
                              AND (service_type IS NULL OR service_type=$2))
@@ -267,7 +267,7 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
                 )
             else:
                 rows = await conn.fetch(
-                    """SELECT * FROM standards_entries
+                    """SELECT id, type, reference, name, description, sub_outcomes FROM standards_entries
                        WHERE is_active=TRUE
                        AND ((is_system=TRUE AND jurisdiction='northern_ireland'
                              AND (service_type IS NULL OR service_type=$1))
@@ -277,7 +277,7 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
                 )
         elif type:
             rows = await conn.fetch(
-                """SELECT * FROM standards_entries
+                """SELECT id, type, reference, name, description, sub_outcomes FROM standards_entries
                    WHERE type=$1 AND is_active=TRUE
                    AND ((is_system=TRUE AND jurisdiction=$2) OR org_id=$3)
                    ORDER BY type, reference""",
@@ -285,14 +285,13 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
             )
         else:
             rows = await conn.fetch(
-                """SELECT * FROM standards_entries
+                """SELECT id, type, reference, name, description, sub_outcomes FROM standards_entries
                    WHERE is_active=TRUE
                    AND ((is_system=TRUE AND jurisdiction=$1) OR org_id=$2)
                    ORDER BY type, reference""",
                 jurisdiction, org_id,
             )
-    _strip = {"org_id", "jurisdiction", "service_type", "created_at", "is_active"}
-    return [{k: v for k, v in dict(r).items() if k not in _strip} for r in rows]
+    return [dict(r) for r in rows]
 
 
 @router.post("/standards")
@@ -336,7 +335,10 @@ async def list_documents(current_user=Depends(get_current_user)):
         raise HTTPException(403, "Admin/Manager only")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        rows = await conn.fetch("SELECT * FROM standards_documents ORDER BY created_at DESC")
+        rows = await conn.fetch(
+            "SELECT id, label, filename, size_bytes, created_at, document_summary, parse_status, "
+            "extracted_criteria, is_active FROM standards_documents ORDER BY created_at DESC"
+        )
     return [dict(r) for r in rows]
 
 
@@ -452,7 +454,10 @@ async def rescan_meetings_background(doc_id: str, org_id: str):
     from utils.ai import analyze_custom_only
     try:
         async with database.with_org(org_id) as conn:
-            doc_row = await conn.fetchrow("SELECT * FROM standards_documents WHERE id=$1 AND parse_status='parsed'", doc_id)
+            doc_row = await conn.fetchrow(
+                "SELECT id, label, filename, extracted_criteria FROM standards_documents WHERE id=$1 AND parse_status='parsed'",
+                doc_id,
+            )
             if not doc_row:
                 return
             doc = dict(doc_row)

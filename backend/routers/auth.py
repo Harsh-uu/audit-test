@@ -259,7 +259,10 @@ async def login(data: LoginRequest, request: Request, response: Response):
 
     # ── Step 2: credential check ──────────────────────────────────────────────
     async with database.with_admin() as conn:
-        user = await conn.fetchrow("SELECT * FROM users WHERE email = $1", email)
+        user = await conn.fetchrow(
+            "SELECT id, email, name, role, must_change_password, supabase_password_set, "
+            "password_hash, mfa_enabled, password_changed_at FROM users WHERE email = $1", email
+        )
 
     # Supabase Auth is the source of truth for password verification once a
     # user has been migrated (see utils/supabase_auth.py); bcrypt is the
@@ -382,7 +385,10 @@ async def verify_mfa(data: VerifyMfaRequest, response: Response):
     # could lock a user out purely from normal repeated legitimate logins.
 
     async with database.with_admin() as conn:
-        user = await conn.fetchrow("SELECT * FROM users WHERE id=$1", user_id)
+        user = await conn.fetchrow(
+            "SELECT is_active, mfa_code_attempts, mfa_code_expires_at, mfa_code, email, name, "
+            "role, must_change_password, password_changed_at FROM users WHERE id=$1", user_id
+        )
         if not user or not user["is_active"]:
             raise HTTPException(status_code=401, detail="User not found or inactive")
         user = dict(user)
@@ -423,7 +429,7 @@ async def request_mfa_code(current_user=Depends(get_current_user)):
     if current_user["role"] not in ("admin", "manager"):
         raise HTTPException(status_code=403, detail="MFA toggle is only available for admin and manager roles")
     async with database.with_admin() as conn:
-        user = await conn.fetchrow("SELECT * FROM users WHERE id=$1", current_user["id"])
+        user = await conn.fetchrow("SELECT id, email FROM users WHERE id=$1", current_user["id"])
         await _generate_and_send_mfa(conn, dict(user))
     return {"message": "A verification code has been sent to your email"}
 
@@ -440,7 +446,9 @@ async def toggle_mfa(data: ToggleMfaRequest, current_user=Depends(get_current_us
         raise HTTPException(status_code=403, detail="MFA toggle is only available for admin and manager roles")
 
     async with database.with_admin() as conn:
-        user = await conn.fetchrow("SELECT * FROM users WHERE id=$1", current_user["id"])
+        user = await conn.fetchrow(
+            "SELECT mfa_code_attempts, mfa_code_expires_at, mfa_code FROM users WHERE id=$1", current_user["id"]
+        )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user = dict(user)
@@ -630,7 +638,7 @@ async def reset_password(data: ResetPasswordRequest):
     validate_password_strength(data.new_password)
     async with database.with_admin() as conn:
         record = await conn.fetchrow(
-            "SELECT * FROM password_reset_tokens WHERE token = $1 AND used = FALSE", data.token
+            "SELECT expires_at, email FROM password_reset_tokens WHERE token = $1 AND used = FALSE", data.token
         )
         if not record:
             raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
@@ -677,7 +685,9 @@ class ChangePasswordRequest(BaseModel):
 async def change_password(data: ChangePasswordRequest, current_user=Depends(get_current_user)):
     validate_password_strength(data.new_password)
     async with database.with_admin() as conn:
-        user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", current_user["id"])
+        user = await conn.fetchrow(
+            "SELECT id, email, password_hash, supabase_password_set FROM users WHERE id = $1", current_user["id"]
+        )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -723,7 +733,7 @@ async def validate_invite(token: str):
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
         invite = await conn.fetchrow(
-            "SELECT * FROM invitations WHERE token = $1 AND used_at IS NULL", token
+            "SELECT expires_at, user_id, org_id FROM invitations WHERE token = $1 AND used_at IS NULL", token
         )
         if not invite:
             raise HTTPException(status_code=404, detail="Invitation not found or already used")
@@ -752,13 +762,13 @@ async def accept_invite(data: AcceptInviteRequest, response: Response):
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
         invite = await conn.fetchrow(
-            "SELECT * FROM invitations WHERE token = $1 AND used_at IS NULL", data.token
+            "SELECT expires_at, user_id, org_id FROM invitations WHERE token = $1 AND used_at IS NULL", data.token
         )
         if not invite:
             raise HTTPException(status_code=404, detail="Invitation not found or already used")
         if invite["expires_at"] < now:
             raise HTTPException(status_code=410, detail="Invitation link has expired")
-        user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", invite["user_id"])
+        user = await conn.fetchrow("SELECT name, email, role FROM users WHERE id = $1", invite["user_id"])
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 

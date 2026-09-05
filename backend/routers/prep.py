@@ -135,7 +135,8 @@ async def list_focus_topics(current_user=Depends(get_current_user)):
     this_month = datetime.now(timezone.utc).strftime("%Y-%m")
     async with database.with_org(org_id) as conn:
         rows = await conn.fetch(
-            "SELECT * FROM focus_topics WHERE org_id=$1 ORDER BY active_month ASC NULLS LAST, created_at DESC",
+            "SELECT id, text, active_month, is_current FROM focus_topics WHERE org_id=$1 "
+            "ORDER BY active_month ASC NULLS LAST, created_at DESC",
             org_id,
         )
     result = []

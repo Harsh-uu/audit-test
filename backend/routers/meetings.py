@@ -515,7 +515,10 @@ async def get_transcript_text(meeting_id: str, current_user=Depends(get_current_
     user_id = current_user.get("id", "")
 
     async with database.with_org(org_id) as conn:
-        row = await conn.fetchrow("SELECT * FROM meetings WHERE id = $1", meeting_id)
+        row = await conn.fetchrow(
+            "SELECT attendees, shared_with, created_by, transcript_id, pii_redactions FROM meetings WHERE id = $1",
+            meeting_id,
+        )
         if not row:
             raise HTTPException(status_code=404, detail="Not found")
         meeting = _parse_meeting_row(dict(row))

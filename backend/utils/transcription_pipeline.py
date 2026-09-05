@@ -166,7 +166,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 "UPDATE meetings SET status='transcribing', updated_at=$1 WHERE id=$2",
                 datetime.now(timezone.utc).isoformat(), meeting_id,
             )
-            meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id = $1", meeting_id)
+            meeting_row = await conn.fetchrow(
+                "SELECT attendees, org_id, sign_off_manager_name, created_by_name, sign_off_manager_id, "
+                "meeting_type, paused_periods FROM meetings WHERE id = $1", meeting_id
+            )
 
         meeting = dict(meeting_row) if meeting_row else {}
         attendee_count = len(_jlist(meeting.get("attendees"))) or None
@@ -246,7 +249,8 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             if custom_standards is None:
                 async with database.with_org(meeting_org_id) as conn:
                     custom_rows = await conn.fetch(
-                        "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
+                        "SELECT id, label, filename, extracted_criteria FROM standards_documents "
+                        "WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
                         meeting_org_id,
                     )
                 custom_standards = [dict(r) for r in custom_rows]

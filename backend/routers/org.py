@@ -108,22 +108,26 @@ async def get_structure(current_user=Depends(get_current_user)):
     async with database.with_org(org_id) as conn:
         # Determine which settings to show
         if scope["level"] == "org":
-            s_rows = await conn.fetch("SELECT * FROM org_settings ORDER BY name ASC")
+            s_rows = await conn.fetch("SELECT id, name, manager_user_id FROM org_settings ORDER BY name ASC")
         else:
             # Branch/team managers see only their own setting
-            s_rows = await conn.fetch("SELECT * FROM org_settings WHERE id=$1", scope["setting_id"])
+            s_rows = await conn.fetch(
+                "SELECT id, name, manager_user_id FROM org_settings WHERE id=$1", scope["setting_id"]
+            )
         s_dicts = [dict(r) for r in s_rows]
         setting_ids = [s["id"] for s in s_dicts]
 
         # Determine which teams to show, in a single batched query (avoids N+1 per setting)
         if scope["level"] == "team":
             t_rows = await conn.fetch(
-                "SELECT * FROM teams WHERE setting_id = ANY($1::uuid[]) AND id=$2 ORDER BY name ASC",
+                "SELECT id, name, description, supervisor_user_id, setting_id FROM teams "
+                "WHERE setting_id = ANY($1::uuid[]) AND id=$2 ORDER BY name ASC",
                 setting_ids, scope["team_id"],
             )
         else:
             t_rows = await conn.fetch(
-                "SELECT * FROM teams WHERE setting_id = ANY($1::uuid[]) ORDER BY name ASC", setting_ids,
+                "SELECT id, name, description, supervisor_user_id, setting_id FROM teams "
+                "WHERE setting_id = ANY($1::uuid[]) ORDER BY name ASC", setting_ids,
             )
         t_dicts = [dict(r) for r in t_rows]
         team_ids = [t["id"] for t in t_dicts]
@@ -180,9 +184,11 @@ async def list_settings(current_user=Depends(get_current_user)):
     scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
         if scope["level"] == "org":
-            rows = await conn.fetch("SELECT * FROM org_settings ORDER BY name ASC")
+            rows = await conn.fetch("SELECT id, name, manager_user_id FROM org_settings ORDER BY name ASC")
         else:
-            rows = await conn.fetch("SELECT * FROM org_settings WHERE id=$1", scope["setting_id"])
+            rows = await conn.fetch(
+                "SELECT id, name, manager_user_id FROM org_settings WHERE id=$1", scope["setting_id"]
+            )
     return [dict(r) for r in rows]
 
 
@@ -219,7 +225,7 @@ async def update_setting(setting_id: str, data: SettingCreate, current_user=Depe
     org_id = current_user.get("org_id", "")
     mgr_id = data.manager_user_id or None
     async with database.with_org(org_id) as conn:
-        existing = await conn.fetchrow("SELECT * FROM org_settings WHERE id=$1", setting_id)
+        existing = await conn.fetchrow("SELECT manager_user_id FROM org_settings WHERE id=$1", setting_id)
         if not existing:
             raise HTTPException(404, "Setting not found")
         old_mgr = existing["manager_user_id"]
@@ -285,7 +291,7 @@ async def update_team(team_id: str, data: TeamCreate, current_user=Depends(get_c
     scope = get_manager_scope(current_user)
     sup_id = data.supervisor_user_id or None
     async with database.with_org(org_id) as conn:
-        existing = await conn.fetchrow("SELECT * FROM teams WHERE id=$1", team_id)
+        existing = await conn.fetchrow("SELECT setting_id, supervisor_user_id FROM teams WHERE id=$1", team_id)
         if not existing:
             raise HTTPException(404, "Team not found")
         _assert_team_scope(scope, dict(existing).get("setting_id"), team_id)

@@ -280,37 +280,37 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
 
             if org_jurisdiction == "wales":
                 cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='ciw' AND is_active=TRUE AND jurisdiction='wales'",
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type='ciw' AND is_active=TRUE AND jurisdiction='wales'",
                 )
                 care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type IN ('awif','scw') AND is_active=TRUE AND jurisdiction='wales' ORDER BY type, reference",
                 )
             elif org_jurisdiction == "scotland":
                 cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='ci' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type='ci' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
                 )
                 care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='sssc' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type='sssc' AND is_active=TRUE AND jurisdiction='scotland' ORDER BY reference",
                 )
             elif org_jurisdiction == "northern_ireland":
                 rqia_type = "rqia_dom" if org_service_type == "domiciliary" else "rqia_res"
                 cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type=$1 AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY reference",
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type=$1 AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY reference",
                     rqia_type,
                 )
                 care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type IN ('niscc_code','niscc_induction') AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY type, reference",
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type IN ('niscc_code','niscc_induction') AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY type, reference",
                 )
             else:
                 cqc_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='cqc' AND is_active=TRUE ORDER BY reference ASC",
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type='cqc' AND is_active=TRUE ORDER BY reference ASC",
                 )
                 care_cert_rows = await conn.fetch(
-                    "SELECT * FROM standards_entries WHERE type='care_cert' AND is_active=TRUE ORDER BY reference ASC",
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type='care_cert' AND is_active=TRUE ORDER BY reference ASC",
                 )
         async with database.with_org(org_id) as conn:
             custom_rows = await conn.fetch(
-                "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
+                "SELECT id, label, filename, extracted_criteria FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
                 org_id,
             )
 

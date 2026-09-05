@@ -159,7 +159,7 @@ async def delete_audio_after_grace(meeting_id: str):
     await asyncio.sleep(300)
     try:
         async with database.with_admin() as conn:
-            meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
+            meeting_row = await conn.fetchrow("SELECT status, audio_file_id FROM meetings WHERE id=$1", meeting_id)
         if not meeting_row or meeting_row["status"] != "signed_off":
             return
         meeting = dict(meeting_row)
@@ -398,7 +398,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
 
         # Lock the analyses row — held until this transaction commits
         a_row = await conn.fetchrow(
-            "SELECT * FROM analyses WHERE id=$1 FOR UPDATE", analysis_id
+            "SELECT cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id=$1 FOR UPDATE", analysis_id
         )
         if not a_row:
             raise HTTPException(status_code=404, detail="Analysis not found")
@@ -506,7 +506,7 @@ async def bulk_update_evidence(meeting_id: str, data: BulkEvidenceActionRequest,
         if not analysis_id:
             raise HTTPException(status_code=400, detail="No analysis found")
 
-        a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1 FOR UPDATE", analysis_id)
+        a_row = await conn.fetchrow("SELECT cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id=$1 FOR UPDATE", analysis_id)
         if not a_row:
             raise HTTPException(status_code=404, detail="Analysis not found")
         analysis = dict(a_row)
@@ -648,7 +648,7 @@ async def get_risk_suggestions(meeting_id: str, risk_id: str, current_user=Depen
         raise HTTPException(status_code=404, detail="Meeting not found")
 
     async with database.with_org(org_id) as conn:
-        a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", m_row["analysis_id"])
+        a_row = await conn.fetchrow("SELECT risks FROM analyses WHERE id=$1", m_row["analysis_id"])
     if not a_row:
         raise HTTPException(status_code=404, detail="Analysis not found")
     analysis = dict(a_row)
@@ -690,7 +690,7 @@ async def mark_reviewed(meeting_id: str, current_user=Depends(get_current_user))
     # before writing, preventing the lost-update race.
     async with database.with_org(org_id) as conn:
         m_row = await conn.fetchrow(
-            "SELECT * FROM meetings WHERE id=$1 AND org_id=$2 FOR UPDATE",
+            "SELECT status, attendees, created_by FROM meetings WHERE id=$1 AND org_id=$2 FOR UPDATE",
             meeting_id, org_id,
         )
         if not m_row:
@@ -726,7 +726,9 @@ async def mark_reviewed(meeting_id: str, current_user=Depends(get_current_user))
 async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT sign_off_manager_id, status, attendees FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(m_row)
@@ -1191,7 +1193,10 @@ async def rescan_evidence(meeting_id: str, data: RescanRequest, background_tasks
         raise HTTPException(status_code=403, detail="Only managers can re-scan evidence")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT status, analysis_id, transcript_id, paused_periods, attendees, sign_off_manager_name, "
+            "created_by_name, meeting_type FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(m_row)
@@ -1256,7 +1261,8 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         if custom_standards is None:
             async with database.with_org(org_id) as conn:
                 custom_rows = await conn.fetch(
-                    "SELECT * FROM standards_documents WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
+                    "SELECT id, label, filename, extracted_criteria FROM standards_documents "
+                    "WHERE org_id=$1 AND is_active=TRUE AND parse_status='parsed'",
                     org_id,
                 )
             custom_standards = [dict(r) for r in custom_rows]
@@ -1573,7 +1579,10 @@ async def get_comments(meeting_id: str, current_user=Depends(get_current_user)):
     await _check_meeting_access(meeting_for_check, current_user, org_id)
 
     async with database.with_org(org_id) as conn:
-        rows = await conn.fetch("SELECT * FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC", meeting_id)
+        rows = await conn.fetch(
+            "SELECT id, user_id, user_name, role, text, created_at FROM reviewer_comments WHERE meeting_id=$1 ORDER BY created_at ASC",
+            meeting_id,
+        )
     return [dict(r) for r in rows]
 
 
@@ -2249,7 +2258,11 @@ async def export_transcript(meeting_id: str, current_user=Depends(get_current_us
     from fastapi.responses import Response
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT title, date, status, transcript_id, pii_redactions, attendees, shared_with, "
+            "created_by, sign_off_manager_id, sign_off_manager_name FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = _parse_meeting_row(dict(m_row))
@@ -2420,7 +2433,10 @@ async def request_reopen(meeting_id: str, data: ReopenRequest, current_user=Depe
 async def approve_reopen(meeting_id: str, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT reopen_requested, attendees, reopen_requested_by, reopen_reason FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(m_row)

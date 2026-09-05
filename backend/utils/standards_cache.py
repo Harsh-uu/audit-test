@@ -34,7 +34,8 @@ async def warm(conn) -> None:
     if _warmed:
         return
     rows = await conn.fetch(
-        "SELECT * FROM standards_entries WHERE is_system = TRUE AND is_active = TRUE "
+        "SELECT type, jurisdiction, reference, name, description, key_questions, sub_outcomes "
+        "FROM standards_entries WHERE is_system = TRUE AND is_active = TRUE "
         "ORDER BY type, reference"
     )
     for r in rows:

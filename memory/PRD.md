@@ -40,6 +40,22 @@ deliberate full-row fetches (detail/edit views, already-optimized hot path in
   clean (portfolio stats, standards library, cross-tenant isolation all correct). One
   pre-existing data gap noted (no signed-off meeting has a transcript in seed data — unrelated
   to this change, already flagged in iteration_116).
+- **Part 2 (Sep 2026, completed to closure)**: user asked to finish the job completely. Trimmed
+  the remaining ~53 occurrences across `review.py` (9), `auth.py` (9), `meetings.py` (1),
+  `org.py` (8), `schedules.py` (4), `admin.py` (2 more: `list_standards`/`list_documents`),
+  `doc_uploads.py` (9 more), `standards_cache.py` (1), `transcription_pipeline.py` (2 more) —
+  every column list traced through both backend usage AND frontend consumers (React components)
+  before trimming, then every single column name cross-checked against live
+  `information_schema.columns`. That cross-check caught 2 real bugs before they shipped: a
+  non-existent `outcomes` column on `standards_entries` (briefly crashed backend startup,
+  fixed immediately) and a non-existent `description` column on `org_settings` (`teams` has
+  one, `org_settings` doesn't — fixed before any request hit it). Final state: **81 → 11
+  occurrences remaining**, every one individually verified as a deliberate full-row
+  detail/report view (`meetings.py`/`review.py` detail & report pages, `prep.py`'s
+  `get_prep`/focus-topics passthroughs, `doc_uploads.py`'s `get_upload`) or the documented
+  null-org_id edge case (`portfolio.py`). Tested via `testing_agent` iteration_118 — 31/31
+  pass, zero column errors, zero 500s, join-resolved fields (manager_name, supervisor_name,
+  staff_name, meeting_type_name/color, sub_outcomes counts) all verified non-blank.
 
 
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested

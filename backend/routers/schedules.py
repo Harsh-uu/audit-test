@@ -74,12 +74,14 @@ async def seed_meeting_types(conn, org_id: str):
 async def _enriched_schedules(conn, org_id: str, staff_ids=None):
     if staff_ids is not None:
         s_rows = await conn.fetch(
-            "SELECT * FROM schedules WHERE org_id=$1 AND is_active=TRUE AND staff_user_id=ANY($2)",
+            "SELECT id, staff_user_id, meeting_type_id, frequency, start_date FROM schedules "
+            "WHERE org_id=$1 AND is_active=TRUE AND staff_user_id=ANY($2)",
             org_id, staff_ids,
         )
     else:
         s_rows = await conn.fetch(
-            "SELECT * FROM schedules WHERE org_id = $1 AND is_active = TRUE", org_id
+            "SELECT id, staff_user_id, meeting_type_id, frequency, start_date FROM schedules "
+            "WHERE org_id = $1 AND is_active = TRUE", org_id
         )
     if not s_rows:
         return []
@@ -99,7 +101,7 @@ async def _enriched_schedules(conn, org_id: str, staff_ids=None):
         completed_counts[sid] = completed_counts.get(sid, 0) + 1
 
     # Meeting type map
-    mt_rows = await conn.fetch("SELECT * FROM meeting_types WHERE org_id = $1", org_id)
+    mt_rows = await conn.fetch("SELECT id, name, color FROM meeting_types WHERE org_id = $1", org_id)
     type_map = {t["id"]: dict(t) for t in mt_rows}
 
     # User map
@@ -170,7 +172,8 @@ async def list_meeting_types(current_user=Depends(get_current_user)):
     async with database.with_org(org_id) as conn:
         await seed_meeting_types(conn, org_id)
         rows = await conn.fetch(
-            "SELECT * FROM meeting_types WHERE org_id = $1 AND is_active = TRUE ORDER BY name ASC", org_id
+            "SELECT id, name, default_frequency, color FROM meeting_types WHERE org_id = $1 AND is_active = TRUE ORDER BY name ASC",
+            org_id,
         )
     result = [dict(r) for r in rows]
     _meeting_types_cache[org_id] = (time.monotonic(), result)
