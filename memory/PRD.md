@@ -138,6 +138,26 @@ the decision was reversed with user approval.
   verbatim in `meetings.py` and `super_admin.py` — could extract to a shared constant later.
 
 
+## Settings Table Orphan Cleanup — FIXED (Aug 2026), fully tested
+Audit finding: `settings.org_id` has no FK and the table was completely absent from
+`delete_org()`'s cleanup (neither its `meeting_id`-list nor its `org_id`-list). Unlike the `jobs`
+case, a real FK genuinely isn't possible here (documented in `m004_fk_constraints.py`):
+`settings.id` uses composite string keys (e.g. `"supervision_template:{org_id}"`) rather than a
+real UUID row identity, so `settings.org_id` is TEXT forever and can't type-match
+`organisations.id` (UUID). That comment only explained why the FK was skipped though — it never
+said cleanup itself was intentionally skipped, and every other FK-impossible table (e.g.
+`standards_documents`) still gets a manual-delete fallback; `settings` never did.
+- Fix: added `"settings"` to the existing `org_id`-based manual cleanup list in
+  `super_admin.py::delete_org()` (`meetings, users, schedules, meeting_types,
+  standards_documents, supervision_uploads, invitations` → + `settings`). One-line change, same
+  proven pattern.
+- Verified end-to-end: created a throwaway org (`TEST_settings_fk_org`) via the real
+  `POST /api/super-admin/orgs`, inserted a `settings` row for it, deleted it via the real
+  `DELETE /api/super-admin/orgs/{id}` — response now reports `"settings": 1` deleted, row
+  confirmed gone, org confirmed removed, throwaway data cleaned up. Test Company org
+  (`b00bf04f-a1b9-4673-8430-b4a08ba15d6c`) unaffected.
+
+
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
 Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
 (stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully

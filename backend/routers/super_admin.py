@@ -177,7 +177,7 @@ async def delete_org(org_id: str, current_user=Depends(get_current_user)):
                 totals[table] = int(result.split()[-1])
 
         for table in ["meetings", "users", "schedules", "meeting_types", "standards_documents",
-                       "supervision_uploads", "invitations"]:
+                       "supervision_uploads", "invitations", "settings"]:
             result = await conn.execute(f"DELETE FROM {table} WHERE org_id = $1", org_id)
             totals[table] = int(result.split()[-1])
 
