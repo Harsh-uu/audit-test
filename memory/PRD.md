@@ -11,6 +11,21 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+
+## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
+Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
+(stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully
+idle, transaction-finished-but-connection-never-closed) was still `0` (disabled) — confirmed
+live via `pg_stat_activity` showing Supabase-managed connections (pg_net, PostgREST, pg_cron)
+idle for 7-30 days with nothing to reclaim them. Matches Supabase's own documented
+best-practice value.
+- **Fix (`migrations/m012_idle_session_timeout.py`)**: `ALTER DATABASE ... SET
+  idle_session_timeout = '10min'` — same `ALTER DATABASE` (not `ALTER SYSTEM`, which needs
+  true superuser this role lacks) pattern as `m010`, applies DB-wide to every role/pool.
+- Verified via live query: both settings now persisted (`idle_in_transaction_session_timeout=
+  30s`, `idle_session_timeout=10min`); post-fix smoke test confirmed login + meeting-list counts
+  unchanged for admin (15) and attendee (7) roles — no regression.
+
 ## Least-Privilege DB Connection Role — COMPLETE (Sep 2026), fully tested
 Security review flagged: the app's ONE connection pool authenticated as Supabase's `postgres`
 role, which has `rolbypassrls=true` — every `with_admin()` call (123 sites) and, by extension,

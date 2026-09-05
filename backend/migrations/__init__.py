@@ -20,6 +20,7 @@ from . import (
     m009_supabase_password_set,
     m010_idle_timeout,
     m011_least_privilege_role,
+    m012_idle_session_timeout,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ MIGRATIONS = [
     m009_supabase_password_set,
     m010_idle_timeout,
     m011_least_privilege_role,
+    m012_idle_session_timeout,
 ]
 
 
