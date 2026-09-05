@@ -1,0 +1,64 @@
+{
+  "summary": "Full-application regression audit (iteration 116) after the m010-m012 DB changes (two-pool least-privilege split, idle_session_timeout=10min, idle_in_transaction_session_timeout=30s) and the two frontend edits. Backend: wrote and ran two new pytest suites — test_iter116_full_regression.py (74 tests: auth all 4 roles + MFA bypass/refresh/logout/forgot+reset+change-password negatives, meetings CRUD & role scoping, recording, processing, review, prep, portfolio+PDF, full admin panel incl. user/standards/template CRUD + insights + stats + exports, schedules & meeting types, org structure/settings/teams/branding, super-admin org+user lifecycle, doc-uploads, RBAC negatives, cross-tenant + same-org isolation) and test_iter116b_lifecycle.py (18 tests: real create -> audio upload -> job worker transcribe -> AI analysis -> PII scan/redaction -> summary/action edits -> comments/audit -> mark-reviewed -> sign-off -> PDF/transcript export with redaction verified -> post-signoff lock -> reopen request/approve). 92/92 backend tests pass. Transcription pipeline verified end-to-end on the live preview: processing -> transcribing -> analyzing -> in_review in ~32s, job row completed, transcript+analysis persisted; AI endpoints (rescan-evidence, regenerate-summary, scan-pii) verified 200 on real transcripts. Static scan found NO slow AI/HTTP/sleep await inside any with_org/with_admin transaction, so idle_in_transaction_session_timeout=30s is not reachable by app code. No InsufficientPrivilege/RLS/pool errors in backend logs. Frontend: exercised admin, attendee, jane, manager (cookie-injected) and super-admin (cookie-injected) end to end on the public preview URL — login, dashboard, meeting report + all tabs, Team Themes, Supervision Matrix, Inspection Prep, Induction, Organisation, Schedules, Standards Library (CQC 47/CareCert 16/Custom 0/Users 10), Settings incl. Security/2FA tab, portfolio, and the super-admin org list. Both previously reported frontend bugs are confirmed FIXED: no /api/admin/standards 403 on the attendee portfolio, and the user-switch cache leak is gone (attendee 7 meetings -> logout -> jane shows exactly 1).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/admin/export-transcripts", "issue": "Returns 404 'No transcripts found for the selected filters' for the whole org because all 3 signed_off meetings have transcript_id NULL. Data condition, not a code fault, but the endpoint has never been exercised on a real dataset — consider seeding one signed-off meeting WITH a transcript so exports stay covered."},
+      {"endpoint": "GET /api/meetings/{id}/transcript-text", "issue": "404 for signed-off meetings without a transcript; the report UI calls it unconditionally and logs a red console error (handled gracefully in UI, but noisy)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StaffPortfolio (attendee)", "issue": "'Export Portfolio PDF' button still renders in a low-contrast muted/disabled-looking state although it works (API returns a valid PDF). Carried over from iteration 115 and still unfixed.", "selector": "text=Export Portfolio PDF", "priority": "LOW"},
+      {"component": "Team Themes (/admin/team)", "issue": "Page shows full-page skeleton loaders for ~10s before the evidence matrix renders (loads fine at 12s). /api/admin/team-insights is slow on first hit — consider a spinner + progressive render or caching.", "selector": "[class*=\"animate-pulse\"]", "priority": "LOW"},
+      {"component": "NewMeeting", "issue": "Date/time still use native browser inputs instead of the shadcn calendar/time components used elsewhere (also visible as dd/mm/yyyy native pickers in the Team Themes date filters).", "selector": "[data-testid=\"meeting-date-input\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login page bootstrap", "issues": ["Unauthenticated /api/auth/me + /api/auth/refresh both return 401 on every page load, producing two red console errors before login — cosmetic but noisy for debugging"]},
+      {"screen": "Manager Settings > Security", "issues": ["2FA shows 'Disabled' with an 'Enable 2FA' button for the manager role, i.e. MFA is optional. /app/memory/test_credentials.md still says MFA is MANDATORY for manager/admin in one section and optional in another — docs contradict the shipped behaviour; pick one and update the doc"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter116_full_regression.py",
+    "/app/backend/tests/test_iter116b_lifecycle.py",
+    "/app/backend/tests/_iter116_pipeline_probe.py",
+    "/app/backend/tests/_iter116_ai_probe.py",
+    "/app/backend/tests/_iter116_tx_scan.py",
+    "/app/backend/tests/_iter116_state.py",
+    "/app/test_reports/pytest/iter116_full.xml",
+    "/app/test_reports/pytest/iter116b_lifecycle.xml"
+  ],
+  "action_items": [
+    "No functional regression found from the pool split or the idle-timeout migrations — no code change required for those.",
+    "Optional: style the attendee 'Export Portfolio PDF' button so it does not read as disabled.",
+    "Optional: gate or soften the /api/meetings/{id}/transcript-text call on reports with no transcript (avoid console 404 noise).",
+    "Optional perf: /api/admin/team-insights first response drives a ~10s skeleton on Team Themes.",
+    "Housekeeping: leftover fixtures still inflate People & Usage counts — users 'TEST pw' (test_iter114_pw_48ea40d1@, test_iter114_pw_41cf801c@) and 'Sec Test' (sectest-aug26@example.com).",
+    "Reconcile the MFA statement in /app/memory/test_credentials.md with the shipped behaviour (manager MFA is optional; only super_admin is mandatory).",
+    "Note: the AI probe called regenerate-summary and rescan-evidence on two seeded demo meetings (2f1cc088…, c20802af…), so their summaries/evidence mappings were regenerated. Harmless, but seeded text is no longer byte-identical."
+  ],
+  "critical_code_review_comments": [
+    "database.py: neither pool sets max_inactive_connection_lifetime, so asyncpg's 300s default applies — safely below the new 10-minute idle_session_timeout, so pooled connections are recycled before the server kills them. Keep it under 600s if that default is ever overridden.",
+    "Static scan (_iter116_tx_scan.py) confirms no AI/httpx/storage/sleep await occurs inside an open with_org()/with_admin() transaction; the transcription pipeline opens short transactions around each AI step, so idle_in_transaction_session_timeout=30s cannot kill a legitimate job. Preserve this invariant in future edits — it is the single biggest risk from m012.",
+    "review.py is 2454 lines and admin.py 2371 lines — both far over the 700-line guideline and the main source of duplicated _ensure_list/_jlist/guard boilerplate. Splitting review.py (workflow / exports / transcript-editing / PII) would materially reduce regression surface.",
+    "admin.py exposes debug endpoints in the normal API surface (/admin/users/debug-by-email, /admin/users/{id}/debug, /admin/meetings/{id}/debug-attendees, /admin/users/fix-org-by-email, /admin/meetings/{id}/add-attendee). They are admin-gated but are un-audited mutation/introspection paths — consider env-gating them off in production.",
+    "export_evidence/export_transcripts read the body via `await request.json()` instead of a Pydantic model, so filters (format/staff_ids/date_from/date_to/meeting_ids) are unvalidated — the only endpoints in the audit without schema validation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter116_full_regression.py",
+    "/app/backend/tests/test_iter116b_lifecycle.py",
+    "/app/backend/tests/_iter116_pipeline_probe.py",
+    "/app/backend/tests/_iter116_ai_probe.py",
+    "/app/backend/tests/_iter116_tx_scan.py",
+    "/app/backend/tests/_iter116_state.py",
+    "/app/test_reports/iteration_116.json"
+  ],
+  "success_rate": {"backend": "100% (92/92: 74 full-regression + 18 lifecycle)", "frontend": "100% of flows exercised rendered and integrated correctly; 3 low-priority cosmetic/perf issues"},
+  "seed_data_creation": "No persistent seed data. All TEST_iter116_* meetings, users, orgs, standards, teams, settings, meeting types and focus topics were created and deleted inside the suites; the pipeline/lifecycle meetings (audio uploaded, analysed, signed off) were deleted at teardown.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "All credentials in /app/memory/test_credentials.md are valid: admin@supervision.com/Admin123! (no MFA prompt), user@supervision.com/AnotherNew789!, jane@supervision.com/JaneNew456!, manager@supervision.com/Manager123! (MFA prompt appears; bypassed with tests/get_tokens.py), superadmin@1two.one/NewPass123! (MFA mandatory; bypassed with get_tokens.py + cookie injection for UI).",
+  "context_for_next_testing_agent": "Run `python3 -m pytest tests/test_iter116_full_regression.py tests/test_iter116b_lifecycle.py -q` from /app/backend (~5 min total; use -n 0 for the lifecycle suite since it is order-dependent). test_iter116_full_regression exports API/T/login/ADMIN/MANAGER helpers that other suites import. Note: writing any file under /app/backend/tests triggers a uvicorn hot reload and ~20s of 502s — wait before probing. Current data: admin/manager see 15 meetings, user@ 7, jane 1; 3 signed_off meetings all lack transcripts (so /admin/export-transcripts legitimately 404s). Tone-WAV uploads DO complete the real pipeline in ~35s but yield an empty-ish transcript, which makes rescan-evidence/regenerate-summary return 400 — use a seeded meeting with a real transcript to test those (see _iter116_ai_probe.py).",
+  "rca_of_the_issue": "No regression attributable to the three DB migrations or the two frontend edits. m011 two-pool split: every endpoint category returns correct, correctly-scoped data with no privilege errors. m012 idle_in_transaction_session_timeout=30s: safe because no long-running (AI/network/storage) await sits inside an open transaction — verified by static scan and by a live 32s pipeline run plus 4.7s PDF export. m010/m012 idle_session_timeout=10min: safe because asyncpg recycles idle pooled connections after its 300s default. The iteration-115 AuthContext clearCache() fix and the StaffPortfolio role gate are both confirmed effective in the browser."
+}
