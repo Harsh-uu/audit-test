@@ -196,7 +196,8 @@ async def update_upload_evidence(
     org_id = current_user.get("org_id")
     async with database.with_org(org_id) as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM supervision_uploads WHERE id=$1 AND org_id=$2", upload_id, org_id
+            "SELECT id, cqc_mappings, care_cert_mappings, custom_mappings FROM supervision_uploads WHERE id=$1 AND org_id=$2",
+            upload_id, org_id,
         )
     if not row:
         raise HTTPException(status_code=404, detail="Not found")

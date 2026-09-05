@@ -110,7 +110,10 @@ async def _get_meeting_guarded(meeting_id: str, user: dict):
     """Return meeting or raise 403/404."""
     org_id = user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
+        row = await conn.fetchrow(
+            "SELECT id, org_id, attendees, sign_off_manager_id, created_by, analysis_id "
+            "FROM meetings WHERE id=$1", meeting_id,
+        )
     if not row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(row)
@@ -365,7 +368,9 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
             )
 
         async with database.with_org(org_id) as conn:
-            meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
+            meeting_row = await conn.fetchrow(
+                "SELECT attendees, sign_off_manager_id, created_by FROM meetings WHERE id=$1", meeting_id,
+            )
         meeting = dict(meeting_row) if meeting_row else {}
         meeting["attendees"] = _ensure_list(meeting.get("attendees"))
         _attendees = meeting["attendees"]
@@ -624,7 +629,9 @@ async def carry_forward_missed(meeting_id: str, current_user=Depends(get_current
 
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        prep_row = await conn.fetchrow("SELECT * FROM meeting_prep WHERE meeting_id=$1", meeting_id)
+        prep_row = await conn.fetchrow(
+            "SELECT coverage_results, sections FROM meeting_prep WHERE meeting_id=$1", meeting_id,
+        )
     if not prep_row:
         raise HTTPException(status_code=404, detail="No prep found")
 

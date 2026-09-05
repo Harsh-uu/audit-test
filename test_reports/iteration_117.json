@@ -1,0 +1,38 @@
+{
+  "summary": "Regression coverage for the SELECT * -> explicit column list trim across 6 backend files (portfolio.py, admin.py exports, prep.py, processing.py, doc_uploads.py, transcription_pipeline.py). Wrote /app/backend/tests/test_iter117_select_star_trim.py: 25 tests covering: full-app sanity (login all 4 roles + meetings list + jane cross-user isolation), portfolio for attendee/admin/manager with numeric-consistency cross-check, all 4 admin exports (evidence CSV+PDF, cqc-excerpts PDF, cc-excerpts PDF, transcripts POST), prep context/generate/carry-forward-missed, processing retry/diarize/retranscribe (assert not-500 on real & 404 on synthetic meeting), doc_uploads update_upload_evidence (404 path + real accept-and-persistence round trip on an existing evidence item). All 25/25 pass in 60s after clearing the pre-existing 10/hour export rate limit. Bytes verified: evidence-csv non-empty; evidence-pdf, cqc-excerpts, cc-excerpts all start with %PDF magic + >500 bytes. export-transcripts still 404s because the 3 signed-off meetings in seed data have transcript_id NULL (pre-existing data condition, iteration 116 already flagged; not a code fault of this change — endpoint no longer 500s and returns clean 404). Frontend spot-checked on preview URL: admin dashboard shows the same 15/3/3 meeting counts as iteration 116, standards library renders (CQC 47, Care Cert 16), attendee 'My Portfolio' renders with the trimmed-column-derived stats block (0 records for user@ is correct — not a supervisee on any signed-off meeting), jane sees exactly 1 meeting (isolation intact). No 500s, no KeyError, no missing-field crashes anywhere.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/admin/export-transcripts", "issue": "Still returns 404 'No transcripts found' because all 3 signed_off meetings have transcript_id NULL — same pre-existing data-only issue flagged in iteration_116; not attributable to this column trim."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter117_select_star_trim.py",
+    "/app/test_reports/pytest/iter117.xml"
+  ],
+  "action_items": [
+    "No action items — the SELECT * -> explicit column trim is fully non-regressive across portfolio, admin exports, prep, processing, and doc_uploads. Main agent may ship."
+  ],
+  "critical_code_review_comments": [
+    "portfolio.py line 118: trimmed SELECT correctly includes analysis_id/pii_redactions used later by _apply_redactions_deep and status/sign_off_manager_name used by the response — verified downstream reads.",
+    "doc_uploads.py line 199: _upload_dict only iterates _JSONB_FIELDS, so the (id, cqc/care_cert/custom_mappings) trim is safe — no orphan reads.",
+    "processing.py retranscribe (line 287): trimmed SELECT drops 'created_by' but the function still uses only audio_file_id/transcript_id/attendees/sign_off_manager_name/created_by_name/meeting_type — verified no reference to created_by after the trim.",
+    "Consider adding a Pydantic body model to POST /admin/export-evidence and /admin/export-transcripts (still using request.json() with no schema) — carried forward from iteration_116 review, not blocking.",
+    "export-transcripts test data gap persists: no signed-off meeting has a transcript. Consider seeding one so this export path has real regression coverage."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter117_select_star_trim.py"
+  ],
+  "success_rate": {"backend": "100% (25/25)", "frontend": "100% of spot-checked flows rendered correctly"},
+  "test_credentials": "admin@supervision.com/Admin123!, user@supervision.com/AnotherNew789!, jane@supervision.com/JaneNew456!, manager@supervision.com/Manager123! (MFA bypassed via DB override) — all valid.",
+  "seed_data_creation": "None. All tests are read-only or self-restoring (doc_uploads evidence status is toggled to 'accepted' then restored to original).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `python3 -m pytest tests/test_iter117_select_star_trim.py -v` from /app/backend (60s). Before re-running admin export tests, run `python3 tests/clear_rate_limit.py` — the 10-per-hour export rate limit uses the login_attempts table and blocks re-runs. jane@supervision.com sees exactly 1 meeting; admin sees 15; user@ sees 7; only 3 are signed_off and none of them have transcripts (so /admin/export-transcripts legitimately 404s — treat as data gap not bug).",
+  "rca_of_the_issue": "N/A — this is a defensive regression pass on an optimization (SELECT * -> explicit column lists across 6 files). Traced downstream field usage of every trimmed query and confirmed: (a) portfolio uses only {id,title,date,status,sign_off_manager_name,pii_redactions,analysis_id} + {id,cqc_mappings,care_cert_mappings,custom_mappings}, all present; (b) doc_uploads _upload_dict only reads _JSONB_FIELDS, all present; (c) processing/prep/admin-export functions only reference the columns in their trimmed SELECT lists — no dangling reads. All endpoints return expected 2xx/4xx (no 500). Change is safe."
+}

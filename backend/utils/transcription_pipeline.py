@@ -405,7 +405,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
         try:
             async with database.with_admin() as conn:
                 prep_row = await conn.fetchrow(
-                    "SELECT * FROM meeting_prep WHERE meeting_id=$1", meeting_id
+                    "SELECT sections FROM meeting_prep WHERE meeting_id=$1", meeting_id
                 )
             if prep_row and _jlist(prep_row.get("sections")):
                 from utils.ai import check_prep_coverage

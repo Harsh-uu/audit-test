@@ -1500,12 +1500,19 @@ async def export_evidence(request: Request, current_user=Depends(get_current_use
                 conditions.append(f"date <= ${len(params)}")
 
         where = " AND ".join(conditions)
-        mtg_rows = await conn.fetch(f"SELECT * FROM meetings WHERE {where} ORDER BY date DESC", *params)
+        mtg_rows = await conn.fetch(
+            f"SELECT id, title, date, analysis_id, transcript_id, pii_redactions, attendees, "
+            f"sign_off_manager_id, sign_off_manager_name FROM meetings WHERE {where} ORDER BY date DESC",
+            *params,
+        )
         mtg_dicts = [dict(r) for r in mtg_rows]
         analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
         analyses_by_id = {}
         if analysis_ids:
-            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
+            a_rows = await conn.fetch(
+                "SELECT id, cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id = ANY($1::uuid[])",
+                analysis_ids,
+            )
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
 
     # Pure Python from here (redaction + CSV row building) — done after the
@@ -1559,13 +1566,17 @@ async def export_cqc_excerpts(current_user=Depends(get_current_user)):
 
     async with database.with_org(org_id) as conn:
         mtg_rows = await conn.fetch(
-            "SELECT * FROM meetings WHERE status IN ('in_review','reviewed','signed_off','shared') AND analysis_id IS NOT NULL ORDER BY date DESC"
+            "SELECT id, title, date, analysis_id, pii_redactions, attendees, sign_off_manager_id, sign_off_manager_name "
+            "FROM meetings WHERE status IN ('in_review','reviewed','signed_off','shared') AND analysis_id IS NOT NULL ORDER BY date DESC"
         )
         mtg_dicts = [dict(r) for r in mtg_rows]
         analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
         analyses_by_id = {}
         if analysis_ids:
-            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
+            a_rows = await conn.fetch(
+                "SELECT id, cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id = ANY($1::uuid[])",
+                analysis_ids,
+            )
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
 
     # Pure Python from here (redaction + regulation grouping) — after the
@@ -1605,7 +1616,8 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
 
     async with database.with_org(org_id) as conn:
         mtg_rows = await conn.fetch(
-            "SELECT * FROM meetings WHERE status IN ('in_review','reviewed','signed_off','shared') AND analysis_id IS NOT NULL ORDER BY date DESC"
+            "SELECT id, title, date, analysis_id, pii_redactions, attendees, sign_off_manager_id, sign_off_manager_name "
+            "FROM meetings WHERE status IN ('in_review','reviewed','signed_off','shared') AND analysis_id IS NOT NULL ORDER BY date DESC"
         )
         mtg_dicts = [dict(r) for r in mtg_rows]
         if selected_ids:
@@ -1613,7 +1625,10 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
         analysis_ids = list({m["analysis_id"] for m in mtg_dicts if m.get("analysis_id")})
         analyses_by_id = {}
         if analysis_ids:
-            a_rows = await conn.fetch("SELECT * FROM analyses WHERE id = ANY($1::uuid[])", analysis_ids)
+            a_rows = await conn.fetch(
+                "SELECT id, cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id = ANY($1::uuid[])",
+                analysis_ids,
+            )
             analyses_by_id = {r["id"]: dict(r) for r in a_rows}
 
     # Pure Python from here (redaction + standard grouping) — after the
@@ -1707,7 +1722,11 @@ async def export_transcripts(request: Request, current_user=Depends(get_current_
                 conditions.append(f"date <= ${len(params)}")
 
         where = " AND ".join(conditions)
-        mtg_rows = await conn.fetch(f"SELECT * FROM meetings WHERE {where} ORDER BY date DESC", *params)
+        mtg_rows = await conn.fetch(
+            f"SELECT id, title, date, analysis_id, transcript_id, pii_redactions, attendees, "
+            f"sign_off_manager_id, sign_off_manager_name FROM meetings WHERE {where} ORDER BY date DESC",
+            *params,
+        )
         mtg_dicts = [dict(r) for r in mtg_rows]
         transcript_ids = list({m["transcript_id"] for m in mtg_dicts if m.get("transcript_id")})
         transcripts_by_id = {}

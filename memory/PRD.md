@@ -12,6 +12,36 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## SELECT * Column Trimming — COMPLETE (Sep 2026), fully tested
+Audit flagged pervasive `SELECT *` (81 occurrences across 12 files) on tables holding full
+meeting transcripts/AI analysis. Verified live: confirmed count, then classified every call
+site into 3 tiers before touching anything — genuinely wasteful (bulk/aggregation queries),
+deliberate full-row fetches (detail/edit views, already-optimized hot path in
+`deps.py::get_current_user`), and unverified (required tracing before deciding).
+- **Trimmed to explicit column lists** (traced every downstream field access first): 
+  `portfolio.py`'s meetings/analyses aggregation (was fetching up to 500 full rows just for
+  3 mapping fields), `admin.py`'s 4 export endpoints (evidence/cqc-excerpts/cc-excerpts/
+  transcripts — same bulk pattern), `prep.py` (`_get_meeting_guarded`, `_run_generate_prep`,
+  `carry_forward_missed`), `processing.py` (retry/diarize/retranscribe), `doc_uploads.py`
+  (`update_upload_evidence`), `transcription_pipeline.py` (prep coverage check).
+- **Corrected a real prioritization mistake during planning**: initially flagged `auth.py`'s
+  `SELECT * FROM users` as highest-priority ("per-request hot path") — turned out `deps.py`'s
+  actual `get_current_user` (the real per-request dependency) already uses an explicit column
+  list; `auth.py`'s occurrences are all low-frequency (login/MFA-toggle/password-change) on a
+  small non-blob table. Redirected effort to the genuinely heavy tables instead.
+- **Deliberately left untouched**: `meetings.py`'s detail view (explicit code comment defends
+  it), `review.py`'s edit-lock views (`FOR UPDATE`, read-modify-write same row), `org.py`/
+  `schedules.py`'s list endpoints (spread full row into frontend response — Type A passthrough),
+  `standards_cache.py` (feeds AI analysis functions, unclear/risky to trim), `standards_entries`/
+  `standards_documents` list/rescan queries in `admin.py` (broad UI consumption or AI-function
+  input, not verified safe to trim).
+- **Testing**: `testing_agent` iteration_117 — 25/25 backend tests pass, all export
+  PDFs/CSVs verified non-empty with correct content (magic bytes checked), frontend spot-check
+  clean (portfolio stats, standards library, cross-tenant isolation all correct). One
+  pre-existing data gap noted (no signed-off meeting has a transcript in seed data — unrelated
+  to this change, already flagged in iteration_116).
+
+
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
 Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
 (stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully

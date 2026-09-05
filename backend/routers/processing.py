@@ -120,7 +120,9 @@ async def retry_processing(
 ):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
+        meeting_row = await conn.fetchrow(
+            "SELECT status, audio_file_id, created_by, attendees FROM meetings WHERE id=$1", meeting_id,
+        )
     if not meeting_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(meeting_row)
@@ -200,7 +202,10 @@ async def diarize_meeting_transcript(
         )
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
+        meeting_row = await conn.fetchrow(
+            "SELECT created_by, attendees, transcript_id, sign_off_manager_name, created_by_name, meeting_type "
+            "FROM meetings WHERE id=$1", meeting_id,
+        )
     if not meeting_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(meeting_row)
@@ -278,7 +283,10 @@ async def retranscribe_meeting(
         )
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        meeting_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1", meeting_id)
+        meeting_row = await conn.fetchrow(
+            "SELECT audio_file_id, transcript_id, attendees, sign_off_manager_name, created_by_name, meeting_type "
+            "FROM meetings WHERE id=$1", meeting_id,
+        )
     if not meeting_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = dict(meeting_row)

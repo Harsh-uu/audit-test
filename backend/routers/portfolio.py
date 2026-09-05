@@ -115,7 +115,8 @@ async def _build_portfolio_data(user_id: str, org_id: str):
     # any row this query would otherwise return.
     async with database.with_org(effective_org_id) as conn:
         meetings_rows = await conn.fetch(
-            """SELECT * FROM meetings
+            """SELECT id, title, date, status, sign_off_manager_name, pii_redactions, analysis_id
+               FROM meetings
                WHERE org_id = $1
                  AND status IN ('signed_off', 'shared')
                  AND analysis_id IS NOT NULL
@@ -145,7 +146,7 @@ async def _build_portfolio_data(user_id: str, org_id: str):
         # already scoped to effective_org_id — with_org() enforces the same.
         async with database.with_org(effective_org_id) as conn:
             analysis_rows = await conn.fetch(
-                "SELECT * FROM analyses WHERE id = ANY($1::uuid[])",
+                "SELECT id, cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id = ANY($1::uuid[])",
                 analysis_ids,
             )
         analyses_map = {r["id"]: dict(r) for r in analysis_rows}
