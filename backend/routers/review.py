@@ -68,6 +68,37 @@ def _parse_analysis_row(a: dict) -> dict:
     return a
 
 
+# Full detail-view column lists — spelled out explicitly (instead of SELECT *)
+# so the query is self-documenting and immune to surprise columns from a
+# future migration. get_review_data() feeds the whole report page, so it
+# needs every column; narrower endpoints (export-pdf) select a trimmed set.
+_MEETING_DETAIL_COLS = (
+    "id, org_id, title, date, location, meeting_type, meeting_type_id, "
+    "created_by, created_by_name, sign_off_manager_id, sign_off_manager_name, "
+    "attendees, team_id, setting_id, schedule_id, status, "
+    "recording_events, paused_periods, total_paused_duration_seconds, recording_notice_shown_at, "
+    "audio_file_id, transcript_id, analysis_id, sign_off_record, "
+    "pii_redactions, pii_review_status, pii_reviewed_at, pii_reviewed_by, pii_reviewed_by_name, pii_skipped, "
+    "shared_with, audio_deletion_status, audio_grace_period_started_at, audio_deleted_at, "
+    "transcript_has_warnings, diarize_status, reopen_record, "
+    "reopen_requested, reopen_requested_by, reopen_requested_by_name, reopen_requested_at, reopen_reason, "
+    "reopen_approved_by, reopen_approved_by_name, reopen_approved_at, "
+    "rescan_status, retranscribed_at, processing_error, notes, created_at, updated_at"
+)
+
+_TRANSCRIPT_DETAIL_COLS = (
+    "id, meeting_id, org_id, text, speaker_text, safety_warnings, speaker_colors, "
+    "speaker_text_backup, speaker_text_backup_at, speaker_text_backup_by, "
+    "speaker_text_edited_by_name, speaker_text_edited_at, retranscribed_at, created_at, updated_at"
+)
+
+_ANALYSIS_DETAIL_COLS = (
+    "id, meeting_id, org_id, summary, edited_summary, achievements, actions, learning_needs, risks, "
+    "cqc_mappings, care_cert_mappings, custom_mappings, pii_redactions, "
+    "last_edited_by, last_edited_at, rescanned_at, rescanned_by_name, created_at"
+)
+
+
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class UpdateSummaryRequest(BaseModel):
@@ -224,7 +255,7 @@ async def _check_meeting_access(meeting: dict, current_user: dict, org_id: str):
 async def get_review_data(meeting_id: str, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        row = await conn.fetchrow(f"SELECT {_MEETING_DETAIL_COLS} FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
     if not row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = _parse_meeting_row(dict(row))
@@ -236,7 +267,7 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
     if meeting.get("transcript_id"):
         try:
             async with database.with_org(org_id) as conn:
-                t_row = await conn.fetchrow("SELECT * FROM transcripts WHERE id=$1", meeting["transcript_id"])
+                t_row = await conn.fetchrow(f"SELECT {_TRANSCRIPT_DETAIL_COLS} FROM transcripts WHERE id=$1", meeting["transcript_id"])
             if t_row:
                 t = dict(t_row)
                 t["safety_warnings"] = _ensure_list(t.get("safety_warnings"))
@@ -252,7 +283,7 @@ async def get_review_data(meeting_id: str, current_user=Depends(get_current_user
     if meeting.get("analysis_id"):
         try:
             async with database.with_org(org_id) as conn:
-                a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", meeting["analysis_id"])
+                a_row = await conn.fetchrow(f"SELECT {_ANALYSIS_DETAIL_COLS} FROM analyses WHERE id=$1", meeting["analysis_id"])
             if a_row:
                 meeting["analysis"] = _parse_analysis_row(dict(a_row))
         except Exception:
@@ -1894,7 +1925,11 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
     from fastapi.responses import Response
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        m_row = await conn.fetchrow("SELECT * FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+        m_row = await conn.fetchrow(
+            "SELECT title, date, status, transcript_id, analysis_id, pii_redactions, attendees, shared_with, "
+            "created_by, sign_off_manager_id, sign_off_manager_name, sign_off_record FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
     if not m_row:
         raise HTTPException(status_code=404, detail="Meeting not found")
     meeting = _parse_meeting_row(dict(m_row))
@@ -1913,7 +1948,11 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
     analysis = {}
     if meeting.get("analysis_id"):
         async with database.with_org(org_id) as conn:
-            a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id=$1", meeting["analysis_id"])
+            a_row = await conn.fetchrow(
+                "SELECT summary, edited_summary, achievements, actions, learning_needs, risks, "
+                "cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id=$1",
+                meeting["analysis_id"],
+            )
         if a_row:
             analysis = _parse_analysis_row(dict(a_row))
 

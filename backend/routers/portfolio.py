@@ -35,7 +35,9 @@ async def _build_portfolio_data(user_id: str, org_id: str):
     # can be null/stale (the "Connor" null-org_id bug class from invite/repair
     # flows), which must not 404 their portfolio for the manager viewing it.
     async with database.with_admin() as conn:
-        user_row = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+        user_row = await conn.fetchrow(
+            "SELECT id, org_id, name, email, role, team_id, setting_id FROM users WHERE id = $1", user_id
+        )
     if not user_row:
         return None
 

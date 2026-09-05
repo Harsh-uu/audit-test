@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Columns returned for the list view — heavy/report-only fields are excluded.
-# Detail view (GET /{id}) still uses SELECT * so the report page gets everything.
 _LIST_COLS = (
     "id, org_id, title, date, location, meeting_type, "
     "created_by, created_by_name, sign_off_manager_id, sign_off_manager_name, "
@@ -22,6 +21,35 @@ _LIST_COLS = (
     "analysis_id, transcript_id, transcript_has_warnings, "
     "shared_with, total_paused_duration_seconds, "
     "audio_file_id, created_at, updated_at"
+)
+
+# Detail view (GET /{id}) needs the full report page — every column, spelled
+# out explicitly (instead of SELECT *) so the query is self-documenting and
+# immune to surprise columns from a future migration.
+_DETAIL_COLS = (
+    "id, org_id, title, date, location, meeting_type, meeting_type_id, "
+    "created_by, created_by_name, sign_off_manager_id, sign_off_manager_name, "
+    "attendees, team_id, setting_id, schedule_id, status, "
+    "recording_events, paused_periods, total_paused_duration_seconds, recording_notice_shown_at, "
+    "audio_file_id, transcript_id, analysis_id, sign_off_record, "
+    "pii_redactions, pii_review_status, pii_reviewed_at, pii_reviewed_by, pii_reviewed_by_name, pii_skipped, "
+    "shared_with, audio_deletion_status, audio_grace_period_started_at, audio_deleted_at, "
+    "transcript_has_warnings, diarize_status, reopen_record, "
+    "reopen_requested, reopen_requested_by, reopen_requested_by_name, reopen_requested_at, reopen_reason, "
+    "reopen_approved_by, reopen_approved_by_name, reopen_approved_at, "
+    "rescan_status, retranscribed_at, processing_error, notes, created_at, updated_at"
+)
+
+_TRANSCRIPT_DETAIL_COLS = (
+    "id, meeting_id, org_id, text, speaker_text, safety_warnings, speaker_colors, "
+    "speaker_text_backup, speaker_text_backup_at, speaker_text_backup_by, "
+    "speaker_text_edited_by_name, speaker_text_edited_at, retranscribed_at, created_at, updated_at"
+)
+
+_ANALYSIS_DETAIL_COLS = (
+    "id, meeting_id, org_id, summary, edited_summary, achievements, actions, learning_needs, risks, "
+    "cqc_mappings, care_cert_mappings, custom_mappings, pii_redactions, "
+    "last_edited_by, last_edited_at, rescanned_at, rescanned_by_name, created_at"
 )
 
 
@@ -348,7 +376,7 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
     user_id = current_user.get("id", "")
 
     async with database.with_org(org_id) as conn:
-        row = await conn.fetchrow("SELECT * FROM meetings WHERE id = $1", meeting_id)
+        row = await conn.fetchrow(f"SELECT {_DETAIL_COLS} FROM meetings WHERE id = $1", meeting_id)
         if not row:
             raise HTTPException(status_code=404, detail="Meeting not found")
         meeting = _parse_meeting_row(dict(row))
@@ -375,7 +403,7 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
 
         # Attach transcript
         if meeting.get("transcript_id"):
-            t_row = await conn.fetchrow("SELECT * FROM transcripts WHERE id = $1", meeting["transcript_id"])
+            t_row = await conn.fetchrow(f"SELECT {_TRANSCRIPT_DETAIL_COLS} FROM transcripts WHERE id = $1", meeting["transcript_id"])
             if t_row:
                 tr = dict(t_row)
                 tr["safety_warnings"] = _ensure_list(tr.get("safety_warnings"))
@@ -388,7 +416,7 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
 
         # Attach analysis
         if meeting.get("analysis_id"):
-            a_row = await conn.fetchrow("SELECT * FROM analyses WHERE id = $1", meeting["analysis_id"])
+            a_row = await conn.fetchrow(f"SELECT {_ANALYSIS_DETAIL_COLS} FROM analyses WHERE id = $1", meeting["analysis_id"])
             if a_row:
                 meeting["analysis"] = _parse_analysis_row(dict(a_row))
 

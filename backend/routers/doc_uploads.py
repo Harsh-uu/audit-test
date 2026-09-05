@@ -175,7 +175,10 @@ async def get_upload(
     org_id = current_user.get("org_id")
     async with database.with_org(org_id) as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM supervision_uploads WHERE id=$1 AND org_id=$2",
+            "SELECT id,org_id,uploader_id,uploader_name,staff_id,staff_name,filename,label,"
+            "doc_type,meeting_date,file_ext,size_bytes,status,cqc_mappings,care_cert_mappings,"
+            "custom_mappings,error,processed_at,created_at "
+            "FROM supervision_uploads WHERE id=$1 AND org_id=$2",
             upload_id, org_id,
         )
     if not row:

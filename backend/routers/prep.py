@@ -348,7 +348,12 @@ async def get_prep(meeting_id: str, current_user=Depends(get_current_user)):
     await _get_meeting_guarded(meeting_id, current_user)
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        row = await conn.fetchrow("SELECT * FROM meeting_prep WHERE meeting_id=$1", meeting_id)
+        row = await conn.fetchrow(
+            "SELECT id, meeting_id, org_id, sections, focus_topic, shared_with_attendees, generated_at, "
+            "coverage_results, coverage_checked_at, created_at, updated_at, gen_status, included_source_ids, "
+            "created_by, shared_at FROM meeting_prep WHERE meeting_id=$1",
+            meeting_id,
+        )
     if not row:
         return {"meeting_id": meeting_id, "exists": False, "gen_status": "idle", "sections": [], "shared_with_attendees": False}
     d = dict(row)

@@ -56,6 +56,38 @@ deliberate full-row fetches (detail/edit views, already-optimized hot path in
   null-org_id edge case (`portfolio.py`). Tested via `testing_agent` iteration_118 — 31/31
   pass, zero column errors, zero 500s, join-resolved fields (manager_name, supervisor_name,
   staff_name, meeting_type_name/color, sub_outcomes counts) all verified non-blank.
+- **Part 3 (Aug 2026, final closure — 81 → 0 occurrences)**: fixed the last 11. Two strategies
+  used depending on risk: (a) for full-detail views whose entire row is spread into a frontend
+  report page (`meetings.py::get_meeting`, `review.py::get_review_data`, plus their nested
+  transcript/analysis sub-fetches) — replaced `SELECT *` with an **exhaustive** explicit column
+  list matching the live `information_schema.columns` output exactly (verified via direct DB
+  query, not migration-file tracing) — zero behavior change, same data returned, just no longer
+  an opaque `*`. (b) for narrower single-purpose queries where downstream field usage was fully
+  traced through both backend and the exact frontend consumer — trimmed to only what's used:
+  `review.py::export_pdf` (traced `_generate_pdf`'s actual field reads), `portfolio.py`'s `users`
+  lookup (id/org_id/name/email/role/team_id/setting_id only), `doc_uploads.py::get_upload`
+  (matches `list_uploads`' existing column list, excludes unused `full_text`), `prep.py::get_prep`
+  (exhaustive `meeting_prep` enumeration, small table). Tested via `testing_agent` iteration_119 —
+  21/21 pass, zero column errors, PDF export still generates correctly, new-user creation flags
+  still flip correctly. Non-blocking code-review note: `meetings.py::_DETAIL_COLS` and
+  `review.py::_MEETING_DETAIL_COLS` are identical 47-column strings duplicated across 2 files —
+  could extract to a shared `utils/columns.py` later to avoid future drift.
+
+
+## `create_org_user` Transaction-Timeout Risk — FIXED (Aug 2026), fully tested
+`super_admin.py::create_org_user` made 2 Supabase Auth network calls (`create_user`,
+`set_password`) INSIDE an open `with_admin()` transaction — under slow network conditions this
+could exceed the 30s `idle_in_transaction_session_timeout` (from the earlier transaction-duration
+fix) and get killed mid-request. Restructured into 3 phases: (1) `with_admin()` block does the
+local `users` insert only, then commits/closes; (2) both Supabase Auth calls now run with NO open
+transaction; (3) on success, a short follow-up `with_admin()` block persists
+`supabase_migrated`/`supabase_password_set=TRUE`. On Supabase failure, same as before — logged,
+user stays on bcrypt fallback (no change in that fallback behavior, just no longer risks holding
+a DB session open during the HTTP call). Verified via `testing_agent` iteration_119: full
+happy-path (created user can log in immediately, flags flip correctly), 404 org-not-found and 400
+duplicate-email guards still fire before any Supabase call. Code-review note (non-blocking): no
+retry/reconciliation mechanism if Supabase provisioning fails after the local row commits — could
+add a retry cron later.
 
 
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
@@ -555,6 +587,16 @@ direct DB password access or a real deploy of this backend pointed at that DB.
 - Clean up orphan `teams` row with `setting_id=NULL`.
 - Catch `asyncpg.UniqueViolationError` in create_user/invite_user for a clean 400 instead of 500 on
   a rare concurrent-duplicate-email race (flagged by testing_agent, low likelihood).
+- Refresh stale `tests/test_idor_sec001.py` fixtures (hardcoded passwords/meeting IDs are outdated)
+  — explicitly deferred by user this session, skip until asked again.
+- Export PDFs don't redact PII from attendee/manager names (only transcript/analysis body is
+  redacted) — logged, not yet fixed.
+- Password-hint copy still says "8 characters" in a few admin user-creation screens (actual policy
+  is 10) — same class of bug already fixed on reset-password/accept-invite, not yet done here.
+- Extract `_DETAIL_COLS`/`_MEETING_DETAIL_COLS` duplication (meetings.py vs review.py) into a
+  shared columns module — non-blocking code-review suggestion from iteration_119.
+- Admin/Review router `with_admin()` audit: 19 calls in `admin.py` + 11 in `review.py` not yet
+  reviewed for least-privilege `with_org()` migration (same pattern as the Sep 2026 RLS fix).
 
 ## Environments
 Preview only in this session (`supervision-preview.preview.emergentagent.com`, Supabase project

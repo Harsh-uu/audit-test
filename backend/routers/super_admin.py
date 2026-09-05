@@ -214,6 +214,9 @@ async def create_org_user(org_id: str, data: CreateOrgUserRequest, current_user=
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
+    # Phase 1: local insert only — commits and closes before any network call,
+    # so the DB session never sits idle-in-transaction waiting on Supabase Auth
+    # (which can exceed idle_in_transaction_session_timeout under load).
     async with database.with_admin() as conn:
         org = await conn.fetchrow("SELECT id FROM organisations WHERE id = $1", org_id)
         if not org:
@@ -227,12 +230,19 @@ async def create_org_user(org_id: str, data: CreateOrgUserRequest, current_user=
             user_id, data.email.lower(), hash_password(data.password),
             data.name.strip(), role, org_id, True, True, now,
         )
-        try:
-            await supabase_auth.create_user(user_id, data.email.lower())
-            await supabase_auth.set_password(user_id, data.password)
+
+    # Phase 2: Supabase Auth network calls — deliberately outside any open
+    # transaction. A failure here is logged and left for retry; the user can
+    # still log in locally via password_hash until supabase_migrated is set.
+    try:
+        await supabase_auth.create_user(user_id, data.email.lower())
+        await supabase_auth.set_password(user_id, data.password)
+    except Exception as exc:
+        logger.error("Supabase Auth provisioning failed for org user %s: %s", data.email, exc)
+    else:
+        # Phase 3: short follow-up transaction to persist the migration flags.
+        async with database.with_admin() as conn:
             await conn.execute("UPDATE users SET supabase_migrated=TRUE, supabase_password_set=TRUE WHERE id=$1", user_id)
-        except Exception as exc:
-            logger.error("Supabase Auth provisioning failed for org user %s: %s", data.email, exc)
     return {"id": user_id, "email": data.email.lower(), "name": data.name.strip(), "role": role, "org_id": org_id}
 
 
