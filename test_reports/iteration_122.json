@@ -1,0 +1,29 @@
+{
+  "summary": "Tested new document download endpoint + delete-with-storage-cleanup + full lifecycle regression. 8/8 backend pytest tests passed (TXT/PDF/DOCX byte-identical downloads, 403 attendee, 404 nonexistent, delete removes DB row + list, full upload->parse->toggle->delete lifecycle, background AI parsing transitions to 'parsed'). Playwright UI verified: new download-doc-{id} button appears alongside toggle-doc-{id} and delete-doc-{id} on every DocCard; clicking it triggers a real browser download event with the correct suggested filename; toggle and delete continue to work exactly as before ('Document deleted' toast shown, list count drops).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_standards_documents_download.py",
+    "/app/test_reports/pytest/iter122.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/routers/admin.py::download_document — content_type falls back to application/octet-stream when NULL; solid. However, if storage_path is present but storage fetch throws for a permission/network reason (not just 'not found'), the caller still gets 404 which conflates 'file missing' with 'transient storage error'. Low priority — consistent with the existing meetings audio pattern.",
+    "backend/routers/admin.py::delete_document — DB row is deleted BEFORE storage removal is attempted (best-effort). This matches the meetings.py audio pattern and is intentional (avoids blocking user on storage flakiness), but does mean any storage failure creates a fresh orphan. Mitigation is the same as the pre-fix audit finding — recommend a periodic reconciliation job long-term. Not blocking.",
+    "frontend/src/pages/AdminLibrary.js::handleDownloadDoc — creates a URL.createObjectURL but only revokes it AFTER a.click(). Since download is asynchronous some browsers may cancel; consider setTimeout(()=>URL.revokeObjectURL(url), 1000). Very minor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_standards_documents_download.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@supervision.com / Admin123!, user@supervision.com / AnotherNew789! (attendee) — both used successfully",
+  "seed_data_creation": "None persisted — all test docs cleaned up in test teardown; leftover test_403.txt from an interrupted attendee-403 test was also cleaned via the UI delete during the Playwright run (verified list count -> 0 in final screenshot).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The Standards Library tab hosting documents is labelled 'Custom Standards' in the UI (not 'Documents'); the internal state key is still tab === 'documents' and data-testid=documents-list. Route is /admin (not /admin/library). All three data-testids exist per-doc: download-doc-{id}, toggle-doc-{id}, delete-doc-{id}. Backend tests use cookie-session auth (not Bearer token) — see helper _login_session() in test_standards_documents_download.py.",
+  "rca of the issue": "N/A — this was verification of a pure bug fix. Verified: (a) new download endpoint works for TXT/PDF/DOCX with byte-identical content and correct Content-Disposition, (b) 403 for attendee and 404 for nonexistent doc, (c) delete now removes DB row and best-effort cleans storage (matching audio pattern in meetings.py), (d) UI has the new Download button wired correctly and existing toggle/delete/upload flows are unchanged, (e) AI parse_status transitions parsing->parsed as before."
+}

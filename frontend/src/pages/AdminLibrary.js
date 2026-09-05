@@ -190,6 +190,16 @@ export default function AdminLibrary() {
     } catch (err) { console.error("Delete document failed:", err.message); setError("Failed to delete document."); }
   };
 
+  const handleDownloadDoc = async (id, filename) => {
+    try {
+      const res = await axios.get(`${API}/admin/standards/documents/${id}/download`, { ...getAuthConfig(), responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename || "document"; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) { console.error("Download document failed:", err.message); setError("Failed to download document."); }
+  };
+
   if (loading) return (
     <Layout>
       <div className="p-6 md:p-8">
@@ -286,6 +296,7 @@ export default function AdminLibrary() {
             handleUploadDoc={handleUploadDoc}
             handleToggleDoc={handleToggleDoc}
             handleDeleteDoc={handleDeleteDoc}
+            handleDownloadDoc={handleDownloadDoc}
             fileInputRef={fileInputRef}
           />
         )}

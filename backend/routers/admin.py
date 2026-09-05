@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Backgro
 from pydantic import BaseModel, EmailStr
 from fastapi.responses import Response as _Response
 from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
-from utils.supabase_storage import put_document
+from utils.supabase_storage import put_document, get_document as _storage_get_document, delete_document as _storage_delete_document
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 import database
 
@@ -438,15 +438,46 @@ async def update_document(doc_id: str, request: Request, current_user=Depends(ge
     return {"message": "Updated"}
 
 
+@router.get("/standards/documents/{doc_id}/download")
+async def download_document(doc_id: str, current_user=Depends(get_current_user)):
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Admin/Manager only")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow(
+            "SELECT filename, storage_path, content_type FROM standards_documents WHERE id=$1",
+            doc_id,
+        )
+    if not row or not row["storage_path"]:
+        raise HTTPException(404, "Document not found")
+    try:
+        file_data, _ = await _storage_get_document(row["storage_path"])
+    except Exception as e:
+        logger.error(f"Document download failed for {doc_id}: {e}")
+        raise HTTPException(404, "File not found in storage")
+    filename = row["filename"] or "document"
+    return _Response(
+        content=file_data,
+        media_type=row["content_type"] or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.delete("/standards/documents/{doc_id}")
 async def delete_document(doc_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Admin/Manager only")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow("SELECT storage_path FROM standards_documents WHERE id=$1", doc_id)
         await conn.execute("DELETE FROM standards_documents WHERE id=$1", doc_id)
         from utils.standards_cache import invalidate_org
         invalidate_org(org_id)
+    if row and row["storage_path"]:
+        try:
+            await _storage_delete_document(row["storage_path"])
+        except Exception as e:
+            logger.error(f"Failed to delete document from storage for {doc_id}: path={row['storage_path']} error={e}")
     return {"message": "Deleted"}
 
 

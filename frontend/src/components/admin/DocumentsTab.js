@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FileText, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Trash2, BookOpen, Upload, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { FileText, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Trash2, BookOpen, Upload, Loader2, CheckCircle, AlertCircle, Download } from "lucide-react";
 
 function ParseStatusBadge({ status }) {
   const cfg = {
@@ -16,7 +16,7 @@ function ParseStatusBadge({ status }) {
   );
 }
 
-function DocCard({ doc, onToggle, onDelete }) {
+function DocCard({ doc, onToggle, onDelete, onDownload }) {
   const [expanded, setExpanded] = useState(false);
   const isActive = doc.is_active !== false;
   const criteria = doc.extracted_criteria || [];
@@ -54,6 +54,9 @@ function DocCard({ doc, onToggle, onDelete }) {
               {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           )}
+          <button onClick={() => onDownload(doc.id, doc.filename)} title="Download original file" className="p-1 text-gray-400 hover:text-teal-600 transition-colors" data-testid={`download-doc-${doc.id}`}>
+            <Download className="w-4 h-4" />
+          </button>
           <button onClick={() => onDelete(doc.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors" data-testid={`delete-doc-${doc.id}`}>
             <Trash2 className="w-4 h-4" />
           </button>
@@ -76,7 +79,7 @@ function DocCard({ doc, onToggle, onDelete }) {
   );
 }
 
-export function DocumentsTab({ docs, uploading, uploadLabel, setUploadLabel, handleUploadDoc, handleToggleDoc, handleDeleteDoc, fileInputRef }) {
+export function DocumentsTab({ docs, uploading, uploadLabel, setUploadLabel, handleUploadDoc, handleToggleDoc, handleDeleteDoc, handleDownloadDoc, fileInputRef }) {
   return (
     <div>
       <div className="mb-4 p-4 bg-teal-50 border border-teal-200 rounded-lg text-sm text-teal-800">
@@ -120,7 +123,7 @@ export function DocumentsTab({ docs, uploading, uploadLabel, setUploadLabel, han
       ) : (
         <div className="space-y-3" data-testid="documents-list">
           {docs.map(doc => (
-            <DocCard key={doc.id} doc={doc} onToggle={handleToggleDoc} onDelete={handleDeleteDoc} />
+            <DocCard key={doc.id} doc={doc} onToggle={handleToggleDoc} onDelete={handleDeleteDoc} onDownload={handleDownloadDoc} />
           ))}
         </div>
       )}

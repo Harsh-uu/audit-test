@@ -121,3 +121,20 @@ async def put_document(path: str, data: bytes, content_type: str) -> dict:
     return await loop.run_in_executor(
         None, partial(_sync_put, DOCS_BUCKET, path, data, content_type)
     )
+
+
+async def get_document(path: str):
+    """Fetch a custom standards document from Supabase."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, partial(_sync_get, DOCS_BUCKET, path)
+    )
+
+
+async def delete_document(path: str):
+    """Permanently delete a custom standards document from Supabase."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, partial(_sync_remove, DOCS_BUCKET, path)
+    )
+

@@ -158,6 +158,31 @@ said cleanup itself was intentionally skipped, and every other FK-impossible tab
   (`b00bf04f-a1b9-4673-8430-b4a08ba15d6c`) unaffected.
 
 
+## Standards Document Download + Storage-Leak Fix — FIXED (Aug 2026), fully tested
+Audit finding: custom standards documents (uploaded for AI evidence extraction) had no way to be
+read back, AND deleting a document's DB row left its file orphaned in Supabase storage forever
+— **verified live**: 12 files existed in the `supervision-documents` bucket with 0 matching
+`standards_documents` rows (100% orphan rate from prior test uploads/deletes), all cleaned up
+manually as part of this fix.
+- `utils/supabase_storage.py`: added `get_document()`/`delete_document()`, thin wrappers around
+  the existing generic `_sync_get`/`_sync_remove` helpers with `DOCS_BUCKET` — exact mirror of
+  the pre-existing `get_audio`/`delete_audio`.
+- `admin.py`: new `GET /standards/documents/{doc_id}/download` (org-scoped, admin/manager only,
+  returns original bytes with correct filename + content-type). `delete_document()` now fetches
+  `storage_path` before the DB delete, then removes the file from storage best-effort (mirrors
+  `meetings.py::delete_meeting`'s audio-cleanup sequencing — storage failure is logged, never
+  blocks the DB delete).
+- Frontend: new Download button on each document card (`DocumentsTab.js`/`AdminLibrary.js`),
+  alongside the existing toggle/delete buttons.
+- Tested via `testing_agent` iteration_122: 8/8 backend tests (TXT/PDF/DOCX byte-identical
+  downloads, 403/404 guards, delete removes DB row + storage file, full
+  upload→parse→toggle→delete lifecycle unaffected) + Playwright UI verification, 100%/100%.
+  New regression suite: `tests/test_standards_documents_download.py`.
+- Non-blocking notes from testing agent: storage failure on delete still creates a fresh orphan
+  (same accepted tradeoff as the audio pattern — a future periodic reconciliation job could catch
+  these); blob URL revoke timing tightened to `setTimeout(1000ms)` per review comment.
+
+
 ## Idle Session Timeout — COMPLETE (Sep 2026), fully tested
 Audit follow-up to the earlier transaction-duration fix: `idle_in_transaction_session_timeout`
 (stuck mid-transaction) was already fixed at 30s via `m010`, but `idle_session_timeout` (fully
