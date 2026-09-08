@@ -232,7 +232,7 @@ export default function Layout({ children, headerCenter }) {
               { path: "/organisation",      icon: Building2, label: "Organisation",      testId: "nav-organisation",      exact: true },
               { path: "/admin/schedules",   icon: Calendar,  label: "Schedules",         testId: "nav-schedules",         exact: true },
               { path: "/admin",             icon: BookOpen,  label: "Standards Library", testId: "nav-standards-library", exact: true },
-              { path: "/upload-supervision",icon: FileUp,    label: "Import Supervision",testId: "nav-import-supervision",exact: true },
+              { path: "/upload-supervision",icon: FileUp,    label: "Import",testId: "nav-import-supervision",exact: true },
               { path: "/settings",          icon: Settings,  label: "Settings",          testId: "nav-settings",          exact: true },
             ].map(({ path, icon: Icon, label, testId, exact }) => {
               const active = exact ? location.pathname === path : isActive(path);
