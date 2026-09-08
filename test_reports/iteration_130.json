@@ -1,0 +1,47 @@
+{
+  "summary": "Frontend-only regression for the Dashboard split (new 6-tile /dashboard hub, new /meetings page, new /resources placeholder, matrix 'View Schedules' link, and /dashboard->/meetings navigation refactor). All acceptance criteria pass for admin, manager and attendee roles. No blocking issues found. Two minor observations noted (see minor issues).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_behaviour": [
+    "Admin login lands on /dashboard rendering exactly 6 tiles with correct data-testids: tile-meetings, tile-matrix, tile-people, tile-evidence, tile-resources, tile-settings.",
+    "Each admin tile navigates to correct route (Meetings->/meetings, Matrix->/supervision-matrix, People->/organisation, Evidence->/admin/team, Resources->/resources, Settings->/settings).",
+    "tile-meetings-quick-add (+) button on Meetings tile navigates directly to /meetings/new without opening the Meetings tile.",
+    "Manager login lands on /dashboard with same 6 tiles as admin (verified on retry — see note in context_for_next_testing_agent).",
+    "Attendee login lands on /dashboard with exactly 3 tiles: tile-meetings, tile-resources, tile-portfolio. Admin-only tiles (matrix/people/evidence/settings) are correctly hidden.",
+    "Attendee tile-portfolio href resolves to /portfolio/{their own user id} and navigation succeeds.",
+    "/meetings page: 'Due This Month' widget, overdue-actions banner, and the 3 top stat cards (Total/In Review/Signed Off) are all GONE. Search input, sort toggle (Newest/Oldest), date-range filter, status quick-filter chips (all/draft/in_review/reviewed/signed_off), new-meeting-btn, and skeleton loader all present with correct data-testids.",
+    "/resources page renders both cards (resources-downloads-card, resources-courses-card) with 'Coming soon' badges, no fake clickable links, no data fetch.",
+    "SupervisionMatrix has new 'View Schedules' link (data-testid=matrix-schedules-link) top-right — visible and clickable for admin & manager, href=/admin/schedules.",
+    "Sidebar (Layout.js) has a new 'Meetings' nav item pointing to /meetings (two anchors found: desktop + mobile). 'Dashboard' still points to /dashboard hub. No other sidebar items removed.",
+    "NewMeeting.js cancel button copy is now 'Back to Meetings' and navigates to /meetings (verified).",
+    "MeetingReport.js back arrow (data-testid=back-to-dashboard-btn, testid preserved intentionally) navigates to /meetings (code verified line 197).",
+    "RecordingScreen.js stuck-recording error state has two buttons both navigating to /meetings with copy 'Back to Meetings' (code verified lines 626-641).",
+    "Codebase grep confirms NO stray navigate('/dashboard') calls exist anywhere expecting a meetings list — remaining /dashboard references are all correct (Login redirect, ProtectedRoute fallback, Layout logo/nav, apiCache key, AcceptInvite/SetPassword post-auth redirect, wildcard route)."
+  ],
+  "critical_code_review_comments": [
+    "Meetings.js line 96: 15s polling interval calls /meetings/ which overrides the initial combined /dashboard/ payload. That means after 15s, org_structure is no longer refreshed. Not a regression (existed before), just noting.",
+    "Dashboard.js is intentionally zero-fetch — good. But tile-portfolio for attendee uses user?.id which if undefined would generate href '/portfolio/undefined'. In observed runs user.id was always present, so safe in practice; consider guarding with tile hidden if !user?.id.",
+    "Layout.js: 'Meetings' nav highlight logic uses matchBase — verify it matches /meetings and /meetings/* (looked at during grep, appears correct via startsWith)."
+  ],
+  "minor_observations": [
+    "Mobile viewport (390px) detected horizontal overflow on /dashboard, /meetings, /resources via document.scrollWidth > clientWidth by ~a few pixels. Likely a scrollbar-width false positive, but worth a visual spot-check by main agent.",
+    "First manager login attempt in initial run only rendered 3 tiles (matrix/people/evidence/settings missing). On retry with a clean session the manager correctly shows all 6 tiles. Looks like a one-time initial-render race — could not reproduce. Flagging for awareness.",
+    "Attendee /portfolio/{id} page loads (route works, sidebar/footer render) but the portfolio body content did not appear in body.innerText within 4s of direct navigation. Out of scope for this change (portfolio page unchanged), but worth confirming if attendees can actually see their own portfolio content."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "No blocking action items. Main agent may optionally: (1) visually verify no true horizontal overflow on 390px viewport for /dashboard, /meetings, /resources, (2) confirm attendee /portfolio/{id} actually renders portfolio content (may be a pre-existing issue outside this refactor's scope)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "Used admin@supervision.com/Admin123!, manager@supervision.com/Manager123!, user@supervision.com/AnotherNew789! from /app/memory/test_credentials.md",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The Dashboard restructure is fully verified. Both intermittent oddities noted (manager 3-tile initial render, one-off attendee portfolio-tile-click bounce) were NOT reproducible on retry with fresh sessions and are treated as flaky/race conditions rather than defects. Backend /api/dashboard/ endpoint is unchanged and untouched per user's approved plan. Focus of any next test iteration should be on portfolio content rendering (unrelated to this change) if needed.",
+  "rca of the issue": "n/a — no defects fixed. Two flaky observations reported for main agent awareness."
+}

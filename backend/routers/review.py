@@ -1821,13 +1821,14 @@ async def _audit_trail_inner(meeting_id: str, current_user: dict, _logger):
                        "learning_need_status_changed": "Learning need updated",
                        "achievement_acknowledged": "Achievement acknowledged",
                        "pdf_exported": "Report PDF exported",
-                       "transcript_exported": "Transcript PDF exported"}
+                       "transcript_exported": "Transcript PDF exported",
+                       "meeting_backdated": "Meeting date flagged"}
     for log in log_rows:
         log = dict(log)
         action = log.get("action", "unknown")
         events.append({"type": action, "label": label_map_audit.get(action, action.replace("_", " ").title()),
                        "actor": log.get("user_name", "System"), "timestamp": log.get("timestamp", ""),
-                       "detail": log.get("detail")})
+                       "detail": log.get("detail"), "flagged": action == "meeting_backdated"})
 
     if (meeting.get("audio_deletion_status") == "deleted") and meeting.get("audio_deleted_at"):
         events.append({"type": "audio_deleted", "label": "Raw audio deleted (GDPR)", "actor": "System",

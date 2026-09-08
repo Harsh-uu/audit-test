@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, Loader2, AlertCircle, LayoutGrid } from "lucide-react";
+import { CheckCircle, Loader2, AlertCircle, LayoutGrid, Calendar, ChevronRight } from "lucide-react";
 
 function fmt(dateStr) {
   if (!dateStr) return "—";
@@ -196,6 +196,13 @@ export default function SupervisionMatrix() {
 
           {/* Summary chips */}
           <div className="ml-auto flex items-center gap-2">
+            <Link
+              to="/admin/schedules"
+              data-testid="matrix-schedules-link"
+              className="flex items-center gap-1 text-xs font-medium text-[#1E3A8A] hover:underline"
+            >
+              <Calendar className="w-3.5 h-3.5" /> View Schedules <ChevronRight className="w-3 h-3" />
+            </Link>
             {overdueList.length > 0 && (
               <span className="text-xs font-semibold bg-red-100 text-red-700 border border-red-200 px-2.5 py-1 rounded-full">
                 {overdueList.length} overdue

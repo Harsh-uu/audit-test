@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional
 from deps import get_db, get_current_user
+from utils.backdate_check import detect_backdate_mismatch
 import database
 
 router = APIRouter()
@@ -23,6 +24,28 @@ async def _write_audit_log(conn, meeting_id: str, org_id: str, action: str, user
         )
     except Exception as e:
         logger.warning(f"audit_log write failed for {action}/{meeting_id}: {e}")
+
+
+async def _flag_backdated_meeting_once(conn, meeting_id: str, org_id: str, detail: str, user_id: str, user_name: str, ts: str):
+    """Write a one-time 'meeting_backdated' audit_logs row when the declared
+    meeting date is far from the real recording start — surfaces it in the
+    Audit Trail instead of leaving it silent. Purely additive/transparency:
+    never blocks or alters the recording flow, and is idempotent per meeting
+    (checked via a SELECT first) so retries/re-recording don't spam duplicates."""
+    try:
+        exists = await conn.fetchval(
+            "SELECT 1 FROM audit_logs WHERE meeting_id=$1 AND action='meeting_backdated' LIMIT 1",
+            meeting_id,
+        )
+        if exists:
+            return
+        await conn.execute(
+            "INSERT INTO audit_logs (id, meeting_id, org_id, action, user_id, user_name, detail, timestamp) "
+            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            str(uuid.uuid4()), meeting_id, org_id, "meeting_backdated", user_id, user_name, detail, ts,
+        )
+    except Exception as e:
+        logger.warning(f"meeting_backdated flag failed for {meeting_id}: {e}")
 
 
 class RecordingEventRequest(BaseModel):
@@ -75,7 +98,7 @@ async def start_recording(meeting_id: str, request: Request, current_user=Depend
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         _m = await conn.fetchrow(
-            "SELECT created_by, attendees FROM meetings WHERE id=$1", meeting_id
+            "SELECT created_by, attendees, date FROM meetings WHERE id=$1", meeting_id
         )
         if not _m:
             raise HTTPException(status_code=404, detail="Meeting not found")
@@ -102,6 +125,14 @@ async def start_recording(meeting_id: str, request: Request, current_user=Depend
             # show as a duplicate "Recording started" entry alongside the real one.
             await _write_audit_log(conn, meeting_id, org_id, "recording_started",
                                    current_user.get("id", ""), current_user.get("name", ""))
+
+        # Flag (never block) a meeting whose declared date is far from when
+        # recording actually starts, so the mismatch is visible in the Audit
+        # Trail instead of silently hidden. See utils/backdate_check.py.
+        mismatch_detail = detect_backdate_mismatch(_m["date"], ts)
+        if mismatch_detail:
+            await _flag_backdated_meeting_once(conn, meeting_id, org_id, mismatch_detail,
+                                               current_user.get("id", ""), current_user.get("name", ""), ts)
     return {"message": "Recording started", "timestamp": ts}
 
 

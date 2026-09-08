@@ -16,6 +16,8 @@ import AcceptInvite from "@/pages/AcceptInvite";
 
 // All app pages — lazy-loaded per route (separate JS chunks)
 const Dashboard         = lazy(() => import("@/pages/Dashboard"));
+const Meetings          = lazy(() => import("@/pages/Meetings"));
+const Resources         = lazy(() => import("@/pages/Resources"));
 const NewMeeting        = lazy(() => import("@/pages/NewMeeting"));
 const RecordingScreen   = lazy(() => import("@/pages/RecordingScreen"));
 const MeetingReport     = lazy(() => import("@/pages/MeetingReport"));
@@ -76,6 +78,8 @@ function App() {
           <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
           <Route path="/super-admin" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/meetings" element={<ProtectedRoute><Meetings /></ProtectedRoute>} />
+          <Route path="/resources" element={<ProtectedRoute><Resources /></ProtectedRoute>} />
           <Route path="/meetings/new" element={<ProtectedRoute><NewMeeting /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/record" element={<ProtectedRoute><RecordingScreen /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/prepare" element={<ProtectedRoute roles={["admin","manager"]}><MeetingPrep /></ProtectedRoute>} />

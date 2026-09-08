@@ -677,6 +677,40 @@ bootstrap connection.
   (previously silent no-op), `super_admin::delete_org`'s totals now correctly counts it. Zero
   regressions. New regression suite: `tests/test_iter128_rls_drift.py`.
 
+## Dashboard Split into 6-Tile Hub + /meetings — SHIPPED (Sep 2026), fully tested
+User found the old `/dashboard` page (meetings list + due-this-month widget + overdue banner +
+stats cards) too busy. Mockups were shown and approved before any code was written.
+- **New `/dashboard`**: instant-load 6-tile hub, zero data fetch (pure `user` from AuthContext).
+  Admin/manager see all 6 (Meetings, Matrix→`/supervision-matrix`, People→`/organisation`,
+  Evidence→`/admin/team` Team Themes, Resources→new `/resources`, Settings→`/settings`). Other
+  roles (attendee) see 3 (Meetings, Resources, My Portfolio→`/portfolio/{own id}`). Meetings tile
+  has a small "+" quick-add straight to `/meetings/new`.
+- **New `/meetings`** (`Meetings.js`): the old Dashboard.js content, simplified per user's explicit
+  instruction — "Due This Month" widget, overdue-actions banner, and the 3 stat cards all deleted
+  entirely (not relocated). Kept: list, New Meeting button, search (title+attendee), status chips,
+  date range, sort, org/team filter, load-all, historical section, admin-only inline delete. Same
+  `/api/dashboard/` backend call + `/dashboard` cache key reused (backend untouched).
+- **New `/resources`**: honest "coming soon" placeholder (Downloads + Supervision Course cards,
+  no fake links) — no real content yet per user ("there will be useful downloads and supervision
+  course in the future").
+- Supervision Matrix (`/supervision-matrix`) unchanged, added small "View Schedules" link top-right
+  per user request.
+- Sidebar (`Layout.js`) unchanged otherwise — added one new "Meetings" nav item (user explicitly
+  wanted everything else left where it is: "the idea of the tiles is to provide shortcuts to the
+  most used pages... we could always add 3 more tiles in future if import/inspection/induction are
+  as well used").
+- All `navigate("/dashboard")` call sites that meant "back to my meetings list" (NewMeeting cancel,
+  RecordingScreen stuck-recording buttons, MeetingReport back-arrow) repointed to `/meetings`
+  with copy updated to "Back to Meetings". Login/logout/invite/reset redirects still correctly
+  target `/dashboard` (the new hub) unchanged.
+- **Verified via `testing_agent`** (iteration_130, frontend-only): 100% pass across admin/manager/
+  attendee — tile visibility/routing, quick-add, simplified Meetings page, Resources placeholder,
+  Matrix link, sidebar nav, all repointed back-buttons, no stray `/dashboard`-as-meetings-list
+  references left in the codebase. Two flagged minor observations were self-verified by main agent
+  as false positives: mobile 390px viewport has zero horizontal overflow on all 3 pages, and
+  attendee's `/portfolio/{id}` page renders full portfolio content correctly (was a Playwright
+  timing artifact in the test script, not a real bug).
+
 ## Session note (Aug 2026): Supabase DB audit mode
 User is running a deliberate, field-by-field Supabase/Postgres audit — reports one issue at a time,
 requires confirmation + RCA + recommended fix BEFORE any change, then explicit "go ahead" before

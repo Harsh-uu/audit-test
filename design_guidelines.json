@@ -1,91 +1,277 @@
 {
-  "project_name": "Supervision 2.0 Post-Recording Flow Redesign",
-  "theme": "light",
-  "archetype": "Organic & Earthy (Archetype 1) - Best for Care/Wellness",
+  "project_name": "Care Provider Supervision & Compliance Dashboard Blueprint",
+  "version": "2.0.0",
+  "created_at": "2026-07",
+  "brand_identity": {
+    "primary_color": "#1E3A8A",
+    "primary_hover": "#1E40AF",
+    "primary_light": "#EFF6FF",
+    "primary_border": "#BFDBFE",
+    "archetype": "ORGANIC & PERFORMANCE PRECISION (Swiss Tech + Care Trust)",
+    "emotional_tone": "Authoritative, reassuring, friction-free, clinical clarity with warmth",
+    "design_philosophy": "Instant Perceived Speed via Zero-Data Tile Navigation, Tactile Bento Geometry, and Zero Visual Clutter"
+  },
   "typography": {
     "headings": {
-      "family": "Manrope, sans-serif",
-      "import_url": "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap",
-      "weights": ["500", "700"],
-      "styling": "Tight tracking (tracking-tight) for large headers."
+      "family": "Montserrat, sans-serif",
+      "h1": "text-3xl sm:text-4xl font-bold tracking-tight text-gray-900",
+      "h2": "text-xl sm:text-2xl font-semibold tracking-tight text-gray-900",
+      "h3": "text-lg font-semibold text-gray-900",
+      "h4": "text-base font-medium text-gray-800"
     },
     "body": {
-      "family": "Inter, sans-serif",
-      "weights": ["400", "500"]
-    }
-  },
-  "colors": {
-    "background": "#F9F8F6",
-    "surface": "#FFFFFF",
-    "primary": "#4A6750",
-    "primary_foreground": "#FFFFFF",
-    "accent_warning": "#D47753",
-    "text_main": "#1A1D1A",
-    "text_muted": "#6E7570",
-    "border": "#E5E3DF"
-  },
-  "visual_enhancers": {
-    "shadows": "Soft, ambient shadows (shadow-sm or shadow-[0_8px_30px_rgba(74,103,80,0.06)])",
-    "borders": "1px solid border on cards using the #E5E3DF color.",
-    "border_radius": "rounded-2xl for main containers, rounded-xl for inner cards.",
-    "animation": "Use Framer Motion for smooth layout transitions and pulsing states for active AI scans."
-  },
-  "image_urls": {
-    "manager_avatar": {
-      "url": "https://images.unsplash.com/photo-1611451444023-7fe9d86fe1d0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjB3b21hbiUyMHBvcnRyYWl0JTIwZmFjZSUyMGNsZWFyfGVufDB8fHx8MTc4NzI2MzQxMnww&ixlib=rb-4.1.0&q=85",
-      "description": "Avatar for the care manager"
+      "family": "Montserrat, -apple-system, BlinkMacSystemFont, sans-serif",
+      "regular": "text-sm text-gray-600 leading-relaxed",
+      "small": "text-xs text-gray-500 leading-normal",
+      "label": "text-xs font-semibold uppercase tracking-wider text-gray-400"
     },
-    "staff_avatar": {
-      "url": "https://images.unsplash.com/photo-1564564244660-5d73c057f2d2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwxfHxzbWlsaW5nJTIwbWFuJTIwcG9ydHJhaXQlMjBmYWNlJTIwY2xlYXJ8ZW58MHx8fHwxNzg3MjYzNDEyfDA&ixlib=rb-4.1.0&q=85",
-      "description": "Avatar for the care staff member"
-    }
-  },
-  "layouts": {
-    "Concept_1": {
-      "name": "The Split Command Center",
-      "description": "A 2-column Bento-style grid. The left column acts as a persistent sticky 'Progress Tracker' detailing the 4 steps. The right column is the dynamic 'Action Area' which currently displays the Confidentiality Review UI. This allows the user to perform tasks while keeping the overall progress context perfectly visible.",
-      "structure": [
-        "Left Column (w-1/3): Contains Meeting Meta (Title, Avatars, Time) and a Vertical Stepper.",
-        "Vertical Stepper States: 1. Upload (Done), 2. Transcribe (Done), 3. Confidentiality Check (Active, Pulsing indicator), 4. Map Evidence (Processing, Spinner).",
-        "Right Column (w-2/3): Contains the Confidentiality Check tool.",
-        "Confidentiality Tool UI: A card showing '3 flags found'. Below it, 3 individual actionable cards showing the transcript snippet with highlighted PII. Buttons to 'Redact' or 'Keep'."
-      ]
-    },
-    "Concept_2": {
-      "name": "The Inline Action Stream",
-      "description": "A unified, single-column vertical timeline layout. It feels like a story unfolding downwards. Completed steps collapse to save space, while the active step (Confidentiality) expands inline into an interactive widget. The background AI scanning step anchors the bottom.",
-      "structure": [
-        "Container: max-w-3xl mx-auto.",
-        "Header: 'Processing Meeting...' with global progress bar.",
-        "Step 1 & 2 Cards: Collapsed state, showing green checkmarks and a brief summary.",
-        "Step 3 Card (Expanded): Massive card with 'Confidentiality Check'. Features inline text with Terracotta highlighted words and inline floating action menus to Redact.",
-        "Step 4 Card (Pinned/Next): 'Mapping Compliance Evidence...' with a shimmering 'AI scanning' background gradient (using framer-motion) to indicate background activity."
-      ]
-    }
-  },
-  "mockup_instructions": {
-    "routing": "Create a unified page with a top-level Tab or Toggle component allowing the user to switch between 'Concept 1: Split View' and 'Concept 2: Inline Stream'.",
-    "interactivity": "Mock the states so Step 1 and 2 are always 'Completed'. Step 3 should be 'Action Required' (Interactive UI for redaction). Step 4 should be 'Processing in Background' with animation.",
-    "components_needed": [
-      "Tabs (Shadcn) to switch concepts",
-      "Card (Shadcn) for containers",
-      "Button (Shadcn) for Redact/Keep actions",
-      "Avatar (Shadcn) for attendees",
-      "Badge (Shadcn) for status",
-      "Progress (Shadcn) for global progress",
-      "Lucide Icons: CheckCircle, Loader2, ShieldAlert, FileText, Mic"
-    ],
-    "styling_rules": [
-      "Follow the 'Generous Spacing Philosophy'. Use p-6 or p-8 inside cards.",
-      "Use framer-motion for the pulsing AI scan effects in Step 4.",
-      "The highlighted PII text should have a soft background (e.g., bg-[#D47753]/10) and bold text color (#D47753)."
+    "forbidden_fonts": [
+      "Inter for main headings",
+      "Space Grotesk"
     ]
   },
-  "universal_guidelines": [
-    "You MUST NOT apply universal transition (e.g., transition: all). Use specific transitions.",
-    "Do not use default generic blue. Stick to the Archetype 1 palette defined above.",
-    "Ensure the layout does not break when scaling down. Use responsive grid-cols.",
-    "Add data-testid attributes to all buttons and interactive elements.",
-    "Use Lucide-react for all icons."
-  ]
+  "colors": {
+    "background": {
+      "app": "#F8F9FA",
+      "card": "#FFFFFF",
+      "card_hover": "#FAFBFD",
+      "sidebar": "#FFFFFF",
+      "org_bar": "#1E3A8A"
+    },
+    "text": {
+      "primary": "#111827",
+      "secondary": "#4B5563",
+      "muted": "#9CA3AF",
+      "accent": "#1E3A8A",
+      "on_primary": "#FFFFFF"
+    },
+    "status_badges": {
+      "draft": "bg-slate-100 text-slate-700 border-slate-200",
+      "recording": "bg-red-100 text-red-700 border-red-200",
+      "in_review": "bg-amber-100 text-amber-700 border-amber-200",
+      "reviewed": "bg-sky-100 text-sky-700 border-sky-200",
+      "signed_off": "bg-emerald-100 text-emerald-800 border-emerald-200",
+      "overdue": "bg-red-50 text-red-700 border-red-200"
+    },
+    "tile_accents": {
+      "meetings": { "border": "hover:border-blue-500", "bg": "group-hover:bg-blue-50/50", "badge": "bg-blue-100 text-blue-800" },
+      "matrix": { "border": "hover:border-indigo-500", "bg": "group-hover:bg-indigo-50/50", "badge": "bg-indigo-100 text-indigo-800" },
+      "people": { "border": "hover:border-emerald-500", "bg": "group-hover:bg-emerald-50/50", "badge": "bg-emerald-100 text-emerald-800" },
+      "evidence": { "border": "hover:border-purple-500", "bg": "group-hover:bg-purple-50/50", "badge": "bg-purple-100 text-purple-800" },
+      "resources": { "border": "hover:border-amber-500", "bg": "group-hover:bg-amber-50/50", "badge": "bg-amber-100 text-amber-800" },
+      "settings": { "border": "hover:border-slate-500", "bg": "group-hover:bg-slate-50/50", "badge": "bg-slate-100 text-slate-800" }
+    }
+  },
+  "visual_enhancers": {
+    "borders": "1px solid #E5E7EB",
+    "hover_border": "1px solid #1E3A8A",
+    "shadows": {
+      "card_default": "0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03)",
+      "card_hover": "0 10px 25px -5px rgba(30, 58, 138, 0.1), 0 8px 10px -6px rgba(30, 58, 138, 0.05)",
+      "dropdown": "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)"
+    },
+    "glassmorphic_header": "backdrop-blur-md bg-white/90 border-b border-gray-200",
+    "micro_interactions": "transition-all duration-200 ease-out hover:-translate-y-1 active:translate-y-0"
+  },
+  "grids_and_layouts": {
+    "dashboard_landing": {
+      "container": "max-w-7xl mx-auto p-6 md:p-10 space-y-8",
+      "hero_banner": "bg-gradient-to-r from-[#1E3A8A] to-[#1E40AF] rounded-2xl p-6 md:p-8 text-white shadow-md relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6",
+      "grid_mode": "MODE A: TETRIS / BENTO TILE GRID",
+      "grid_classes": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8",
+      "instant_load_guarantee": "Zero loading spinners or skeletons; all tiles render synchronously with hardcoded routes and instant click response."
+    },
+    "simplified_meetings_page": {
+      "route": "/meetings",
+      "container": "max-w-7xl mx-auto p-6 md:p-8 space-y-6",
+      "header_flex": "flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5",
+      "filter_bar": "bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3"
+    },
+    "resources_page": {
+      "route": "/resources",
+      "container": "max-w-7xl mx-auto p-6 md:p-8 space-y-8",
+      "hero_header": "bg-gradient-to-br from-amber-500/10 via-blue-900/5 to-transparent p-6 md:p-8 rounded-2xl border border-amber-200/60"
+    }
+  },
+  "tile_specifications": [
+    {
+      "key": "meetings",
+      "title": "Meetings",
+      "route": "/meetings",
+      "icon": "Calendar",
+      "badge": "Shortcut",
+      "badge_color": "bg-blue-100 text-blue-800",
+      "description": "Start new supervisions, record sessions, and review draft or signed-off meeting reports.",
+      "quick_action": "Start New Meeting (+)",
+      "target_role": "all",
+      "data_testid": "tile-meetings"
+    },
+    {
+      "key": "matrix",
+      "title": "Matrix",
+      "route": "/supervision-matrix",
+      "icon": "LayoutGrid",
+      "badge": "Compliance Grid",
+      "badge_color": "bg-indigo-100 text-indigo-800",
+      "description": "View organisation-wide supervision status grid across care settings and staff members.",
+      "target_role": "admin_manager_only",
+      "data_testid": "tile-matrix"
+    },
+    {
+      "key": "people",
+      "title": "People",
+      "route": "/organisation",
+      "icon": "Users",
+      "badge": "Org Hub",
+      "badge_color": "bg-emerald-100 text-emerald-800",
+      "description": "Manage care settings, staff roles, line management structures, and team rosters.",
+      "target_role": "admin_manager_only",
+      "data_testid": "tile-people"
+    },
+    {
+      "key": "evidence",
+      "title": "Evidence",
+      "route": "/admin/team",
+      "icon": "BarChart2",
+      "badge": "Team Themes",
+      "badge_color": "bg-purple-100 text-purple-800",
+      "description": "Analyse AI evidence trends, CQC standard coverage, and common supervision themes.",
+      "target_role": "admin_manager_only",
+      "data_testid": "tile-evidence"
+    },
+    {
+      "key": "resources",
+      "title": "Resources",
+      "route": "/resources",
+      "icon": "BookOpen",
+      "badge": "Coming Soon",
+      "badge_color": "bg-amber-100 text-amber-800",
+      "description": "Access supervision guides, downloadable CQC policy templates, and upcoming training courses.",
+      "target_role": "all",
+      "data_testid": "tile-resources"
+    },
+    {
+      "key": "settings",
+      "title": "Settings",
+      "route": "/settings",
+      "icon": "Settings",
+      "badge": "Org Config",
+      "badge_color": "bg-slate-100 text-slate-800",
+      "description": "Configure brand colors, organisation details, security options, and system preferences.",
+      "target_role": "admin_manager_only",
+      "data_testid": "tile-settings"
+    }
+  ],
+  "rbac_rules": {
+    "admin_and_manager": {
+      "visible_tiles": ["meetings", "matrix", "people", "evidence", "resources", "settings"],
+      "tile_count": 6
+    },
+    "attendee_and_staff": {
+      "visible_tiles": ["meetings", "resources", "portfolio"],
+      "tile_count": 3,
+      "note": "Non-management roles only see tiles relevant to their own supervision history and learning resources. Additional tile 'My Portfolio' (/portfolio) replaces restricted admin tiles."
+    }
+  },
+  "meetings_page_simplification_spec": {
+    "status": "APPROVED DESIGN MOCKUP",
+    "route": "/meetings",
+    "retained_elements": [
+      "Full meetings list with status badges (Draft, In Review, Signed Off, etc.)",
+      "Primary 'New Meeting' button",
+      "Real-time search bar (by title, attendee name, location)",
+      "Status filter quick-chips ('All', 'Draft', 'In Review', 'Reviewed', 'Signed Off')",
+      "Date range picker & sort toggle",
+      "Organisation structure filter dropdown (Setting / Team)"
+    ],
+    "removed_elements": [
+      "Due This Month matrix carousel (Schedule due-cards widget)",
+      "Overdue actions warning banner (relocated)",
+      "Top 3 summary stat cards (Total / In Review / Signed Off - optional header summary metrics available in filter bar if required)"
+    ],
+    "benefit_rationale": "Removes data-fetch dependencies from the landing page. Renders instantaneously, prevents visual clutter on mobile/desktop, and turns the Meetings page into a focused execution stream."
+  },
+  "explicit_recommendations": {
+    "due_this_month_and_overdue_banner_relocation": {
+      "recommended_home": "Schedules Page (/admin/schedules) & Supervision Matrix Page (/supervision-matrix)",
+      "rationale": "The 'Due This Month' widget and Overdue Actions banner are schedule-centric management controls, not meeting-execution tools. Placing them prominently at the top of /admin/schedules and /supervision-matrix aligns perfectly with workflow context (when managers are planning shifts & auditing compliance), while leaving /meetings 100% lean for recording and reading reports.",
+      "user_invite_ack": "User explicitly asked 'happy for you to suggest better ideas if you have them'. Relocating schedule-due widgets to the dedicated Schedules page keeps the landing tile hub lightning fast and meeting list clean."
+    }
+  },
+  "supervision_matrix_enhancement": {
+    "header_addition": "Top-Right 'Schedules' Hyperlink",
+    "route": "/admin/schedules",
+    "design": "Clean button-style link: 'View Schedules' with Calendar icon and ChevronRight icon, positioned in top-right of Supervision Matrix header.",
+    "data_testid": "matrix-schedules-link"
+  },
+  "resources_page_concept": {
+    "route": "/resources",
+    "page_title": "Supervision & Care Resources",
+    "subtitle": "Essential downloads, compliance frameworks, and supervision training courses.",
+    "sections": [
+      {
+        "id": "downloads",
+        "title": "Useful Downloads & Templates",
+        "badge": "Instant PDF / DocX",
+        "items": [
+          { "name": "1-to-1 Supervision Framework Guide (CQC Compliant)", "type": "PDF", "size": "1.2 MB", "icon": "FileText" },
+          { "name": "Supervision Preparation Checklist for Managers", "type": "DOCX", "size": "450 KB", "icon": "FileText" },
+          { "name": "Reflective Practice Template for Care Staff", "type": "PDF", "size": "890 KB", "icon": "FileText" }
+        ]
+      },
+      {
+        "id": "courses",
+        "title": "Supervision Masterclass & CPD Courses",
+        "badge": "Coming Q3 2026",
+        "items": [
+          { "title": "Effective Care Supervision in Practice", "duration": "4 Modules • 2 hrs", "level": "Manager CPD", "status": "Coming Soon" },
+          { "title": "Navigating Difficult Supervision Conversations", "duration": "3 Modules • 1.5 hrs", "level": "Advanced", "status": "Coming Soon" }
+        ]
+      },
+      {
+        "id": "support_cta",
+        "title": "Need a Specific Policy Template?",
+        "description": "Our care compliance team can create custom supervision resources for your organisation.",
+        "action_text": "Request Resource",
+        "action_testid": "request-resource-btn"
+      }
+    ]
+  },
+  "motion_and_interactions": {
+    "tile_hover": "transform transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg border border-gray-200 hover:border-[#1E3A8A]",
+    "button_active": "active:scale-95 transition-transform",
+    "prefers_reduced_motion": "motion-reduce:transform-none motion-reduce:transition-none"
+  },
+  "accessibility": {
+    "wcag_level": "AA Compliant",
+    "min_contrast": "4.5:1 for standard text, 3:1 for large display elements",
+    "keyboard_nav": "All tiles and buttons tabbable with visible outline-none focus:ring-2 focus:ring-[#1E3A8A]",
+    "screen_readers": "aria-label attributes on icon buttons, role='region' for tile grid",
+    "data_testids": "Mandatory on all interactive elements using kebab-case"
+  },
+  "image_urls": {
+    "hero_illustration": "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1200&q=80",
+    "resources_banner": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80"
+  },
+  "component_path_mapping": {
+    "Dashboard": "/app/frontend/src/pages/Dashboard.js (Redesigned 6-Tile Landing Hub)",
+    "Meetings": "/app/frontend/src/pages/Meetings.js or updated /app/frontend/src/pages/Dashboard.js simplified tab",
+    "Resources": "/app/frontend/src/pages/Resources.js (New Page)",
+    "SupervisionMatrix": "/app/frontend/src/pages/SupervisionMatrix.js (Header hyperlink added)",
+    "Layout": "/app/frontend/src/components/Layout.js (Sidebar intact)"
+  },
+  "instructions_to_main_agent": [
+    "1. Replace existing Dashboard.js content with the 6-tile Bento shortcut hub layered inside <Layout>.",
+    "2. Move current meetings list code from Dashboard.js into a dedicated simplified Meetings component at route /meetings (updating App.js lazy route).",
+    "3. Add role-based filtering (user.role) so admin/manager see all 6 tiles while attendee/staff see only Meetings, Resources, and My Portfolio.",
+    "4. Create the new Resources page at /resources with instant-loading downloads and supervision course coming-soon cards.",
+    "5. Update SupervisionMatrix.js header to include top-right link to /admin/schedules.",
+    "6. Ensure all interactive tiles and buttons retain data-testid attributes for E2E tests."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "testing_attributes": "All interactive elements MUST include data-testid attribute in kebab-case.",
+    "transitions": "DO NOT use transition: all. Use specific properties (e.g. transition-transform, transition-colors).",
+    "centering": "DO NOT add text-align: center to the root App container.",
+    "theme_color": "Maintain brand color #1E3A8A as primary accent, with dark navy org bar."
+  }
 }

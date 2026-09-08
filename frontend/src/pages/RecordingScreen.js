@@ -624,7 +624,7 @@ export default function RecordingScreen() {
                       if (!window.confirm("Delete this meeting and all its data?")) return;
                       try {
                         await axios.delete(`${API}/meetings/${meetingId}`, getAuthConfig());
-                        navigate("/dashboard");
+                        navigate("/meetings");
                       } catch (e) {
                         setError("Delete failed: " + (e.response?.data?.detail || e.message));
                       }
@@ -635,10 +635,10 @@ export default function RecordingScreen() {
                     Delete Meeting
                   </button>
                   <button
-                    onClick={() => navigate("/dashboard")}
+                    onClick={() => navigate("/meetings")}
                     className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors"
                   >
-                    Back to Dashboard
+                    Back to Meetings
                   </button>
                 </div>
               </div>

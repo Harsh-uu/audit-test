@@ -8,6 +8,7 @@ from typing import Optional, List
 from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
 import database
 from utils.supabase_storage import delete_audio
+from utils.backdate_check import detect_backdate_mismatch
 
 logger = logging.getLogger(__name__)
 
@@ -466,6 +467,17 @@ async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
             meeting["pii_redactions_count"] = len(redactions)
     if meeting.get("analysis") and redactions:
         meeting["analysis"] = _apply_redactions_deep(meeting["analysis"], redactions)
+
+    # Surface a mismatch between the declared meeting date and when it was
+    # actually recorded (never blocks anything — see utils/backdate_check.py).
+    # Purely derived from data already fetched above, no extra query.
+    first_start_ts = next(
+        (ev.get("timestamp") for ev in meeting.get("recording_events", []) if ev.get("type") == "started"),
+        None,
+    )
+    date_mismatch = detect_backdate_mismatch(meeting.get("date"), first_start_ts)
+    meeting["date_flagged"] = bool(date_mismatch)
+    meeting["date_flag_detail"] = date_mismatch
 
     return meeting
 

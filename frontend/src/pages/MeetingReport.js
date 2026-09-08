@@ -75,9 +75,20 @@ export default function MeetingReport() {
   const meetingHeaderCenter = (
     <div className="min-w-0" data-testid="meeting-header-title">
       <div className="text-white font-semibold text-[15px] leading-tight line-clamp-2 sm:line-clamp-1">{meeting.title}</div>
-      <div className="text-white/70 text-[11px] mt-0.5 truncate">
-        {new Date(meeting.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-        {meeting.location ? ` · ${meeting.location}` : ""}
+      <div className="text-white/70 text-[11px] mt-0.5 truncate flex items-center gap-1">
+        <span>
+          {new Date(meeting.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          {meeting.location ? ` · ${meeting.location}` : ""}
+        </span>
+        {meeting.date_flagged && (
+          <span
+            className="inline-flex items-center gap-0.5 text-amber-300 flex-shrink-0"
+            title={meeting.date_flag_detail || "Declared meeting date differs from when it was actually recorded — see Audit Trail"}
+            data-testid="meeting-backdated-flag"
+          >
+            <AlertTriangle className="w-3 h-3" />
+          </span>
+        )}
       </div>
     </div>
   );
@@ -183,7 +194,7 @@ export default function MeetingReport() {
         {/* Top bar */}
         <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20 gap-2">
           <div className="flex items-center gap-3 min-w-0 flex-wrap">
-            <button onClick={() => navigate("/dashboard")} className="text-gray-500 hover:text-gray-700 flex-shrink-0" data-testid="back-to-dashboard-btn">
+            <button onClick={() => navigate("/meetings")} className="text-gray-500 hover:text-gray-700 flex-shrink-0" data-testid="back-to-dashboard-btn">
               <ArrowLeft className="w-4 h-4" />
             </button>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium border text-xs flex-shrink-0 ${isSignedOff ? "bg-emerald-100 text-emerald-800 border-emerald-200" : canReview ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-blue-100 text-blue-700 border-blue-200"}`} data-testid="meeting-status-pill">

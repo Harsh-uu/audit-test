@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 import {
-  LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen,
+  LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen, CalendarClock,
   TrendingUp, BarChart2, X, Building2, Calendar, FileUp, LayoutGrid, ClipboardCheck,
   Pencil, Check, Loader2, KeyRound, Settings, Award, UserCircle, ChevronDown,
 } from "lucide-react";
@@ -134,6 +134,7 @@ export default function Layout({ children, headerCenter }) {
   // ── Regular User Layout ──────────────────────────────────────────────────
   const navItems = [
     { path: "/dashboard",                 icon: LayoutDashboard, label: "Dashboard"    },
+    { path: "/meetings",                  icon: CalendarClock,   label: "Meetings"     },
     { path: "/meetings/new",              icon: Mic,             label: "New Meeting"  },
     { path: `/portfolio/${user?.id}`,     icon: TrendingUp,      label: "My Portfolio", matchBase: "/portfolio" },
   ];

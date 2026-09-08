@@ -132,8 +132,8 @@ export default function NewMeeting() {
         <div className="px-6 pt-6 pb-4 border-b border-gray-100 bg-white">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-2xl font-semibold text-gray-900 font-display">New Meeting</h1>
-            <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-xs flex-shrink-0">
-              <ArrowLeft className="w-3.5 h-3.5" />Back to Dashboard
+            <button onClick={() => navigate("/meetings")} className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-xs flex-shrink-0">
+              <ArrowLeft className="w-3.5 h-3.5" />Back to Meetings
             </button>
           </div>
 
