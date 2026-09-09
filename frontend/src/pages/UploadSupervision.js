@@ -9,6 +9,13 @@ import {
   Calendar, Tag, X, ChevronRight, FileUp, Clock
 } from "lucide-react";
 
+// dd/mm/yyyy — matches the UK date-picker format used on this page
+function formatUkDate(dateStr) {
+  if (!dateStr) return "—";
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : dateStr;
+}
+
 const DOC_TYPE_OPTIONS = [
   { value: "supervision_record", label: "Previous Supervision Record" },
   { value: "job_description", label: "Job Description" },
@@ -46,7 +53,7 @@ function UploadCard({ upload, onDelete, navigate, regLabel, certLabel }) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900 truncate">{upload.label || upload.filename}</p>
         <p className="text-xs text-gray-500 mt-0.5">
-          {upload.staff_name} · {upload.meeting_date}
+          {upload.staff_name} · {formatUkDate(upload.meeting_date)}
           {upload.doc_type && upload.doc_type !== "other" && (
             <span className="ml-1.5 px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px] font-medium capitalize">
               {DOC_TYPE_OPTIONS.find(o => o.value === upload.doc_type)?.label || upload.doc_type}
@@ -284,7 +291,7 @@ export default function UploadSupervision() {
               {/* Meeting date */}
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
-                  <Calendar className="w-3.5 h-3.5" /> Supervision date
+                  <Calendar className="w-3.5 h-3.5" /> Date
                 </label>
                 <input
                   type="date"
