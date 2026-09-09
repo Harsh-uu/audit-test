@@ -5,8 +5,7 @@ import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { UkDatePicker } from "@/components/ui/uk-date-picker";
-import { ArrowLeft, Users, UserCheck, Calendar, MapPin, AlertCircle, Sparkles, ChevronRight, HelpCircle } from "lucide-react";
+import { ArrowLeft, Users, UserCheck, MapPin, AlertCircle, Sparkles, ChevronRight, HelpCircle } from "lucide-react";
 
 function InfoTooltip({ children, side = "top" }) {
   return (
@@ -199,29 +198,6 @@ export default function NewMeeting() {
                 <option value="competency_review">Competency Review</option>
                 <option value="other">Other</option>
               </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                <Calendar className="inline w-3 h-3 mr-1 text-gray-400" />Date &amp; Time
-              </label>
-              <div className="flex items-center gap-2">
-                <UkDatePicker
-                  value={form.date.split("T")[0]}
-                  onChange={(d) => setForm(f => ({ ...f, date: `${d}T${f.date.split("T")[1] || "00:00"}` }))}
-                  className="flex-1 px-3 py-2 text-sm"
-                  testId="meeting-date-input"
-                />
-                <input
-                  id="meeting-time"
-                  name="meeting_time"
-                  type="time"
-                  value={form.date.split("T")[1] || ""}
-                  onChange={e => setForm(f => ({ ...f, date: `${f.date.split("T")[0]}T${e.target.value}` }))}
-                  className="w-28 px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
-                  data-testid="meeting-time-input"
-                />
-              </div>
             </div>
 
             <div>
