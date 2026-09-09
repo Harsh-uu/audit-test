@@ -249,7 +249,7 @@ export default function UploadSupervision() {
             <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
               <FileUp className="w-4 h-4 text-indigo-700" />
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900 font-display">Import Supervision Document</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 font-display">Import</h1>
           </div>
           <p className="text-sm text-gray-500 ml-11">
             Upload any document for a staff member — supervision records, job descriptions, feedback, observations and more — to scan for {evidenceLabel} evidence.
