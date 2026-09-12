@@ -30,26 +30,39 @@ function canUseMediaDevices() {
 }
 
 // ── IndexedDB audio backup helpers ──────────────────────────────────────────
-// Keeps the recorded audio blob alive across page refreshes so uploads can
-// be retried even after the browser tab is reloaded.
+// Keeps the recorded audio alive across page refreshes so uploads can be
+// retried even after the browser tab is reloaded.
+//
+// PERF-002: stores one small record PER incremental auto-save (not one
+// ever-growing record overwritten every time) — each 3-min save only writes
+// the audio recorded since the last save, so total work stays O(recording
+// length) instead of O(recording length squared). The full recording is
+// only ever reconstructed (by concatenating all chunk records in order) on
+// the rare read path: page-refresh recovery or upload-retry.
 
 function openAudioDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open("supervision_audio", 1);
+    const req = indexedDB.open("supervision_audio", 2);
     req.onupgradeneeded = (e) => {
-      e.target.result.createObjectStore("recordings", { keyPath: "meetingId" });
+      const db = e.target.result;
+      if (db.objectStoreNames.contains("recordings")) {
+        db.deleteObjectStore("recordings");
+      }
+      const store = db.createObjectStore("recordings", { autoIncrement: true });
+      store.createIndex("meetingId", "meetingId", { unique: false });
     };
     req.onsuccess = (e) => resolve(e.target.result);
     req.onerror = (e) => reject(e.target.error);
   });
 }
 
-async function saveAudioBackup(meetingId, blob) {
+// Appends one incremental chunk record — never overwrites previous chunks.
+async function appendAudioChunk(meetingId, blob) {
   try {
     const db = await openAudioDB();
     await new Promise((resolve, reject) => {
       const tx = db.transaction("recordings", "readwrite");
-      tx.objectStore("recordings").put({ meetingId, blob, savedAt: Date.now() });
+      tx.objectStore("recordings").add({ meetingId, blob, savedAt: Date.now() });
       tx.oncomplete = resolve;
       tx.onerror = (e) => reject(e.target.error);
     });
@@ -58,15 +71,20 @@ async function saveAudioBackup(meetingId, blob) {
   }
 }
 
+// Reconstructs the full backed-up recording by concatenating every saved
+// chunk for this meeting, oldest first.
 async function loadAudioBackup(meetingId) {
   try {
     const db = await openAudioDB();
-    return await new Promise((resolve, reject) => {
+    const records = await new Promise((resolve, reject) => {
       const tx = db.transaction("recordings", "readonly");
-      const req = tx.objectStore("recordings").get(meetingId);
-      req.onsuccess = (e) => resolve(e.target.result?.blob || null);
+      const req = tx.objectStore("recordings").index("meetingId").getAll(meetingId);
+      req.onsuccess = (e) => resolve(e.target.result || []);
       req.onerror = (e) => reject(e.target.error);
     });
+    if (records.length === 0) return null;
+    records.sort((a, b) => a.savedAt - b.savedAt);
+    return new Blob(records.map(r => r.blob), { type: "audio/webm" });
   } catch (e) {
     return null;
   }
@@ -77,7 +95,12 @@ async function clearAudioBackup(meetingId) {
     const db = await openAudioDB();
     await new Promise((resolve, reject) => {
       const tx = db.transaction("recordings", "readwrite");
-      tx.objectStore("recordings").delete(meetingId);
+      const store = tx.objectStore("recordings");
+      const cursorReq = store.index("meetingId").openCursor(meetingId);
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) { store.delete(cursor.primaryKey); cursor.continue(); }
+      };
       tx.oncomplete = resolve;
       tx.onerror = (e) => reject(e.target.error);
     });
@@ -109,6 +132,7 @@ export default function RecordingScreen() {
   const [prepMode, setPrepMode] = useState(true); // true = show prep agenda, false = static template
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const lastSavedChunkIndexRef = useRef(0);
   const timerRef = useRef(null);
   const elapsedRef = useRef(0);
   const wakeLockRef = useRef(null);
@@ -227,6 +251,16 @@ export default function RecordingScreen() {
     return ""; // let browser decide
   };
 
+  // PERF-002: only blobs+persists the chunks recorded SINCE the last save
+  // (not the whole recording) — called every 3 min and once more on stop.
+  const saveNewChunksToBackup = async () => {
+    const newChunks = audioChunksRef.current.slice(lastSavedChunkIndexRef.current);
+    if (newChunks.length === 0) return;
+    const chunkBlob = new Blob(newChunks, { type: "audio/webm" });
+    lastSavedChunkIndexRef.current = audioChunksRef.current.length;
+    await appendAudioChunk(meetingId, chunkBlob);
+  };
+
   const startRecording = async () => {
     setError("");
     await acquireWakeLock();
@@ -278,6 +312,10 @@ export default function RecordingScreen() {
     }
 
     audioChunksRef.current = [];
+    lastSavedChunkIndexRef.current = 0;
+    // Defensive cleanup: clear any stale chunks left over from a previous
+    // session for this meeting before starting a fresh incremental backup.
+    await clearAudioBackup(meetingId);
     recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) {
         audioChunksRef.current.push(e.data);
@@ -285,9 +323,9 @@ export default function RecordingScreen() {
     };
     recorder.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
-      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      // Persist to IndexedDB so the upload can be retried after a page refresh
-      saveAudioBackup(meetingId, blob).then(() => handleUpload());
+      // Persist only the newest chunks (append) so the final stop-save does
+      // the same small amount of work as every periodic save did.
+      saveNewChunksToBackup().finally(() => handleUpload());
     };
     recorder.onerror = (e) => {
       setError(`Recording error: ${e.error?.message || "unknown error"}`);
@@ -306,11 +344,10 @@ export default function RecordingScreen() {
 
     // Save progress to IndexedDB every 3 minutes so at most 3 min is at risk
     // if the session is interrupted (pod restart, page refresh, tab close).
-    chunkSaveIntervalRef.current = setInterval(async () => {
-      if (audioChunksRef.current.length > 0) {
-        const progressBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        await saveAudioBackup(meetingId, progressBlob);
-      }
+    // PERF-002: only the chunks since the last save are packaged+written,
+    // not the whole recording — keeps each save's cost roughly constant.
+    chunkSaveIntervalRef.current = setInterval(() => {
+      saveNewChunksToBackup();
     }, 3 * 60 * 1000);
 
     // Log start event (non-blocking — don't let API failures break recording)

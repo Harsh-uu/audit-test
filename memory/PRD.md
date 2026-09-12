@@ -12,6 +12,42 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.5: RecordingScreen Progressive-Slowdown Auto-Save — FIXED (Sep 2026), verified live
+Audit item: `RecordingScreen.js`'s IndexedDB backup used ONE record per meeting (`keyPath:
+"meetingId"`) holding the full recording blob. Every 3-min auto-save AND the final
+`recorder.onstop` handler both rebuilt `new Blob(audioChunksRef.current, ...)` from ALL chunks
+recorded since the start, then overwrote that single record — so save #10 (30min) re-copied
+~10x the bytes save #1 (3min) did; total work across a recording grew ~O(length²).
+- **Fix**: IndexedDB schema bumped v1→v2 to store one small record PER incremental save
+  (autoIncrement key + `meetingId` index) instead of one ever-growing record.
+  `lastSavedChunkIndexRef` tracks how many chunks are already persisted; a new
+  `saveNewChunksToBackup()` helper blobs+appends only the chunks since the last save — used by
+  both the 3-min interval AND the final `onstop` handler (previously each rebuilt independently).
+  `loadAudioBackup` (rare read path: page-refresh recovery / upload-retry) now concatenates all
+  saved chunk records in order — same return shape, zero change needed in `handleUpload` or the
+  refresh-recovery effect. `clearAudioBackup` (after successful upload) now deletes all chunk
+  records for that meeting via a cursor over the index. Added a defensive
+  `clearAudioBackup(meetingId)` at the start of `startRecording()` (was already effectively a
+  no-op in the one real call path, now correct-by-construction for the new schema too).
+  Confirmed no race: `stopRecording()` already clears the periodic interval BEFORE triggering
+  `.stop()`, so the periodic and final saves can never overlap.
+- **Verified TWO ways** (user explicitly required live proof, not just code review):
+  (1) Isolated IndexedDB algorithm test via `page.evaluate` mirroring the exact schema: 3
+  sequential appends produced 3 SEPARATE records (not overwritten), concatenated read
+  reconstructed the exact byte-for-byte original content in the correct order, clear removed all
+  records for that meetingId — all assertions passed. (2) Full live browser test: created a real
+  meeting, granted mic permission (Playwright fake device), started recording — IndexedDB had 0
+  records mid-recording (correct, periodic save hadn't fired yet), stopped after 8s — exactly 1
+  chunk record appended by the `onstop` handler, upload succeeded and the meeting correctly
+  progressed to "Processing Audio: Complete → Transcribing" (AssemblyAI accepted the file as
+  valid WebM audio, only rejecting it afterward for containing silence — the fake mic device
+  produces no real speech, an expected test-environment artifact, not a bug), and after the
+  successful upload the IndexedDB record count correctly dropped back to 0 (cleared). All 3 test
+  meetings cleaned up afterward. No console errors from the recording flow itself (pre-existing
+  benign 401s from the unrelated silent-refresh interceptor). No testing_agent round used — self
+  tested via screenshot_tool with real browser IndexedDB + MediaRecorder execution.
+- Issue 2.5 now fully CLOSED.
+
 ## Issue 2.4: Meetings.js Unconditional Polling — FIXED (Sep 2026), verified
 Audit item: `Meetings.js:83-98` started an unconditional `setInterval(fetchMeetingsOnly, 15000)`
 on mount that ran for as long as the page stayed open — polling every 15s even when every
