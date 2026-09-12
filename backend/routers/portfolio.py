@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
+import asyncio
 import json
 import logging
 
@@ -329,7 +330,7 @@ async def export_portfolio_pdf(user_id: str, current_user=Depends(get_current_us
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    pdf_bytes = _generate_portfolio_pdf(data)
+    pdf_bytes = await asyncio.to_thread(_generate_portfolio_pdf, data)
     safe_name = "".join(c for c in data["user"]["name"] if c.isalnum() or c in " _-").strip().replace(" ", "_")
     filename = f"portfolio_{safe_name}.pdf"
     return Response(

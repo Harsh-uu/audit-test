@@ -1995,7 +1995,7 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
         if meeting.get("sign_off_record"):
             pdf_meeting["sign_off_record"] = _apply_redactions_deep(meeting["sign_off_record"], redactions)
 
-    pdf_bytes = _generate_pdf(pdf_meeting, analysis, transcript_text, speaker_text,
+    pdf_bytes = await asyncio.to_thread(_generate_pdf, pdf_meeting, analysis, transcript_text, speaker_text,
                               jurisdiction=org_jurisdiction, service_type=org_service_type)
     async with database.with_org(org_id) as conn:
         await _audit(conn, meeting_id, org_id, "pdf_exported", current_user["id"], current_user.get("name", ""),
@@ -2352,7 +2352,7 @@ async def export_transcript(meeting_id: str, current_user=Depends(get_current_us
         if meeting.get("sign_off_manager_name"):
             pdf_meeting["sign_off_manager_name"] = _apply_redactions_to_text(meeting["sign_off_manager_name"], redactions)
 
-    pdf_bytes = _generate_transcript_pdf(pdf_meeting, speaker_text, transcript_text)
+    pdf_bytes = await asyncio.to_thread(_generate_transcript_pdf, pdf_meeting, speaker_text, transcript_text)
     async with database.with_org(org_id) as conn:
         await _audit(conn, meeting_id, org_id, "transcript_exported", current_user["id"], current_user.get("name", ""), "")
     safe_title = "".join(c for c in (meeting.get("title") or "transcript") if c.isalnum() or c in " _-")
