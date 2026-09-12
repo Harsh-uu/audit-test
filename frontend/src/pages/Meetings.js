@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
@@ -78,6 +78,7 @@ export default function Meetings() {
   const [orgFilter, setOrgFilter] = useState({ setting_id: "", team_id: "" });
   const [orgStructure, setOrgStructure] = useState({ settings: [], unassigned_users: [] });
   const [showHistorical, setShowHistorical] = useState(false);
+  const pollRef = useRef(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -92,9 +93,7 @@ export default function Meetings() {
       .catch(err => console.error("Meetings load failed", err.message))
       .finally(() => setLoading(false));
 
-    // Background polling: only re-fetch meetings (lightweight, detects processing complete)
-    const interval = setInterval(fetchMeetingsOnly, 15000);
-    return () => clearInterval(interval);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lightweight poll — keeps meeting statuses live without re-fetching everything
@@ -108,6 +107,20 @@ export default function Meetings() {
       console.error("Failed to refresh meetings", err.message);
     }
   };
+
+  // PERF-002: only poll while at least one meeting is still mid-pipeline
+  // (processing/transcribing/analyzing) — same pattern as UploadSupervision.js,
+  // rather than an unconditional 15s interval regardless of activity.
+  useEffect(() => {
+    const hasProcessing = meetings.some(m => ["processing", "transcribing", "analyzing"].includes(m.status));
+    if (hasProcessing && !pollRef.current) {
+      pollRef.current = setInterval(fetchMeetingsOnly, 15000);
+    } else if (!hasProcessing && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetings]);
 
   // Called when user clicks "Load all meetings" — fetches full untruncated list
   const loadAllMeetings = async () => {

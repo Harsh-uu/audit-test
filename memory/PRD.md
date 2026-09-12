@@ -12,6 +12,30 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.4: Meetings.js Unconditional Polling — FIXED (Sep 2026), verified
+Audit item: `Meetings.js:83-98` started an unconditional `setInterval(fetchMeetingsOnly, 15000)`
+on mount that ran for as long as the page stayed open — polling every 15s even when every
+visible meeting was fully terminal (signed off/reviewed/draft) and nothing could possibly change.
+`UploadSupervision.js` already had the correct pattern: a `pollRef`-tracked interval that only
+runs while `uploads.some(u => ["processing","text_ready"].includes(u.status))`.
+- **Fix**: applied the identical pattern. Added a `pollRef` (`useRef`), removed the unconditional
+  interval from the mount effect (kept the initial `cachedGet` load unchanged), and added a new
+  `useEffect` watching `meetings` that starts the 15s interval only when
+  `meetings.some(m => ["processing","transcribing","analyzing"].includes(m.status))` is true,
+  clearing it otherwise. Those 3 statuses are the only ones that change automatically via the
+  backend AI pipeline without a user action; `draft`/`recording`/`stopped` are user-driven and
+  `in_review`/`reviewed`/`signed_off`/`shared`/`processing_failed` are terminal — none of these
+  need polling.
+- **Verified**: frontend rebuilt, logged in as `admin@supervision.com`, intercepted `GET
+  /api/meetings` network calls on `/meetings`. With no meeting in a processing state: 0 calls
+  over a 35s wait (previously would have fired at 15s/30s). Temporarily set a real meeting's
+  `status` to `processing` directly in the DB, reloaded: page correctly showed a "Processing"
+  badge and fired exactly 2 poll calls over the same 32s window (at ~15s/~30s) — confirmed both
+  the "stays off" and "turns on" branches work. Reverted the test meeting back to `in_review`
+  afterward. No console errors, no regressions. Self-tested via screenshot_tool + direct DB
+  verification, no testing_agent round used.
+- Issue 2.4 now fully CLOSED.
+
 ## Issue 2.3: NewMeeting Staff-List Filter Memoization — FIXED (Sep 2026), verified
 Audit item, same pattern as 2.1/2.2: `NewMeeting.js:81-89` ran 4 `.filter()` passes over the full
 org `users` list (`attendees`, `selectedAttendees`, `managers`, `supervisees`) directly in the
