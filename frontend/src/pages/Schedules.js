@@ -224,6 +224,7 @@ export default function Schedules() {
       }, getAuthConfig());
       flash("Schedule updated");
       setEditingSchedule(null);
+      invalidateCache("/schedules/");
       fetchAll();
     } catch (err) { setEditError(err.response?.data?.detail || "Failed to save"); }
     setSavingEdit(false);
@@ -239,6 +240,7 @@ export default function Schedules() {
       await axios.post(`${API}/schedules/`, { ...scheduleForm, staff_user_id: staffUserId }, getAuthConfig());
       flash("Schedule added");
       setShowAddSchedule(null);
+      invalidateCache("/schedules/");
       fetchAll();
     } catch (err) { setScheduleError(err.response?.data?.detail || "Failed to save"); }
     setSavingSchedule(false);
@@ -302,6 +304,7 @@ export default function Schedules() {
       flash(`Created ${res.data.created} schedule${res.data.created !== 1 ? "s" : ""} · ${res.data.skipped} already existed`);
       setShowBulk(false);
       setBulkPreview(null);
+      invalidateCache("/schedules/");
       fetchAll();
     } catch (err) { setBulkError(err.response?.data?.detail || "Failed"); }
     setBulkSaving(false);
