@@ -12,6 +12,37 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 1.9: Logo Upload/Download Blocking Fix — FIXED (Sep 2026), verified
+Audit item: `utils/storage.py`'s `put_object`/`get_object`/`init_storage` all use the synchronous
+`requests` library, called directly (no thread offload) from `org.py`'s `upload_logo()` (line
+482) and `get_org_logo()` (line 507, unauthenticated, hit on every page render that shows a logo)
+— same event-loop-blocking pattern as 1.1/1.7/1.8.
+- **Fix**: wrapped both call sites in `org.py` in `await asyncio.to_thread(...)` — `put_object`
+  in `upload_logo`, `get_object` in `get_org_logo`. `storage.py` itself left untouched (kept as
+  plain sync functions so `server.py`'s one-time startup `init_storage()` call is unaffected).
+- **Verified**: backend restarted clean, no errors in logs. Logged in as `admin@supervision.com`,
+  uploaded a real PNG via `POST /api/org/branding/logo` (200, ~2s real network call) — fired a
+  concurrent `GET /api/health` mid-upload, returned 200 in ~0.13s. Same test for
+  `GET /api/org/branding/logo/{org_id}` (200, ~0.9s) with concurrent health check at ~0.13s.
+  Downloaded logo confirmed byte-identical (md5 match) to the uploaded file — no functional
+  regression. Self-tested via curl, no testing_agent round used (2-call-site fix). Test data
+  cleaned up.
+- Issue 1.9 now fully CLOSED.
+
+## Issue 1.8: Forgot-Password Email Blocking Fix — FIXED (Sep 2026), verified
+Audit item: `POST /auth/forgot-password`'s `resend.Emails.send(...)` call in `auth.py` was still
+a direct synchronous network call (same class of bug as 1.1/1.7, already fixed for
+bcrypt/PDF-generation and the MFA-code send at line 204). Confirmed on inspection: the MFA-code
+send was already correctly wrapped, but the password-reset send (line 626) was not.
+- **Fix**: wrapped `resend.Emails.send(...)` in `await asyncio.to_thread(...)`, identical pattern
+  to the MFA-code send just above it in the same file.
+- **Verified**: backend restarted clean (no errors in `backend.err.log`), `POST
+  /api/auth/forgot-password` still returns 200 with correct message (~1.8s, real network call to
+  Resend), and a concurrent `GET /api/health` fired mid-send returned 200 in ~0.1s — proves the
+  event loop is no longer blocked during the send. Self-tested via curl (concurrent timing test),
+  no testing_agent round used (single-file, single-call-site fix).
+- Issue 1.8 now fully CLOSED.
+
 ## SELECT * Column Trimming — COMPLETE (Sep 2026), fully tested
 Audit flagged pervasive `SELECT *` (81 occurrences across 12 files) on tables holding full
 meeting transcripts/AI analysis. Verified live: confirmed count, then classified every call

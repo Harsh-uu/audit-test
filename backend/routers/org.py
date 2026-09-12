@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 import logging
@@ -479,7 +480,10 @@ async def upload_logo(file: UploadFile = File(...), current_user=Depends(get_cur
     org_id = current_user.get("org_id") or "shared"
     path = f"branding/{org_id}/{uuid.uuid4()}.{ext}"
     try:
-        put_object(path, data, canonical_mime)
+        # PERF-001: same asyncio.to_thread pattern as bcrypt/PDF-generation/email —
+        # put_object() uses the synchronous `requests` library, which would
+        # otherwise block the single event loop for the full upload round-trip.
+        await asyncio.to_thread(put_object, path, data, canonical_mime)
     except Exception as e:
         logger.error(f"Logo upload failed: {e}")
         raise HTTPException(500, "Storage upload failed")
@@ -504,7 +508,7 @@ async def get_org_logo(org_id: str):
         path = _jdict(org["branding"]).get("logo_path")
         if not path:
             raise HTTPException(404, "No logo")
-        content, content_type = get_object(path)
+        content, content_type = await asyncio.to_thread(get_object, path)
         return _Response(content=content, media_type=content_type, headers={"Cache-Control": "public, max-age=3600"})
     except HTTPException:
         raise

@@ -201,7 +201,7 @@ async def _generate_and_send_mfa(conn, user: dict) -> None:
     )
     resend.api_key = os.environ.get("RESEND_API_KEY", "")
     try:
-        resend.Emails.send({
+        await asyncio.to_thread(resend.Emails.send, {
             "from": "Supervision 2 <noreply@notify.1two.one>",
             "to": [user["email"]],
             "subject": "Your verification code",
@@ -623,7 +623,10 @@ async def forgot_password(data: ForgotPasswordRequest, request: Request):
 
     resend.api_key = os.environ.get("RESEND_API_KEY", "")
     try:
-        resend.Emails.send({
+        # PERF-001: same asyncio.to_thread pattern as the MFA-code send above —
+        # resend's SDK does a synchronous network call, which would otherwise
+        # freeze the single event loop for every other in-flight request.
+        await asyncio.to_thread(resend.Emails.send, {
             "from": "Supervision 2 <noreply@notify.1two.one>",
             "to": [email],
             "subject": "Reset your password",
