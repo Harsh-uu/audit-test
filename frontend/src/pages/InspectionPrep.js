@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
@@ -213,6 +213,13 @@ export default function InspectionPrep() {
     setExporting(false);
   };
 
+  // PERF-002: extracted + memoized above the early returns so the full
+  // standards×staff coverage matrix is built once per data load, not on
+  // every row expand/collapse (which only toggles `open`, not `insights`).
+  const cqcRows = insights?.matrix?.cqc?.rows      || [];
+  const cqcStds = insights?.matrix?.cqc?.standards  || [];
+  const cqcCov  = useMemo(() => buildCoverage(cqcStds, cqcRows), [cqcStds, cqcRows]);
+
   if (loading) {
     return (
       <Layout>
@@ -287,11 +294,6 @@ export default function InspectionPrep() {
       </Layout>
     );
   }
-
-  const cqcRows  = insights.matrix?.cqc?.rows      || [];
-  const cqcStds  = insights.matrix?.cqc?.standards  || [];
-
-  const cqcCov  = buildCoverage(cqcStds, cqcRows);
 
   // sort: red → amber → green
   const order = { red: 0, amber: 1, green: 2 };

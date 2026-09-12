@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { cachedGet } from "@/utils/apiCache";
@@ -21,10 +21,9 @@ function coverageTheme(pct) {
 
 function buildCoverage(standards, rows) {
   return standards.map(std => {
-    const evidenced = rows.filter(r => {
-      const s = r.cells?.[std.ref]?.status;
-      return s === "evidenced" || s === "partial";
-    }).length;
+    // NOTE: kept identical to InspectionPrep.js's "!== gap" definition on purpose —
+    // both pages must agree on what counts as evidenced.
+    const evidenced = rows.filter(r => r.cells?.[std.ref]?.status !== "gap").length;
     const gaps = rows.filter(r => r.cells?.[std.ref]?.status === "gap").map(r => r.staff_name);
     const evidenced_staff = rows
       .filter(r => r.cells?.[std.ref]?.status !== "gap")
@@ -313,6 +312,13 @@ export default function CareCertPrep() {
     setExporting(false);
   };
 
+  // PERF-002: extracted + memoized above the early returns so the full
+  // standards×staff coverage matrix is built once per data load, not on
+  // every row expand/collapse (which only toggles `open`, not `insights`).
+  const ccRows = insights?.matrix?.care_cert?.rows      || [];
+  const ccStds = insights?.matrix?.care_cert?.standards  || [];
+  const ccCov  = useMemo(() => buildCoverage(ccStds, ccRows), [ccStds, ccRows]);
+
   if (loading) {
     return (
       <Layout>
@@ -388,10 +394,6 @@ export default function CareCertPrep() {
     );
   }
 
-  const ccRows = insights.matrix?.care_cert?.rows      || [];
-  const ccStds = insights.matrix?.care_cert?.standards  || [];
-
-  const ccCov     = buildCoverage(ccStds, ccRows);
   const order     = { red: 0, amber: 1, green: 2 };
   const ccSorted  = [...ccCov].sort((a, b) => order[a.theme.key] - order[b.theme.key]);
 

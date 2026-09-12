@@ -12,6 +12,33 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.1: CareCertPrep/InspectionPrep Coverage-Matrix Memoization + Definition Align — FIXED (Sep 2026), verified
+Audit item: both `CareCertPrep.js` (Induction page) and `InspectionPrep.js` (CQC/CIW/CI/RQIA page)
+called their near-identical `buildCoverage(standards, rows)` directly in the component body —
+recomputed the full standards×staff matrix (nested filter/map loops) on every re-render, including
+every single row expand/collapse (`toggle()` only flips `open` state, not the underlying data).
+Also found the two files' "evidenced" count used differently-written filters
+(`status === "evidenced" || status === "partial"` in CareCertPrep vs `status !== "gap"` in
+InspectionPrep) — mathematically equivalent given today's actual status values (each matrix only
+ever has 2 non-gap statuses), but brittle/inconsistent if a status is ever added to one matrix
+and not the other.
+- **Fix**: wrapped both `buildCoverage(...)` calls in `useMemo`, keyed on `[stds, rows]` —
+  extracted the `rows`/`standards` data-access lines from `insights` and moved them (with the
+  `useMemo` call) ABOVE the loading/no-data early `return`s in both files, required to keep
+  React's hook-call order identical across the loading→loaded transition (a `useMemo` placed
+  after an early return would only fire on some renders, violating rules of hooks). Standardized
+  `CareCertPrep.js`'s evidenced filter to the same `status !== "gap"` expression InspectionPrep
+  already used (already used for both files' `evidenced_staff` list) — zero output change with
+  today's data, just removes future drift risk.
+- **Verified**: frontend rebuilt (`vite build` — no hot reload here), logged in as
+  `admin@supervision.com`, Playwright-clicked through both `/inspection-prep`... correction, real
+  routes are `/inspection` and `/care-cert` (not `/inspection-prep`/`/care-cert-prep`) — confirmed
+  via `App.js` route table. Expanded/collapsed the first row on both pages: percentage, staff
+  count, gap names, and evidenced-staff list byte-identical before/after each toggle. No console
+  errors, no regressions. Self-tested via screenshot_tool, no testing_agent round used (2-file,
+  isolated frontend perf fix).
+- Issue 2.1 now fully CLOSED.
+
 ## Issue 1.9: Logo Upload/Download Blocking Fix — FIXED (Sep 2026), verified
 Audit item: `utils/storage.py`'s `put_object`/`get_object`/`init_storage` all use the synchronous
 `requests` library, called directly (no thread offload) from `org.py`'s `upload_logo()` (line
