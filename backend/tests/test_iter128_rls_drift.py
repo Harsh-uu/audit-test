@@ -256,7 +256,7 @@ class TestJobsCascade:
                 """INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, created_at)
                    VALUES ($1,$2,$3,'Test','admin',$4,TRUE,$5)""",
                 user_id, f"test_rls_{suffix}@example.com",
-                hash_password("Whatever123!"), org_id, now,
+                await hash_password("Whatever123!"), org_id, now,
             )
             await conn.execute(
                 """INSERT INTO meetings (id, org_id, title, date, meeting_type,

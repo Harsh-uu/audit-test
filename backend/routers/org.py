@@ -411,7 +411,7 @@ async def invite_user_to_org(data: InviteUserRequest, current_user=Depends(get_c
             raise HTTPException(400, "Email already registered")
         await conn.execute(
             "INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, must_change_password, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-            user_id, data.email.lower(), hash_password(data.password), data.name, role, org_id, True, True, now,
+            user_id, data.email.lower(), await hash_password(data.password), data.name, role, org_id, True, True, now,
         )
         try:
             await supabase_auth.create_user(user_id, data.email.lower())

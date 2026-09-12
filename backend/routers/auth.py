@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from pydantic import BaseModel, EmailStr
+import asyncio
 import bcrypt
 import jwt
 import os
@@ -19,13 +20,18 @@ router = APIRouter()
 JWT_ALGORITHM = "HS256"
 
 
-def hash_password(password: str) -> str:
+async def hash_password(password: str) -> str:
+    # PERF-001: bcrypt is intentionally slow (~220ms) — run it in a worker
+    # thread so it never blocks the single asyncio event loop (uvicorn
+    # --workers 1), which would otherwise freeze every other in-flight
+    # request for the duration of every login/MFA-check/password-change.
     salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+    hashed = await asyncio.to_thread(bcrypt.hashpw, password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
 
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+async def verify_password(plain: str, hashed: str) -> bool:
+    return await asyncio.to_thread(bcrypt.checkpw, plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
 def _mask_email(email: str) -> str:
@@ -187,7 +193,7 @@ def create_mfa_session_token(user_id: str) -> str:
 async def _generate_and_send_mfa(conn, user: dict) -> None:
     """Generate a 6-digit OTP, hash it, store it, and email it to the user."""
     code = f"{secrets.randbelow(1000000):06d}"
-    code_hash = bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode()
+    code_hash = (await asyncio.to_thread(bcrypt.hashpw, code.encode(), bcrypt.gensalt())).decode()
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
     await conn.execute(
         "UPDATE users SET mfa_code=$1, mfa_code_expires_at=$2, mfa_code_attempts=0 WHERE id=$3",
@@ -287,7 +293,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
         except SupabaseAuthUnavailable:
             raise HTTPException(status_code=503, detail="Sign-in is temporarily unavailable. Please try again shortly.")
     else:
-        password_ok = bool(user and verify_password(data.password, user["password_hash"] or ""))
+        password_ok = bool(user and await verify_password(data.password, user["password_hash"] or ""))
 
     # ── Step 3: record failed attempt (committed separately so rollback can't undo it)
     if not password_ok:
@@ -408,7 +414,7 @@ async def verify_mfa(data: VerifyMfaRequest, response: Response):
             raise HTTPException(status_code=401, detail="Code expired. Please sign in again.")
 
         code_hash = user.get("mfa_code") or ""
-        if not code_hash or not bcrypt.checkpw(data.code.strip().encode(), code_hash.encode()):
+        if not code_hash or not await asyncio.to_thread(bcrypt.checkpw, data.code.strip().encode(), code_hash.encode()):
             await conn.execute(
                 "UPDATE users SET mfa_code_attempts = COALESCE(mfa_code_attempts, 0) + 1 WHERE id=$1",
                 user_id,
@@ -468,7 +474,7 @@ async def toggle_mfa(data: ToggleMfaRequest, current_user=Depends(get_current_us
             raise HTTPException(status_code=401, detail="Code expired. Please request a new code.")
 
         code_hash = user.get("mfa_code") or ""
-        if not code_hash or not bcrypt.checkpw(data.code.strip().encode(), code_hash.encode()):
+        if not code_hash or not await asyncio.to_thread(bcrypt.checkpw, data.code.strip().encode(), code_hash.encode()):
             await conn.execute(
                 "UPDATE users SET mfa_code_attempts = COALESCE(mfa_code_attempts, 0) + 1 WHERE id=$1",
                 current_user["id"],
@@ -677,7 +683,7 @@ async def reset_password(data: ResetPasswordRequest):
             """UPDATE users SET password_hash=$1, must_change_password=FALSE,
                password_changed_at=$2, supabase_migrated=(supabase_migrated OR $4),
                supabase_password_set=(supabase_password_set OR $4) WHERE email=$3""",
-            hash_password(data.new_password), now, record["email"], supabase_ok,
+            await hash_password(data.new_password), now, record["email"], supabase_ok,
         )
         await conn.execute("UPDATE password_reset_tokens SET used=TRUE WHERE token=$1", data.token)
     return {"message": "Password updated successfully. You can now log in."}
@@ -705,7 +711,7 @@ async def change_password(data: ChangePasswordRequest, current_user=Depends(get_
             except SupabaseAuthUnavailable:
                 raise HTTPException(status_code=503, detail="Unable to verify your password right now. Please try again shortly.")
         else:
-            current_ok = verify_password(data.current_password, user["password_hash"] or "")
+            current_ok = await verify_password(data.current_password, user["password_hash"] or "")
         if not current_ok:
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         if data.current_password == data.new_password:
@@ -730,7 +736,7 @@ async def change_password(data: ChangePasswordRequest, current_user=Depends(get_
             """UPDATE users SET password_hash=$1, must_change_password=FALSE,
                password_changed_at=$2, supabase_migrated=(supabase_migrated OR $3),
                supabase_password_set=(supabase_password_set OR $3) WHERE id=$4""",
-            hash_password(data.new_password), now, supabase_ok, current_user["id"],
+            await hash_password(data.new_password), now, supabase_ok, current_user["id"],
         )
     return {"message": "Password changed successfully"}
 
@@ -793,7 +799,7 @@ async def accept_invite(data: AcceptInviteRequest, response: Response):
                must_change_password=FALSE, password_changed_at=$5,
                supabase_migrated=(supabase_migrated OR $6),
                supabase_password_set=(supabase_password_set OR $6) WHERE id=$4""",
-            hash_password(data.password), name, invite["org_id"], invite["user_id"], now, supabase_ok,
+            await hash_password(data.password), name, invite["org_id"], invite["user_id"], now, supabase_ok,
         )
         await conn.execute("UPDATE invitations SET used_at=$1 WHERE token=$2", now, data.token)
 

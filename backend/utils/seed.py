@@ -3835,7 +3835,7 @@ async def seed_super_admin():
             await conn.execute(
                 """INSERT INTO users (id, email, password_hash, name, role, is_active, created_at)
                    VALUES ($1,$2,$3,$4,$5,$6,$7)""",
-                str(uuid.uuid4()), email, hash_password(password),
+                str(uuid.uuid4()), email, await hash_password(password),
                 "Super Admin", "super_admin", True,
                 datetime.now(timezone.utc).isoformat(),
             )

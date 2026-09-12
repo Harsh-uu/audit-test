@@ -130,7 +130,7 @@ async def create_user(data: CreateUserRequest, current_user=Depends(get_current_
             raise HTTPException(400, "Email already exists")
         await conn.execute(
             "INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, must_change_password, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-            user_id, data.email.lower(), hash_password(data.password), data.name, role, org_id, True, True, now,
+            user_id, data.email.lower(), await hash_password(data.password), data.name, role, org_id, True, True, now,
         )
         try:
             await supabase_auth.create_user(user_id, data.email.lower())
@@ -226,7 +226,7 @@ async def reset_user_password(user_id: str, data: ResetPasswordRequest, current_
             raise HTTPException(404, "User not found")
         await conn.execute(
             "UPDATE users SET password_hash=$1, must_change_password=TRUE, password_changed_at=$2 WHERE id=$3",
-            hash_password(data.new_password), now, user_id,
+            await hash_password(data.new_password), now, user_id,
         )
     return {"message": "Password reset successfully"}
 

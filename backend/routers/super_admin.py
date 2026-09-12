@@ -227,7 +227,7 @@ async def create_org_user(org_id: str, data: CreateOrgUserRequest, current_user=
         await conn.execute(
             """INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, must_change_password, created_at)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)""",
-            user_id, data.email.lower(), hash_password(data.password),
+            user_id, data.email.lower(), await hash_password(data.password),
             data.name.strip(), role, org_id, True, True, now,
         )
 
@@ -259,7 +259,7 @@ async def update_org_user(org_id: str, user_id: str, data: UpdateOrgUserRequest,
     if data.password:
         from routers.auth import hash_password, validate_password_strength
         validate_password_strength(data.password)
-        updates["password_hash"] = hash_password(data.password)
+        updates["password_hash"] = await hash_password(data.password)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -367,7 +367,7 @@ async def invite_org_admin(org_id: str, data: InviteAdminRequest, current_user=D
         await conn.execute(
             """INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, created_at)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)""",
-            user_id, data.email.lower(), hash_password(secrets.token_urlsafe(32)),
+            user_id, data.email.lower(), await hash_password(secrets.token_urlsafe(32)),
             data.name.strip(), "admin", org_id, False, now,
         )
         await conn.execute(
