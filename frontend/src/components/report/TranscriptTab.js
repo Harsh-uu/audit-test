@@ -44,6 +44,15 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
   // ── Find & Replace state ───────────────────────────────────────────────────
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
+  // PERF-004: the raw query updates the input instantly (so typing feels
+  // responsive), but the expensive full-transcript scan below is driven by
+  // this debounced copy instead, so it only runs once typing pauses rather
+  // than on every keystroke.
+  const [debouncedFindQuery, setDebouncedFindQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFindQuery(findQuery), 200);
+    return () => clearTimeout(t);
+  }, [findQuery]);
   const [replaceWith, setReplaceWith] = useState("");
   const [findMatchIdx, setFindMatchIdx] = useState(0);
   const findInputRef = useRef(null);
@@ -141,8 +150,10 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
   }, [highlightExcerpt, localTurns, rawParas, hasSpeakerText]);
 
   // ── Find & Replace match computation ──────────────────────────────────────
+  // PERF-004: driven by debouncedFindQuery, not the raw findQuery, so this
+  // full-transcript scan runs once per pause-in-typing, not per keystroke.
   const findMatches = useMemo(() => {
-    const q = findQuery.trim();
+    const q = debouncedFindQuery.trim();
     if (!q) return [];
     const ql = q.toLowerCase();
     const matches = [];
@@ -167,7 +178,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
       });
     }
     return matches;
-  }, [findQuery, viewMode, localTurns, rawParas]);
+  }, [debouncedFindQuery, viewMode, localTurns, rawParas]);
 
   // Build per-turn / per-para match maps with globalIdx for multi-highlight rendering
   const turnMatchMap = useMemo(() => {

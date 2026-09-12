@@ -3,7 +3,7 @@ import { ArrowLeftRight, Pencil, Check } from "lucide-react";
 import { HighlightedText, MultiHighlightText } from "./HighlightedText";
 
 /** A single speaker-turn row in the Speaker View — pill, reassign menu, editable text, split-to-highlight support */
-export function SpeakerTurnRow({
+function SpeakerTurnRowInner({
   turn, index, pillStyle, rowStyle,
   canEditSpeakers, isMenuOpen, onToggleMenu, uniqueSpeakers, onAssign, onFlipFromHere,
   isEditing, editingTurnText, setEditingTurnText, onSaveTurnText, onCancelTurnText, onStartEdit,
@@ -149,3 +149,38 @@ export function SpeakerTurnRow({
     </div>
   );
 }
+
+// PERF-004: on a long meeting, TranscriptTab re-renders on every search
+// keystroke (findQuery lives there) — without this, every row would
+// re-render too, even ones nowhere near the match. `pillStyle`/`rowStyle`
+// are fresh objects each parent render, so we compare their actual values
+// instead of relying on React.memo's default shallow reference check.
+function arePropsEqual(prev, next) {
+  return (
+    prev.turn === next.turn &&
+    prev.index === next.index &&
+    prev.canEditSpeakers === next.canEditSpeakers &&
+    prev.isMenuOpen === next.isMenuOpen &&
+    prev.uniqueSpeakers === next.uniqueSpeakers &&
+    prev.isEditing === next.isEditing &&
+    (!next.isEditing || prev.editingTurnText === next.editingTurnText) &&
+    prev.isHighlighted === next.isHighlighted &&
+    prev.findReplaceOpen === next.findReplaceOpen &&
+    prev.findQueryTrimmed === next.findQueryTrimmed &&
+    prev.turnMatches === next.turnMatches &&
+    prev.findMatchIdx === next.findMatchIdx &&
+    prev.effectiveHighlightQuery === next.effectiveHighlightQuery &&
+    prev.pillStyle?.backgroundColor === next.pillStyle?.backgroundColor &&
+    prev.pillStyle?.color === next.pillStyle?.color &&
+    prev.rowStyle?.backgroundColor === next.rowStyle?.backgroundColor &&
+    prev.onToggleMenu === next.onToggleMenu &&
+    prev.onAssign === next.onAssign &&
+    prev.onFlipFromHere === next.onFlipFromHere &&
+    prev.setEditingTurnText === next.setEditingTurnText &&
+    prev.onSaveTurnText === next.onSaveTurnText &&
+    prev.onCancelTurnText === next.onCancelTurnText &&
+    prev.onStartEdit === next.onStartEdit
+  );
+}
+
+export const SpeakerTurnRow = React.memo(SpeakerTurnRowInner, arePropsEqual);
