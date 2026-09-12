@@ -9,6 +9,136 @@ import {
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 
+// PERF-002: static nav lists hoisted to module scope — they never change,
+// so there's no reason to recreate them on every Layout render.
+const INSIGHTS_NAV_ITEMS = [
+  { path: "/supervision-matrix", icon: LayoutGrid,    label: "Supervision Matrix", testId: "nav-supervision-matrix",  exact: true },
+  { path: "/admin/team",         icon: BarChart2,      label: "Team Themes",        testId: "nav-team-intelligence",   exact: true },
+  { path: "/inspection-prep",    icon: ClipboardCheck, label: "Inspection",         testId: "nav-inspection-prep",     exact: true },
+  { path: "/care-cert",          icon: Award,          label: "Induction",          testId: "nav-care-cert",           exact: true },
+];
+
+const MANAGE_NAV_ITEMS = [
+  { path: "/organisation",       icon: Building2, label: "Organisation",      testId: "nav-organisation",       exact: true },
+  { path: "/admin/schedules",    icon: Calendar,  label: "Schedules",         testId: "nav-schedules",          exact: true },
+  { path: "/admin",              icon: BookOpen,  label: "Standards Library", testId: "nav-standards-library",  exact: true },
+  { path: "/upload-supervision", icon: FileUp,    label: "Import",           testId: "nav-import-supervision", exact: true },
+  { path: "/settings",           icon: Settings,  label: "Settings",         testId: "nav-settings",           exact: true },
+];
+
+// PERF-002: this used to be defined INSIDE Layout's function body, which
+// gave it a brand new function reference on every Layout render — React
+// then unmounted + remounted the whole sidebar subtree (twice — desktop
+// and mobile) on every state change in Layout, instead of updating it in
+// place. Defining it here keeps a stable component identity; every value
+// it needs from Layout is now passed in explicitly as a prop.
+function SidebarContent({
+  onNavClick, collapsed, onToggleCollapsed, onMobileClose,
+  orgLogoUrl, orgPrimary, navItems, isActive, pathname, canManage,
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 h-auto min-h-16 flex-shrink-0">
+        {!collapsed && (
+          <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+            <Link to="/dashboard" onClick={onNavClick} className="flex items-center gap-2">
+              <img src="/logo.svg" alt="1two.one" className="w-8 h-8 flex-shrink-0" />
+              <span className="font-semibold text-[#1E3A8A] text-lg tracking-tight">
+                1two.one
+              </span>
+            </Link>
+            {orgLogoUrl && (
+              <img
+                src={orgLogoUrl}
+                alt="Organisation"
+                className="h-7 w-auto max-w-[120px] object-contain"
+                data-testid="org-logo-sidebar"
+              />
+            )}
+          </div>
+        )}
+        {collapsed && <img src="/logo.svg" alt="1two.one" className="w-7 h-7 mx-auto" />}
+        <button
+          onClick={onToggleCollapsed}
+          className="p-1 rounded hover:bg-gray-100 text-gray-500 hidden lg:block flex-shrink-0"
+          data-testid="sidebar-toggle"
+        >
+          {collapsed ? <Menu className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
+        {/* Mobile close button */}
+        <button
+          onClick={onMobileClose}
+          className="p-1 rounded hover:bg-gray-100 text-gray-500 lg:hidden flex-shrink-0"
+          data-testid="sidebar-mobile-close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {navItems.map(({ path, icon: Icon, label, matchBase }) => {
+          const active = isActive(matchBase || path);
+          return (
+            <Link
+              key={path}
+              to={path}
+              onClick={onNavClick}
+              data-testid={`nav-${label.toLowerCase().replace(/\s/g, "-")}`}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                active ? "text-white" : "text-gray-600 hover:bg-gray-100"
+              }`}
+              style={active ? { backgroundColor: orgPrimary } : {}}
+            >
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              {!collapsed && <span>{label}</span>}
+            </Link>
+          );
+        })}
+
+        {canManage && (
+          <>
+            {/* ── Top half: Insight & Analysis tools ───────────────────────── */}
+            {!collapsed && (
+              <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Insights</div>
+            )}
+            {INSIGHTS_NAV_ITEMS.map(({ path, icon: Icon, label, testId, exact }) => {
+              const active = exact ? pathname === path : isActive(path);
+              return (
+                <Link key={path} to={path} onClick={onNavClick} data-testid={testId}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${active ? "text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                  style={active ? { backgroundColor: orgPrimary } : {}}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  {!collapsed && <span>{label}</span>}
+                </Link>
+              );
+            })}
+
+            {/* ── Bottom half: Management & Config ─────────────────────────── */}
+            {!collapsed && (
+              <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Manage</div>
+            )}
+            {MANAGE_NAV_ITEMS.map(({ path, icon: Icon, label, testId, exact }) => {
+              const active = exact ? pathname === path : isActive(path);
+              return (
+                <Link key={path} to={path} onClick={onNavClick} data-testid={testId}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${active ? "text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                  style={active ? { backgroundColor: orgPrimary } : {}}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  {!collapsed && <span>{label}</span>}
+                </Link>
+              );
+            })}
+          </>
+        )}
+      </nav>
+    </div>
+  );
+}
+
 export default function Layout({ children, headerCenter }) {
   const { user, logout, getAuthConfig, updateOrgName, API } = useAuth();
   const location = useLocation();
@@ -139,119 +269,6 @@ export default function Layout({ children, headerCenter }) {
     { path: `/portfolio/${user?.id}`,     icon: TrendingUp,      label: "My Portfolio", matchBase: "/portfolio" },
   ];
 
-  const SidebarContent = ({ onNavClick }) => (
-    <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 h-auto min-h-16 flex-shrink-0">
-        {!collapsed && (
-          <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-            <Link to="/dashboard" onClick={onNavClick} className="flex items-center gap-2">
-              <img src="/logo.svg" alt="1two.one" className="w-8 h-8 flex-shrink-0" />
-              <span className="font-semibold text-[#1E3A8A] text-lg tracking-tight">
-                1two.one
-              </span>
-            </Link>
-            {orgLogoUrl && (
-              <img
-                src={orgLogoUrl}
-                alt="Organisation"
-                className="h-7 w-auto max-w-[120px] object-contain"
-                data-testid="org-logo-sidebar"
-              />
-            )}
-          </div>
-        )}
-        {collapsed && <img src="/logo.svg" alt="1two.one" className="w-7 h-7 mx-auto" />}
-        <button
-          onClick={() => { setCollapsed(!collapsed); }}
-          className="p-1 rounded hover:bg-gray-100 text-gray-500 hidden lg:block flex-shrink-0"
-          data-testid="sidebar-toggle"
-        >
-          {collapsed ? <Menu className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
-        {/* Mobile close button */}
-        <button
-          onClick={() => setMobileOpen(false)}
-          className="p-1 rounded hover:bg-gray-100 text-gray-500 lg:hidden flex-shrink-0"
-          data-testid="sidebar-mobile-close"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map(({ path, icon: Icon, label, matchBase }) => {
-          const active = isActive(matchBase || path);
-          return (
-            <Link
-              key={path}
-              to={path}
-              onClick={onNavClick}
-              data-testid={`nav-${label.toLowerCase().replace(/\s/g, "-")}`}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                active ? "text-white" : "text-gray-600 hover:bg-gray-100"
-              }`}
-              style={active ? { backgroundColor: orgPrimary } : {}}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {!collapsed && <span>{label}</span>}
-            </Link>
-          );
-        })}
-
-        {(user?.role === "admin" || user?.role === "manager") && (
-          <>
-            {/* ── Top half: Insight & Analysis tools ───────────────────────── */}
-            {!collapsed && (
-              <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Insights</div>
-            )}
-            {[
-              { path: "/supervision-matrix", icon: LayoutGrid,    label: "Supervision Matrix",  testId: "nav-supervision-matrix",  exact: true },
-              { path: "/admin/team",         icon: BarChart2,      label: "Team Themes",   testId: "nav-team-intelligence",   exact: true },
-              { path: "/inspection-prep",    icon: ClipboardCheck, label: "Inspection",          testId: "nav-inspection-prep",     exact: true },
-              { path: "/care-cert",          icon: Award,          label: "Induction",           testId: "nav-care-cert",           exact: true },
-            ].map(({ path, icon: Icon, label, testId, exact }) => {
-              const active = exact ? location.pathname === path : isActive(path);
-              return (
-                <Link key={path} to={path} onClick={onNavClick} data-testid={testId}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${active ? "text-white" : "text-gray-600 hover:bg-gray-100"}`}
-                  style={active ? { backgroundColor: orgPrimary } : {}}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  {!collapsed && <span>{label}</span>}
-                </Link>
-              );
-            })}
-
-            {/* ── Bottom half: Management & Config ─────────────────────────── */}
-            {!collapsed && (
-              <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-gray-400 tracking-wider">Manage</div>
-            )}
-            {[
-              { path: "/organisation",      icon: Building2, label: "Organisation",      testId: "nav-organisation",      exact: true },
-              { path: "/admin/schedules",   icon: Calendar,  label: "Schedules",         testId: "nav-schedules",         exact: true },
-              { path: "/admin",             icon: BookOpen,  label: "Standards Library", testId: "nav-standards-library", exact: true },
-              { path: "/upload-supervision",icon: FileUp,    label: "Import",testId: "nav-import-supervision",exact: true },
-              { path: "/settings",          icon: Settings,  label: "Settings",          testId: "nav-settings",          exact: true },
-            ].map(({ path, icon: Icon, label, testId, exact }) => {
-              const active = exact ? location.pathname === path : isActive(path);
-              return (
-                <Link key={path} to={path} onClick={onNavClick} data-testid={testId}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${active ? "text-white" : "text-gray-600 hover:bg-gray-100"}`}
-                  style={active ? { backgroundColor: orgPrimary } : {}}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  {!collapsed && <span>{label}</span>}
-                </Link>
-              );
-            })}
-          </>
-        )}
-      </nav>
-    </div>
-  );
-
   return (
     <div className="flex h-screen bg-[#F8F9FA] overflow-hidden">
 
@@ -275,7 +292,18 @@ export default function Layout({ children, headerCenter }) {
           ${collapsed ? "w-16" : "w-60"}
         `}
       >
-        <SidebarContent onNavClick={() => {}} />
+        <SidebarContent
+          onNavClick={() => {}}
+          collapsed={collapsed}
+          onToggleCollapsed={() => setCollapsed(!collapsed)}
+          onMobileClose={() => setMobileOpen(false)}
+          orgLogoUrl={orgLogoUrl}
+          orgPrimary={orgPrimary}
+          navItems={navItems}
+          isActive={isActive}
+          pathname={location.pathname}
+          canManage={canManage}
+        />
       </aside>
 
       {/* ── Mobile sidebar (slide-over) ───────────────────────────────────── */}
@@ -288,7 +316,18 @@ export default function Layout({ children, headerCenter }) {
           ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        <SidebarContent onNavClick={() => setMobileOpen(false)} />
+        <SidebarContent
+          onNavClick={() => setMobileOpen(false)}
+          collapsed={collapsed}
+          onToggleCollapsed={() => setCollapsed(!collapsed)}
+          onMobileClose={() => setMobileOpen(false)}
+          orgLogoUrl={orgLogoUrl}
+          orgPrimary={orgPrimary}
+          navItems={navItems}
+          isActive={isActive}
+          pathname={location.pathname}
+          canManage={canManage}
+        />
       </aside>
 
       {/* ── Main content ─────────────────────────────────────────────────── */}

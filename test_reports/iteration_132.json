@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend-only verification of the SidebarContent stable-identity refactor in Layout.js (PERF-002). Tested admin (full nav), attendee (reduced nav), sidebar collapse toggle, mobile slide-over (open/nav-close/X-close/backdrop-close), user menu (open/close/settings/change-password/logout), org-name rename typing (the primary visible symptom), active-state highlighting on all 13 nav items, and DOM node identity survival across state changes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Super admin credentials in /app/memory/test_credentials.md (superadmin@1two.one / NewPass123!) returned 401 via helper script — likely stale/rotated again; NOT related to this refactor (super_admin uses a completely separate code branch in Layout.js lines 193-262 that was not touched). Consider re-verifying and updating the credentials file if this account is needed for future testing."
+  ],
+  "critical_code_review_comments": [
+    "Refactor is clean: SidebarContent hoisted to module scope with explicit props (no closures over Layout state), and INSIGHTS_NAV_ITEMS/MANAGE_NAV_ITEMS constants hoisted correctly.",
+    "Minor: the `navItems` array passed to SidebarContent is still recreated on every Layout render (line 265-270) since it depends on `user?.id` for the portfolio path. This is fine for correctness (SidebarContent won't remount because it's the same component reference), but if you want extra perf, wrap it in useMemo keyed on user?.id.",
+    "Minor: `isActive` is defined inline in Layout body (line 189) so it gets a new function reference each render — currently passed as prop to SidebarContent. Not a correctness issue but could be useCallback'd for consistency.",
+    "Observation: on route navigation the `<aside data-testid=\"sidebar\">` DOM node identity is NOT preserved (verified: `same: False` after nav to /meetings). This is unrelated to the PERF-002 fix (which targets remounts caused by SidebarContent's unstable identity within a single Layout render cycle). This route-nav remount is likely because Layout is wrapped per-route in App.js rather than as a persistent shell above <Routes>. Worth investigating separately if broader remount-avoidance is desired, but not in scope for this fix."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PERF-002 SidebarContent refactor verified end-to-end. Core proof: typing 10 chars sequentially in org-name-input preserved sidebar `<aside>` DOM identity AND the JS expando marker (`window.__aside.__mk3 === 'TYPE'` throughout) — this is the exact scenario the fix addresses. Also verified: collapse-toggle preserves DOM identity+marker, user-menu open/close preserves identity+marker. All 13 admin nav items present + active highlight applies org primary color (rgb(138,52,30) for Test Company). Attendee correctly sees only 4 base nav items, no Insights/Manage sections, no org-name-edit pencil. Mobile slide-over: open (left=0), nav-click closes (-288px), X close (-288), backdrop close (-288). Escape cancels org-name-rename. No JS page errors during test run (3 console 401s were expected pre-login auth checks).",
+  "test_credentials": "admin@supervision.com/Admin123! works; user@supervision.com/AnotherNew789! works; superadmin@1two.one/NewPass123! returned 401 (stale — flag for main agent).",
+  "rca of the issue": "N/A — this was a refactor verification, not a bug reproduction. The refactor achieves its stated goal: SidebarContent as a stable top-level component prevents unmount+remount of the sidebar subtree on Layout state changes (collapse, mobile-open, user-menu, org-name typing)."
+}
