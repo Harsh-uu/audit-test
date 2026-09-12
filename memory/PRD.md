@@ -12,6 +12,24 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.2: TeamInsights PersonGroups + regCounts Memoization — FIXED (Sep 2026), verified
+Audit item, same pattern as 2.1: `TeamInsights.js`'s `PersonGroups` component (used by all 4
+register tabs — Achievements/Learning Needs/Attention/Actions) built its `groupMap`/`groups`
+(grouping by staff name, then sorting by most-recent meeting) directly in the component body —
+recomputed on every single expand/collapse click, since `togglePerson`/`toggleItem`/`setShowAllFor`
+state lives in that same component. `regCounts` (the 4 tab-header count badges) had the identical
+unmemoized pattern one level up, in the main page component.
+- **Fix**: wrapped `PersonGroups`'s grouping+sort in `useMemo` keyed on `[items]`; wrapped
+  `regCounts` in `useMemo` keyed on `[registers]`. Both hooks sit unconditionally above/alongside
+  existing hooks with no intervening early `return` in either component, so no rules-of-hooks risk
+  (verified by tracing both function bodies).
+- **Verified**: frontend rebuilt, logged in as `admin@supervision.com`, navigated to
+  `/admin/team` → Achievements tab. Tab badges (17/6/8/16) render correctly from memoized
+  `regCounts`. Expanded "Demo Manager" person group — correct 5 achievements shown with
+  identical data before/after toggle. No console errors, no regressions. Self-tested via
+  screenshot_tool, no testing_agent round used (single-file, 2-hook perf fix).
+- Issue 2.2 now fully CLOSED.
+
 ## Issue 2.1: CareCertPrep/InspectionPrep Coverage-Matrix Memoization + Definition Align — FIXED (Sep 2026), verified
 Audit item: both `CareCertPrep.js` (Induction page) and `InspectionPrep.js` (CQC/CIW/CI/RQIA page)
 called their near-identical `buildCoverage(standards, rows)` directly in the component body —

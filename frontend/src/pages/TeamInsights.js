@@ -547,25 +547,29 @@ function PersonGroups({ items, type, onToggle }) {
   const [expandedItems, setExpandedItems] = useState(() => new Set());
   const [showAllFor, setShowAllFor] = useState(() => new Set());
 
-  // Group by individual staff name (one item may cover multiple people)
-  const groupMap = new Map();
-  items.forEach(item => {
-    const names = (item.staff_names || "Unknown").split(/,\s*/);
-    names.forEach(name => {
-      const key = name.trim() || "Unknown";
-      if (!groupMap.has(key)) groupMap.set(key, []);
-      if (!groupMap.get(key).find(e => e.id === item.id && e.meeting_id === item.meeting_id)) {
-        groupMap.get(key).push(item);
-      }
+  // PERF-002: memoized so the grouping+sort only re-runs when `items` actually
+  // changes, not on every expand/collapse click (togglePerson/toggleItem/
+  // setShowAllFor state lives in this same component and re-renders it).
+  const groups = useMemo(() => {
+    const groupMap = new Map();
+    items.forEach(item => {
+      const names = (item.staff_names || "Unknown").split(/,\s*/);
+      names.forEach(name => {
+        const key = name.trim() || "Unknown";
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        if (!groupMap.get(key).find(e => e.id === item.id && e.meeting_id === item.meeting_id)) {
+          groupMap.get(key).push(item);
+        }
+      });
     });
-  });
 
-  // Sort groups: most recent first
-  const groups = [...groupMap.entries()].sort((a, b) => {
-    const aDate = (a[1][0]?.meeting_date || "");
-    const bDate = (b[1][0]?.meeting_date || "");
-    return bDate.localeCompare(aDate);
-  });
+    // Sort groups: most recent first
+    return [...groupMap.entries()].sort((a, b) => {
+      const aDate = (a[1][0]?.meeting_date || "");
+      const bDate = (b[1][0]?.meeting_date || "");
+      return bDate.localeCompare(aDate);
+    });
+  }, [items]);
 
   // Auto-expand first person on load
   useEffect(() => {
@@ -1368,12 +1372,14 @@ export default function TeamInsights() {
   };
 
   // Count badges for register tabs
-  const regCounts = {
+  // PERF-002: memoized so these 4 filter passes only re-run when `registers`
+  // actually changes, not on every unrelated re-render (tab/search/filter/date).
+  const regCounts = useMemo(() => ({
     achievements:   registers?.achievements?.filter(i => !i.acknowledged).length ?? null,
     learning_needs: registers?.learning_needs?.filter(i => !i.completed).length ?? null,
     risks:          registers?.risks?.filter(i => !i.is_resolved).length ?? null,
     actions:        registers?.actions?.filter(i => !i.completed).length ?? null,
-  };
+  }), [registers]);
 
   const MAIN_TABS = [
     { key: "matrix",         label: "Evidence Matrix",    icon: Grid3x3,       accent: null },
