@@ -12,6 +12,26 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.3: NewMeeting Staff-List Filter Memoization — FIXED (Sep 2026), verified
+Audit item, same pattern as 2.1/2.2: `NewMeeting.js:81-89` ran 4 `.filter()` passes over the full
+org `users` list (`attendees`, `selectedAttendees`, `managers`, `supervisees`) directly in the
+component body. Since these live alongside `location`/`meeting_type` in the same `form` state
+object, typing a single character into Location or picking a Meeting Type re-rendered the
+component and re-ran all 4 filters over the entire staff list, even though `users` and
+`attendee_ids` hadn't changed.
+- **Fix**: wrapped all 4 in `useMemo` — `attendees` keyed on `[users]`; `selectedAttendees`/
+  `managers` keyed on `[users, form.attendee_ids]`; `supervisees` keyed on `[selectedAttendees]`.
+  `titlePreview` (cheap `buildTitle()` call on the already-memoized small arrays) left as plain
+  computation. No early `return` exists in this component, so hook-call order is safe.
+- **Verified**: frontend rebuilt, logged in as `admin@supervision.com`, Playwright walkthrough on
+  `/meetings/new`: selecting attendee 1 → title updates correctly ("Supervision with Demo
+  Manager"); typing "Room 12B" into Location → title unchanged (correct, no dependency); changing
+  Meeting Type to Appraisal → title updates ("Appraisal with Demo Manager"); selecting a 2nd
+  attendee (Demo User) → title correctly shows the non-manager supervisee ("Appraisal with Demo
+  User"), sign-off manager auto-selected to "Demo Manager (manager)" as before. No console
+  errors, no regressions. Self-tested via screenshot_tool, no testing_agent round used.
+- Issue 2.3 now fully CLOSED.
+
 ## Issue 2.2: TeamInsights PersonGroups + regCounts Memoization — FIXED (Sep 2026), verified
 Audit item, same pattern as 2.1: `TeamInsights.js`'s `PersonGroups` component (used by all 4
 register tabs — Achievements/Learning Needs/Attention/Actions) built its `groupMap`/`groups`

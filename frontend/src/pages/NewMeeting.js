@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
@@ -78,14 +78,24 @@ export default function NewMeeting() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const attendees = users.filter(u => u.role !== "shared_reviewer");
-  const managers = users.filter(
-    u => ["manager", "admin"].includes(u.role) && form.attendee_ids.includes(u.id)
+  // PERF-002: memoized so these 4 filters over the full org staff list only
+  // re-run when `users` or the selected attendees actually change, not on
+  // every unrelated form keystroke (location text, meeting type, etc).
+  const attendees = useMemo(() => users.filter(u => u.role !== "shared_reviewer"), [users]);
+  const selectedAttendees = useMemo(
+    () => users.filter(u => form.attendee_ids.includes(u.id)),
+    [users, form.attendee_ids]
+  );
+  const managers = useMemo(
+    () => users.filter(u => ["manager", "admin"].includes(u.role) && form.attendee_ids.includes(u.id)),
+    [users, form.attendee_ids]
   );
 
   // Supervisees = selected non-manager attendees (for title + prep scoping)
-  const selectedAttendees = users.filter(u => form.attendee_ids.includes(u.id));
-  const supervisees = selectedAttendees.filter(u => !["manager", "admin"].includes(u.role));
+  const supervisees = useMemo(
+    () => selectedAttendees.filter(u => !["manager", "admin"].includes(u.role)),
+    [selectedAttendees]
+  );
   const titlePreview = buildTitle(form.meeting_type, supervisees.length > 0 ? supervisees : selectedAttendees);
 
   const toggleAttendee = (userId) => {
