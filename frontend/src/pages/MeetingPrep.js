@@ -432,6 +432,28 @@ export default function MeetingPrep() {
     return () => clearInterval(indexingPollRef.current);
   }, [hasIndexingSources, hasPending, loadAll]);
 
+  // ── Reconcile pending-upload cards once their doc appears in context ──────
+  // Previously this ran its own separate 4s setInterval inside
+  // handleUploadContext — a second poller doing the exact same "is it ready
+  // yet?" check as indexingPollRef above, at the same time. Removed that
+  // duplicate timer; this just reacts to the SAME `context` refresh the
+  // general poller already performs every 4s while hasPending is true.
+  useEffect(() => {
+    if (pendingUploads.length === 0) return;
+    const docCount = (context?.sources || []).filter(s => s.source_type === "doc_upload").length;
+    const now = Date.now();
+    setPendingUploads(prev => prev.filter(item => {
+      if (item.status !== "extracting") return true;
+      if (docCount > item.baselineDocCount) {
+        toast.success(`"${item.label}" added — indexing in the background.`);
+        return false;
+      }
+      // Give up silently after ~60s, same cap as the old 15×4s timer
+      return now - item.createdAt <= 60000;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context]);
+
   // ── Poll while generating ──────────────────────────────────────────────────
   useEffect(() => {
     const status = prep?.gen_status;
@@ -486,7 +508,8 @@ export default function MeetingPrep() {
     const label = uploadLabel || uploadFile.name;
     // Add optimistic pending entry immediately
     const tempId = `pending_${Date.now()}`;
-    setPendingUploads(p => [...p, { id: tempId, label, docType: uploadDocType, progress: 0, status: "uploading" }]);
+    const baselineDocCount = (context?.sources || []).filter(s => s.source_type === "doc_upload").length;
+    setPendingUploads(p => [...p, { id: tempId, label, docType: uploadDocType, progress: 0, status: "uploading", baselineDocCount, createdAt: Date.now() }]);
     setUploading(true);
     setUploadProgress(0);
     setUploadOpen(false);
@@ -511,20 +534,6 @@ export default function MeetingPrep() {
       });
       // Upload complete — now waiting for text extraction (indexing poller takes over)
       setPendingUploads(p => p.map(u => u.id === tempId ? { ...u, status: "extracting", progress: 100 } : u));
-
-      // Remove pending card once the doc appears in allSources (count increases)
-      const prevCount = (context?.sources || []).filter(s => s.source_type === "doc_upload").length;
-      let attempts = 0;
-      const waitForDoc = setInterval(async () => {
-        attempts++;
-        const ctx = await axios.get(`${API}/prep/${meetingId}/context`, getAuthConfig());
-        const newCount = (ctx.data.sources || []).filter(s => s.source_type === "doc_upload").length;
-        if (newCount > prevCount || attempts >= 15) {
-          clearInterval(waitForDoc);
-          setPendingUploads(p => p.filter(u => u.id !== tempId));
-          if (newCount > prevCount) toast.success(`"${label}" added — indexing in the background.`);
-        }
-      }, 4000);
     } catch (err) {
       setPendingUploads(p => p.filter(u => u.id !== tempId));
       toast.error(err.response?.data?.detail || "Upload failed");
