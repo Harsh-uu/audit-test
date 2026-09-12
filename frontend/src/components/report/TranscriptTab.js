@@ -671,7 +671,15 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     });
   }, [editingTurnIndex]);
 
-  const raw = anonymiseTranscript(meeting.transcript?.text || lazyRawText, meeting.attendees || []);
+  // PERF-005: was called directly in the render body — re-ran the full
+  // find-and-replace over the whole transcript on every render, including
+  // ones from unrelated state (typing in Find/Replace, editing a turn,
+  // opening a speaker menu). Memoized so it only recomputes when the
+  // actual transcript text or attendee list changes.
+  const raw = useMemo(
+    () => anonymiseTranscript(meeting.transcript?.text || lazyRawText, meeting.attendees || []),
+    [meeting.transcript?.text, lazyRawText, meeting.attendees]
+  );
   const wordCount = raw ? raw.trim().split(/\s+/).filter(Boolean).length : 0;
   const readMins = Math.ceil(wordCount / 150);
   const findQueryTrimmed = Boolean(findQuery.trim());
