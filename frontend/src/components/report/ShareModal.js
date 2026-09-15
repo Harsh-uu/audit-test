@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, Share2, Check, Users, Loader2 } from "lucide-react";
 import axios from "axios";
+import { cachedGet } from "../../utils/apiCache";
 import { useAuth } from "../../context/AuthContext";
 
 export function ShareModal({ show, onClose, meeting, onShared }) {
@@ -14,7 +15,7 @@ export function ShareModal({ show, onClose, meeting, onShared }) {
     if (!show) return;
     setSelectedIds([]);
     setLoading(true);
-    axios.get(`${API}/admin/users`, getAuthConfig())
+    cachedGet(`${API}/admin/users`, getAuthConfig())
       .then(res => setOrgUsers(res.data || []))
       .catch(() => {})
       .finally(() => setLoading(false));

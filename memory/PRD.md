@@ -12,6 +12,31 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.6: BrandingTab/ShareModal Bypassed App Cache — FIXED (Sep 2026), verified live
+Audit item: `utils/apiCache.js`'s `TTL_MAP` explicitly configures `/org/branding` (5 min) and
+`/admin/users` (30s) for caching, but `BrandingTab.js` and `ShareModal.js` both used a plain
+`axios.get(...)` for these exact endpoints, bypassing the cache entirely — hitting the server on
+every mount/every modal open.
+- **Fix**: swapped `axios.get` → `cachedGet` (drop-in replacement) in both files. Additionally
+  (needed to avoid a real regression from the switch, not just the literal 1-line ask): added
+  `invalidateCache("/org/branding")` to `BrandingTab.js`'s 3 mutation handlers
+  (`handleLogoUpload`, `removeLogo`, `handleSave`) — without this, editing branding then
+  switching Settings tabs away and back within the 5-min TTL would show stale pre-edit data,
+  since `BrandingTab` unmounts/remounts on every tab switch (`OrgSettings.js:593`,
+  `{tab === "branding" && <BrandingTab />}`). `ShareModal.js` needed no invalidation addition —
+  it only reads `/admin/users`, never mutates it.
+- **Verified live** via Playwright + network interception (admin login):
+  `/org/branding`: exactly 1 GET fired across opening the Branding tab, switching away, and
+  switching back TWICE (previously would have been 3 GETs). Clicking "Save Branding" (PUT 200,
+  "Branding saved" shown) then revisiting the tab correctly triggered a fresh GET (2nd call) —
+  confirming `invalidateCache` works and stale data is never shown after an edit.
+  `/admin/users`: opening a signed-off meeting's Share modal fired exactly 1 GET (showed the
+  correct manager/admin list); closing and reopening the modal fired 0 additional GETs — served
+  from cache.
+  No console errors, no regressions. Self-tested via screenshot_tool, no testing_agent round
+  used.
+- Issue 2.6 now fully CLOSED.
+
 ## Issue 2.5: RecordingScreen Progressive-Slowdown Auto-Save — FIXED (Sep 2026), verified live
 Audit item: `RecordingScreen.js`'s IndexedDB backup used ONE record per meeting (`keyPath:
 "meetingId"`) holding the full recording blob. Every 3-min auto-save AND the final

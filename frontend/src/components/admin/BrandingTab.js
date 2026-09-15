@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
+import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import { Upload, Check, AlertCircle, Image, X } from "lucide-react";
 
@@ -21,7 +22,7 @@ export function BrandingTab() {
   // Re-fetch branding on mount so we always show the persisted values,
   // even when the login response did not include org_branding.
   useEffect(() => {
-    axios.get(`${API}/org/branding`, getAuthConfig())
+    cachedGet(`${API}/org/branding`, getAuthConfig())
       .then(res => {
         if (res.data) {
           setPrimaryColor(res.data.primary_color || "#1E3A8A");
@@ -52,6 +53,7 @@ export function BrandingTab() {
       setLogoPreview(`${API}/org/branding/logo/${user?.org_id}?t=${Date.now()}`);
       // Keep context in sync so other components see updated branding
       updateOrgBranding({ ...(user?.org_branding || {}), has_logo: true });
+      invalidateCache("/org/branding");
     } catch (err) {
       setError(err.response?.data?.detail || "Logo upload failed");
     }
@@ -66,6 +68,7 @@ export function BrandingTab() {
       setHasLogo(false);
       setLogoPreview("");
       updateOrgBranding({ ...current, has_logo: false });
+      invalidateCache("/org/branding");
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to remove logo");
     }
@@ -77,6 +80,7 @@ export function BrandingTab() {
     try {
       await axios.put(`${API}/org/branding`, { primary_color: primaryColor }, getAuthConfig());
       updateOrgBranding({ has_logo: hasLogo, primary_color: primaryColor });
+      invalidateCache("/org/branding");
       setMessage("Branding saved");
       setTimeout(() => setMessage(""), 3000);
     } catch (err) {
