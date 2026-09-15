@@ -57,21 +57,30 @@ async def get_dashboard(current_user=Depends(get_current_user)):
             return None
         today = datetime.now(timezone.utc).date().isoformat()
         async with database.with_org(org_id) as conn:
-            rows = await conn.fetch(
-                """SELECT a.actions
+            # PERF-004: count outstanding/overdue actions directly in the DB
+            # via jsonb_array_elements + COUNT(*) FILTER, instead of pulling
+            # every qualifying meeting's full actions array into Python and
+            # counting there — this query only ever returns 2 numbers.
+            row = await conn.fetchrow(
+                """SELECT
+                     COUNT(*) FILTER (
+                       WHERE jsonb_typeof(action) = 'object'
+                         AND NOT COALESCE((action->>'completed')::boolean, false)
+                     ) AS outstanding,
+                     COUNT(*) FILTER (
+                       WHERE jsonb_typeof(action) = 'object'
+                         AND NOT COALESCE((action->>'completed')::boolean, false)
+                         AND COALESCE(action->>'due_date', '') != ''
+                         AND (action->>'due_date') < $1
+                     ) AS overdue
                    FROM meetings m
                    JOIN analyses a ON a.id = m.analysis_id
+                   CROSS JOIN LATERAL jsonb_array_elements(COALESCE(a.actions, '[]'::jsonb)) AS action
                    WHERE m.status IN ('in_review','reviewed','signed_off','shared')
-                   AND m.analysis_id IS NOT NULL"""
+                     AND m.analysis_id IS NOT NULL""",
+                today,
             )
-        outstanding, overdue = 0, 0
-        for row in rows:
-            for action in _jlist(dict(row).get("actions")):
-                if isinstance(action, dict) and not action.get("completed", False):
-                    outstanding += 1
-                    if action.get("due_date") and str(action["due_date"]) < today:
-                        overdue += 1
-        return {"outstanding": outstanding, "overdue": overdue}
+        return {"outstanding": row["outstanding"], "overdue": row["overdue"]}
 
     async def fetch_structure():
         """Lightweight settings+teams list for dashboard filter dropdowns.

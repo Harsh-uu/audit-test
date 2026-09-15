@@ -155,12 +155,15 @@ async def list_uploads(
         raise HTTPException(status_code=403, detail="Admin/Manager only")
     org_id = current_user.get("org_id")
     async with database.with_org(org_id) as conn:
+        # PERF-004: cap to the 200 most recent uploads — this list has no
+        # pagination UI, so an unbounded org-lifetime history would only ever
+        # get slower to load as more uploads accumulate.
         if staff_id:
             rows = await conn.fetch(
                 "SELECT id,org_id,uploader_id,uploader_name,staff_id,staff_name,filename,label,"
                 "doc_type,meeting_date,file_ext,size_bytes,status,cqc_mappings,care_cert_mappings,"
                 "custom_mappings,error,processed_at,created_at "
-                "FROM supervision_uploads WHERE org_id=$1 AND staff_id=$2 ORDER BY created_at DESC",
+                "FROM supervision_uploads WHERE org_id=$1 AND staff_id=$2 ORDER BY created_at DESC LIMIT 200",
                 org_id, staff_id,
             )
         else:
@@ -168,7 +171,7 @@ async def list_uploads(
                 "SELECT id,org_id,uploader_id,uploader_name,staff_id,staff_name,filename,label,"
                 "doc_type,meeting_date,file_ext,size_bytes,status,cqc_mappings,care_cert_mappings,"
                 "custom_mappings,error,processed_at,created_at "
-                "FROM supervision_uploads WHERE org_id=$1 ORDER BY created_at DESC",
+                "FROM supervision_uploads WHERE org_id=$1 ORDER BY created_at DESC LIMIT 200",
                 org_id,
             )
     return [_upload_dict(r) for r in rows]

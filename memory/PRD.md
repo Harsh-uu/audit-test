@@ -12,6 +12,31 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.9: Dashboard Action Stats + Doc Uploads Unbounded History — FIXED (Sep 2026), verified live
+Audit item: 2 endpoints pulled an org's entire history with no cap, getting slower forever as an
+org accumulates data.
+- **dashboard.py `fetch_action_stats`**: was fetching the full `actions` JSONB array for every
+  qualifying meeting ever, then counting outstanding/overdue in Python. Replaced with a single
+  aggregate SQL query using `jsonb_array_elements` + `CROSS JOIN LATERAL` +
+  `COUNT(*) FILTER (...)` — counts both numbers directly in Postgres, zero JSON blobs
+  transferred. Preserved exact original semantics: `jsonb_typeof(action) = 'object'` guard
+  (matches Python's `isinstance(action, dict)` check — skips non-object array entries the same
+  way), `COALESCE((action->>'completed')::boolean, false)` (matches `action.get("completed",
+  False)` default), and `COALESCE(action->>'due_date', '') != ''` before the date-string
+  comparison (matches Python's truthy check on `due_date` before comparing).
+- **doc_uploads.py `list_uploads`**: added `LIMIT 200` (both the `staff_id`-filtered and
+  unfiltered query variants), ordered by `created_at DESC` so it's always the most recent —
+  frontend (`UploadSupervision.js`, `StaffPortfolio.js`) already consumes this as a plain array
+  with no pagination UI, so kept the exact same response shape, no frontend changes needed.
+- **Verified live**: independently re-computed the OLD Python-counting logic directly against
+  the real DB scoped to the admin's org — got `{"outstanding": 17, "overdue": 0}`. Called the
+  actual `/api/dashboard/` endpoint with the NEW SQL-based counting — got the exact same
+  `{"outstanding": 17, "overdue": 0}`, byte-for-byte match. `/api/doc-uploads/` still correctly
+  returns all 3 existing uploads (well under the 200 cap) in the same order as before. No
+  backend errors. Self-tested via curl + direct DB comparison script, no testing_agent round
+  used.
+- Issue 2.9 now fully CLOSED.
+
 ## Issue 2.8: 5 Backend "One-at-a-Time" Loops Batched — FIXED (Sep 2026), verified live
 Audit item: 5 backend actions looped through a list doing 1 DB call per item instead of 1 batched
 call for the whole list — small impact today, grows proportionally with usage.
