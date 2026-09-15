@@ -12,6 +12,26 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 3.4: Dead `_compress_to_mp3` Function — DELETED (Sep 2026), verified live
+Confirmed 100% via full-codebase search (backend + frontend, every directory): `_compress_to_mp3`
+in `ai.py` had zero references from any actual app code path (routers, pipeline, other utils) —
+only referenced by `tests/test_vad_threshold_and_retry.py`.
+- **Fix**: deleted the function from `ai.py`, plus its now-unused `subprocess`/`tempfile`
+  imports (both were only used inside this one function). Updated the test file: removed the 2
+  tests that asserted on the deleted function's internal `silence_filter` string
+  (`test_silence_filter_uses_minus_40db`, `test_silence_filter_has_both_silenceremove_steps` —
+  nothing left to test), updated `test_ai_py_imports_valid` to no longer import the deleted
+  function, and removed the now-unused `import re`.
+- **Verified live**: backend restarted clean (confirms `ai.py` still imports with no errors).
+  Ran the updated `tests/test_vad_threshold_and_retry.py` — all 4 tests in `TestCodeReview`
+  (including the modified `test_ai_py_imports_valid`) passed. The 5 errors in the unrelated
+  `TestRetryEndpoint` class are a pre-existing stale fixture issue (expects an `access_token`
+  field the cookie-based auth no longer returns) — confirmed unrelated to this change, not
+  introduced by it. Full-codebase grep confirms zero remaining references to the deleted
+  function. No testing_agent round used (dead-code deletion + matching test cleanup, verified
+  via direct pytest run).
+- Issue 3.4 now fully CLOSED.
+
 ## Issue 3.3: Admin Stat/List Endpoints — ACKNOWLEDGED, NOT FIXED (Sep 2026, by user request)
 Audit item confirmed accurate: `/admin/people-stats`, `/admin/meetings-brief`,
 `/admin/team-insights`, `/admin/standards*`, `/admin/template`, `/admin/users` all already have

@@ -1,16 +1,18 @@
 """
 Tests for iteration 56:
-1. ai.py _compress_to_mp3 uses -40dB threshold (not -50dB) in silence_filter
-2. ai.py analyze_meeting truncates transcript at 80,000 chars with note
-3. POST /api/processing/{meeting_id}/retry endpoint returns 200 for processing_failed meeting
-4. Backend syntax validity (no import or startup errors)
+1. ai.py analyze_meeting truncates transcript at 80,000 chars with note
+2. POST /api/processing/{meeting_id}/retry endpoint returns 200 for processing_failed meeting
+3. Backend syntax validity (no import or startup errors)
+
+Note (PERF-006 cleanup): the _compress_to_mp3 silence-filter tests that used to live here were
+removed along with the dead _compress_to_mp3 function itself (ai.py) — it was never called by
+any app code path, only referenced by this test file.
 """
 
 import pytest
 import requests
 import os
 import uuid
-import re
 
 def _get_base_url():
     """Try public URL first; fall back to localhost if 502/unreachable."""
@@ -55,47 +57,6 @@ def admin_headers(admin_token):
 class TestCodeReview:
     """Static code verification — check that the fixes are present in source files."""
 
-    def test_silence_filter_uses_minus_40db(self):
-        """ai.py _compress_to_mp3 silence_filter must use -40dB not -50dB."""
-        ai_path = os.path.join(os.path.dirname(__file__), "..", "utils", "ai.py")
-        with open(ai_path, "r") as f:
-            content = f.read()
-
-        # Must contain -40dB somewhere in the silence filter block
-        assert "-40dB" in content, "Expected -40dB threshold in ai.py silence_filter"
-        # Must NOT contain the old -50dB threshold in silence_filter
-        # (check specifically in the silence_filter string, not elsewhere)
-        silence_filter_match = re.search(
-            r'silence_filter\s*=\s*\(.*?\)', content, re.DOTALL
-        )
-        assert silence_filter_match, "Could not find silence_filter assignment in ai.py"
-        silence_filter_text = silence_filter_match.group(0)
-        assert "-40dB" in silence_filter_text, \
-            f"silence_filter should contain -40dB, got: {silence_filter_text}"
-        assert "-50dB" not in silence_filter_text, \
-            f"silence_filter should NOT contain old -50dB threshold, got: {silence_filter_text}"
-        print("PASS: silence_filter uses -40dB threshold correctly")
-
-    def test_silence_filter_has_both_silenceremove_steps(self):
-        """ai.py silence_filter must have two silenceremove steps (start + end via areverse)."""
-        ai_path = os.path.join(os.path.dirname(__file__), "..", "utils", "ai.py")
-        with open(ai_path, "r") as f:
-            content = f.read()
-
-        silence_filter_match = re.search(
-            r'silence_filter\s*=\s*\(.*?\)', content, re.DOTALL
-        )
-        assert silence_filter_match, "Could not find silence_filter in ai.py"
-        filter_text = silence_filter_match.group(0)
-
-        # Should have start_periods=1 twice
-        assert filter_text.count("start_periods=1") == 2, \
-            f"Expected 2x start_periods=1 in silence_filter, found: {filter_text.count('start_periods=1')}"
-        # Should have areverse for end-silence removal
-        assert "areverse" in filter_text, \
-            "Expected areverse in silence_filter for trailing silence removal"
-        print("PASS: silence_filter has both silenceremove steps with areverse")
-
     def test_transcript_capped_at_80000(self):
         """ai.py analyze_meeting user_prompt must cap transcript at 80,000 chars."""
         ai_path = os.path.join(os.path.dirname(__file__), "..", "utils", "ai.py")
@@ -137,7 +98,7 @@ class TestCodeReview:
         """utils/ai.py must import without syntax errors."""
         import subprocess
         result = subprocess.run(
-            ["python", "-c", "from utils.ai import analyze_meeting, _compress_to_mp3; print('ai.py OK')"],
+            ["python", "-c", "from utils.ai import analyze_meeting; print('ai.py OK')"],
             capture_output=True, text=True,
             cwd=os.path.join(os.path.dirname(__file__), ".."),
         )

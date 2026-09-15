@@ -3,8 +3,6 @@ import json
 import logging
 import uuid
 import asyncio
-import subprocess
-import tempfile
 import time
 from openai import AsyncOpenAI
 
@@ -359,57 +357,6 @@ def _ms_to_mmss(ms: int) -> str:
     s = int(ms) // 1000
     return f"{s // 60:02d}:{s % 60:02d}"
 
-
-def _compress_to_mp3(audio_data: bytes, input_suffix: str) -> bytes:
-    """Compress audio to 16 kHz mono 32 kbps MP3 — optimal for voice, ~7 MB per 30 min.
-
-    Also trims leading and trailing silence (>=1 s at -50 dBFS) to prevent
-    AssemblyAI hallucinations during dead air at the start/end of a recording.
-    Internal silence gaps are NEVER removed so AssemblyAI timestamps stay accurate.
-    """
-    import imageio_ffmpeg
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-    with tempfile.NamedTemporaryFile(suffix=input_suffix, delete=False) as f:
-        f.write(audio_data)
-        inp = f.name
-    out = inp + ".mp3"
-    # Silence-trim filter: remove leading silence, then reverse+trim+reverse to remove
-    # trailing silence. start_periods=1 (no start_duration) stops trimming the instant
-    # the first non-silent sample is found — internal gaps are never touched.
-    silence_filter = (
-        "silenceremove=start_periods=1:start_threshold=-40dB,"
-        "areverse,"
-        "silenceremove=start_periods=1:start_threshold=-40dB,"
-        "areverse"
-    )
-    try:
-        result = subprocess.run(
-            [
-                ffmpeg_exe, "-i", inp,
-                "-vn",                  # drop any video stream
-                "-af", silence_filter,  # trim leading/trailing silence only
-                "-ar", "16000",         # 16 kHz — optimal for speech recognition
-                "-ac", "1",             # mono
-                "-b:a", "32k",          # 32 kbps bitrate
-                out, "-y", "-loglevel", "error",
-            ],
-            capture_output=True,
-            timeout=180,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"ffmpeg compression failed: {result.stderr.decode()}")
-        with open(out, "rb") as f:
-            compressed = f.read()
-        logger.info(
-            "Audio compressed: %.1f KB → %.1f KB (silence trimmed from start/end)",
-            len(audio_data) / 1024,
-            len(compressed) / 1024,
-        )
-        return compressed
-    finally:
-        os.unlink(inp)
-        if os.path.exists(out):
-            os.unlink(out)
 
 ANALYSIS_SYSTEM_PROMPT = _PROMPT_INJECTION_GUARD + """You are a compliance evidence specialist for UK adult social care providers.
 Your task is to analyse supervision meeting transcripts and identify evidence of worker competency and organisational compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
