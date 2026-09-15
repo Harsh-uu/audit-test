@@ -12,6 +12,16 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 3.3: Admin Stat/List Endpoints — ACKNOWLEDGED, NOT FIXED (Sep 2026, by user request)
+Audit item confirmed accurate: `/admin/people-stats`, `/admin/meetings-brief`,
+`/admin/team-insights`, `/admin/standards*`, `/admin/template`, `/admin/users` all already have
+frontend-side `cachedGet` TTLs (30s–10min) configured in `apiCache.js` — backend "fetches more
+than needed" concern is already mitigated by not re-fetching on every render. `super_admin.py`'s
+`list_org_users` (super-admin viewing one org's user list) has no LIMIT, but is naturally bounded
+by a single care-provider org's realistic headcount.
+- **Decision**: user's own fix note said "Low priority — already mitigated by caching, or
+  naturally bounded by realistic data size." No code changes made.
+
 ## Issue 3.2: seed.py One-Row-at-a-Time Standards Insert — FIXED (Sep 2026, per follow-up user request), verified live
 Originally flagged as "not worth prioritizing" and left unfixed — user then asked to proceed
 anyway. `_insert_standards_entries` (the ONE shared helper used by all 5 region seed functions —
