@@ -164,19 +164,29 @@ CARE_CERT_STANDARDS = [
 
 
 async def _insert_standards_entries(conn, entries: list, jurisdiction: str):
-    """Shared helper: bulk-insert standards entries with given jurisdiction."""
-    for e in entries:
-        await conn.execute(
-            """INSERT INTO standards_entries
-               (id, org_id, type, reference, name, description, keywords, sub_outcomes,
-                key_questions, quality_statement, source, is_active, is_system, jurisdiction, service_type, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16)
-               ON CONFLICT (id) DO NOTHING""",
-            e["id"], None, e["type"], e["reference"], e["name"], e["description"],
-            e["keywords"], e["sub_outcomes"],
-            e["key_questions"], e.get("quality_statement", False), e["source"],
-            e.get("is_active", True), True, jurisdiction, e.get("service_type"), e["created_at"],
-        )
+    """Shared helper: bulk-insert standards entries with given jurisdiction.
+
+    PERF-006: one batched executemany() instead of one INSERT per row — this
+    only ever runs once per region (first boot), but no reason not to batch it.
+    """
+    if not entries:
+        return
+    await conn.executemany(
+        """INSERT INTO standards_entries
+           (id, org_id, type, reference, name, description, keywords, sub_outcomes,
+            key_questions, quality_statement, source, is_active, is_system, jurisdiction, service_type, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16)
+           ON CONFLICT (id) DO NOTHING""",
+        [
+            (
+                e["id"], None, e["type"], e["reference"], e["name"], e["description"],
+                e["keywords"], e["sub_outcomes"],
+                e["key_questions"], e.get("quality_statement", False), e["source"],
+                e.get("is_active", True), True, jurisdiction, e.get("service_type"), e["created_at"],
+            )
+            for e in entries
+        ],
+    )
 
 
 async def seed_standards():

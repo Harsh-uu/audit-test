@@ -12,14 +12,27 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
-## Issue 3.2: seed.py One-Row-at-a-Time Standards Insert — ACKNOWLEDGED, NOT FIXED (Sep 2026, by user request)
-Audit item confirmed accurate: `utils/seed.py`'s `_insert_standards_entries` (and the similar
-per-region loops for CQC regulations/quality statements, Care Cert standards, CIW/AWIF/SCW,
-Scotland CI quality indicators) insert `standards_entries` rows one at a time in a Python loop
-instead of a single batched insert. Each is guarded by an "already seeded — skipping" check, so
-this only ever runs once per region, on that region's very first app boot.
-- **Decision**: user explicitly said "Not worth prioritizing — only matters for the one-time
-  first boot." No code changes made. Left as-is intentionally.
+## Issue 3.2: seed.py One-Row-at-a-Time Standards Insert — FIXED (Sep 2026, per follow-up user request), verified live
+Originally flagged as "not worth prioritizing" and left unfixed — user then asked to proceed
+anyway. `_insert_standards_entries` (the ONE shared helper used by all 5 region seed functions —
+England, Wales/CIW, Wales/AWIF+SCW, Scotland, Northern Ireland) looped `for e in entries: await
+conn.execute(INSERT...)`. Replaced with a single `conn.executemany(...)` call passing all rows
+at once — fixes all 5 regions' first-boot seeding through this one shared function. Confirmed
+the connection-level jsonb type codec (`database.py`, encoder=json.dumps) applies identically to
+`executemany()` as it does to `execute()`, so raw Python lists for `keywords`/`sub_outcomes`/
+`key_questions` still encode correctly (not double-encoded). Left the 2 separate one-time
+JSONB-repair/backfill UPDATE loops in `seed_standards()` untouched — out of the stated scope
+("adds standards records"), and each is an even rarer one-time data-migration path.
+- **Verified live**: real backend restart triggered the full startup seed sequence for all
+  regions with no errors (all "already seeded — skipping", so the new batched INSERT path
+  wasn't exercised by real data on this restart). Directly invoked `_insert_standards_entries`
+  with 5 isolated fake test entries (`jurisdiction='test_jurisdiction_perf6'`) — all 5 correctly
+  inserted with correct jsonb encoding (verified `keywords`/`sub_outcomes`/`key_questions` came
+  back as proper lists/objects, not double-encoded strings); re-ran the same insert and confirmed
+  `ON CONFLICT (id) DO NOTHING` still prevents duplicates (count stayed at 5). Test rows deleted
+  afterward — no real seeded standards touched. No backend errors. Self-tested via direct
+  function invocation, no testing_agent round used.
+- Issue 3.2 now fully CLOSED.
 
 ## Issue 3.1: 5 Small Batch/Dedup Tidy-ups — FIXED (Sep 2026), verified live
 5 small, self-contained inefficiencies batched together in files already being touched.
