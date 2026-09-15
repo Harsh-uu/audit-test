@@ -12,6 +12,15 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 3.2: seed.py One-Row-at-a-Time Standards Insert — ACKNOWLEDGED, NOT FIXED (Sep 2026, by user request)
+Audit item confirmed accurate: `utils/seed.py`'s `_insert_standards_entries` (and the similar
+per-region loops for CQC regulations/quality statements, Care Cert standards, CIW/AWIF/SCW,
+Scotland CI quality indicators) insert `standards_entries` rows one at a time in a Python loop
+instead of a single batched insert. Each is guarded by an "already seeded — skipping" check, so
+this only ever runs once per region, on that region's very first app boot.
+- **Decision**: user explicitly said "Not worth prioritizing — only matters for the one-time
+  first boot." No code changes made. Left as-is intentionally.
+
 ## Issue 3.1: 5 Small Batch/Dedup Tidy-ups — FIXED (Sep 2026), verified live
 5 small, self-contained inefficiencies batched together in files already being touched.
 - **super_admin.py `delete_org`**: was `for path in audio_paths: await delete_audio(path)`.
