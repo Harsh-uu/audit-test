@@ -12,6 +12,31 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.7: ComplianceTab Fully-Expanded Unbounded List — FIXED (Sep 2026), verified live
+Audit item: `EvidenceCard` (in `ComplianceTab.js`) hardcoded `useState(true)` for its `expanded`
+state — every evidence card defaulted to fully expanded, with a confirmed real meeting having
+126 evidence mappings all rendered open simultaneously with no incremental loading.
+- **Fix**: `EvidenceCard` now accepts a `defaultExpanded` prop. New `EvidenceSection` wrapper
+  (used for all 3 groups — CQC/Care Cert/Custom) renders only the first 20 items per section by
+  default (`INITIAL_VISIBLE_COUNT`), with only the first 3 of those defaulting to expanded
+  (`INITIAL_EXPANDED_COUNT`); a "Show N more (M remaining)" button reveals the rest of that
+  section incrementally. Chose this simpler load-more pattern over a scroll-position
+  virtualization library (react-window) — lower risk, no new dependency, doesn't interact with
+  per-card expand/collapse or the "Show in transcript" jump action.
+  Verified `bulkAcceptEvidence` (Accept all likely/possible) operates on the full
+  `meeting.analysis.*_mappings` data arrays in React state, completely independent of what's
+  mounted in the DOM — confirmed zero impact on bulk-accept correctness before implementing.
+- **Verified live**: temporarily inflated a real meeting's `custom_mappings` to 25 items via
+  direct DB update (reversible test, not synthetic UI mocking) — confirmed exactly 36 cards
+  mounted initially (14 CQC + 2 Care Cert + 20 of 25 Custom, capped), "Show 5 more (5 remaining)"
+  button appeared and correctly revealed all 25 on click (41 total after). Screenshot confirmed
+  the CQC section's first 3 cards render expanded (transcript excerpt + accept/reject/flag
+  visible) and the 4th+ render collapsed (header only) — exactly matching the intended default.
+  Reverted the test meeting's `custom_mappings` back to its original single item afterward
+  (confirmed count restored to 17 total: 14+2+1). No console errors, no regressions. Self-tested
+  via screenshot_tool + direct DB verification, no testing_agent round used.
+- Issue 2.7 now fully CLOSED.
+
 ## Issue 2.6: BrandingTab/ShareModal Bypassed App Cache — FIXED (Sep 2026), verified live
 Audit item: `utils/apiCache.js`'s `TTL_MAP` explicitly configures `/org/branding` (5 min) and
 `/admin/users` (30s) for caching, but `BrandingTab.js` and `ShareModal.js` both used a plain

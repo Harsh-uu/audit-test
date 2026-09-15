@@ -61,8 +61,8 @@ function KeyQuestionBadge({ label }) {
   );
 }
 
-function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence, type, onShowInTranscript, regBadge }) {
-  const [expanded, setExpanded] = useState(true);
+function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence, type, onShowInTranscript, regBadge, defaultExpanded = true }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(mapping.edited_evidence_summary || mapping.evidence_summary);
 
@@ -306,6 +306,47 @@ const CONFIDENCE_ALIASES = {
   possible_evidence: ["possible_evidence", "needs_review", "not_enough_evidence"],
 };
 
+// PERF-002: a meeting can have 100+ evidence mappings — rendering every card
+// fully expanded at once (previous default) produces a very heavy DOM tree.
+// Only the first few cards per section default open, and each section only
+// mounts its first N items, revealed incrementally via "Show more" instead
+// of all at once.
+const INITIAL_EXPANDED_COUNT = 3;
+const INITIAL_VISIBLE_COUNT = 20;
+
+function EvidenceSection({ mappings, type, isReviewMode, canEditWording, onUpdateEvidence, onShowInTranscript, regBadge }) {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
+  const visible = mappings.slice(0, visibleCount);
+  const remaining = mappings.length - visible.length;
+
+  return (
+    <>
+      {visible.map((m, idx) => (
+        <EvidenceCard
+          key={m.id}
+          mapping={m}
+          isReviewMode={isReviewMode}
+          canEditWording={canEditWording}
+          onUpdateEvidence={onUpdateEvidence}
+          type={type}
+          onShowInTranscript={onShowInTranscript}
+          regBadge={regBadge}
+          defaultExpanded={idx < INITIAL_EXPANDED_COUNT}
+        />
+      ))}
+      {remaining > 0 && (
+        <button
+          onClick={() => setVisibleCount(c => c + INITIAL_VISIBLE_COUNT)}
+          className="w-full text-center text-xs font-medium text-[#1E3A8A] hover:text-[#1E40AF] py-2 mb-3 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          data-testid={`show-more-${type}`}
+        >
+          Show {Math.min(remaining, INITIAL_VISIBLE_COUNT)} more ({remaining} remaining)
+        </button>
+      )}
+    </>
+  );
+}
+
 export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAcceptingTier = null }) {
   const { user } = useAuth();
   const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction);
@@ -389,9 +430,7 @@ export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canRe
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{regHeader}</h3>
               <span className="text-xs text-gray-400">({analysis.cqc_mappings.length})</span>
             </div>
-            {analysis.cqc_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="cqc" onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
-            ))}
+            <EvidenceSection mappings={analysis.cqc_mappings} type="cqc" isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
           </div>
         )}
 
@@ -402,9 +441,7 @@ export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canRe
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{certHeader}</h3>
               <span className="text-xs text-gray-400">({analysis.care_cert_mappings.length})</span>
             </div>
-            {analysis.care_cert_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="care_cert" onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
-            ))}
+            <EvidenceSection mappings={analysis.care_cert_mappings} type="care_cert" isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
           </div>
         )}
 
@@ -415,9 +452,7 @@ export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canRe
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Organisational Standards</h3>
               <span className="text-xs text-gray-400">({analysis.custom_mappings.length})</span>
             </div>
-            {analysis.custom_mappings.map(m => (
-              <EvidenceCard key={m.id} mapping={m} isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} type="custom" onShowInTranscript={onShowInTranscript} />
-            ))}
+            <EvidenceSection mappings={analysis.custom_mappings} type="custom" isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} onShowInTranscript={onShowInTranscript} />
           </div>
         )}
 
