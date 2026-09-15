@@ -661,7 +661,7 @@ async def reset_password(data: ResetPasswordRequest):
         if record["expires_at"] < datetime.now(timezone.utc).isoformat():
             raise HTTPException(status_code=400, detail="This reset link has expired.")
 
-        user = await conn.fetchrow("SELECT id FROM users WHERE email=$1", record["email"])
+        user = await conn.fetchrow("SELECT id, supabase_password_set FROM users WHERE email=$1", record["email"])
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -674,7 +674,7 @@ async def reset_password(data: ResetPasswordRequest):
             logger.error("Supabase Auth password set failed for %s: %s", record["email"], exc)
             supabase_ok = False
 
-        already_on_supabase = await conn.fetchval("SELECT supabase_password_set FROM users WHERE email=$1", record["email"])
+        already_on_supabase = user["supabase_password_set"]
         if already_on_supabase and not supabase_ok:
             # Login for this user checks Supabase first — silently updating only
             # bcrypt here would strand them on their OLD Supabase password while

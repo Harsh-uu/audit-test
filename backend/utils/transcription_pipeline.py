@@ -112,6 +112,7 @@ async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, ma
     # matching meeting's analysis actions in one query, instead of one
     # SELECT per previous meeting.
     matching_prevs = []
+    supervisee_ids_set = set(supervisee_ids)
     for prev in prev_rows:
         prev = dict(prev)
         source_manager_id = prev.get("sign_off_manager_id")
@@ -120,7 +121,7 @@ async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, ma
             for a in _jlist(prev.get("attendees"))
             if a.get("user_id") and a.get("role") not in ("manager", "admin") and a.get("user_id") != source_manager_id
         }
-        if not source_supervisee_ids.intersection(set(supervisee_ids)):
+        if not source_supervisee_ids.intersection(supervisee_ids_set):
             continue
         matching_prevs.append(prev)
 

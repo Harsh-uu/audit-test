@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from deps import get_db, get_current_user
 import database
-from utils.supabase_storage import delete_audio
+from utils.supabase_storage import delete_audio_batch
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -183,11 +183,13 @@ async def delete_org(org_id: str, current_user=Depends(get_current_user)):
 
         await conn.execute("DELETE FROM organisations WHERE id = $1", org_id)
 
-    for path in audio_paths:
+    if audio_paths:
         try:
-            await delete_audio(path)
+            # PERF-005: one batched Supabase Storage call for all of this org's
+            # audio files, instead of one delete request per file.
+            await delete_audio_batch(audio_paths)
         except Exception as e:
-            logger.error("Failed to delete audio from storage during org '%s' deletion: path=%s error=%s", org_id, path, e)
+            logger.error("Failed to delete audio from storage during org '%s' deletion: paths=%s error=%s", org_id, audio_paths, e)
 
     logger.info("Deleted org '%s' (%s): %s", org_name, org_id, totals)
     return {"message": f"Organisation '{org_name}' permanently deleted", "deleted": totals}

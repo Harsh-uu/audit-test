@@ -162,16 +162,23 @@ async def _sweep_audio_deletions():
                     # Delete from Supabase Storage first — if this raises, the row stays
                     # in 'grace_period' and this sweep retries it on its next pass.
                     await delete_audio(storage_path)
+                # PERF-005: one connection for both updates instead of two
+                # separate pooled connection checkouts per meeting.
                 async with database.with_admin() as conn:
                     await conn.execute(
                         "UPDATE audio_files SET is_deleted=TRUE, deletion_status='deleted', deleted_at=$1 WHERE id=$2",
                         now, audio_file_id,
                     )
-            async with database.with_admin() as conn:
-                await conn.execute(
-                    "UPDATE meetings SET audio_deletion_status='deleted', audio_deleted_at=$1, updated_at=$1 WHERE id=$2",
-                    now, meeting_id,
-                )
+                    await conn.execute(
+                        "UPDATE meetings SET audio_deletion_status='deleted', audio_deleted_at=$1, updated_at=$1 WHERE id=$2",
+                        now, meeting_id,
+                    )
+            else:
+                async with database.with_admin() as conn:
+                    await conn.execute(
+                        "UPDATE meetings SET audio_deletion_status='deleted', audio_deleted_at=$1, updated_at=$1 WHERE id=$2",
+                        now, meeting_id,
+                    )
             logger.info("[queue] Audio sweep: deleted audio for meeting %s", meeting_id)
         except Exception as e:
             logger.error("[queue] Audio sweep: deletion failed for meeting %s: %s", meeting_id, e)

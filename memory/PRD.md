@@ -12,6 +12,46 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 3.1: 5 Small Batch/Dedup Tidy-ups — FIXED (Sep 2026), verified live
+5 small, self-contained inefficiencies batched together in files already being touched.
+- **super_admin.py `delete_org`**: was `for path in audio_paths: await delete_audio(path)`.
+  Added `delete_audio_batch()` to `supabase_storage.py` (new `_sync_remove_many` using
+  `.remove(paths)` with the full list in one Supabase Storage call) and switched `delete_org` to
+  call it once with all paths.
+- **job_worker.py `_sweep_audio_deletions`**: was opening 2 separate `with_admin()` connections
+  per meeting (one for `audio_files`, one for `meetings`). Merged into 1 connection for the
+  audio_file_id-present case; the audio_file_id-absent case (meetings-only update) unchanged.
+- **auth.py `reset_password`**: was querying `users` by email twice (`id`, then later
+  `supabase_password_set`). Now selects both columns in the one query. Confirmed
+  `supabase_auth.create_user`/`set_password` never touch `supabase_password_set`, so reading it
+  earlier is equivalent, not stale.
+- **transcription_pipeline.py `_get_rolled_actions`**: was recomputing `set(supervisee_ids)` on
+  every loop iteration (up to 50x). Hoisted to `supervisee_ids_set = set(supervisee_ids)` once
+  before the loop.
+- **ai.py `transcribe_audio`**: was calling `_apply_uk_spelling(u.text)` twice per utterance
+  (once for `lines`, once for `ts_lines`). Now computed once per utterance into
+  `cleaned_utterances`, reused for both.
+- **Verified**: (1) `delete_audio_batch()` called directly against real Supabase Storage with
+  fake/non-existent paths — succeeded with no exception (idempotent, matches original per-path
+  behavior), plus empty-list no-op confirmed. The `super_admin.py` router wiring itself is a
+  straightforward substitution, confirmed via clean backend startup with no import/syntax errors
+  — full end-to-end org-deletion was not exercised (blocked by an unrelated pre-existing
+  super_admin login credential mismatch against `test_credentials.md`, not a regression from
+  this change) — noting this explicitly rather than overclaiming. (2) `_sweep_audio_deletions`
+  invoked directly against real DB with 2 throwaway test meetings (one with an `audio_files`
+  row, one without) — both correctly updated to `audio_deletion_status='deleted'` via the merged
+  connection, `audio_files.is_deleted` correctly set true for the with-audio case. Test rows
+  cleaned up. (3) Full live `forgot-password` → `reset-password` flow on a throwaway test user —
+  succeeded, login confirmed working with the new password; test user deleted afterward. (4)
+  Direct re-invocation of `_get_rolled_actions` — identical result (1 rolled action) to before
+  the hoist. (5) Isolated logic test confirmed the cleanup call count dropped from 4 to 2 (one
+  per utterance) with identical output content for both `speaker_text` and `timestamped_plain`.
+  No backend errors across all tests. Self-tested via curl + direct DB/function invocation, no
+  testing_agent round used.
+- Issue 3.1 now fully CLOSED (with the one noted exception on full super_admin org-delete E2E
+  coverage — flagging for a future retest once that unrelated login issue is looked at, if ever
+  raised).
+
 ## Issue 2.9: Dashboard Action Stats + Doc Uploads Unbounded History — FIXED (Sep 2026), verified live
 Audit item: 2 endpoints pulled an org's entire history with no cap, getting slower forever as an
 org accumulates data.

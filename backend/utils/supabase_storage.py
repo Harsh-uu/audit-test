@@ -91,6 +91,11 @@ def _sync_remove(bucket: str, path: str):
     client.storage.from_(bucket).remove([path])
 
 
+def _sync_remove_many(bucket: str, paths: list):
+    client = _get_client()
+    client.storage.from_(bucket).remove(paths)
+
+
 async def put_audio(path: str, data: bytes, content_type: str) -> dict:
     """Upload a meeting audio recording to Supabase (EU)."""
     loop = asyncio.get_running_loop()
@@ -112,6 +117,16 @@ async def delete_audio(path: str):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None, partial(_sync_remove, AUDIO_BUCKET, path)
+    )
+
+
+async def delete_audio_batch(paths: list):
+    """Permanently delete multiple meeting audio recordings in one Supabase call (GDPR)."""
+    if not paths:
+        return
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, partial(_sync_remove_many, AUDIO_BUCKET, paths)
     )
 
 

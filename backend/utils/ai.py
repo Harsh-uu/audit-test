@@ -788,10 +788,14 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
         logger.info(f"AssemblyAI found {len(unique_speakers)} speaker(s): {sorted(unique_speakers)}")
 
         if len(unique_speakers) > 1:
-            lines = [f"[{_ms_to_mmss(u.start)}] Speaker {u.speaker}: {_apply_uk_spelling(u.text)}" for u in transcript.utterances]
+            # PERF-005: clean each utterance's text once, reuse for both the
+            # speaker-labelled and timestamped-plain versions below, instead
+            # of running the same UK-spelling cleanup twice per utterance.
+            cleaned_utterances = [(u, _apply_uk_spelling(u.text)) for u in transcript.utterances]
+            lines = [f"[{_ms_to_mmss(u.start)}] Speaker {u.speaker}: {ct}" for u, ct in cleaned_utterances]
             speaker_text = "\n".join(lines)
             # Build a timestamped version of the plain text for analysis (no speaker labels — diarization runs in parallel)
-            ts_lines = [f"[{_ms_to_mmss(u.start)}] {_apply_uk_spelling(u.text)}" for u in transcript.utterances]
+            ts_lines = [f"[{_ms_to_mmss(u.start)}] {ct}" for u, ct in cleaned_utterances]
             timestamped_plain = "\n".join(ts_lines)
             logger.info("AssemblyAI diarization usable — GPT-4o will map names only")
             return plain_text, speaker_text, timestamped_plain, warnings
