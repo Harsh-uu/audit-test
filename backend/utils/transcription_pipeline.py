@@ -108,6 +108,10 @@ async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, ma
         current_meeting_id, supervisee_ids,
     )
 
+    # PERF-003: filter matching previous meetings first, then fetch every
+    # matching meeting's analysis actions in one query, instead of one
+    # SELECT per previous meeting.
+    matching_prevs = []
     for prev in prev_rows:
         prev = dict(prev)
         source_manager_id = prev.get("sign_off_manager_id")
@@ -118,15 +122,23 @@ async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, ma
         }
         if not source_supervisee_ids.intersection(set(supervisee_ids)):
             continue
+        matching_prevs.append(prev)
 
-        analysis_row = await conn.fetchrow(
-            "SELECT actions FROM analyses WHERE id = $1",
-            prev["analysis_id"],
+    analysis_ids = [p["analysis_id"] for p in matching_prevs if p.get("analysis_id")]
+    actions_by_analysis_id = {}
+    if analysis_ids:
+        a_rows = await conn.fetch(
+            "SELECT id, actions FROM analyses WHERE id = ANY($1::uuid[])",
+            analysis_ids,
         )
-        if not analysis_row:
+        actions_by_analysis_id = {r["id"]: r["actions"] for r in a_rows}
+
+    for prev in matching_prevs:
+        analysis_actions = actions_by_analysis_id.get(prev.get("analysis_id"))
+        if analysis_actions is None:
             continue
 
-        for action in _jlist(analysis_row["actions"]):
+        for action in _jlist(analysis_actions):
             if action.get("completed") or action.get("is_rolled_over"):
                 continue
             key = (prev["id"], action.get("id", ""))

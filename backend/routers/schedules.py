@@ -281,7 +281,9 @@ async def bulk_create_schedules(data: ScheduleBulkCreate, current_user=Depends(g
             org_id, data.meeting_type_id,
         )
         existing_staff = {r["staff_user_id"] for r in existing_rows}
-        created, skipped = 0, 0
+
+        skipped = 0
+        candidate_ids = []
         for uid in data.staff_user_ids:
             # Scope check — silently skip out-of-scope staff
             if allowed_ids is not None and uid not in allowed_ids:
@@ -290,16 +292,28 @@ async def bulk_create_schedules(data: ScheduleBulkCreate, current_user=Depends(g
             if uid in existing_staff:
                 skipped += 1
                 continue
-            u = await conn.fetchrow("SELECT id FROM users WHERE id=$1 AND org_id=$2", uid, org_id)
-            if not u:
-                continue
-            await conn.execute(
-                """INSERT INTO schedules (id, org_id, staff_user_id, meeting_type_id, frequency, start_date, is_active, created_by, created_at)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)""",
-                str(uuid.uuid4()), org_id, uid, data.meeting_type_id, data.frequency,
-                data.start_date, True, current_user["id"], now,
+            candidate_ids.append(uid)
+
+        created = 0
+        if candidate_ids:
+            # PERF-003: one query validates every candidate staff id at once,
+            # instead of one SELECT per staff member.
+            valid_rows = await conn.fetch(
+                "SELECT id FROM users WHERE id = ANY($1::uuid[]) AND org_id=$2",
+                candidate_ids, org_id,
             )
-            created += 1
+            valid_ids = [r["id"] for r in valid_rows]
+            if valid_ids:
+                # One multi-row INSERT for all new schedules at once, instead
+                # of one INSERT per staff member.
+                await conn.execute(
+                    """INSERT INTO schedules (id, org_id, staff_user_id, meeting_type_id, frequency, start_date, is_active, created_by, created_at)
+                       SELECT gen_random_uuid(), $1::uuid, uid, $2::uuid, $3::text, $4::date, TRUE, $5::uuid, $6::timestamptz
+                       FROM UNNEST($7::uuid[]) AS uid""",
+                    org_id, data.meeting_type_id, data.frequency,
+                    data.start_date, current_user["id"], now, valid_ids,
+                )
+                created = len(valid_ids)
     return {"created": created, "skipped": skipped, "total": len(data.staff_user_ids)}
 
 

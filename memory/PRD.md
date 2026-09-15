@@ -12,6 +12,45 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Issue 2.8: 5 Backend "One-at-a-Time" Loops Batched — FIXED (Sep 2026), verified live
+Audit item: 5 backend actions looped through a list doing 1 DB call per item instead of 1 batched
+call for the whole list — small impact today, grows proportionally with usage.
+- **schedules.py `bulk_create_schedules`**: replaced per-staff `SELECT` (validate exists) + per-
+  staff `INSERT` with one `SELECT id FROM users WHERE id = ANY($1::uuid[])` to validate all
+  candidates at once, then one multi-row `INSERT ... SELECT gen_random_uuid(), ... FROM
+  UNNEST($7::uuid[])` for all new schedules at once.
+- **org.py `delete_setting`**: replaced fetch-teams-then-loop-update with a single
+  `UPDATE users SET team_id=NULL, setting_id=NULL WHERE team_id IN (SELECT id FROM teams WHERE
+  setting_id=$1)` — no Python loop, no separate fetch needed at all.
+- **review.py `bulk_update_evidence`**: was opening a BRAND NEW `with_admin()` pooled connection
+  per changed item to insert into `evidence_feedback` (worse than a plain N+1 — N connection
+  checkouts). Now collects all rows first, then one `with_admin()` connection + one
+  `executemany(...)` call for the whole batch.
+- **prep.py, 2 places** (`get_prep_context` and `_run_generate_prep`): both fetched up to 5 (or 3)
+  previous meetings then looped doing 1 `SELECT` on `analyses` per meeting. Now collect all
+  `analysis_id`s first, one `SELECT ... WHERE id = ANY($1::uuid[])`, build a dict, use dict
+  lookups in the loop instead of a query per row.
+- **transcription_pipeline.py `_get_rolled_actions`**: fetched up to 50 previous meetings then
+  looped doing 1 `SELECT` on `analyses` per matching meeting. Now filters matching meetings
+  first, then one batched `SELECT ... WHERE id = ANY($1::uuid[])` for all their actions.
+- **Verified live** (all via real DB, not mocked): (1) `bulk_create_schedules` — created 3
+  candidates, 1 correctly created via the new `UNNEST` insert (verified `gen_random_uuid()` +
+  `created_by` correct in DB), 2 correctly skipped (1 scope/duplicate, 1 pre-existing). (2)
+  `delete_setting` — created a test branch + 2 teams, assigned a real staff member to one,
+  deleted the branch: staff's `team_id`/`setting_id` both correctly nulled via the single
+  subquery UPDATE, teams and setting rows gone. (3) `bulk_update_evidence` — bulk-accepted 11
+  real "likely_evidence" pending items on a real meeting via the actual `/api/review/{id}
+  /evidence/bulk-action` endpoint: all 11 updated to "accepted" AND exactly 11 `evidence_feedback`
+  rows inserted via the new `executemany` batch (verified in DB) — reverted both afterward. (4)
+  `get_prep_context` (`/api/prep/{id}/context`) — returned exactly 5 previous meetings each with
+  correct summary/actions from the batched analysis lookup. `generate_prep` (background AI task)
+  — ran successfully end-to-end, produced valid prep questions, no errors. (5)
+  `_get_rolled_actions` — invoked directly against real DB with real attendee data, correctly
+  returned 1 rolled-over incomplete action matching what was independently visible in the
+  `get_prep_context` output. No console/backend errors across all 5 tests, no regressions.
+  Self-tested via curl + direct DB/function verification, no testing_agent round used.
+- Issue 2.8 now fully CLOSED.
+
 ## Issue 2.7: ComplianceTab Fully-Expanded Unbounded List — FIXED (Sep 2026), verified live
 Audit item: `EvidenceCard` (in `ComplianceTab.js`) hardcoded `useState(true)` for its `expanded`
 state — every evidence card defaulted to fully expanded, with a confirmed real meeting having

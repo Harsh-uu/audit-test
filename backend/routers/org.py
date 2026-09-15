@@ -248,9 +248,12 @@ async def delete_setting(setting_id: str, current_user=Depends(get_current_user)
         raise HTTPException(403, "Admin only")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        t_rows = await conn.fetch("SELECT id FROM teams WHERE setting_id=$1", setting_id)
-        for t in t_rows:
-            await conn.execute("UPDATE users SET team_id=NULL, setting_id=NULL WHERE team_id=$1", t["id"])
+        # PERF-003: single UPDATE detaches all of this branch's team members
+        # at once, instead of one UPDATE per team.
+        await conn.execute(
+            "UPDATE users SET team_id=NULL, setting_id=NULL WHERE team_id IN (SELECT id FROM teams WHERE setting_id=$1)",
+            setting_id,
+        )
         await conn.execute("DELETE FROM teams WHERE setting_id=$1", setting_id)
         await conn.execute("UPDATE users SET setting_id=NULL WHERE setting_id=$1", setting_id)
         result = await conn.execute("DELETE FROM org_settings WHERE id=$1", setting_id)

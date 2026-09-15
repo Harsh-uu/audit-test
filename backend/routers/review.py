@@ -579,26 +579,35 @@ async def bulk_update_evidence(meeting_id: str, data: BulkEvidenceActionRequest,
                             f"{changed_count} {confidence_label} item{'s' if changed_count != 1 else ''} bulk-accepted")
 
     type_label_map = {"cqc_mappings": "cqc", "care_cert_mappings": "care_cert", "custom_mappings": "custom"}
-    for mapping_type, item in changed_items:
-        ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
-        name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
+    if changed_items:
+        # PERF-003: build all evidence_feedback rows up front and insert them
+        # in one connection + one batched executemany, instead of opening a
+        # brand new pooled connection and doing one INSERT per item.
+        now_ts = datetime.now(timezone.utc).isoformat()
+        feedback_rows = []
+        for mapping_type, item in changed_items:
+            ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
+            name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
+            feedback_rows.append((
+                str(uuid.uuid4()), meeting_id, org_id,
+                current_user["id"], current_user.get("name", ""),
+                item.get("id", ""), type_label_map.get(mapping_type, mapping_type), ref, name,
+                item.get("confidence", ""), data.status,
+                item.get("evidence_summary", ""),
+                None,
+                item.get("transcript_excerpt", ""),
+                now_ts,
+            ))
         try:
             async with database.with_admin() as fb_conn:
-                await fb_conn.execute(
+                await fb_conn.executemany(
                     """INSERT INTO evidence_feedback
                        (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
                         evidence_type, standard_ref, standard_name, ai_confidence,
                         manager_action, evidence_summary, edited_summary,
                         transcript_excerpt, timestamp)
                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
-                    str(uuid.uuid4()), meeting_id, org_id,
-                    current_user["id"], current_user.get("name", ""),
-                    item.get("id", ""), type_label_map.get(mapping_type, mapping_type), ref, name,
-                    item.get("confidence", ""), data.status,
-                    item.get("evidence_summary", ""),
-                    None,
-                    item.get("transcript_excerpt", ""),
-                    datetime.now(timezone.utc).isoformat(),
+                    feedback_rows,
                 )
         except Exception as _fb_err:
             logger.warning(f"evidence_feedback insert skipped (bulk): {_fb_err}")

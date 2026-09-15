@@ -244,17 +244,19 @@ async def get_prep_context(meeting_id: str, current_user=Depends(get_current_use
                        ORDER BY date DESC LIMIT 5""",
                     org_id, meeting_id, supervisee_ids,
                 )
+                # PERF-003: one query fetches every previous meeting's analysis
+                # at once, instead of one SELECT per previous meeting.
+                analysis_ids = [p["analysis_id"] for p in prev_rows if p.get("analysis_id")]
+                analyses_by_id = {}
+                if analysis_ids:
+                    a_rows = await conn.fetch(
+                        "SELECT id, summary, edited_summary, actions FROM analyses WHERE id = ANY($1::uuid[])",
+                        analysis_ids,
+                    )
+                    analyses_by_id = {r["id"]: dict(r) for r in a_rows}
             for prev in prev_rows:
                 prev = dict(prev)
-                analysis = None
-                if prev.get("analysis_id"):
-                    async with database.with_org(org_id) as conn:
-                        a_row = await conn.fetchrow(
-                            "SELECT summary, edited_summary, actions FROM analyses WHERE id=$1",
-                            prev["analysis_id"],
-                        )
-                    if a_row:
-                        analysis = dict(a_row)
+                analysis = analyses_by_id.get(prev.get("analysis_id"))
                 sources.append({
                     "source_id": prev["id"],
                     "source_type": "previous_meeting",
@@ -405,18 +407,23 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
                        ORDER BY date DESC LIMIT 3""",
                     org_id, meeting_id, supervisee_ids,
                 )
+                # PERF-003: one query fetches every relevant previous meeting's
+                # analysis at once, instead of one SELECT per previous meeting.
+                relevant_analysis_ids = [
+                    p["analysis_id"] for p in prev_rows
+                    if p.get("analysis_id") and (include_all or p["id"] in included_source_ids)
+                ]
+                analyses_by_id = {}
+                if relevant_analysis_ids:
+                    a_rows = await conn.fetch(
+                        "SELECT id, summary, edited_summary, actions FROM analyses WHERE id = ANY($1::uuid[])",
+                        relevant_analysis_ids,
+                    )
+                    analyses_by_id = {r["id"]: dict(r) for r in a_rows}
             for prev in prev_rows:
                 prev = dict(prev)
                 if include_all or prev["id"] in included_source_ids:
-                    analysis = None
-                    if prev.get("analysis_id"):
-                        async with database.with_org(org_id) as conn:
-                            a_row = await conn.fetchrow(
-                                "SELECT summary, edited_summary, actions FROM analyses WHERE id=$1",
-                                prev["analysis_id"],
-                            )
-                        if a_row:
-                            analysis = dict(a_row)
+                    analysis = analyses_by_id.get(prev.get("analysis_id"))
                     prev_summaries.append({
                         "title": prev.get("title", ""),
                         "date": prev.get("date", ""),
