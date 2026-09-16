@@ -14,9 +14,7 @@ import {
 const BULK_CONFIDENCE_ALIASES = {
   likely_evidence: ["likely_evidence"],
   possible_evidence: ["possible_evidence", "needs_review", "not_enough_evidence"],
-};
-
-const STATUS_CONFIG = {
+};const STATUS_CONFIG = {
   processing: {
     icon: Loader2,
     color: "text-amber-700",
@@ -117,19 +115,21 @@ export default function DocUploadReport() {
 
   const bulkAcceptEvidence = async (confidence) => {
     const aliases = BULK_CONFIDENCE_ALIASES[confidence] || [confidence];
-    const pending = ["cqc_mappings", "care_cert_mappings", "custom_mappings"]
+    const pendingCount = ["cqc_mappings", "care_cert_mappings", "custom_mappings"]
       .flatMap(field => (upload[field] || []).filter(
         e => aliases.includes(e.confidence) && (e.status || "pending") === "pending"
-      ));
-    if (pending.length === 0) {
+      )).length;
+    if (pendingCount === 0) {
       toast.info("No pending items in that category to accept");
       return;
     }
     setBulkAcceptingTier(confidence);
     try {
-      await Promise.all(pending.map(e =>
-        axios.put(`${API}/doc-uploads/${uploadId}/evidence/${e.id}`, { status: "accepted" }, getAuthConfig())
-      ));
+      const { data } = await axios.post(
+        `${API}/doc-uploads/${uploadId}/evidence/bulk-action`,
+        { confidence, status: "accepted" },
+        getAuthConfig()
+      );
       setUpload(prev => {
         const next = { ...prev };
         for (const field of ["cqc_mappings", "care_cert_mappings", "custom_mappings"]) {
@@ -142,7 +142,7 @@ export default function DocUploadReport() {
         return next;
       });
       invalidateCache("/admin/team-insights");
-      toast.success(`${pending.length} item${pending.length !== 1 ? "s" : ""} accepted`);
+      toast.success(`${data.changed_count} item${data.changed_count !== 1 ? "s" : ""} accepted`);
     } catch (err) {
       toast.error("Failed to accept all — please try again");
       console.error("Bulk accept failed:", err.message);

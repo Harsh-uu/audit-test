@@ -6,7 +6,7 @@ extract its text, run AI evidence mapping, and link it to a specific staff membe
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from datetime import datetime, timezone
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 import io
 import json
 import uuid
@@ -40,6 +40,19 @@ class UpdateUploadEvidenceRequest(BaseModel):
     status: Optional[str] = None                    # accepted | rejected | needs_followup | pending
     edited_evidence_summary: Optional[str] = None
     notes: Optional[str] = None
+
+
+# Legacy confidence values pre-date the likely/possible rename — treat them as
+# "possible" so bulk-accept still works on older document scans.
+_CONFIDENCE_ALIASES = {
+    "likely_evidence": {"likely_evidence"},
+    "possible_evidence": {"possible_evidence", "needs_review", "not_enough_evidence"},
+}
+
+
+class BulkUploadEvidenceActionRequest(BaseModel):
+    confidence: Literal["likely_evidence", "possible_evidence"]
+    status: Literal["accepted", "rejected", "needs_followup"] = "accepted"
 
 
 def _upload_dict(row) -> dict:
@@ -225,6 +238,59 @@ async def download_upload(
         media_type=content_type or "application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/{upload_id}/evidence/bulk-action")
+async def bulk_update_upload_evidence(
+    upload_id: str,
+    data: BulkUploadEvidenceActionRequest,
+    current_user=Depends(get_current_user),
+):
+    """
+    Accept/reject/flag every pending item of one confidence tier in a single
+    atomic update (SELECT ... FOR UPDATE + one write) — firing N separate PUT
+    calls in parallel races on the same JSONB column and silently drops all
+    but the last writer, which is what made "Accept all" look like a no-op.
+    """
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin/Manager only")
+    org_id = current_user.get("org_id")
+    confidence_set = _CONFIDENCE_ALIASES.get(data.confidence, {data.confidence})
+
+    async with database.with_org(org_id) as conn:
+        row = await conn.fetchrow(
+            "SELECT cqc_mappings, care_cert_mappings, custom_mappings FROM supervision_uploads WHERE id=$1 AND org_id=$2 FOR UPDATE",
+            upload_id, org_id,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+
+        upload = _upload_dict(row)
+        update_cols = {}
+        changed_count = 0
+        for field in _JSONB_FIELDS:
+            mappings = list(upload.get(field) or [])
+            changed = False
+            for i, m in enumerate(mappings):
+                if m.get("confidence") in confidence_set and (m.get("status") or "pending") == "pending":
+                    mappings[i]["status"] = data.status
+                    changed = True
+                    changed_count += 1
+            if changed:
+                update_cols[field] = mappings
+
+        if update_cols:
+            set_parts = []
+            values = []
+            idx = 1
+            for field, val in update_cols.items():
+                set_parts.append(f"{field}=${idx}")
+                values.append(val)
+                idx += 1
+            values.append(upload_id)
+            await conn.execute(f"UPDATE supervision_uploads SET {', '.join(set_parts)} WHERE id=${idx}", *values)
+
+    return {"message": f"{changed_count} item{'s' if changed_count != 1 else ''} updated", "changed_count": changed_count}
 
 
 @router.put("/{upload_id}/evidence/{evidence_id}")
