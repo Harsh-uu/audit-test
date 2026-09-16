@@ -13,6 +13,7 @@ from deps import get_current_user, get_manager_scope, get_scoped_staff_ids
 import database
 from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
+from utils.need_reviewer import process_need_review_signals
 from utils.supabase_storage import delete_audio
 from routers.admin import _stats_cache as _admin_stats_cache
 
@@ -1356,7 +1357,6 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         )
 
         async with database.with_admin() as conn:
-            from utils.need_reviewer import process_need_review_signals
             await process_need_review_signals(conn, org_id, meeting_id, analysis_result, effective_jurisdiction)
         # Rescan deliberately never overwrites `risks` (only re-scans compliance mappings) —
         # but if a Need Reviewer threshold was JUST reached, merge that one flag in by id.
@@ -1408,8 +1408,9 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
 
         existing_risks = _jlist_local(existing_row["risks"] if existing_row else [])
         if new_need_review_risks:
-            existing_risk_ids = {r.get("id") for r in existing_risks}
-            merged_risks = existing_risks + [r for r in new_need_review_risks if r.get("id") not in existing_risk_ids]
+            # Fresh Need Reviewer entries win on id collision (e.g. "3 times" -> "4 times")
+            new_ids = {r.get("id") for r in new_need_review_risks}
+            merged_risks = [r for r in existing_risks if r.get("id") not in new_ids] + new_need_review_risks
         else:
             merged_risks = existing_risks
 

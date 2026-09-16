@@ -13,6 +13,7 @@ import os
 import uuid
 from utils.supabase_storage import get_audio
 from utils.ai import analyze_meeting, diarize_transcript, transcribe_with_assemblyai, map_speaker_numbers_to_names, generate_meeting_summary
+from utils.need_reviewer import process_need_review_signals
 import database
 from routers.admin import _stats_cache as _admin_stats_cache
 
@@ -381,7 +382,6 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         analysis_id = str(uuid.uuid4())
         async with database.with_admin() as conn:
-            from utils.need_reviewer import process_need_review_signals
             await process_need_review_signals(conn, meeting_org_id, meeting_id, analysis_result, effective_jurisdiction)
             # Core INSERT — only columns guaranteed to exist in any schema version
             await conn.execute(
