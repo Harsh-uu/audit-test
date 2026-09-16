@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { ComplianceTab } from "@/components/report/ComplianceTab";
@@ -9,6 +10,11 @@ import {
   ArrowLeft, FileText, User, Calendar, Upload, Loader2, AlertCircle,
   CheckCircle, Clock, Download
 } from "lucide-react";
+
+const BULK_CONFIDENCE_ALIASES = {
+  likely_evidence: ["likely_evidence"],
+  possible_evidence: ["possible_evidence", "needs_review", "not_enough_evidence"],
+};
 
 const STATUS_CONFIG = {
   processing: {
@@ -39,6 +45,7 @@ export default function DocUploadReport() {
 
   const [upload, setUpload] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [bulkAcceptingTier, setBulkAcceptingTier] = useState(null);
   const pollRef = useRef(null);
 
   const fetchUpload = async () => {
@@ -106,6 +113,42 @@ export default function DocUploadReport() {
       }
       return next;
     });
+  };
+
+  const bulkAcceptEvidence = async (confidence) => {
+    const aliases = BULK_CONFIDENCE_ALIASES[confidence] || [confidence];
+    const pending = ["cqc_mappings", "care_cert_mappings", "custom_mappings"]
+      .flatMap(field => (upload[field] || []).filter(
+        e => aliases.includes(e.confidence) && (e.status || "pending") === "pending"
+      ));
+    if (pending.length === 0) {
+      toast.info("No pending items in that category to accept");
+      return;
+    }
+    setBulkAcceptingTier(confidence);
+    try {
+      await Promise.all(pending.map(e =>
+        axios.put(`${API}/doc-uploads/${uploadId}/evidence/${e.id}`, { status: "accepted" }, getAuthConfig())
+      ));
+      setUpload(prev => {
+        const next = { ...prev };
+        for (const field of ["cqc_mappings", "care_cert_mappings", "custom_mappings"]) {
+          next[field] = (prev[field] || []).map(m =>
+            aliases.includes(m.confidence) && (m.status || "pending") === "pending"
+              ? { ...m, status: "accepted" }
+              : m
+          );
+        }
+        return next;
+      });
+      invalidateCache("/admin/team-insights");
+      toast.success(`${pending.length} item${pending.length !== 1 ? "s" : ""} accepted`);
+    } catch (err) {
+      toast.error("Failed to accept all — please try again");
+      console.error("Bulk accept failed:", err.message);
+    } finally {
+      setBulkAcceptingTier(null);
+    }
   };
 
   const handleDownload = async () => {
@@ -232,6 +275,8 @@ export default function DocUploadReport() {
               analysis={analysis}
               canReview={true}
               updateEvidence={updateEvidence}
+              onBulkAccept={bulkAcceptEvidence}
+              bulkAcceptingTier={bulkAcceptingTier}
               isLocked={false}
               className="h-full overflow-y-auto"
               noMaxHeight={true}
