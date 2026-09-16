@@ -25,6 +25,14 @@ const STATUS_CONFIG = {
 // Order status-breakdown text on collapsed month rows in a sensible reading order.
 const STATUS_BREAKDOWN_ORDER = ["draft", "processing", "transcribing", "analyzing", "in_review", "reviewed", "signed_off", "shared", "processing_failed"];
 
+// Filled (active-state) version of each status's badge color, for the quick-filter chips.
+const FILLED_STATUS_COLORS = {
+  draft:      "bg-gray-600 text-white border-gray-600",
+  in_review:  "bg-amber-500 text-white border-amber-500",
+  reviewed:   "bg-teal-600 text-white border-teal-600",
+  signed_off: "bg-emerald-600 text-white border-emerald-600",
+};
+
 const QUICK_FILTERS = [
   { value: "all",       label: "All" },
   { value: "draft",     label: "Draft" },
@@ -489,9 +497,13 @@ export default function Meetings() {
                 onClick={() => setStatusFilter(f.value)}
                 data-testid={`filter-chip-${f.value}`}
                 className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  statusFilter === f.value
-                    ? "bg-[#1E3A8A] text-white border-[#1E3A8A]"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-[#1E3A8A] hover:text-[#1E3A8A]"
+                  f.value === "all"
+                    ? (statusFilter === "all"
+                        ? "bg-[#1E3A8A] text-white border-[#1E3A8A]"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-[#1E3A8A] hover:text-[#1E3A8A]")
+                    : (statusFilter === f.value
+                        ? FILLED_STATUS_COLORS[f.value]
+                        : `${STATUS_CONFIG[f.value].color} hover:opacity-80`)
                 }`}
               >
                 {f.label}
