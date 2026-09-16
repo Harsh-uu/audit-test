@@ -3804,6 +3804,214 @@ async def seed_northern_ireland_standards():
         )
 
 
+# ── Ofsted: Schools, Early Years, Children's Homes ────────────────────────────
+# jurisdiction='ofsted'; service_type distinguishes which of the 3 setting types
+# a standard applies to (mirrors the NI residential/domiciliary pattern).
+
+EIF_AREAS = [
+    {"reference": "EIF Safeguarding", "name": "Safeguarding", "description": "Whether the school's culture, policies and day-to-day practice keep pupils safe from harm, including online, and staff know how to identify and respond to concerns swiftly. Graded separately from other areas as 'met'/'not met'.", "keywords": ["safeguarding", "child protection", "designated safeguarding lead", "DSL", "disclosure", "referral", "early help", "online safety", "safer recruitment"]},
+    {"reference": "EIF Inclusion", "name": "Inclusion", "description": "How well the school identifies and meets the needs of all pupils, including those with SEND, disadvantaged pupils and those with additional needs, ensuring equal access to a high-quality education.", "keywords": ["inclusion", "SEND", "SENCO", "disadvantaged pupils", "EAL", "reasonable adjustments", "equity", "additional needs"]},
+    {"reference": "EIF Curriculum and Teaching", "name": "Curriculum and Teaching", "description": "The ambition, design and delivery of the curriculum, and whether teaching enables pupils to acquire knowledge and skills that build towards clearly defined end points.", "keywords": ["curriculum", "teaching", "lesson planning", "sequencing", "subject knowledge", "pedagogy", "schemes of work"]},
+    {"reference": "EIF Achievement", "name": "Achievement", "description": "The outcomes pupils achieve as a result of the education provided, including attainment, progress, and readiness for the next stage of education or employment.", "keywords": ["achievement", "attainment", "progress", "outcomes", "exam results", "readiness", "next stage"]},
+    {"reference": "EIF Attendance and Behaviour", "name": "Attendance and Behaviour", "description": "Whether pupils attend regularly and behave well, feel safe, and are free from bullying and disruption, allowing learning to proceed without interruption.", "keywords": ["attendance", "punctuality", "behaviour", "bullying", "disruption", "exclusions", "conduct"]},
+    {"reference": "EIF Personal Development and Wellbeing", "name": "Personal Development and Wellbeing", "description": "How the school develops pupils' character, resilience and confidence, and protects and promotes their mental health and wellbeing, including through extracurricular opportunities.", "keywords": ["personal development", "wellbeing", "mental health", "resilience", "character", "extracurricular", "confidence"]},
+    {"reference": "EIF Leadership and Governance", "name": "Leadership and Governance", "description": "How effectively leaders and governors set a clear vision, manage the school's resources and workforce, protect staff wellbeing and workload, and ensure a high-quality education for all pupils.", "keywords": ["leadership", "governance", "staff wellbeing", "workload", "vision", "resource management", "school improvement"]},
+]
+
+TEACHERS_STANDARDS = [
+    {"reference": "TS1", "name": "Set high expectations", "description": "Establish a safe and stimulating environment rooted in mutual respect, and set goals that stretch and challenge pupils of all backgrounds, abilities and dispositions.", "keywords": ["high expectations", "stimulating environment", "mutual respect", "challenge", "positive attitudes"], "sub_outcomes": [
+        {"ref": "TS1.1", "desc": "Establish a safe and stimulating environment for pupils, rooted in mutual respect"},
+        {"ref": "TS1.2", "desc": "Set goals that stretch and challenge pupils of all backgrounds, abilities and dispositions"},
+        {"ref": "TS1.3", "desc": "Demonstrate consistently the positive attitudes, values and behaviour expected of pupils"},
+    ]},
+    {"reference": "TS2", "name": "Promote good progress and outcomes", "description": "Be accountable for pupils' attainment, progress and outcomes, and plan teaching to build on pupils' capabilities and prior knowledge.", "keywords": ["progress", "outcomes", "accountability", "prior knowledge", "reflection"], "sub_outcomes": [
+        {"ref": "TS2.1", "desc": "Be accountable for pupils' attainment, progress and outcomes"},
+        {"ref": "TS2.2", "desc": "Plan teaching to build on pupils' capabilities and prior knowledge"},
+        {"ref": "TS2.3", "desc": "Guide pupils to reflect on the progress they have made and their emerging needs"},
+    ]},
+    {"reference": "TS3", "name": "Demonstrate good subject and curriculum knowledge", "description": "Have a secure knowledge of the relevant subject(s) and curriculum areas, and promote high standards of literacy and correct use of standard English.", "keywords": ["subject knowledge", "curriculum knowledge", "literacy", "standard English"], "sub_outcomes": [
+        {"ref": "TS3.1", "desc": "Have a secure knowledge of the relevant subject(s) and curriculum areas"},
+        {"ref": "TS3.2", "desc": "Demonstrate a critical understanding of developments in the subject and curriculum areas"},
+        {"ref": "TS3.3", "desc": "Promote high standards of literacy, articulacy and correct use of standard English"},
+    ]},
+    {"reference": "TS4", "name": "Plan and teach well-structured lessons", "description": "Impart knowledge and develop understanding through effective use of lesson time, and reflect systematically on the effectiveness of lessons and approaches to teaching.", "keywords": ["lesson planning", "structure", "homework", "reflection", "curiosity"], "sub_outcomes": [
+        {"ref": "TS4.1", "desc": "Impart knowledge and develop understanding through effective use of lesson time"},
+        {"ref": "TS4.2", "desc": "Set homework and plan other out-of-class activities to consolidate and extend knowledge"},
+        {"ref": "TS4.3", "desc": "Reflect systematically on the effectiveness of lessons and approaches to teaching"},
+    ]},
+    {"reference": "TS5", "name": "Adapt teaching to respond to the strengths and needs of all pupils", "description": "Know when and how to differentiate appropriately, and understand how a range of factors can inhibit pupils' ability to learn.", "keywords": ["differentiation", "SEN", "EAL", "adaptive teaching", "pupil needs"], "sub_outcomes": [
+        {"ref": "TS5.1", "desc": "Know when and how to differentiate appropriately, using approaches which enable pupils to be taught effectively"},
+        {"ref": "TS5.2", "desc": "Have a secure understanding of how a range of factors can inhibit pupils' ability to learn"},
+        {"ref": "TS5.3", "desc": "Have a clear understanding of the needs of all pupils, including those with SEN, EAL and disabilities"},
+    ]},
+    {"reference": "TS6", "name": "Make accurate and productive use of assessment", "description": "Know how to assess the relevant subject and curriculum areas, and use formative and summative assessment to secure pupils' progress.", "keywords": ["assessment", "marking", "feedback", "data", "targets"], "sub_outcomes": [
+        {"ref": "TS6.1", "desc": "Know and understand how to assess the relevant subject and curriculum areas, including statutory requirements"},
+        {"ref": "TS6.2", "desc": "Make use of formative and summative assessment to secure pupils' progress"},
+        {"ref": "TS6.3", "desc": "Give pupils regular feedback, both orally and through accurate marking"},
+    ]},
+    {"reference": "TS7", "name": "Manage behaviour effectively", "description": "Have clear rules and routines for behaviour in classrooms, and take responsibility for promoting good and courteous behaviour.", "keywords": ["behaviour management", "classroom rules", "discipline", "safe environment"], "sub_outcomes": [
+        {"ref": "TS7.1", "desc": "Have clear rules and routines for behaviour, and take responsibility for promoting good and courteous behaviour"},
+        {"ref": "TS7.2", "desc": "Have high expectations of behaviour, and establish a framework for discipline"},
+        {"ref": "TS7.3", "desc": "Manage classes effectively, maintaining good relationships with pupils and exercising appropriate authority"},
+    ]},
+    {"reference": "TS8", "name": "Fulfil wider professional responsibilities", "description": "Make a positive contribution to the wider life and ethos of the school, and take responsibility for improving teaching through professional development.", "keywords": ["professional responsibilities", "CPD", "colleagues", "parents", "school ethos"], "sub_outcomes": [
+        {"ref": "TS8.1", "desc": "Make a positive contribution to the wider life and ethos of the school"},
+        {"ref": "TS8.2", "desc": "Develop effective professional relationships with colleagues, deploying support staff effectively"},
+        {"ref": "TS8.3", "desc": "Take responsibility for improving teaching through appropriate professional development, and communicate effectively with parents"},
+    ]},
+    {"reference": "TS9", "name": "Personal and professional conduct (Part Two)", "description": "Treat pupils with dignity, build relationships rooted in mutual respect, and observe proper professional boundaries — both in and outside school.", "keywords": ["professional conduct", "boundaries", "dignity", "British values", "safeguarding wellbeing"], "sub_outcomes": [
+        {"ref": "TS9.1", "desc": "Treat pupils with dignity, build relationships rooted in mutual respect, and observe proper boundaries"},
+        {"ref": "TS9.2", "desc": "Have regard for the need to safeguard pupils' wellbeing"},
+        {"ref": "TS9.3", "desc": "Show tolerance of and respect for the rights of others, and not undermine fundamental British values"},
+    ]},
+]
+
+EYFS_SAFEGUARDING = [
+    {"reference": "EYFS Safeguarding", "name": "Safeguarding children", "description": "Policies and procedures to safeguard children, promptly identify children in need of extra support, respond to concerns appropriately, and manage allegations against staff — including online safety.", "keywords": ["safeguarding", "designated safeguarding lead", "child protection", "online safety", "allegations", "disclosure"]},
+    {"reference": "EYFS Suitability", "name": "Suitability of adults", "description": "Ensuring staff, volunteers and other adults having contact with children are suitable, including DBS checks, references and ongoing suitability checks.", "keywords": ["DBS", "vetting", "suitability", "references", "induction"]},
+    {"reference": "EYFS Health", "name": "Promoting good health", "description": "Managing children with allergies or medical needs, administering medicines safely, food and drink provision, and paediatric first aid requirements.", "keywords": ["health", "allergies", "medication", "food", "first aid", "medical needs"]},
+    {"reference": "EYFS Behaviour", "name": "Managing behaviour", "description": "A clear, consistent approach to managing children's behaviour, appropriate to their ages and stages of development, without any form of corporal punishment.", "keywords": ["behaviour management", "positive behaviour", "consistency", "age-appropriate"]},
+    {"reference": "EYFS Records", "name": "Suitable premises, environment, records and policies", "description": "Safe and suitable premises, required staff-to-child ratios, and up-to-date records, policies and procedures.", "keywords": ["premises", "ratios", "records", "policies", "documentation"]},
+]
+
+EYFS_LEARNING = [
+    {"reference": "EYFS Communication and Language", "name": "Communication and Language", "description": "Prime area: supporting a child's talking, listening, vocabulary, and understanding of language through conversation, story and rhyme.", "keywords": ["communication", "language", "vocabulary", "listening", "speech"], "sub_outcomes": [
+        {"ref": "CL.1", "desc": "Listening, attention and understanding"},
+        {"ref": "CL.2", "desc": "Speaking"},
+    ]},
+    {"reference": "EYFS Physical Development", "name": "Physical Development", "description": "Prime area: gross and fine motor skill development, coordination, and physical confidence through active and creative play.", "keywords": ["physical development", "gross motor", "fine motor", "coordination", "movement"], "sub_outcomes": [
+        {"ref": "PD.1", "desc": "Gross motor skills"},
+        {"ref": "PD.2", "desc": "Fine motor skills"},
+    ]},
+    {"reference": "EYFS PSED", "name": "Personal, Social and Emotional Development", "description": "Prime area: supporting a child's confidence, self-regulation, friendships and emotional wellbeing.", "keywords": ["PSED", "self-regulation", "emotional wellbeing", "friendships", "confidence"], "sub_outcomes": [
+        {"ref": "PSED.1", "desc": "Self-regulation"},
+        {"ref": "PSED.2", "desc": "Managing self"},
+        {"ref": "PSED.3", "desc": "Building relationships"},
+    ]},
+    {"reference": "EYFS Literacy", "name": "Literacy", "description": "Specific area: reading, phonics, mark-making and early writing skills.", "keywords": ["literacy", "phonics", "reading", "writing", "mark-making"], "sub_outcomes": [
+        {"ref": "LIT.1", "desc": "Comprehension"},
+        {"ref": "LIT.2", "desc": "Word reading"},
+        {"ref": "LIT.3", "desc": "Writing"},
+    ]},
+    {"reference": "EYFS Mathematics", "name": "Mathematics", "description": "Specific area: number, counting, shape, pattern and early mathematical reasoning.", "keywords": ["mathematics", "number", "counting", "shape", "pattern"], "sub_outcomes": [
+        {"ref": "MATHS.1", "desc": "Number"},
+        {"ref": "MATHS.2", "desc": "Numerical patterns"},
+    ]},
+    {"reference": "EYFS Understanding the World", "name": "Understanding the World", "description": "Specific area: exploring the child's environment, community, technology and the natural world.", "keywords": ["understanding the world", "community", "technology", "natural world", "exploration"], "sub_outcomes": [
+        {"ref": "UTW.1", "desc": "Past and present"},
+        {"ref": "UTW.2", "desc": "People, culture and communities"},
+        {"ref": "UTW.3", "desc": "The natural world"},
+    ]},
+    {"reference": "EYFS Expressive Arts and Design", "name": "Expressive Arts and Design", "description": "Specific area: creative play, art, music, imaginative play and self-expression.", "keywords": ["expressive arts", "creativity", "art", "music", "imaginative play"], "sub_outcomes": [
+        {"ref": "EAD.1", "desc": "Creating with materials"},
+        {"ref": "EAD.2", "desc": "Being imaginative and expressive"},
+    ]},
+]
+
+CHQS_STANDARDS = [
+    {"reference": "CHQS 1", "name": "Quality and Purpose of Care Standard", "description": "The overall purpose of the home and how care is organised around each child's individual needs, matching the home's Statement of Purpose.", "keywords": ["quality of care", "purpose of care", "statement of purpose", "individual needs"]},
+    {"reference": "CHQS 2", "name": "Children's Views, Wishes and Feelings Standard", "description": "Actively listening to children, involving them in decisions that affect them, and acting on what they express wanting.", "keywords": ["children's views", "wishes", "feelings", "participation", "voice"]},
+    {"reference": "CHQS 3", "name": "Education Standard", "description": "Supporting a child's schooling, learning progress, and engagement with their educational needs.", "keywords": ["education", "schooling", "learning", "attainment", "PEP"]},
+    {"reference": "CHQS 4", "name": "Enjoyment and Achievement Standard", "description": "Supporting a child's hobbies, interests, achievements and personal successes, however small.", "keywords": ["enjoyment", "achievement", "hobbies", "interests", "success"]},
+    {"reference": "CHQS 5", "name": "Health and Well-being Standard", "description": "A child's physical and emotional health, medical appointments, and general wellbeing.", "keywords": ["health", "wellbeing", "medical", "emotional health"]},
+    {"reference": "CHQS 6", "name": "Positive Relationships Standard", "description": "Building trust with a child, modelling healthy relationships, and supporting relationships with family and peers.", "keywords": ["relationships", "trust", "attachment", "family contact", "peers"]},
+    {"reference": "CHQS 7", "name": "Protection of Children Standard", "description": "Noticing a risk to a child, raising a safeguarding concern, following the home's safeguarding procedures, and managing risk-related incidents.", "keywords": ["safeguarding", "protection", "risk", "harm", "abuse"]},
+    {"reference": "CHQS 8", "name": "Leadership and Management Standard", "description": "Effective staff supervision, development and oversight of the home's day-to-day operation.", "keywords": ["leadership", "management", "supervision", "oversight", "staffing"]},
+    {"reference": "CHQS 9", "name": "Care Planning Standard", "description": "Reviewing and contributing to a child's care plan or placement plan as their circumstances or needs change.", "keywords": ["care planning", "placement plan", "review", "needs assessment"]},
+]
+
+L3_RESIDENTIAL_UNITS = [
+    {"reference": "L3RC 1", "name": "Understand the development of children and young people in residential childcare", "description": "Knowledge of typical child and young person development and how residential care can support or disrupt it.", "keywords": ["child development", "young people", "developmental stages"]},
+    {"reference": "L3RC 2", "name": "Understand how to safeguard and protect children and young people", "description": "Recognising abuse and vulnerability, and applying safeguarding procedures in a residential setting.", "keywords": ["safeguarding", "protection", "abuse recognition", "procedures"]},
+    {"reference": "L3RC 3", "name": "Understand how to support children who have experienced harm or abuse", "description": "Trauma-informed approaches to supporting children who have experienced harm or abuse.", "keywords": ["trauma", "harm", "abuse", "recovery", "support"]},
+    {"reference": "L3RC 4", "name": "Promote effective communication and information handling", "description": "Clear, appropriate communication with children, colleagues and other professionals, and accurate information handling.", "keywords": ["communication", "information handling", "confidentiality", "records"]},
+    {"reference": "L3RC 5", "name": "Support risk management in residential childcare", "description": "Identifying, assessing and managing risk in a residential childcare setting.", "keywords": ["risk management", "risk assessment", "safety planning"]},
+    {"reference": "L3RC 6", "name": "Assessment and planning with children and young people", "description": "Contributing to assessment and care planning processes with the child at the centre.", "keywords": ["assessment", "care planning", "child-centred"]},
+    {"reference": "L3RC 7", "name": "Support group living in residential childcare", "description": "Managing the dynamics of children living together as a group, including routines and shared living.", "keywords": ["group living", "routines", "peer dynamics"]},
+    {"reference": "L3RC 8", "name": "Understand how to support positive outcomes for children and young people", "description": "Working towards defined positive outcomes for each child, in line with their care plan.", "keywords": ["positive outcomes", "care plan", "progress"]},
+    {"reference": "L3RC 9", "name": "Support attachment and positive relationships", "description": "Building secure attachments and positive relationships with children in residential care.", "keywords": ["attachment", "relationships", "trust", "consistency"]},
+    {"reference": "L3RC 10", "name": "Support the well-being and resilience of children and young people", "description": "Actively promoting emotional wellbeing and building resilience in children.", "keywords": ["wellbeing", "resilience", "emotional support"]},
+    {"reference": "L3RC 11", "name": "Support children to achieve their learning potential", "description": "Supporting a child's engagement with education and helping them achieve their learning potential.", "keywords": ["learning", "education support", "achievement"]},
+    {"reference": "L3RC 12", "name": "Support children to manage their health", "description": "Supporting a child's physical health needs, including appointments and health routines.", "keywords": ["health management", "medical appointments", "health routines"]},
+    {"reference": "L3RC 13", "name": "Support the development of socially aware behaviour", "description": "Supporting children to develop socially appropriate behaviour and understand the impact of their actions on others.", "keywords": ["behaviour support", "social awareness", "behaviour that challenges"]},
+    {"reference": "L3RC 14", "name": "Engage in professional development in residential childcare settings", "description": "Ongoing professional development, reflective practice and use of supervision to improve practice.", "keywords": ["professional development", "CPD", "reflective practice", "supervision"]},
+    {"reference": "L3RC 15", "name": "Support the rights, diversity and equality of children and young people", "description": "Promoting each child's rights, and respecting their diversity, identity and equality of treatment.", "keywords": ["rights", "diversity", "equality", "identity"]},
+    {"reference": "L3RC 16", "name": "Participate in teams to benefit children and young people", "description": "Working effectively as part of a staff team to deliver consistent, high-quality care.", "keywords": ["teamwork", "collaboration", "consistency"]},
+]
+
+
+async def seed_ofsted_standards():
+    """Seed Ofsted standards: Schools (EIF/Teachers' Standards), Early Years (EYFS
+    Safeguarding/Learning), Children's Homes (Quality Standards/L3 Diploma). Idempotent."""
+    async with database.with_admin() as conn:
+        ofsted_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM standards_entries WHERE is_system=TRUE AND jurisdiction='ofsted'"
+        )
+        if ofsted_count and ofsted_count > 0:
+            logger.info(f"Ofsted standards already seeded ({ofsted_count} entries) — skipping")
+            return
+
+        now = datetime.now(timezone.utc).isoformat()
+        entries = []
+
+        for reg in EIF_AREAS:
+            entries.append({
+                "id": str(uuid.uuid4()), "type": "eif", "reference": reg["reference"], "name": reg["name"],
+                "description": reg["description"], "keywords": reg["keywords"], "sub_outcomes": [],
+                "key_questions": [], "quality_statement": False,
+                "source": "Ofsted — Education Inspection Framework (EIF), effective from November 2025",
+                "service_type": "school", "created_at": now,
+            })
+        for std in TEACHERS_STANDARDS:
+            entries.append({
+                "id": str(uuid.uuid4()), "type": "teachers_standards", "reference": std["reference"], "name": std["name"],
+                "description": std["description"], "keywords": std["keywords"], "sub_outcomes": std.get("sub_outcomes", []),
+                "key_questions": [], "quality_statement": False,
+                "source": "DfE — Teachers' Standards (December 2021)",
+                "service_type": "school", "created_at": now,
+            })
+        for reg in EYFS_SAFEGUARDING:
+            entries.append({
+                "id": str(uuid.uuid4()), "type": "eyfs_safeguarding", "reference": reg["reference"], "name": reg["name"],
+                "description": reg["description"], "keywords": reg["keywords"], "sub_outcomes": [],
+                "key_questions": [], "quality_statement": False,
+                "source": "DfE — Statutory Framework for the Early Years Foundation Stage (2024), Safeguarding and Welfare Requirements",
+                "service_type": "early_years", "created_at": now,
+            })
+        for std in EYFS_LEARNING:
+            entries.append({
+                "id": str(uuid.uuid4()), "type": "eyfs_learning", "reference": std["reference"], "name": std["name"],
+                "description": std["description"], "keywords": std["keywords"], "sub_outcomes": std.get("sub_outcomes", []),
+                "key_questions": [], "quality_statement": False,
+                "source": "DfE — Statutory Framework for the Early Years Foundation Stage (2024), Learning and Development Requirements",
+                "service_type": "early_years", "created_at": now,
+            })
+        for reg in CHQS_STANDARDS:
+            entries.append({
+                "id": str(uuid.uuid4()), "type": "chqs", "reference": reg["reference"], "name": reg["name"],
+                "description": reg["description"], "keywords": reg["keywords"], "sub_outcomes": [],
+                "key_questions": [], "quality_statement": False,
+                "source": "Ofsted — The Children's Homes Quality Standards (Children's Homes (England) Regulations 2015)",
+                "service_type": "childrens_home", "created_at": now,
+            })
+        for std in L3_RESIDENTIAL_UNITS:
+            entries.append({
+                "id": str(uuid.uuid4()), "type": "l3_residential", "reference": std["reference"], "name": std["name"],
+                "description": std["description"], "keywords": std["keywords"], "sub_outcomes": [],
+                "key_questions": [], "quality_statement": False,
+                "source": "Level 3 Diploma for Residential Childcare (England) — mandatory units",
+                "service_type": "childrens_home", "created_at": now,
+            })
+
+        await _insert_standards_entries(conn, entries, "ofsted")
+        logger.info(
+            f"Seeded {len(entries)} Ofsted standards entries "
+            f"({len(EIF_AREAS)} EIF, {len(TEACHERS_STANDARDS)} Teachers' Standards, "
+            f"{len(EYFS_SAFEGUARDING)} EYFS Safeguarding, {len(EYFS_LEARNING)} EYFS Learning, "
+            f"{len(CHQS_STANDARDS)} CHQS, {len(L3_RESIDENTIAL_UNITS)} L3 Residential Childcare)"
+        )
+
+
 _KNOWN_WEAK_PASSWORDS = {
     "SuperAdmin123!", "admin", "password", "admin123", "changeme",
     "password123", "letmein", "welcome1", "supervisor", "supervisor1",
@@ -3897,5 +4105,6 @@ async def seed_all():
     await seed_welsh_standards()
     await seed_scotland_standards()
     await seed_northern_ireland_standards()
+    await seed_ofsted_standards()
     await seed_super_admin()
     await seed_default_org()

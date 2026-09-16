@@ -251,6 +251,11 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             cqc_rows    = sc.get_system(rqia_type, "northern_ireland")
             care_cert_rows = (sc.get_system("niscc_code", "northern_ireland") +
                               sc.get_system("niscc_induction", "northern_ireland"))
+        elif org_jurisdiction == "ofsted":
+            ofsted_reg_type = {"school": "eif", "early_years": "eyfs_safeguarding", "childrens_home": "chqs"}.get(org_service_type, "eif")
+            ofsted_cert_type = {"school": "teachers_standards", "early_years": "eyfs_learning", "childrens_home": "l3_residential"}.get(org_service_type, "teachers_standards")
+            cqc_rows    = sc.get_system(ofsted_reg_type, "ofsted")
+            care_cert_rows = sc.get_system(ofsted_cert_type, "ofsted")
         else:  # england
             cqc_rows    = sc.get_system("cqc")
             care_cert_rows = sc.get_system("care_cert")
@@ -304,10 +309,12 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             diarize_coro = diarize_transcript(transcript_text, manager_name, supervisee_names, meeting_type)
 
         paused_periods = meeting.get("paused_periods") or []
-        # Build effective jurisdiction string (NI needs service_type suffix for AI prompt routing)
+        # Build effective jurisdiction string (NI/Ofsted need service_type suffix for AI prompt routing)
         effective_jurisdiction = org_jurisdiction
         if org_jurisdiction == "northern_ireland":
             effective_jurisdiction = f"northern_ireland_{org_service_type or 'domiciliary'}"
+        elif org_jurisdiction == "ofsted":
+            effective_jurisdiction = f"ofsted_{org_service_type or 'school'}"
 
         results = await asyncio.gather(
             analyze_meeting(

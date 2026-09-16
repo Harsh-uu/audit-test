@@ -28,8 +28,11 @@ export default function AdminLibrary() {
 
   // Jurisdiction-aware tab labels
   const jurisdiction = user?.org_jurisdiction || "england";
-  const regLabel      = { wales: "CIW", scotland: "Care Inspectorate", northern_ireland: "RQIA" }[jurisdiction] || "CQC";
-  const certLabel     = { wales: "AWIF / SCW", scotland: "SSSC", northern_ireland: "NISCC" }[jurisdiction] || "Care Certificate";
+  const serviceType = user?.org_service_type || "";
+  const OFSTED_REG_LABEL  = { early_years: "EYFS Safeguarding", childrens_home: "CHQS", school: "EIF" }[serviceType] || "EIF";
+  const OFSTED_CERT_LABEL = { early_years: "EYFS Learning", childrens_home: "L3 Diploma", school: "Teachers' Standards" }[serviceType] || "Teachers' Standards";
+  const regLabel      = { wales: "CIW", scotland: "Care Inspectorate", northern_ireland: "RQIA", ofsted: OFSTED_REG_LABEL }[jurisdiction] || "CQC";
+  const certLabel     = { wales: "AWIF / SCW", scotland: "SSSC", northern_ireland: "NISCC", ofsted: OFSTED_CERT_LABEL }[jurisdiction] || "Care Certificate";
   const [tab, setTab] = useState("cqc");
   const [standards, setStandards] = useState([]);
   const [users, setUsers] = useState([]);

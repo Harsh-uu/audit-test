@@ -354,6 +354,17 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
                 care_cert_rows = await conn.fetch(
                     "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type IN ('niscc_code','niscc_induction') AND is_active=TRUE AND jurisdiction='northern_ireland' ORDER BY type, reference",
                 )
+            elif org_jurisdiction == "ofsted":
+                ofsted_reg_type = {"school": "eif", "early_years": "eyfs_safeguarding", "childrens_home": "chqs"}.get(org_service_type, "eif")
+                ofsted_cert_type = {"school": "teachers_standards", "early_years": "eyfs_learning", "childrens_home": "l3_residential"}.get(org_service_type, "teachers_standards")
+                cqc_rows = await conn.fetch(
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type=$1 AND is_active=TRUE AND jurisdiction='ofsted' ORDER BY reference",
+                    ofsted_reg_type,
+                )
+                care_cert_rows = await conn.fetch(
+                    "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type=$1 AND is_active=TRUE AND jurisdiction='ofsted' ORDER BY reference",
+                    ofsted_cert_type,
+                )
             else:
                 cqc_rows = await conn.fetch(
                     "SELECT reference, name, description, key_questions, sub_outcomes FROM standards_entries WHERE type='cqc' AND is_active=TRUE ORDER BY reference ASC",
@@ -371,10 +382,12 @@ async def process_upload_background(upload_id: str, file_data: bytes, filename: 
         care_cert_stds = [_parse_std(dict(r)) for r in care_cert_rows]
         custom_stds = [dict(r) for r in custom_rows]
 
-        # Build effective jurisdiction for NI prompt routing
+        # Build effective jurisdiction for NI/Ofsted prompt routing
         effective_jurisdiction = org_jurisdiction
         if org_jurisdiction == "northern_ireland":
             effective_jurisdiction = f"northern_ireland_{org_service_type or 'domiciliary'}"
+        elif org_jurisdiction == "ofsted":
+            effective_jurisdiction = f"ofsted_{org_service_type or 'school'}"
 
         from utils.ai import analyze_doc_for_evidence
         result = await analyze_doc_for_evidence(text, cqc_stds, care_cert_stds, custom_stds, jurisdiction=effective_jurisdiction)

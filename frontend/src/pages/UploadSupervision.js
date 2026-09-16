@@ -116,13 +116,18 @@ export default function UploadSupervision() {
 
   // Jurisdiction-aware label for the page description
   const jurisdiction = user?.org_jurisdiction || "england";
+  const serviceType = user?.org_service_type || "";
+  const OFSTED_EVIDENCE_LABEL = { early_years: "EYFS", childrens_home: "Children's Homes Quality Standards", school: "Ofsted EIF and Teachers' Standards" }[serviceType] || "Ofsted";
+  const OFSTED_REG_BADGE  = { early_years: "EYFS", childrens_home: "CHQS", school: "EIF" }[serviceType] || "EIF";
+  const OFSTED_CERT_BADGE = { early_years: "EYFS L&D", childrens_home: "L3 Diploma", school: "Teachers' Std" }[serviceType] || "Teachers' Std";
   const evidenceLabel = {
     wales:            "CIW and AWIF / SCW",
     scotland:         "Care Inspectorate and SSSC",
     northern_ireland: "RQIA and NISCC",
+    ofsted:           OFSTED_EVIDENCE_LABEL,
   }[jurisdiction] || "CQC and Care Certificate";
-  const regBadge  = { wales: "CIW", scotland: "CI", northern_ireland: "RQIA" }[jurisdiction] || "CQC";
-  const certBadge = { wales: "AWIF/SCW", scotland: "SSSC", northern_ireland: "NISCC" }[jurisdiction] || "Care Cert";
+  const regBadge  = { wales: "CIW", scotland: "CI", northern_ireland: "RQIA", ofsted: OFSTED_REG_BADGE }[jurisdiction] || "CQC";
+  const certBadge = { wales: "AWIF/SCW", scotland: "SSSC", northern_ireland: "NISCC", ofsted: OFSTED_CERT_BADGE }[jurisdiction] || "Care Cert";
 
   const [staffList, setStaffList] = useState([]);
   const [uploads, setUploads] = useState([]);

@@ -467,12 +467,25 @@ async def _run_generate_prep(meeting_id: str, focus_topic: str, included_source_
                     "snippet": (doc.get("extracted_text") or "")[:600],
                 })
 
+        # Sector label — only differs for Ofsted orgs; all other jurisdictions keep the
+        # existing default "UK adult social care" wording (zero behaviour change for them).
+        sector_label = "UK adult social care"
+        async with database.with_admin() as conn:
+            org_row = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
+        if org_row and org_row["jurisdiction"] == "ofsted":
+            sector_label = {
+                "school": "UK education (school staff)",
+                "early_years": "UK early years childcare",
+                "childrens_home": "UK children's residential care",
+            }.get(org_row["service_type"], "UK children's services")
+
         result = await generate_prep_questions(
             supervisee_name=supervisee_name,
             focus_topic=focus_topic or "",
             previous_meeting_summaries=prev_summaries,
             uploaded_docs=uploaded_docs,
             org_values_snippets=org_values,
+            sector_label=sector_label,
         )
 
         now = datetime.now(timezone.utc).isoformat()

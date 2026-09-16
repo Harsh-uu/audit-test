@@ -12,7 +12,7 @@ import {
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
-function getInspectionLabels(jurisdiction) {
+function getInspectionLabels(jurisdiction, serviceType) {
   switch (jurisdiction) {
     case "wales":
       return { pageTitle: "CIW Inspection Prep", statSub: "CIW standards", exportFile: "ciw_evidence_excerpts.pdf" };
@@ -20,6 +20,10 @@ function getInspectionLabels(jurisdiction) {
       return { pageTitle: "Care Inspectorate Prep", statSub: "CI standards", exportFile: "ci_evidence_excerpts.pdf" };
     case "northern_ireland":
       return { pageTitle: "RQIA Inspection Prep", statSub: "RQIA standards", exportFile: "rqia_evidence_excerpts.pdf" };
+    case "ofsted":
+      if (serviceType === "early_years") return { pageTitle: "EYFS Inspection Prep", statSub: "EYFS safeguarding standards", exportFile: "eyfs_evidence_excerpts.pdf" };
+      if (serviceType === "childrens_home") return { pageTitle: "Children's Homes Inspection Prep", statSub: "Quality Standards", exportFile: "chqs_evidence_excerpts.pdf" };
+      return { pageTitle: "Ofsted Inspection Prep", statSub: "EIF evaluation areas", exportFile: "eif_evidence_excerpts.pdf" };
     default:
       return { pageTitle: "CQC Inspection Prep", statSub: "CQC regs", exportFile: "cqc_evidence_excerpts.pdf" };
   }
@@ -194,7 +198,7 @@ export default function InspectionPrep() {
 
   const handleExportExcerpts = async () => {
     setExporting(true);
-    const { exportFile } = getInspectionLabels(user?.org_jurisdiction || "england");
+    const { exportFile } = getInspectionLabels(user?.org_jurisdiction || "england", user?.org_service_type);
     try {
       const resp = await fetch(`${API}/admin/export-cqc-excerpts`, {
         credentials: 'include',
@@ -310,7 +314,8 @@ export default function InspectionPrep() {
   const totalStaff = cqcRows.length;
 
   const jurisdiction = insights?.org_jurisdiction || user?.org_jurisdiction || "england";
-  const { pageTitle, statSub, exportFile } = getInspectionLabels(jurisdiction);
+  const serviceType = insights?.org_service_type || user?.org_service_type || "";
+  const { pageTitle, statSub, exportFile } = getInspectionLabels(jurisdiction, serviceType);
 
   return (
     <Layout>

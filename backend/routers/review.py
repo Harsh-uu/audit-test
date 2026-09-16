@@ -1283,11 +1283,13 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         cached_org = sc.get_org_info(org_id)
         if cached_org:
             org_jurisdiction = cached_org["jurisdiction"]
+            org_service_type = cached_org["service_type"]
         else:
             async with database.with_admin() as conn:
                 org_row = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
             org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
-            sc.set_org_info(org_id, org_jurisdiction, (org_row["service_type"] if org_row else "") or "")
+            org_service_type = (org_row["service_type"] if org_row else None) or ""
+            sc.set_org_info(org_id, org_jurisdiction, org_service_type)
 
         # System standards — from in-process cache, zero DB hits
         if org_jurisdiction == "wales":
@@ -1296,6 +1298,16 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         elif org_jurisdiction == "scotland":
             cqc_rows       = sc.get_system("ci", "scotland")
             care_cert_rows = sc.get_system("sssc", "scotland")
+        elif org_jurisdiction == "northern_ireland":
+            rqia_type      = "rqia_dom" if org_service_type == "domiciliary" else "rqia_res"
+            cqc_rows       = sc.get_system(rqia_type, "northern_ireland")
+            care_cert_rows = (sc.get_system("niscc_code", "northern_ireland") +
+                              sc.get_system("niscc_induction", "northern_ireland"))
+        elif org_jurisdiction == "ofsted":
+            ofsted_reg_type  = {"school": "eif", "early_years": "eyfs_safeguarding", "childrens_home": "chqs"}.get(org_service_type, "eif")
+            ofsted_cert_type = {"school": "teachers_standards", "early_years": "eyfs_learning", "childrens_home": "l3_residential"}.get(org_service_type, "teachers_standards")
+            cqc_rows       = sc.get_system(ofsted_reg_type, "ofsted")
+            care_cert_rows = sc.get_system(ofsted_cert_type, "ofsted")
         else:
             cqc_rows       = sc.get_system("cqc")
             care_cert_rows = sc.get_system("care_cert")
@@ -1328,9 +1340,18 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         rescan_manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or ""
         rescan_supervisee_names = [a.get("name") for a in rescan_attendees if a.get("name")]
         rescan_meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
+        # Build effective jurisdiction for NI/Ofsted prompt routing (BUGFIX: previously this
+        # rescan path passed the plain jurisdiction, so NI rescans always fell through to the
+        # CQC/England prompt branch instead of correctly distinguishing residential/domiciliary —
+        # matches the same effective_jurisdiction pattern already used by the main pipeline).
+        effective_jurisdiction = org_jurisdiction
+        if org_jurisdiction == "northern_ireland":
+            effective_jurisdiction = f"northern_ireland_{org_service_type or 'domiciliary'}"
+        elif org_jurisdiction == "ofsted":
+            effective_jurisdiction = f"ofsted_{org_service_type or 'school'}"
         analysis_result = await _analyze_meeting(
             transcript_text, cqc_standards, care_cert_standards, paused_periods,
-            custom_standards, supervision_template, custom_prompt, jurisdiction=org_jurisdiction,
+            custom_standards, supervision_template, custom_prompt, jurisdiction=effective_jurisdiction,
             manager_name=rescan_manager_name, attendee_names=rescan_supervisee_names, meeting_type=rescan_meeting_type,
         )
 
@@ -2038,6 +2059,16 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         else:
             reg_section_label = "RQIA Residential Standards Evidence"
         cert_section_label = "NISCC Code & Induction Evidence"
+    elif jurisdiction == "ofsted":
+        if service_type == "early_years":
+            reg_section_label = "EYFS Safeguarding & Welfare Evidence"
+            cert_section_label = "EYFS Learning & Development Evidence"
+        elif service_type == "childrens_home":
+            reg_section_label = "Children's Homes Quality Standards Evidence"
+            cert_section_label = "L3 Residential Childcare Diploma Evidence"
+        else:
+            reg_section_label = "Ofsted EIF Evidence"
+            cert_section_label = "Teachers' Standards Evidence"
     else:  # england (default)
         reg_section_label = "CQC Regulatory Evidence"
         cert_section_label = "Care Certificate Evidence"

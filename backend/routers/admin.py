@@ -276,6 +276,24 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
                        ORDER BY type, reference""",
                     org_service_type, org_id,
                 )
+        elif jurisdiction == "ofsted":
+            # Ofsted: every system entry has a service_type (early_years/childrens_home/school) — exact match
+            if type:
+                rows = await conn.fetch(
+                    """SELECT id, type, reference, name, description, sub_outcomes FROM standards_entries
+                       WHERE type=$1 AND is_active=TRUE
+                       AND ((is_system=TRUE AND jurisdiction='ofsted' AND service_type=$2) OR org_id=$3)
+                       ORDER BY type, reference""",
+                    type, org_service_type, org_id,
+                )
+            else:
+                rows = await conn.fetch(
+                    """SELECT id, type, reference, name, description, sub_outcomes FROM standards_entries
+                       WHERE is_active=TRUE
+                       AND ((is_system=TRUE AND jurisdiction='ofsted' AND service_type=$1) OR org_id=$2)
+                       ORDER BY type, reference""",
+                    org_service_type, org_id,
+                )
         elif type:
             rows = await conn.fetch(
                 """SELECT id, type, reference, name, description, sub_outcomes FROM standards_entries
@@ -603,7 +621,7 @@ async def _ti_resolve_staff(conn, org_id: str, current_user: dict, team_id: Opti
 
 async def _ti_load_standards(conn, org_id: str, org_jurisdiction: str, org_service_type: Optional[str]):
     """Load jurisdiction-aware standards and split into CQC-type vs Care-Cert-type buckets."""
-    REG_TYPES = {"cqc", "ciw", "ci", "rqia_dom", "rqia_res"}
+    REG_TYPES = {"cqc", "ciw", "ci", "rqia_dom", "rqia_res", "eif", "eyfs_safeguarding", "chqs"}
     if org_jurisdiction == "wales":
         std_rows = await conn.fetch(
             "SELECT type, reference, name, sub_outcomes FROM standards_entries WHERE is_active=TRUE AND is_system=TRUE AND jurisdiction='wales' ORDER BY type, reference",
@@ -617,6 +635,13 @@ async def _ti_load_standards(conn, org_id: str, org_jurisdiction: str, org_servi
             """SELECT type, reference, name, sub_outcomes FROM standards_entries
                WHERE is_active=TRUE AND jurisdiction='northern_ireland'
                AND (service_type IS NULL OR service_type=$1)
+               ORDER BY type, reference""",
+            org_service_type,
+        )
+    elif org_jurisdiction == "ofsted":
+        std_rows = await conn.fetch(
+            """SELECT type, reference, name, sub_outcomes FROM standards_entries
+               WHERE is_active=TRUE AND is_system=TRUE AND jurisdiction='ofsted' AND service_type=$1
                ORDER BY type, reference""",
             org_service_type,
         )

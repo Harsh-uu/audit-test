@@ -26,8 +26,10 @@ def _require_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Super admin only")
 
 
-VALID_JURISDICTIONS = ("england", "wales", "scotland", "northern_ireland")
-VALID_SERVICE_TYPES = ("residential", "domiciliary")
+VALID_JURISDICTIONS = ("england", "wales", "scotland", "northern_ireland", "ofsted")
+NI_SERVICE_TYPES = ("residential", "domiciliary")
+OFSTED_SERVICE_TYPES = ("early_years", "childrens_home", "school")
+VALID_SERVICE_TYPES = NI_SERVICE_TYPES + OFSTED_SERVICE_TYPES
 
 
 class CreateOrgRequest(BaseModel):
@@ -98,9 +100,14 @@ async def create_org(data: CreateOrgRequest, current_user=Depends(get_current_us
             raise HTTPException(status_code=400, detail="Organisation with this name already exists")
         jurisdiction = data.jurisdiction if data.jurisdiction in VALID_JURISDICTIONS else "england"
         service_type = data.service_type if data.service_type in VALID_SERVICE_TYPES else None
-        # NI orgs must declare service_type
-        if jurisdiction == "northern_ireland" and not service_type:
+        # NI orgs must declare service_type (residential/domiciliary) — checked against the
+        # correct family, not just VALID_SERVICE_TYPES, since that tuple now also contains
+        # Ofsted's service_type values and the two families must never cross-contaminate.
+        if jurisdiction == "northern_ireland" and service_type not in NI_SERVICE_TYPES:
             raise HTTPException(status_code=400, detail="service_type ('residential' or 'domiciliary') is required for Northern Ireland organisations")
+        # Ofsted orgs must declare service_type (early_years/childrens_home/school)
+        if jurisdiction == "ofsted" and service_type not in OFSTED_SERVICE_TYPES:
+            raise HTTPException(status_code=400, detail="service_type ('early_years', 'childrens_home' or 'school') is required for Ofsted organisations")
         await conn.execute(
             "INSERT INTO organisations (id, name, slug, status, branding, jurisdiction, service_type, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
             org_id, data.name.strip(), slug, "active", "{}", jurisdiction, service_type, now,
@@ -121,19 +128,25 @@ async def update_org(org_id: str, data: UpdateOrgRequest, current_user=Depends(g
         updates["jurisdiction"] = data.jurisdiction
     if data.service_type in VALID_SERVICE_TYPES:
         updates["service_type"] = data.service_type
-    elif data.service_type == "" or (data.jurisdiction and data.jurisdiction != "northern_ireland"):
-        # Clear service_type when switching away from NI
+    elif data.service_type == "" or (data.jurisdiction and data.jurisdiction not in ("northern_ireland", "ofsted")):
+        # Clear service_type when switching away from NI/Ofsted
         updates["service_type"] = None
 
-    # If switching TO northern_ireland, must provide service_type
+    # If switching TO northern_ireland or ofsted, must provide a valid service_type for
+    # that jurisdiction's own family (not just any non-empty value — NI and Ofsted's
+    # service_type values must never cross-contaminate each other).
     effective_jurisdiction = updates.get("jurisdiction") or data.jurisdiction
-    if effective_jurisdiction == "northern_ireland":
-        resolved_service_type = updates.get("service_type")
-        if resolved_service_type is None and data.service_type not in VALID_SERVICE_TYPES:
-            raise HTTPException(
-                status_code=400,
-                detail="service_type ('residential' or 'domiciliary') is required for Northern Ireland organisations",
-            )
+    resolved_service_type = updates["service_type"] if "service_type" in updates else data.service_type
+    if effective_jurisdiction == "northern_ireland" and resolved_service_type not in NI_SERVICE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="service_type ('residential' or 'domiciliary') is required for Northern Ireland organisations",
+        )
+    if effective_jurisdiction == "ofsted" and resolved_service_type not in OFSTED_SERVICE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="service_type ('early_years', 'childrens_home' or 'school') is required for Ofsted organisations",
+        )
 
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")

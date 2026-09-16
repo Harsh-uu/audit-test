@@ -121,7 +121,9 @@ export default function SuperAdminDashboard() {
     try {
       const payload = { name: orgForm.name.trim(), jurisdiction: orgForm.jurisdiction };
       if (orgForm.jurisdiction === "northern_ireland") {
-        payload.service_type = orgForm.service_type;
+        payload.service_type = ["residential", "domiciliary"].includes(orgForm.service_type) ? orgForm.service_type : "domiciliary";
+      } else if (orgForm.jurisdiction === "ofsted") {
+        payload.service_type = ["early_years", "childrens_home", "school"].includes(orgForm.service_type) ? orgForm.service_type : "early_years";
       }
       await axios.post(`${API}/super-admin/orgs`, payload, getAuthConfig());
       setOrgForm({ name: "", jurisdiction: "england", service_type: "domiciliary" });
@@ -138,7 +140,7 @@ export default function SuperAdminDashboard() {
     setEditOrgForm({
       name: org.name,
       jurisdiction: org.jurisdiction || "england",
-      service_type: org.service_type || "domiciliary",
+      service_type: org.service_type || (org.jurisdiction === "ofsted" ? "early_years" : "domiciliary"),
     });
     setShowEditOrg(org);
     setError("");
@@ -152,9 +154,11 @@ export default function SuperAdminDashboard() {
     try {
       const payload = { name: editOrgForm.name.trim(), jurisdiction: editOrgForm.jurisdiction };
       if (editOrgForm.jurisdiction === "northern_ireland") {
-        payload.service_type = editOrgForm.service_type;
+        payload.service_type = ["residential", "domiciliary"].includes(editOrgForm.service_type) ? editOrgForm.service_type : "domiciliary";
+      } else if (editOrgForm.jurisdiction === "ofsted") {
+        payload.service_type = ["early_years", "childrens_home", "school"].includes(editOrgForm.service_type) ? editOrgForm.service_type : "early_years";
       } else {
-        payload.service_type = "";  // clear service_type when not NI
+        payload.service_type = "";  // clear service_type when not NI/Ofsted
       }
       await axios.patch(`${API}/super-admin/orgs/${showEditOrg.id}`, payload, getAuthConfig());
       toast.success("Organisation updated");
@@ -322,6 +326,8 @@ export default function SuperAdminDashboard() {
                           ? "bg-green-100 text-green-700"
                           : org.jurisdiction === "scotland"
                           ? "bg-purple-100 text-purple-700"
+                          : org.jurisdiction === "ofsted"
+                          ? "bg-pink-100 text-pink-700"
                           : "bg-orange-100 text-orange-700"
                       }`}
                     >
@@ -329,6 +335,8 @@ export default function SuperAdminDashboard() {
                         : org.jurisdiction === "scotland" ? "Scotland"
                         : org.jurisdiction === "northern_ireland"
                           ? `N. Ireland${org.service_type ? ` · ${org.service_type === "domiciliary" ? "Dom" : "Res"}` : ""}`
+                          : org.jurisdiction === "ofsted"
+                          ? `Ofsted${org.service_type ? ` · ${{ early_years: "Early Years", childrens_home: "Children's Home", school: "School" }[org.service_type] || org.service_type}` : ""}`
                           : org.jurisdiction}
                     </span>
                   )}
@@ -585,6 +593,7 @@ export default function SuperAdminDashboard() {
                     <option value="wales">Wales (CIW / AWIF / SCW)</option>
                     <option value="scotland">Scotland (Care Inspectorate)</option>
                     <option value="northern_ireland">Northern Ireland (RQIA / NISCC)</option>
+                    <option value="ofsted">Ofsted (Schools / Early Years / Children's Homes)</option>
                   </select>
                   <p className="mt-1 text-xs text-gray-500">
                     Sets which regulatory framework is used for evidence mapping and compliance reporting.
@@ -606,6 +615,26 @@ export default function SuperAdminDashboard() {
                     </select>
                     <p className="mt-1 text-xs text-gray-500">
                       Determines whether RQIA domiciliary or residential regulations are applied. NISCC Code and Induction are shown for both.
+                    </p>
+                  </div>
+                )}
+                {orgForm.jurisdiction === "ofsted" && (
+                  <div>
+                    <label htmlFor="create-org-service-type" className="block text-sm font-medium text-gray-700 mb-1">Setting Type</label>
+                    <select
+                      id="create-org-service-type"
+                      name="service_type"
+                      data-testid="org-service-type-select"
+                      value={["early_years", "childrens_home", "school"].includes(orgForm.service_type) ? orgForm.service_type : "early_years"}
+                      onChange={e => setOrgForm(f => ({ ...f, service_type: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
+                    >
+                      <option value="early_years">Early Years (EYFS)</option>
+                      <option value="childrens_home">Children's Home (Quality Standards)</option>
+                      <option value="school">School (EIF)</option>
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Determines which Ofsted framework is used for evidence mapping and induction tracking.
                     </p>
                   </div>
                 )}
@@ -675,6 +704,7 @@ export default function SuperAdminDashboard() {
                     <option value="wales">Wales (CIW / AWIF / SCW)</option>
                     <option value="scotland">Scotland (Care Inspectorate)</option>
                     <option value="northern_ireland">Northern Ireland (RQIA / NISCC)</option>
+                    <option value="ofsted">Ofsted (Schools / Early Years / Children's Homes)</option>
                   </select>
                   <p className="mt-1 text-xs text-gray-500">
                     Changes which regulatory framework is used for all new evidence mappings in this org.
@@ -693,6 +723,23 @@ export default function SuperAdminDashboard() {
                     >
                       <option value="domiciliary">Domiciliary Care (RQIA Dom Standards 2021)</option>
                       <option value="residential">Residential Care (RQIA Regulations 2005)</option>
+                    </select>
+                  </div>
+                )}
+                {editOrgForm.jurisdiction === "ofsted" && (
+                  <div>
+                    <label htmlFor="edit-org-service-type" className="block text-sm font-medium text-gray-700 mb-1">Setting Type</label>
+                    <select
+                      id="edit-org-service-type"
+                      name="service_type"
+                      data-testid="edit-org-service-type-select"
+                      value={["early_years", "childrens_home", "school"].includes(editOrgForm.service_type) ? editOrgForm.service_type : "early_years"}
+                      onChange={e => setEditOrgForm(f => ({ ...f, service_type: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
+                    >
+                      <option value="early_years">Early Years (EYFS)</option>
+                      <option value="childrens_home">Children's Home (Quality Standards)</option>
+                      <option value="school">School (EIF)</option>
                     </select>
                   </div>
                 )}

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 
 // ── Jurisdiction-aware label helper ──────────────────────────────────────────
-function getJurisdictionLabels(jurisdiction) {
+function getJurisdictionLabels(jurisdiction, serviceType) {
   switch (jurisdiction) {
     case "wales":
       return { regHeader: "CIW Regulations", certHeader: "AWIF / SCW Standards", regBadge: "CIW" };
@@ -14,6 +14,10 @@ function getJurisdictionLabels(jurisdiction) {
       return { regHeader: "Care Inspectorate Standards", certHeader: "SSSC Code Standards", regBadge: "CI" };
     case "northern_ireland":
       return { regHeader: "RQIA Standards", certHeader: "NISCC Standards", regBadge: "RQIA" };
+    case "ofsted":
+      if (serviceType === "early_years") return { regHeader: "EYFS Safeguarding & Welfare", certHeader: "EYFS Learning & Development", regBadge: "EYFS" };
+      if (serviceType === "childrens_home") return { regHeader: "Children's Homes Quality Standards", certHeader: "L3 Residential Diploma", regBadge: "CHQS" };
+      return { regHeader: "Ofsted EIF", certHeader: "Teachers' Standards", regBadge: "EIF" };
     default:
       return { regHeader: "CQC Regulations", certHeader: "Care Certificate", regBadge: "CQC" };
   }
@@ -349,7 +353,7 @@ function EvidenceSection({ mappings, type, isReviewMode, canEditWording, onUpdat
 
 export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAcceptingTier = null }) {
   const { user } = useAuth();
-  const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction);
+  const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction, user?.org_service_type);
   const allMappings = [
     ...(analysis.cqc_mappings || []),
     ...(analysis.care_cert_mappings || []),

@@ -1139,6 +1139,15 @@ async def analyze_doc_for_evidence(
     elif jurisdiction == "northern_ireland_residential":
         reg_label = "RQIA RESIDENTIAL CARE HOME REGULATIONS (Northern Ireland — 2005)"
         cert_label = "NISCC CODE OF PRACTICE & INDUCTION PROGRAMME (Northern Ireland Social Care Council)"
+    elif jurisdiction == "ofsted_school":
+        reg_label = "OFSTED EDUCATION INSPECTION FRAMEWORK (EIF, effective from November 2025)"
+        cert_label = "TEACHERS' STANDARDS (DfE, December 2021)"
+    elif jurisdiction == "ofsted_early_years":
+        reg_label = "EYFS SAFEGUARDING & WELFARE REQUIREMENTS (Statutory Framework for the EYFS, 2024)"
+        cert_label = "EYFS LEARNING & DEVELOPMENT — SEVEN AREAS OF LEARNING"
+    elif jurisdiction == "ofsted_childrens_home":
+        reg_label = "CHILDREN'S HOMES QUALITY STANDARDS (Children's Homes (England) Regulations 2015)"
+        cert_label = "LEVEL 3 DIPLOMA FOR RESIDENTIAL CHILDCARE — MANDATORY UNITS"
     else:
         reg_label = "CQC REGULATIONS"
         cert_label = "CARE CERTIFICATE STANDARDS"
@@ -1226,6 +1235,15 @@ async def analyze_meeting(
     elif jurisdiction == "northern_ireland_residential":
         reg_label = "RQIA RESIDENTIAL CARE HOME REGULATIONS (Northern Ireland — 2005)"
         cert_label = "NISCC CODE OF PRACTICE & INDUCTION PROGRAMME (Northern Ireland Social Care Council)"
+    elif jurisdiction == "ofsted_school":
+        reg_label = "OFSTED EDUCATION INSPECTION FRAMEWORK (EIF, effective from November 2025)"
+        cert_label = "TEACHERS' STANDARDS (DfE, December 2021)"
+    elif jurisdiction == "ofsted_early_years":
+        reg_label = "EYFS SAFEGUARDING & WELFARE REQUIREMENTS (Statutory Framework for the EYFS, 2024)"
+        cert_label = "EYFS LEARNING & DEVELOPMENT — SEVEN AREAS OF LEARNING"
+    elif jurisdiction == "ofsted_childrens_home":
+        reg_label = "CHILDREN'S HOMES QUALITY STANDARDS (Children's Homes (England) Regulations 2015)"
+        cert_label = "LEVEL 3 DIPLOMA FOR RESIDENTIAL CHILDCARE — MANDATORY UNITS"
     else:
         reg_label = "CQC REGULATIONS"
         cert_label = "CARE CERTIFICATE STANDARDS"
@@ -1611,6 +1629,147 @@ Map when a worker describes taking responsibility for the quality of their own w
 SSSC 6 — Uphold public trust
 Map when professional conduct — inside or outside work — is discussed, including anything that could affect SSSC registration, social media behaviour, relationship boundaries with service users, or anything that affects the public's trust in social care."""
 
+    elif jurisdiction == "ofsted_school":
+        domain_guide = """
+EVIDENCE DETECTION GUIDE — read this before mapping any standard:
+Your task is not to match phrases — it is to understand what each person is DOING and THINKING, then identify which Ofsted evaluation area or Teachers' Standard governs that behaviour. School staff rarely name a framework area. Reason from the described behaviour to the standard that captures its intent.
+
+── EIF EVALUATION AREAS ─────────────────────────────────────────────────────
+
+EIF Safeguarding
+This area is about whether the school's culture, policies and day-to-day practice keep pupils safe from harm — including online. Map it whenever a worker describes noticing a concern about a pupil, raising it with the designated safeguarding lead (DSL), following a safeguarding procedure, completing safeguarding training, or being aware of their duty to protect. Does not require the word "safeguarding": "something felt off about how she was acting so I logged it" is evidence.
+
+EIF Inclusion
+This area is about whether every pupil — including those with SEND, EAL or disadvantage — can access a high-quality education and is genuinely included. Map it whenever a worker describes adapting their approach for a specific pupil's additional needs, working with a SENCO, making reasonable adjustments, or ensuring a pupil isn't excluded from an activity because of their needs.
+
+EIF Curriculum and Teaching
+This area is about the ambition and delivery of what is taught. Map it whenever a worker describes planning a lesson or sequence of learning, explaining a concept in a new way, checking pupils understood before moving on, or reflecting on how well a topic was taught.
+
+EIF Achievement
+This area is about the outcomes pupils actually achieve. Map it whenever a worker discusses a pupil's progress, attainment, a change in a pupil's performance, or how ready a pupil is for their next stage.
+
+EIF Attendance and Behaviour
+Map it whenever attendance patterns, punctuality, behaviour incidents, bullying, disruption to learning, or a strategy for improving a pupil's attendance or conduct are discussed.
+
+EIF Personal Development and Wellbeing
+Map it whenever a worker describes supporting a pupil's confidence, resilience, character, extracurricular participation, or mental health and wellbeing — including noticing a change in a pupil's emotional state and responding to it.
+
+EIF Leadership and Governance
+The supervision meeting itself is direct evidence of this area — a school investing in structured line management and staff development is leadership in action. Map it further whenever workload, staff wellbeing, resource management, or governance processes are discussed. Also map it when the worker expresses their own welfare concerns — workload, stress, feeling overwhelmed — because leaders protecting staff wellbeing is now an explicit part of this area.
+
+── TEACHERS' STANDARDS ──────────────────────────────────────────────────────
+
+TS1 — High expectations
+Map when a worker describes setting ambitious goals for pupils, maintaining a positive and respectful classroom culture, or modelling the attitudes and behaviour expected of pupils.
+
+TS2 — Promoting progress and outcomes
+Map when a worker describes taking ownership of a pupil's progress, adapting lesson plans to pupils' prior knowledge, or helping a pupil reflect on their own progress.
+
+TS3 — Subject and curriculum knowledge
+Map when a worker discusses their own subject knowledge, keeping up to date with developments in their subject, or supporting literacy and correct use of English across the curriculum.
+
+TS4 — Planning well-structured lessons
+Map when a worker describes structuring a lesson, setting homework, or reflecting on what worked and didn't work in a lesson.
+
+TS5 — Adapting teaching to pupils' needs
+Map when a worker describes differentiating their approach for pupils with different needs, abilities, SEN, EAL, or stages of development.
+
+TS6 — Use of assessment
+Map when a worker discusses marking, giving feedback, using assessment data to set targets, or checking understanding through questioning.
+
+TS7 — Managing behaviour
+Map when a worker describes classroom rules and routines, de-escalating a behaviour incident, or maintaining an authoritative but positive learning environment.
+
+TS8 — Wider professional responsibilities
+Map when a worker describes contributing to the wider life of the school, working with colleagues or support staff, communicating with parents, or engaging in their own professional development.
+
+TS9 (Part Two) — Personal and professional conduct
+Map when a worker reflects on professional boundaries, treating pupils with dignity and respect, safeguarding pupils' wellbeing through their own conduct, or upholding professional standards both in and outside school."""
+
+    elif jurisdiction == "ofsted_early_years":
+        domain_guide = """
+EVIDENCE DETECTION GUIDE — read this before mapping any standard:
+Your task is not to match phrases — it is to understand what each person is DOING and THINKING, then identify which EYFS requirement or area of learning governs that behaviour. Early years practitioners rarely name a framework section. Reason from the described behaviour to the standard that captures its intent.
+
+── SAFEGUARDING AND WELFARE REQUIREMENTS ────────────────────────────────────
+
+EYFS Safeguarding
+Map it whenever a worker describes noticing a concern about a child, raising it with the designated safeguarding lead, following the setting's safeguarding policy, or being aware of their duty to protect a child from harm — including online safety and use of mobile phones/cameras around children.
+
+EYFS Suitability
+Map it whenever DBS checks, references, staff vetting, or the suitability of an adult having contact with children is discussed — including a new starter's induction and vetting.
+
+EYFS Health
+Map it whenever managing a child's allergy or medical need, administering medicine, food and drink provision, or paediatric first aid is discussed.
+
+EYFS Behaviour
+Map it whenever a worker describes managing a child's behaviour appropriately for their age and stage, or reflects on their approach to behaviour without physical punishment.
+
+EYFS Records
+Map it whenever record-keeping, required policies, staff-to-child ratios, or documentation about a child's attendance or development is discussed.
+
+── LEARNING AND DEVELOPMENT — SEVEN AREAS OF LEARNING ───────────────────────
+
+EYFS Communication and Language
+Map it whenever a worker describes supporting a child's talking, listening, vocabulary, or understanding of language — reading with a child, back-and-forth conversation, or noticing a speech/language need.
+
+EYFS Physical Development
+Map it whenever gross or fine motor skill activities, physical play, coordination, or a child's physical progress is discussed.
+
+EYFS PSED
+Map it whenever a child's confidence, self-regulation, friendships, or emotional wellbeing is discussed — including a worker noticing a change in a child's emotional state and responding to it.
+
+EYFS Literacy
+Map it whenever reading, phonics, mark-making, or early writing is discussed.
+
+EYFS Mathematics
+Map it whenever number, counting, shape, pattern, or early mathematical reasoning activities are discussed.
+
+EYFS Understanding the World
+Map it whenever a child's exploration of their environment, community, technology, or the natural world is discussed.
+
+EYFS Expressive Arts and Design
+Map it whenever creative play, art, music, imaginative play, or a child's self-expression through a creative activity is discussed."""
+
+    elif jurisdiction == "ofsted_childrens_home":
+        domain_guide = """
+EVIDENCE DETECTION GUIDE — read this before mapping any standard:
+Your task is not to match phrases — it is to understand what each person is DOING and THINKING, then identify which Quality Standard or diploma unit governs that behaviour. Residential childcare workers rarely name a standard number. Reason from the described behaviour to the standard that captures its intent.
+
+── THE NINE QUALITY STANDARDS ───────────────────────────────────────────────
+
+Quality and Purpose of Care Standard
+Map it whenever a worker describes the overall purpose of the home, how care is organised around a child's individual needs, or reflects on whether care being provided matches the home's Statement of Purpose.
+
+Children's Views, Wishes and Feelings Standard
+Map it whenever a worker describes actively listening to a child, involving them in a decision, or acting on something the child expressed wanting.
+
+Education Standard
+Map it whenever a child's schooling, learning progress, engagement with education, or support for their educational needs is discussed.
+
+Enjoyment and Achievement Standard
+Map it whenever a worker describes supporting a child's hobbies, interests, achievements, or personal successes — however small.
+
+Health and Well-being Standard
+Map it whenever a child's physical or emotional health, a medical appointment, or their general wellbeing is discussed.
+
+Positive Relationships Standard
+Map it whenever a worker describes building trust with a child, modelling healthy relationships, or supporting a child's relationships with family or peers.
+
+Protection of Children Standard
+Map it whenever a worker describes noticing a risk to a child, raising a safeguarding concern, following the home's safeguarding procedure, or managing a risk-related incident. Does not require the word "safeguarding" — "I was worried about what he told me so I flagged it" is evidence.
+
+Leadership and Management Standard
+The supervision meeting itself is direct evidence of this standard — the home investing in structured staff supervision and development. Map it further whenever staffing, training, or management oversight is discussed.
+
+Care Planning Standard
+Map it whenever a worker describes reviewing or contributing to a child's care plan, placement plan, or a change in the child's circumstances or needs.
+
+── LEVEL 3 DIPLOMA FOR RESIDENTIAL CHILDCARE — KEY UNITS ───────────────────
+
+Map training, development, and specific skill areas to the relevant diploma unit when a worker discusses: child development, safeguarding and protection from harm/abuse, effective communication, risk management, assessment and planning, group living dynamics, positive outcomes, attachment and relationships, wellbeing and resilience, supporting learning, health management, managing behaviour that challenges, ongoing professional development, or promoting equality, diversity and children's rights. The worker does not need to reference the diploma directly — any description of applying this knowledge or skill in practice is evidence of that unit."""
+
+
     else:  # northern_ireland (dom or res)
         domain_guide = """
 EVIDENCE DETECTION GUIDE — read this before mapping any standard:
@@ -1780,6 +1939,7 @@ async def generate_prep_questions(
     previous_meeting_summaries: list,      # list of {"title", "date", "summary", "actions"}
     uploaded_docs: list,                    # list of {"label", "doc_type", "content_snippet"}
     org_values_snippets: list,              # list of {"name", "snippet"}
+    sector_label: str = "UK adult social care",
 ) -> dict:
     """Generate open-ended, behavioural supervision prep questions for each section.
 
@@ -1827,7 +1987,7 @@ async def generate_prep_questions(
 
     sections_spec = "\n".join([f'  "{s["id"]}": "{s["label"]}"' for s in PREP_SECTIONS])
 
-    system_prompt = f"""You are an expert UK adult social care supervision facilitator.
+    system_prompt = f"""You are an expert {sector_label} supervision facilitator.
 Your task is to generate HIGHLY PERSONALISED, open-ended supervision preparation questions for a manager 
 to use in a one-to-one supervision session with {_safe_name(supervisee_name)}.
 
