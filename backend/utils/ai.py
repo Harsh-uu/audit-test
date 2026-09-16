@@ -912,10 +912,14 @@ DO NOT flag:
 - Organisation names, care home names, or place names alone
 
 Return valid JSON array only — no markdown, no text outside JSON:
-[{"original": "exact phrase as it appears in the transcript", "type": "third_party_name|sensitive_personal_detail|contact_detail|address", "replacement": "safe replacement e.g. [Service User], [Family Member], [Colleague], [Resident]", "reason": "one sentence explanation"}]
+[{"original": "the person's fullest name as it appears in the transcript", "aliases": ["other shorter ways this SAME person is referred to elsewhere in the transcript, e.g. first name alone, nickname, surname alone — empty array if there are none"], "type": "third_party_name|sensitive_personal_detail|contact_detail|address", "replacement": "safe replacement e.g. [Service User], [Family Member], [Colleague], [Resident]", "reason": "one sentence explanation"}]
 
-Return [] if no third-party PII is found.
-If the same person appears multiple times, return one entry for their most complete name/reference."""
+CRITICAL — ONE FLAG PER PERSON, NEVER MERGE TWO PEOPLE:
+- Each flag must refer to exactly ONE individual. NEVER combine two different people into a single "original" phrase (e.g. do NOT return "David Smith and his brother Paul Smith" as one entry — that is TWO people and must be TWO separate flags: one for "David Smith", one for "Paul Smith").
+- If the same person is mentioned multiple times under different forms of their name (e.g. "David Smith" in one sentence, then just "David" later), return ONE flag for that person using their fullest name as "original", and list the shorter forms in "aliases" so every mention gets caught — do not create a second flag for the same person's first name alone.
+- "original" must be ONLY the person's name itself (e.g. "David Smith"), never a surrounding sentence fragment like "David Smith and his brother" or "David Smith spat at another pupil" — keep it to the shortest string that uniquely identifies them, plus any shorter aliases in the aliases array.
+
+Return [] if no third-party PII is found."""
 
 
 async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, manager_name: str = "") -> list:

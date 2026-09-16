@@ -8,6 +8,8 @@ def _build_redaction_pattern(original: str) -> str:
     Build a regex pattern for the original phrase.
     Makes title abbreviations like 'Mr'/'Mr.' interchangeable,
     so 'Mr Hutchinson' matches 'Mr. Hutchinson' and vice versa.
+    Wrapped in word boundaries so a short alias like 'David' never matches
+    inside a longer word like 'Davidson'.
     """
     for title in TITLE_PREFIXES:
         # Check if original starts with the title (with or without period)
@@ -16,21 +18,27 @@ def _build_redaction_pattern(original: str) -> str:
             if original.lower().startswith(prefix.lower()):
                 rest = original[len(prefix):]
                 # title with optional period, then one or more whitespace chars
-                return re.escape(title) + r'\.?\s+' + re.escape(rest)
-    return re.escape(original)
+                return r'\b' + re.escape(title) + r'\.?\s+' + re.escape(rest) + r'\b'
+    return r'\b' + re.escape(original) + r'\b'
 
 
 def apply_redactions_to_text(text: str, redactions: list) -> str:
     """Apply saved redaction pairs to a text string (case-insensitive).
-    Handles title abbreviation variations e.g. Mr / Mr."""
+    Handles title abbreviation variations e.g. Mr / Mr.
+    Also matches any `aliases` (e.g. first name alone) recorded alongside the
+    full name, since AI-generated summaries paraphrase and rarely repeat the
+    exact original phrase — matching the bare name/alias catches the rest."""
     if not text or not redactions:
         return text
     result = text
     for r in redactions:
         original = r.get("original", "")
         replacement = r.get("replacement", "[Redacted]")
-        if original:
-            pattern = _build_redaction_pattern(original)
+        variants = [original] + [a for a in (r.get("aliases") or []) if a]
+        for variant in variants:
+            if not variant:
+                continue
+            pattern = _build_redaction_pattern(variant)
             result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
     return result
 

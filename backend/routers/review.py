@@ -1513,10 +1513,12 @@ async def complete_pii_review(meeting_id: str, data: PIIReviewRequest, current_u
     for r in data.redactions:
         original = r.get("original", "").strip()
         replacement = r.get("replacement", "[Redacted]").strip()
+        aliases = [a.strip() for a in (r.get("aliases") or []) if isinstance(a, str) and a.strip()]
         if original and replacement:
             clean_redactions.append({
                 "id": r.get("id", str(uuid.uuid4())[:8]),
                 "original": original,
+                "aliases": aliases,
                 "replacement": replacement,
                 "type": r.get("type", "unknown"),
                 "added_at": now,

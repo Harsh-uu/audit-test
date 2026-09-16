@@ -123,7 +123,7 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
 
   const handleApply = () => {
     const redactions = flags.filter(f => selected[f.id]).map(f => ({
-      id: f.id, original: f.original, replacement: replacements[f.id] || "[Redacted]", type: f.type,
+      id: f.id, original: f.original, aliases: f.aliases || [], replacement: replacements[f.id] || "[Redacted]", type: f.type,
     }));
     finishPiiReview(redactions, false);
   };
@@ -254,6 +254,11 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
                                 />
                               </div>
                               {flag.reason && <p className="text-xs text-gray-400">{flag.reason}</p>}
+                              {flag.aliases && flag.aliases.length > 0 && (
+                                <p className="text-xs text-gray-400" data-testid={`pii-aliases-${flag.id}`}>
+                                  Also matches: {flag.aliases.join(", ")}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>
