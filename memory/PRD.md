@@ -12,6 +12,35 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Bug Fixes: Ofsted Evidence Field Aliasing, Teachers' Standards Badge, Report Loading Skeleton, Meetings Month-Lazy-Load, Doc-Upload Bulk-Accept Race Condition (Sep 2026) — DONE, user-confirmed
+- **Ofsted zero-evidence bug**: root-caused to the AI sometimes inventing jurisdiction-named JSON keys
+  (`eif_mappings`, `teachers_standards_mappings`) instead of the fixed schema keys
+  (`cqc_mappings`/`care_cert_mappings`) the pipeline reads — evidence was generated correctly but
+  silently discarded. Fixed with an explicit "field names are fixed" prompt rule + a
+  `_normalize_mapping_aliases()` safety net in `ai.py` covering all non-CQC jurisdictions
+  (Wales/Scotland/NI/Ofsted). User-confirmed fixed on their live meeting (13 evidence items now).
+- **Mislabeled evidence badge**: the small per-card badge hardcoded "Care Cert" regardless of
+  jurisdiction (section header was already correct). Added `certBadge` to `getJurisdictionLabels()`
+  in `ComplianceTab.js`: Teachers' Standards → "TS", Wales → "AWIF/SCW", Scotland → "SSSC",
+  NI → "NISCC", Early Years → "EYFS", Children's Home → "L3".
+- **Meeting report bare-spinner gap**: replaced with a skeleton resembling the processing tracker
+  layout in `MeetingReport.js`'s `loading` state.
+- **Meetings page month-based lazy load**: current month loads in full; every previous month
+  collapses into a "Month Year ── N meetings · status breakdown" divider row, lazy-expanded on
+  click. New `GET /api/meetings/month-summary` endpoint + `year`/`month` filter added to
+  `_list_meetings_data()` (all 4 role-scoping branches). Search/filter auto-fetches full history
+  transparently. Old "Load all meetings" button removed (superseded). Tested: 13/13 backend,
+  all frontend flows pass (iteration_137).
+- **Doc-upload "Accept all likely/possible" bulk-accept race condition**: `ComplianceTab.js` was
+  missing `onBulkAccept`/`bulkAcceptingTier` props on the `DocUploadReport.js` page (buttons were
+  literal no-ops). First fix (wiring + `Promise.all` of N single-item PUTs) still failed under
+  real testing — root cause was a read-modify-write race: N concurrent PUTs to the same JSONB
+  column each read the same stale row and the last writer wins, silently dropping all other
+  updates (11 requests → only 2 survived). Real fix: new atomic
+  `POST /api/doc-uploads/{upload_id}/evidence/bulk-action` endpoint using
+  `SELECT ... FOR UPDATE` + one write, mirroring the meeting-side pattern in `review.py`.
+  User-confirmed fixed live (13/13 items correctly flipped to Accepted in one call).
+
 ## Prep-Prompt Rewrite Verification + Admin/Review Security Audit + Minor UI Cleanups (Sep 2026) — DONE, tested
 Continuation of prior session's `generate_prep_questions` prompt rewrite (GROW model, 25-word cap,
 higher context limits, blank-slate mode, bonus insight section).
