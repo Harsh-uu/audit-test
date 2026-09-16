@@ -11,6 +11,12 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## AI Accuracy Sortable Table (Sep 2026) — DONE, tested
+- Route `/admin/team?tab=ai_accuracy` (NOT `/team-insights` — that path doesn't exist; App.js:94 confirms actual route).
+- "Recent evidence decisions" converted from flat list to sortable `<table>`: columns Standard, Manager, Attendee, Date, AI Confidence, Decision. All 6 independently sortable (click=asc, click again=desc, ▲/▼ indicator).
+- Dates use en-GB short format via custom `formatUkDate()` helper (not `toLocaleDateString`, which returns "Sept" for September in en-GB — fixed to always give 3-letter months, e.g. "16 Sep 2026").
+- Tested via testing_agent (iteration_138.json): 95% pass, only nit was Sept/Sep which is now fixed.
+
 
 ## Bug Fixes: Ofsted Evidence Field Aliasing, Teachers' Standards Badge, Report Loading Skeleton, Meetings Month-Lazy-Load, Doc-Upload Bulk-Accept Race Condition (Sep 2026) — DONE, user-confirmed
 - **Ofsted zero-evidence bug**: root-caused to the AI sometimes inventing jurisdiction-named JSON keys

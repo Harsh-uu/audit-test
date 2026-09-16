@@ -1026,6 +1026,11 @@ function RegisterView({ type, items = [], loading, onToggle }) {
 // manager makes on an AI-suggested mapping is captured there but had no
 // screen anywhere. Self-contained: fetches its own data, doesn't touch the
 // page's shared `data`/`registers` state or their load functions.
+const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function formatUkDate(ts) {
+  const d = new Date(ts);
+  return `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
 const EVIDENCE_TYPE_LABEL = { cqc: "CQC", care_cert: "Induction", custom: "Organisational" };
 const CONFIDENCE_LABEL = { likely_evidence: "Likely evidence", possible_evidence: "Possible evidence" };
 const ACTION_LABEL = { accepted: "Accepted", rejected: "Rejected", needs_followup: "Needs follow-up", edited_summary: "Edited", viewed: "Viewed", pending: "Pending" };
@@ -1220,7 +1225,7 @@ function AiAccuracyView({ API, getAuthConfig }) {
                   <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{f.user_name || "—"}</td>
                   <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{f.attendee_name || "—"}</td>
                   <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">
-                    {f.timestamp ? new Date(f.timestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                    {f.timestamp ? formatUkDate(f.timestamp) : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap">{CONFIDENCE_LABEL[f.ai_confidence] || f.ai_confidence}</td>
                   <td className="px-4 py-2.5 whitespace-nowrap">

@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only regression of Recent evidence decisions sortable table on Team Insights AI Accuracy tab (route is actually /admin/team?tab=ai_accuracy, NOT /team-insights as the request stated). Logged in as admin@supervision.com. All 6 sortable columns work: rows visibly re-order on first click, sort direction arrow (▲/▼) appears next to the active column, second click reverses the direction. Table renders 200 rows with columns Standard, Manager, Attendee, Date, AI Confidence, Decision. Stat cards (total=223, rate=99.4%, rejected=1, followup=1), top-rejected standards block, and Export CSV button all render correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AiAccuracyView (TeamInsights.js line 1223)", "issue": "Date column renders 'Sept' (4 letters) for September instead of 'Sep' (3 letters) as the user example specified ('16 Sep 2026'). Browser Intl.DateTimeFormat('en-GB', {month:'short'}) natively returns 'Sept' for September (all other months are 3-letter e.g. 'Aug', 'Jan'). Observed samples in DB: '16 Sept 2026' rows. Everything else in en-GB matches (day-first order, short month, full year).", "selector": "[data-testid^='ai-accuracy-row-'] td:nth-child(4)", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: If strict 3-letter month is required (e.g. 'Sep'), post-process the toLocaleDateString output (e.g. .replace('Sept','Sep')) or manually format with a short-month array. Current output is the browser-native en-GB and is technically correct — treat as product preference.",
+    "Note that the route path in the request ('/team-insights') is incorrect — the actual route is '/admin/team' (per /app/frontend/src/App.js:94). Testing agent had to correct this. Consider updating the request template or adding a redirect."
+  ],
+  "critical_code_review_comments": [
+    "TeamInsights.js is 1709 lines — exceeds 700-line guideline. Consider splitting AiAccuracyView and other tab views into their own files.",
+    "sortedFeedback comparator uses reverse() which mutates and is O(n). Fine at 200 rows but consider a proper compareFn with direction multiplier for cleanliness.",
+    "Timestamp sort uses string compare on ISO strings — works because ISO 8601 is lexicographically sortable, but a Date-based compare would be more explicit."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested per request)", "frontend": "95% (only minor Sept vs Sep month-format nit)"},
+  "test_credentials": "admin@supervision.com / Admin123! — worked as documented",
+  "seed_data_creation": "None — Test Company org already had 223 evidence_feedback rows seeded, so no blocker.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Route for Team Insights is /admin/team (roles: admin, manager), NOT /team-insights. Query param ?tab=ai_accuracy correctly opens the AI Accuracy tab. Test Company org is well-seeded with evidence_feedback data (223 rows, mix of viewed/rejected). Sortable table testids: ai-accuracy-sort-{standard|manager|attendee|timestamp|confidence|decision}, rows ai-accuracy-row-{id}, wrapper ai-accuracy-feedback-list. Sort direction arrow is a plain unicode ▲/▼ inside the <th> text — assert via .textContent contains ▲ or ▼."
+}
