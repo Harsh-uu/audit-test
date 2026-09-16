@@ -30,6 +30,7 @@ from . import (
     m019_meetings_date_timestamp,
     m020_disable_rls_drift,
     m021_revoke_public_grants,
+    m022_need_review_signals,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ MIGRATIONS = [
     m019_meetings_date_timestamp,
     m020_disable_rls_drift,
     m021_revoke_public_grants,
+    m022_need_review_signals,
 ]
 
 

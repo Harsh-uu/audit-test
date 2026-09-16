@@ -358,6 +358,32 @@ def _ms_to_mmss(ms: int) -> str:
     return f"{s // 60:02d}:{s % 60:02d}"
 
 
+_OFSTED_SECTOR_CONTEXT = {
+    "school": ("UK education (a school)", "pupil"),
+    "early_years": ("UK early years childcare (a nursery or childminder setting)", "child"),
+    "childrens_home": ("UK children's residential care (a children's home)", "child"),
+}
+
+
+def _ofsted_sector_override(effective_jurisdiction: str) -> str:
+    """Additive override block appended to a system prompt ONLY when the jurisdiction is
+    Ofsted. Leaves the adult-social-care-tuned prompt text completely untouched for
+    england/wales/scotland/northern_ireland — zero regression risk for existing behaviour."""
+    if not effective_jurisdiction or not effective_jurisdiction.startswith("ofsted"):
+        return ""
+    service_type = effective_jurisdiction[len("ofsted_"):] if effective_jurisdiction.startswith("ofsted_") else "school"
+    sector_name, person = _OFSTED_SECTOR_CONTEXT.get(service_type, _OFSTED_SECTOR_CONTEXT["school"])
+    return f"""
+
+SECTOR OVERRIDE — READ CAREFULLY, THIS SUPERSEDES THE ADULT SOCIAL CARE FRAMING ABOVE:
+This organisation is NOT an adult social care provider. It is a {sector_name} setting. Apply everything above with these substitutions:
+- Wherever this prompt says "service user", "resident", or "client", it means "{person}" here.
+- Wherever this prompt says "adult social care", "care provider", or "care setting", it means "{sector_name}" here.
+- The instruction banning the word "pastoral" does NOT apply here — "pastoral care", "pastoral lead", and "pastoral support" are correct, standard UK education terminology and should be used naturally where relevant.
+- The "caseload → people we support" language rule does NOT apply here — staff in this sector do not have a "caseload"; do not force that substitution.
+- Keep every other instruction, risk-detection pattern, and structural rule above exactly as written — only the terminology changes, not the underlying logic (e.g. safeguarding escalation-gap and normalisation detection apply just as much to a concern about a {person} as to an adult service user)."""
+
+
 ANALYSIS_SYSTEM_PROMPT = _PROMPT_INJECTION_GUARD + """You are a compliance evidence specialist for UK adult social care providers.
 Your task is to analyse supervision meeting transcripts and identify evidence of worker competency and organisational compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
 
@@ -393,6 +419,13 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
         "specific actionable suggestion two"
       ],
       "suggested_question": "optional — one follow-up question for the manager to ask at next supervision (omit this field entirely if not applicable; max 2-3 per session total)"
+    }
+  ],
+  "need_review_signals": [
+    {
+      "person_name": "the named service user's name exactly as spoken, e.g. 'Edith' or 'Edith Jones'",
+      "concern_category": "one of: insufficient_visit_time, missed_or_late_medication, repeated_falls, missed_or_incomplete_visits, deteriorating_condition_unaddressed, family_requesting_more_support, staffing_capacity_mismatch",
+      "quote": "exact short quote from the transcript that evidences this (max 40 words)"
     }
   ],
   "cqc_mappings": [
@@ -472,7 +505,7 @@ Rules:
   Do NOT apply this elevated weighting to: witnessed ACTIONS alone with no outcome stated (e.g. "colleague saw them do X"), or self-reported outcomes (e.g. "I think it went well", "I think it worked"). Only an independently witnessed, specific OUTCOME claim qualifies — the source (someone other than the supervisee) and the specificity (measurable/time-bound detail) must BOTH be present.
 - For Care Certificate mappings, ALWAYS map to the most specific sub-outcome ref (e.g. "2.1a", "2.2h", "13.9c"). Use the exact sub-outcome ref and its description as provided in the standards context below. One evidence item = one sub-outcome ref. Create separate mapping entries if evidence covers multiple sub-outcomes.
 - For custom_mappings, only include entries if there are custom standards provided AND there is actual evidence. Use the document_id exactly as provided.
-- If no custom standards are provided, return custom_mappings as an empty array []
+- NEED_REVIEW_SIGNALS — this is separate from `risks` and tracks potential commissioning/care-review needs about a SPECIFIC named service user (not the supervisee, not generic concerns). Only extract a signal when a worker or manager describes a CONCRETE, SPECIFIC instance of one of the listed concern_category types happening to a named individual (e.g. "I didn't have enough time with Edith on Thursday because..."). Do NOT extract vague or hypothetical statements. Do NOT extract concerns about the supervisee themselves. One entry per distinct instance described — if the same person+category is mentioned twice in this transcript, only include it once. If nothing qualifies, return an empty array.- If no custom standards are provided, return custom_mappings as an empty array []
 - If the meeting had paused sections, note this in the summary
 - For ACHIEVEMENTS: Extract 1–5 specific moments of genuinely good practice, personal or professional growth, positive skill demonstration, or care quality from the transcript. These surface what went well — not general praise. Include: manager compliments on a specific skill or action, worker self-reflection on something they handled well, described best practice narrated by the worker, or improvement since a previous session explicitly noted. Do NOT fabricate or infer achievements not grounded in specific statements. Use "id" values like "ach_1", "ach_2". If nothing specific and genuine is present, return an empty array [].
   ACHIEVEMENTS — PRESERVATION RULE: The number or severity of risks identified in a session must never reduce the achievements array. Identify achievements independently of risk content, before or without reference to how many risks were found. A session with five risk entries and one genuine achievement should report both in full — the achievement is not diminished, delayed, or omitted because of what else was found.
@@ -922,7 +955,7 @@ CRITICAL — ONE FLAG PER PERSON, NEVER MERGE TWO PEOPLE:
 Return [] if no third-party PII is found."""
 
 
-async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, manager_name: str = "") -> list:
+async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, manager_name: str = "", jurisdiction: str = "") -> list:
     """Scan transcript for PII using regex (UK patterns) + GPT-4o (third-party names).
     Returns a merged, deduplicated list of flag dicts."""
     import re as _re
@@ -1009,7 +1042,7 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
             )
 
             try:
-                ai_flags = await _ai_chat_json("gpt-4o", PII_SCAN_SYSTEM_PROMPT, user_prompt)
+                ai_flags = await _ai_chat_json("gpt-4o", PII_SCAN_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt)
                 if isinstance(ai_flags, list):
                     for flag in ai_flags:
                         original = flag.get("original", "").strip()
@@ -1025,7 +1058,7 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
     return flags
 
 
-async def generate_meeting_summary(transcript_text: str, manager_name: str = "", attendee_names: list = None) -> str:
+async def generate_meeting_summary(transcript_text: str, manager_name: str = "", attendee_names: list = None, jurisdiction: str = "") -> str:
     """Re-generate just the meeting summary in the new structured format."""
     attendee_lines = []
     if manager_name:
@@ -1038,7 +1071,7 @@ async def generate_meeting_summary(transcript_text: str, manager_name: str = "",
         + "\n".join(attendee_lines) + "\n\n"
     ) if attendee_lines else ""
     user_prompt = f"{attendee_context}Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
-    result = await _ai_chat("o4-mini", SUMMARY_ONLY_PROMPT, user_prompt, reasoning_effort="medium")
+    result = await _ai_chat("o4-mini", SUMMARY_ONLY_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="medium")
     return _apply_uk_language(result)
 
 
@@ -1203,7 +1236,7 @@ async def analyze_doc_for_evidence(
 Provide your analysis as JSON only. Only map regulations/standards where there is actual evidence in the document."""
 
     try:
-        result = await _ai_chat_json("o4-mini", DOC_EVIDENCE_SYSTEM_PROMPT, user_prompt, reasoning_effort="high")
+        result = await _ai_chat_json("o4-mini", DOC_EVIDENCE_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="high")
         result.setdefault("cqc_mappings", [])
         result.setdefault("care_cert_mappings", [])
         result.setdefault("custom_mappings", [])
@@ -1909,7 +1942,7 @@ Provide your analysis as JSON. Only map regulations/standards where there is act
 
     # Parse JSON from response (retries once directly via OpenAI if the JSON body is malformed)
     try:
-        result = await _ai_chat_json("o4-mini", ANALYSIS_SYSTEM_PROMPT, user_prompt, reasoning_effort="high")
+        result = await _ai_chat_json("o4-mini", ANALYSIS_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="high")
         if "custom_mappings" not in result:
             result["custom_mappings"] = []
         return _sanitise_analysis(result)

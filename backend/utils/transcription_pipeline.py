@@ -323,7 +323,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 manager_name=manager_name, attendee_names=supervisee_names, meeting_type=meeting_type,
             ),
             diarize_coro,
-            generate_meeting_summary(timestamped_plain, manager_name=manager_name, attendee_names=supervisee_names),   # runs concurrently — zero added latency
+            generate_meeting_summary(timestamped_plain, manager_name=manager_name, attendee_names=supervisee_names, jurisdiction=effective_jurisdiction),   # runs concurrently — zero added latency
             return_exceptions=True,
         )
         analysis_result = results[0]
@@ -381,6 +381,8 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         analysis_id = str(uuid.uuid4())
         async with database.with_admin() as conn:
+            from utils.need_reviewer import process_need_review_signals
+            await process_need_review_signals(conn, meeting_org_id, meeting_id, analysis_result, effective_jurisdiction)
             # Core INSERT — only columns guaranteed to exist in any schema version
             await conn.execute(
                 """INSERT INTO analyses

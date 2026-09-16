@@ -1355,6 +1355,13 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             manager_name=rescan_manager_name, attendee_names=rescan_supervisee_names, meeting_type=rescan_meeting_type,
         )
 
+        async with database.with_admin() as conn:
+            from utils.need_reviewer import process_need_review_signals
+            await process_need_review_signals(conn, org_id, meeting_id, analysis_result, effective_jurisdiction)
+        # Rescan deliberately never overwrites `risks` (only re-scans compliance mappings) —
+        # but if a Need Reviewer threshold was JUST reached, merge that one flag in by id.
+        new_need_review_risks = [r for r in analysis_result.get("risks", []) if str(r.get("id", "")).startswith("needreview_")]
+
         cqc_kq_map = {s.get("reference"): s.get("key_questions") or [] for s in cqc_standards}
         for item in analysis_result.get("cqc_mappings", []):
             item.setdefault("status", "pending")
@@ -1376,7 +1383,7 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         now = datetime.now(timezone.utc).isoformat()
         analysis_id = meeting["analysis_id"]
         async with database.with_org(org_id) as conn:
-            existing_row = await conn.fetchrow("SELECT cqc_mappings, care_cert_mappings, custom_mappings FROM analyses WHERE id=$1", analysis_id)
+            existing_row = await conn.fetchrow("SELECT cqc_mappings, care_cert_mappings, custom_mappings, risks FROM analyses WHERE id=$1", analysis_id)
 
         def _jlist_local(val):
             if val is None: return []
@@ -1399,16 +1406,23 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
         merged_cc  = _merge(existing_cc,  analysis_result.get("care_cert_mappings", []), "outcome_ref")
         merged_cu  = _merge(existing_cu,  analysis_result.get("custom_mappings", []), "criterion_ref")
 
+        existing_risks = _jlist_local(existing_row["risks"] if existing_row else [])
+        if new_need_review_risks:
+            existing_risk_ids = {r.get("id") for r in existing_risks}
+            merged_risks = existing_risks + [r for r in new_need_review_risks if r.get("id") not in existing_risk_ids]
+        else:
+            merged_risks = existing_risks
+
         async with database.with_org(org_id) as conn:
             await conn.execute(
                 """UPDATE analyses SET
-                   cqc_mappings=$1::jsonb, care_cert_mappings=$2::jsonb, custom_mappings=$3::jsonb,
+                   cqc_mappings=$1::jsonb, care_cert_mappings=$2::jsonb, custom_mappings=$3::jsonb, risks=$8::jsonb,
                    last_edited_at=$4, last_edited_by=$5, rescanned_at=$4, rescanned_by_name=$6
                    WHERE id=$7""",
                 merged_cqc,
                 merged_cc,
                 merged_cu,
-                now, user_id, user_name, analysis_id,
+                now, user_id, user_name, analysis_id, merged_risks,
             )
             # Also update achievements from the fresh analysis (safe — falls through gracefully if column absent)
             try:
@@ -1460,8 +1474,14 @@ async def regenerate_summary(meeting_id: str, current_user=Depends(get_current_u
     regen_manager_name = m_row["sign_off_manager_name"] or m_row["created_by_name"] or ""
     regen_supervisee_names = [a.get("name") for a in regen_attendees if a.get("name")]
 
+    async with database.with_org(org_id) as conn:
+        org_row = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
+    regen_jurisdiction = ""
+    if org_row and org_row["jurisdiction"] == "ofsted":
+        regen_jurisdiction = f"ofsted_{org_row['service_type'] or 'school'}"
+
     from utils.ai import generate_meeting_summary
-    new_summary = await generate_meeting_summary(text, manager_name=regen_manager_name, attendee_names=regen_supervisee_names)
+    new_summary = await generate_meeting_summary(text, manager_name=regen_manager_name, attendee_names=regen_supervisee_names, jurisdiction=regen_jurisdiction)
     async with database.with_org(org_id) as conn:
         await conn.execute("UPDATE analyses SET summary=$1 WHERE id=$2", new_summary, m_row["analysis_id"])
         await _log_edit(conn, meeting_id, org_id, "summary_regenerated",
@@ -1494,7 +1514,12 @@ async def scan_pii(meeting_id: str, current_user=Depends(get_current_user)):
     from utils.ai import scan_pii_in_transcript
     attendees = _ensure_list(m_row["attendees"])
     manager_name = m_row["sign_off_manager_name"] or m_row["created_by_name"] or ""
-    flags = await scan_pii_in_transcript(text, attendees, manager_name)
+    async with database.with_org(org_id) as conn:
+        org_row = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
+    scan_jurisdiction = ""
+    if org_row and org_row["jurisdiction"] == "ofsted":
+        scan_jurisdiction = f"ofsted_{org_row['service_type'] or 'school'}"
+    flags = await scan_pii_in_transcript(text, attendees, manager_name, jurisdiction=scan_jurisdiction)
     return {"flags": flags}
 
 
