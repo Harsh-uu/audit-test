@@ -14,7 +14,7 @@ async def main():
     email, pw = sys.argv[1], sys.argv[2]
     conn = await asyncpg.connect(be["DATABASE_URL"], ssl="require")
     h = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     res = await conn.execute(
         "UPDATE users SET password_hash=$1, must_change_password=FALSE, password_changed_at=$2, mfa_code_attempts=0 WHERE email=$3",
         h, now, email)

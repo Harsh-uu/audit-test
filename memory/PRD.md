@@ -12,7 +12,52 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
-## Feature: Ofsted Jurisdiction (Sep 2026) — DONE, tested 100% (backend + frontend)
+## Prep-Prompt Rewrite Verification + Admin/Review Security Audit + Minor UI Cleanups (Sep 2026) — DONE, tested
+Continuation of prior session's `generate_prep_questions` prompt rewrite (GROW model, 25-word cap,
+higher context limits, blank-slate mode, bonus insight section).
+- **Critical bug found & fixed on session start**: the previous agent's prompt edit left a Python
+  3.11-incompatible nested triple-quote (`{"""..."""}` inside an outer `f"""..."""`) in `ai.py`'s
+  rule 10 (blank-slate mode) — this crashed the ENTIRE backend on every hot-reload (`SyntaxError`
+  at import time, `routers/processing.py` import chain). Fixed by extracting that block into a
+  plain `blank_slate_rule` string variable computed before the f-string, referenced via
+  `{blank_slate_rule}` — no nested-quote conflict. Backend confirmed healthy after fix.
+- **Prompt verified end-to-end, live**: (1) rich-context case (real supervisee, 5 prior meetings +
+  2 uploaded docs + org standards) — produced grounded, GROW-styled, sub-25-word questions
+  referencing specific document content, non-generic AOB, bonus insight section present. (2)
+  blank-slate case (brand-new starter, zero history/docs/focus) — correctly switched to warm
+  first-check-in questions with no reference to "documents"/"focus topic". User approved both.
+- **Security audit** (`security_audit_agent` on `admin.py`+`review.py`'s `with_admin()` usage,
+  continuing the P1 backlog item): found and fixed 3 confirmed cross-tenant BOLA bugs — SEC-001
+  `delete_standard` could deactivate ANY org's custom standard (no org filter, now `with_org()`);
+  SEC-002 4 debug/repair endpoints (`debug-by-email`, `{user_id}/debug`, `debug-attendees`,
+  `add-attendee`) let a plain `admin` (not just super_admin) read/mutate other orgs' users/meetings
+  — now gated with an explicit org_id-match 404 for non-super_admin callers; SEC-003
+  `export-cc-excerpts` could leak foreign-org staff names into a PDF — now `with_org()` so RLS
+  drops foreign ids. Also downgraded ~12 more `with_admin()`→`with_org(org_id)` call sites across
+  both files per the audit's hardening list (defence-in-depth, zero behaviour change — org lookups,
+  template save, evidence_feedback inserts, send-email recipient check, rescan org lookup,
+  `delete_audio_after_grace` fetching org_id up front instead of using god-mode throughout).
+  Left untouched: genuinely global/pre-org paths (email-uniqueness check, rate-limit tables, the
+  global settings-template fallback, super_admin cache rewarm).
+- **Minor UI cleanups**: password hint placeholders/validation "8 characters"→"10" in
+  `SuperAdminDashboard.js`, `OrgStructure.js`, `PeopleHub.js`, `UsersTab.js`; removed the dead
+  `isMandatory`/super_admin branch + stale "cannot be disabled for managers and admins" copy in
+  `OrgSettings.js` SecurityTab (super_admin never reaches this admin/manager-only route, and MFA
+  is actually optional for both roles per the Supabase Auth migration); restyled "Export Portfolio
+  PDF" button (pill shape, hover lift, spinner icon while exporting) in `StaffPortfolio.js`;
+  lightened the Team Themes loading skeleton (`bg-gray-100` override) in `TeamInsights.js`; fixed a
+  missed "Care Worker"→"Staff / Supervisee" label in `PeopleHub.js`'s `ROLES` array (regression
+  from the earlier session's role-label update — OrgStructure.js/UsersTab.js had it, PeopleHub.js
+  didn't).
+- **Tested via `testing_agent`** iteration_136: 19/19 backend pytest pass, verified with a genuine
+  second org+admin (`orgb-test-3628a11d@example.com` / OrgBTest123! in "IDOR Test Org B") proving
+  real cross-org 404 denial on all 3 SEC fixes, same-org happy-path unaffected, zero regressions on
+  standards/users/template/rescan/send-email. Frontend UI items self-verified via screenshot
+  (Security tab, password hints, button restyle, lighter skeleton) — not run through testing_agent
+  (low-risk cosmetic-only, backend was the priority this session).
+- Non-blocking code-review notes from testing agent → moved to Backlog P3.
+
+
 Added a 5th jurisdiction, `ofsted`, alongside england/wales/scotland/northern_ireland, fully
 additive (mirrors the NI residential/domiciliary pattern exactly). Covers 3 setting types via a
 required `service_type`:
@@ -1275,15 +1320,18 @@ direct DB password access or a real deploy of this backend pointed at that DB.
   a rare concurrent-duplicate-email race (flagged by testing_agent, low likelihood).
 - Refresh stale `tests/test_idor_sec001.py` fixtures (hardcoded passwords/meeting IDs are outdated)
   — explicitly deferred by user this session, skip until asked again.
-- Password-hint copy still says "8 characters" in a few admin user-creation screens (actual policy
-  is 10) — same class of bug already fixed on reset-password/accept-invite, not yet done here.
-- Unreachable `super_admin` UI branch in `OrgSettings.js` SecurityTab; "Export Portfolio PDF"
-  button styling looks disabled; lighter loading state needed on Team Themes page.
 - Orphan `teams` row with `setting_id=NULL` stays invisible in dashboard filters/dropdown.
 - Extract `_DETAIL_COLS`/`_MEETING_DETAIL_COLS` duplication (meetings.py vs review.py) into a
   shared columns module — non-blocking code-review suggestion from iteration_119.
-- Admin/Review router `with_admin()` audit: 19 calls in `admin.py` + 11 in `review.py` not yet
-  reviewed for least-privilege `with_org()` migration (same pattern as the Sep 2026 RLS fix).
+- Code-review notes from iteration_136 security audit (non-blocking, defence-in-depth):
+  admin.py's 4 debug/repair endpoints (`debug-by-email`, `debug-user`, `debug-meeting-attendees`,
+  `add-attendee`) still fetch via `with_admin()` then gate with an in-Python org_id compare —
+  works, but a future refactor could accidentally delete the check with no DB-level backstop
+  (unlike `delete_standard`, which uses `with_org()` so RLS enforces it structurally). Consider
+  adding a unit test that guards the org_id-compare line, or splitting into a with_org() probe +
+  with_admin() fallback only for super_admin. Also: `export_cc_excerpts` silently drops
+  foreign-org staff_ids via RLS with no log line — consider `logger.warning(...)` when
+  dropped-id-count > 0 for security visibility.
 
 ## Environments
 Preview only in this session (`supervision-preview.preview.emergentagent.com`, Supabase project
