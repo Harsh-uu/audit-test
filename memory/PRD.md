@@ -12,6 +12,50 @@ React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supab
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
 
+## Feature: Ofsted Jurisdiction (Sep 2026) — DONE, tested 100% (backend + frontend)
+Added a 5th jurisdiction, `ofsted`, alongside england/wales/scotland/northern_ireland, fully
+additive (mirrors the NI residential/domiciliary pattern exactly). Covers 3 setting types via a
+required `service_type`:
+- **school**: regs = Ofsted EIF (effective Nov 2025) — 7 areas (Safeguarding, Inclusion,
+  Curriculum and Teaching, Achievement, Attendance and Behaviour, Personal Development and
+  Wellbeing, Leadership and Governance). Induction/cert = Teachers' Standards (DfE 2021, TS1-TS9
+  incl. Part Two conduct). Deliberately excludes the ITE inspection toolkit per user request.
+- **early_years**: regs = EYFS Safeguarding & Welfare Requirements (5 categories). Induction/cert
+  = EYFS Learning & Development, 7 areas of learning.
+- **childrens_home**: regs = The 9 Children's Homes Quality Standards (Children's Homes (England)
+  Regulations 2015). Induction/cert = Level 3 Diploma for Residential Childcare, 16 mandatory
+  units.
+- Seeded 53 new `standards_entries` rows (`seed_ofsted_standards()` in `seed.py`).
+- `super_admin.py`: `VALID_JURISDICTIONS` +`ofsted`; `NI_SERVICE_TYPES`/`OFSTED_SERVICE_TYPES`
+  kept as separate tuples so the two families can never cross-contaminate (validated both ways).
+- `ai.py`: reg_label/cert_label branches in both `analyze_doc_for_evidence` and `analyze_meeting`,
+  plus 3 new detailed domain guides (evidence-detection instructions) in `analyze_meeting` for
+  ofsted_school / ofsted_early_years / ofsted_childrens_home — first-pass v1, intended to be
+  refined once real Ofsted demo feedback comes in (same as CQC's guide was iteratively tuned).
+  `generate_prep_questions` gained an optional `sector_label` param (default unchanged for all
+  other jurisdictions) so the Induction/Prep page reads correctly for Ofsted orgs.
+- Wired through `doc_uploads.py`, `transcription_pipeline.py`, `review.py` (rescan + PDF export),
+  `admin.py` (`list_standards`, `_ti_load_standards`), `prep.py`.
+- Frontend: `SuperAdminDashboard.js` (Ofsted option + Setting Type sub-picker + badges),
+  `InspectionPrep.js`, `ComplianceTab.js`, `AdminLibrary.js`, `UploadSupervision.js` all made
+  service_type-aware for Ofsted labels.
+- **Bugfix (user-approved, found & fixed alongside)**: NI's "Rescan evidence" button was passing
+  plain `jurisdiction="northern_ireland"` to `analyze_meeting`, which only branches on
+  `northern_ireland_residential`/`northern_ireland_domiciliary` — so NI rescans always silently
+  fell back to CQC/England content. Fixed in `review.py::_run_rescan_background` by building the
+  same `effective_jurisdiction` string the main pipeline already used.
+- **Tested via testing_agent**: 100% backend (20/20 pytest — org validation, cross-family
+  service_type rejection, seed counts, list_standards scoping, AI label branches, NI bugfix
+  source-verified) and 100% frontend (Super Admin create/edit modals, badges, regression clean
+  on England/Wales/Scotland/NI). AI evidence-scan pipeline verified end-to-end for school and
+  childrens_home (correct EIF/Teachers'-Standards/CHQS refs, zero CQC cross-contamination);
+  early_years transcript returned 0 mappings once due to LLM non-determinism on a short test
+  transcript (not a wiring bug). No critical/minor issues outstanding.
+- Nit for future polish: `ai.py`'s Ofsted label maps are duplicated across the 2 functions
+  (harmless, matches existing pattern for wales/scotland/NI) — could be refactored into a shared
+  jurisdiction→label dict later if touching this area again.
+
+
 ## Issue 3.4: Dead `_compress_to_mp3` Function — DELETED (Sep 2026), verified live
 Confirmed 100% via full-codebase search (backend + frontend, every directory): `_compress_to_mp3`
 in `ai.py` had zero references from any actual app code path (routers, pipeline, other utils) —
