@@ -217,12 +217,22 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
 async def list_meetings(
     limit: int = Query(500, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
     current_user=Depends(get_current_user),
 ):
-    return await _list_meetings_data(current_user, limit=limit, offset=offset)
+    return await _list_meetings_data(current_user, limit=limit, offset=offset, year=year, month=month)
 
 
-async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int = 0) -> list:
+def _month_bounds(year: int, month: int):
+    import calendar as _cal
+    start = f"{year:04d}-{month:02d}-01"
+    last_day = _cal.monthrange(year, month)[1]
+    end = f"{year:04d}-{month:02d}-{last_day:02d}T23:59:59"
+    return start, end
+
+
+async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int = 0, year: int = None, month: int = None) -> list:
     role = current_user["role"]
     if role == "super_admin":
         return []
@@ -230,14 +240,17 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
     user_id = current_user["id"]
     scope = get_manager_scope(current_user)
 
+    date_range = _month_bounds(year, month) if (year and month) else None
+
     # Attendees / shared_reviewers with no org_id (e.g. some invited users whose
     # org_id was not written during invite acceptance) — bypass RLS and query
     # directly by user_id so they can still see their meetings.
     if role not in ("admin", "manager") and not org_id:
+        date_clause = " AND COALESCE(date, created_at) BETWEEN $4 AND $5" if date_range else ""
         async with database.with_admin() as conn:
             rows = await conn.fetch(
                 f"""SELECT {_LIST_COLS} FROM meetings
-                   WHERE created_by=$1
+                   WHERE (created_by=$1
                       OR EXISTS (
                           SELECT 1 FROM jsonb_array_elements(
                               CASE
@@ -257,9 +270,9 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                                   ELSE '[]'::jsonb
                               END
                           ) s WHERE s->>'user_id' = $1::text
-                      )
+                      )){date_clause}
                    ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
-                user_id, limit, offset,
+                user_id, limit, offset, *(date_range or []),
             )
         return [_parse_meeting_row(dict(r)) for r in rows]
 
@@ -275,6 +288,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
     # defence-in-depth on top of the explicit ownership check, it can't hide
     # any row this query would otherwise return.
     if role not in ("admin", "manager"):
+        date_clause = " AND COALESCE(date, created_at) BETWEEN $5 AND $6" if date_range else ""
         async with database.with_org(org_id) as conn:
             rows = await conn.fetch(
                 f"""SELECT {_LIST_COLS} FROM meetings
@@ -301,26 +315,28 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                                END
                            ) s WHERE s->>'user_id' = $1::text
                        )
-                   )
+                   ){date_clause}
                    ORDER BY created_at DESC LIMIT $3 OFFSET $4""",
-                user_id, org_id, limit, offset,
+                user_id, org_id, limit, offset, *(date_range or []),
             )
         return [_parse_meeting_row(dict(r)) for r in rows]
 
     # ── Admins and Managers — use RLS via with_org ────────────────────────────
     async with database.with_org(org_id) as conn:
         if role == "admin":
+            date_where = "WHERE COALESCE(date, created_at) BETWEEN $3 AND $4" if date_range else ""
             rows = await conn.fetch(
-                f"SELECT {_LIST_COLS} FROM meetings ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-                limit, offset,
+                f"SELECT {_LIST_COLS} FROM meetings {date_where} ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                limit, offset, *(date_range or []),
             )
 
         elif role == "manager":
             if scope["level"] == "org":
                 # Org-level manager sees every meeting in the org
+                date_where = "WHERE COALESCE(date, created_at) BETWEEN $3 AND $4" if date_range else ""
                 rows = await conn.fetch(
-                    f"SELECT {_LIST_COLS} FROM meetings ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-                    limit, offset,
+                    f"SELECT {_LIST_COLS} FROM meetings {date_where} ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                    limit, offset, *(date_range or []),
                 )
             else:
                 # Scoped manager — get current team/setting members
@@ -332,9 +348,10 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                 # Convert UUIDs to strings so text = ANY(text[]) comparisons work
                 all_scoped_str = [str(uid) for uid in all_scoped]
 
+                date_clause = " AND COALESCE(date, created_at) BETWEEN $4 AND $5" if date_range else ""
                 rows = await conn.fetch(
                     f"""SELECT {_LIST_COLS} FROM meetings
-                       WHERE created_by::text = ANY($1)
+                       WHERE (created_by::text = ANY($1)
                           OR sign_off_manager_id::text = ANY($1)
                           OR EXISTS (
                               SELECT 1 FROM jsonb_array_elements(
@@ -345,9 +362,9 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                                       ELSE '[]'::jsonb
                                   END
                               ) a WHERE a->>'user_id' = ANY($1)
-                          )
+                          )){date_clause}
                        ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
-                    all_scoped_str, limit, offset,
+                    all_scoped_str, limit, offset, *(date_range or []),
                 )
                 result = []
                 scoped_staff_ids_str = {str(uid) for uid in scoped_staff_ids}
@@ -369,6 +386,98 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
             rows = []  # safety fallback; all non-admin/manager roles are handled above
 
     return [_parse_meeting_row(dict(r)) for r in rows]
+
+
+# Month names for the collapsed month-divider rows on the Meetings page.
+_MONTH_NAMES = [
+    "", "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+
+@router.get("/month-summary")
+async def get_month_summary(current_user=Depends(get_current_user)):
+    """
+    Cheap GROUP BY month+status count, used to render collapsed month-divider
+    rows on the Meetings page without fetching full meeting rows for every
+    past month. Excludes the current calendar month (fetched in full instead).
+    """
+    role = current_user["role"]
+    if role == "super_admin":
+        return []
+    org_id = current_user.get("org_id", "")
+    user_id = current_user["id"]
+    scope = get_manager_scope(current_user)
+
+    now = datetime.now(timezone.utc)
+    current_month_key = f"{now.year:04d}-{now.month:02d}"
+    month_expr = "to_char(date_trunc('month', COALESCE(date, created_at)), 'YYYY-MM')"
+
+    if role not in ("admin", "manager") and not org_id:
+        async with database.with_admin() as conn:
+            rows = await conn.fetch(
+                f"""SELECT {month_expr} AS month_key, status, COUNT(*) AS n FROM meetings
+                   WHERE created_by=$1
+                      OR EXISTS (SELECT 1 FROM jsonb_array_elements(
+                          CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END
+                      ) a WHERE a->>'user_id' = $1::text)
+                   GROUP BY month_key, status""",
+                user_id,
+            )
+    elif not org_id:
+        return []
+    elif role not in ("admin", "manager"):
+        async with database.with_org(org_id) as conn:
+            rows = await conn.fetch(
+                f"""SELECT {month_expr} AS month_key, status, COUNT(*) AS n FROM meetings
+                   WHERE org_id = $2 AND (
+                       created_by = $1
+                       OR EXISTS (SELECT 1 FROM jsonb_array_elements(
+                           CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END
+                       ) a WHERE a->>'user_id' = $1::text)
+                   )
+                   GROUP BY month_key, status""",
+                user_id, org_id,
+            )
+    else:
+        async with database.with_org(org_id) as conn:
+            if role == "admin" or scope["level"] == "org":
+                rows = await conn.fetch(
+                    f"SELECT {month_expr} AS month_key, status, COUNT(*) AS n FROM meetings GROUP BY month_key, status"
+                )
+            else:
+                scoped_staff_ids_list = await get_scoped_staff_ids(conn, org_id, scope)
+                all_scoped_str = [str(uid) for uid in (set(scoped_staff_ids_list or []) | {user_id})]
+                rows = await conn.fetch(
+                    f"""SELECT {month_expr} AS month_key, status, COUNT(*) AS n FROM meetings
+                       WHERE created_by::text = ANY($1)
+                          OR sign_off_manager_id::text = ANY($1)
+                          OR EXISTS (SELECT 1 FROM jsonb_array_elements(
+                              CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END
+                          ) a WHERE a->>'user_id' = ANY($1))
+                       GROUP BY month_key, status""",
+                    all_scoped_str,
+                )
+
+    months = {}
+    for r in rows:
+        mk = r["month_key"]
+        if not mk or mk == current_month_key:
+            continue
+        months.setdefault(mk, {"count": 0, "status_counts": {}})
+        months[mk]["count"] += r["n"]
+        months[mk]["status_counts"][r["status"]] = months[mk]["status_counts"].get(r["status"], 0) + r["n"]
+
+    result = []
+    for mk, data in months.items():
+        y, m = mk.split("-")
+        result.append({
+            "year": int(y), "month": int(m), "month_key": mk,
+            "label": f"{_MONTH_NAMES[int(m)]} {y}",
+            "count": data["count"], "status_counts": data["status_counts"],
+        })
+    result.sort(key=lambda x: x["month_key"], reverse=True)
+    return result
 
 
 @router.get("/{meeting_id}")

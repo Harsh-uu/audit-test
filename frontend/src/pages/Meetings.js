@@ -22,6 +22,9 @@ const STATUS_CONFIG = {
   processing_failed: { label: "Failed",       color: "bg-red-100 text-red-700 border-red-200",           icon: AlertCircle },
 };
 
+// Order status-breakdown text on collapsed month rows in a sensible reading order.
+const STATUS_BREAKDOWN_ORDER = ["draft", "processing", "transcribing", "analyzing", "in_review", "reviewed", "signed_off", "shared", "processing_failed"];
+
 const QUICK_FILTERS = [
   { value: "all",       label: "All" },
   { value: "draft",     label: "Draft" },
@@ -60,13 +63,37 @@ function formatDate(dateStr) {
   } catch { return dateStr; }
 }
 
+function formatStatusBreakdown(statusCounts) {
+  const known = STATUS_BREAKDOWN_ORDER.filter(s => statusCounts[s] > 0);
+  const unknown = Object.keys(statusCounts).filter(s => !STATUS_BREAKDOWN_ORDER.includes(s) && statusCounts[s] > 0);
+  return [...known, ...unknown]
+    .map(s => `${statusCounts[s]} ${(STATUS_CONFIG[s] || {}).label || s}`)
+    .join(" · ");
+}
+
+function currentMonthKeyParts() {
+  const d = new Date();
+  return { year: d.getFullYear(), month: d.getMonth() + 1, key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` };
+}
+
 export default function Meetings() {
   const { getAuthConfig, API, user } = useAuth();
   const navigate = useNavigate();
-  const [meetings, setMeetings] = useState([]);
+  const { key: currentMonthKey, year: currentYear, month: currentMonth } = useMemo(currentMonthKeyParts, []);
+
   const [loading, setLoading] = useState(true);
-  const [hasMoreMeetings, setHasMoreMeetings] = useState(false);
+  // month_key -> meeting[] ; current month is always loaded in full up front
+  const [monthCache, setMonthCache] = useState({});
+  // [{ month_key, year, month, label, count, status_counts }] — every OTHER month, newest first
+  const [monthSummaries, setMonthSummaries] = useState([]);
+  const [expandedKeys, setExpandedKeys] = useState(() => new Set());
+  const [expandingKey, setExpandingKey] = useState(null);
+
+  // Full flat list — only fetched once the user searches/filters, so filtering
+  // can cover the whole history instead of just what's currently expanded.
+  const [allMeetings, setAllMeetings] = useState(null);
   const [loadingAll, setLoadingAll] = useState(false);
+
   const [deletingId, setDeletingId] = useState(null);   // meeting id currently pending confirm
   const [deleteLoadingId, setDeleteLoadingId] = useState(null); // in-flight delete
   const [search, setSearch] = useState("");
@@ -82,13 +109,15 @@ export default function Meetings() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // Initial load: single combined endpoint (1 round-trip instead of several)
-    cachedGet(`${API}/dashboard/`, getAuthConfig())
-      .then(r => {
-        const d = r.data;
-        setMeetings(d.meetings || []);
-        setHasMoreMeetings(d.has_more_meetings || false);
-        if (d.org_structure) setOrgStructure(d.org_structure);
+    Promise.all([
+      cachedGet(`${API}/dashboard/`, getAuthConfig()),
+      axios.get(`${API}/meetings/?year=${currentYear}&month=${currentMonth}`, getAuthConfig()),
+      axios.get(`${API}/meetings/month-summary`, getAuthConfig()),
+    ])
+      .then(([dashRes, curRes, sumRes]) => {
+        if (dashRes.data.org_structure) setOrgStructure(dashRes.data.org_structure);
+        setMonthCache({ [currentMonthKey]: curRes.data });
+        setMonthSummaries(sumRes.data);
       })
       .catch(err => console.error("Meetings load failed", err.message))
       .finally(() => setLoading(false));
@@ -96,55 +125,80 @@ export default function Meetings() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Lightweight poll — keeps meeting statuses live without re-fetching everything
-  const fetchMeetingsOnly = async () => {
+  // Expand/collapse a previous month's divider row — lazy-fetches on first expand only.
+  const toggleMonth = async (monthKey, year, month) => {
+    if (expandedKeys.has(monthKey)) {
+      setExpandedKeys(prev => { const n = new Set(prev); n.delete(monthKey); return n; });
+      return;
+    }
+    setExpandedKeys(prev => new Set(prev).add(monthKey));
+    if (monthCache[monthKey]) return; // already fetched earlier this session
+    setExpandingKey(monthKey);
     try {
-      const { data } = await axios.get(`${API}/meetings/`, getAuthConfig());
-      setMeetings(data);
-      // Full list is now loaded — no more "Load all" needed
-      setHasMoreMeetings(false);
+      const { data } = await axios.get(`${API}/meetings/?year=${year}&month=${month}`, getAuthConfig());
+      setMonthCache(prev => ({ ...prev, [monthKey]: data }));
     } catch (err) {
-      console.error("Failed to refresh meetings", err.message);
+      console.error("Failed to load month", monthKey, err.message);
+      setExpandedKeys(prev => { const n = new Set(prev); n.delete(monthKey); return n; });
+    } finally {
+      setExpandingKey(null);
     }
   };
 
-  // PERF-002: only poll while at least one meeting is still mid-pipeline
-  // (processing/transcribing/analyzing) — same pattern as UploadSupervision.js,
-  // rather than an unconditional 15s interval regardless of activity.
+  // PERF-002: only poll while at least one *currently loaded* month has a
+  // meeting still mid-pipeline — re-fetches just those loaded months, never
+  // the whole history, so this stays cheap however big the org gets.
   useEffect(() => {
-    const hasProcessing = meetings.some(m => ["processing", "transcribing", "analyzing"].includes(m.status));
+    const hasProcessing = Object.values(monthCache).some(list =>
+      list.some(m => ["processing", "transcribing", "analyzing"].includes(m.status))
+    );
     if (hasProcessing && !pollRef.current) {
-      pollRef.current = setInterval(fetchMeetingsOnly, 15000);
+      pollRef.current = setInterval(async () => {
+        const keys = Object.keys(monthCache);
+        await Promise.all(keys.map(async k => {
+          const [y, m] = k.split("-").map(Number);
+          try {
+            const { data } = await axios.get(`${API}/meetings/?year=${y}&month=${m}`, getAuthConfig());
+            setMonthCache(prev => ({ ...prev, [k]: data }));
+          } catch (err) { /* keep stale data on transient poll failure */ }
+        }));
+      }, 15000);
     } else if (!hasProcessing && pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meetings]);
+  }, [monthCache]);
 
-  // Called when user clicks "Load all meetings" — fetches full untruncated list
-  const loadAllMeetings = async () => {
-    setLoadingAll(true);
-    try {
-      const { data } = await axios.get(`${API}/meetings/`, getAuthConfig());
-      setMeetings(data);
-      setHasMoreMeetings(false);
-    } catch (err) {
-      console.error("Failed to load all meetings", err.message);
-    } finally {
-      setLoadingAll(false);
+  const allLoadedMeetings = useMemo(() => Object.values(monthCache).flat(), [monthCache]);
+  const activeMeetingsLoaded = useMemo(() => allLoadedMeetings.filter(m => !m.is_historical), [allLoadedMeetings]);
+  const historicalMeetings = useMemo(() => allLoadedMeetings.filter(m => m.is_historical === true), [allLoadedMeetings]);
+
+  const hasActiveFilters = search || statusFilter !== "all" || dateFrom || dateTo || orgFilter.setting_id || orgFilter.team_id;
+
+  // The moment any search/filter is applied, fetch the complete history once
+  // (like the old "Load all meetings" button) so filtering isn't limited to
+  // whatever months happen to be expanded — this is the one place the page
+  // deliberately trades speed for completeness.
+  useEffect(() => {
+    if (hasActiveFilters && allMeetings === null && !loadingAll) {
+      setLoadingAll(true);
+      axios.get(`${API}/meetings/`, getAuthConfig())
+        .then(({ data }) => setAllMeetings(data))
+        .catch(err => console.error("Failed to load full meeting history", err.message))
+        .finally(() => setLoadingAll(false));
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasActiveFilters]);
 
-  // Legacy alias so delete handler can call fetchMeetings after delete
-  const fetchMeetings = fetchMeetingsOnly;
-
-  const activeMeetings = useMemo(() => meetings.filter(m => !m.is_historical), [meetings]);
-  const historicalMeetings = useMemo(() => meetings.filter(m => m.is_historical === true), [meetings]);
+  const searchSource = useMemo(() => {
+    const list = hasActiveFilters ? (allMeetings || []) : activeMeetingsLoaded;
+    return list.filter(m => !m.is_historical);
+  }, [hasActiveFilters, allMeetings, activeMeetingsLoaded]);
 
   const filteredMeetings = useMemo(() => {
     const q = search.toLowerCase();
-    return activeMeetings
+    return searchSource
       .filter(m => {
         if (q) {
           const titleMatch = m.title?.toLowerCase().includes(q);
@@ -171,9 +225,7 @@ export default function Meetings() {
         const db = new Date(b.date || b.created_at || 0).getTime();
         return sortOrder === "desc" ? db - da : da - db;
       });
-  }, [activeMeetings, search, statusFilter, dateFrom, dateTo, sortOrder, orgFilter]);
-
-  const hasActiveFilters = search || statusFilter !== "all" || dateFrom || dateTo || orgFilter.setting_id || orgFilter.team_id;
+  }, [searchSource, search, statusFilter, dateFrom, dateTo, sortOrder, orgFilter]);
 
   const clearFilters = () => {
     setSearch("");
@@ -196,7 +248,12 @@ export default function Meetings() {
     setDeleteLoadingId(meetingId);
     try {
       await axios.delete(`${API}/meetings/${meetingId}`, getAuthConfig());
-      setMeetings(prev => prev.filter(m => m.id !== meetingId));
+      setMonthCache(prev => {
+        const next = {};
+        for (const [k, list] of Object.entries(prev)) next[k] = list.filter(m => m.id !== meetingId);
+        return next;
+      });
+      if (allMeetings !== null) setAllMeetings(prev => prev.filter(m => m.id !== meetingId));
       // Bust the dashboard cache so navigating back re-fetches a fresh list
       invalidateCache("/dashboard");
     } catch (err) {
@@ -206,6 +263,85 @@ export default function Meetings() {
       setDeletingId(null);
     }
   };
+
+  const renderMeetingCard = (meeting) => (
+    <div
+      key={meeting.id}
+      onClick={deletingId === meeting.id ? undefined : getMeetingAction(meeting)}
+      className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
+      data-testid={`meeting-item-${meeting.id}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-1">
+            <h3 className="font-medium text-gray-900 truncate">{meeting.title}</h3>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <span>{formatDate(meeting.date || meeting.created_at)}</span>
+            {meeting.location && <span>{meeting.location}</span>}
+            {meeting.attendees?.length > 0 && (
+              <span className="flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                {meeting.attendees.length} attendee{meeting.attendees.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            {meeting.sign_off_manager_name && (
+              <span>Manager: {meeting.sign_off_manager_name}</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Dynamic Prep shortcut — only for draft/stopped meetings, manager/admin */}
+          {(user?.role === "manager" || user?.role === "admin") && ["draft", "stopped"].includes(meeting.status) && (
+            <button
+              onClick={e => { e.stopPropagation(); navigate(`/meetings/${meeting.id}/prepare`); }}
+              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
+              title="Dynamic Supervision Prep"
+              data-testid={`prepare-btn-${meeting.id}`}
+            >
+              <Sparkles className="w-3 h-3" /> Prepare
+            </button>
+          )}
+          <StatusBadge status={meeting.status} />
+          {canDelete && (
+            deletingId === meeting.id ? (
+              <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                <span className="text-xs text-red-600 font-medium">Delete?</span>
+                <button
+                  onClick={e => handleDelete(e, meeting.id)}
+                  disabled={deleteLoadingId === meeting.id}
+                  className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-60"
+                  data-testid={`delete-confirm-btn-${meeting.id}`}
+                >
+                  {deleteLoadingId === meeting.id ? "..." : "Yes"}
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); setDeletingId(null); }}
+                  className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+                  data-testid={`delete-cancel-btn-${meeting.id}`}
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={e => handleDelete(e, meeting.id)}
+                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                title="Delete meeting"
+                data-testid={`delete-meeting-btn-${meeting.id}`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )
+          )}
+          <ChevronRight className="w-4 h-4 text-gray-400 mt-0.5" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const currentMonthMeetings = (monthCache[currentMonthKey] || []).filter(m => !m.is_historical);
+  const hasAnyMeetingsAtAll = currentMonthMeetings.length > 0 || monthSummaries.length > 0;
 
   return (
     <Layout>
@@ -355,21 +491,15 @@ export default function Meetings() {
                 {f.label}
                 {f.value !== "all" && (
                   <span className="ml-1.5 opacity-70">
-                    {activeMeetings.filter(m => m.status === f.value).length}
+                    {activeMeetingsLoaded.filter(m => m.status === f.value).length}
                   </span>
                 )}
               </button>
             ))}
             {/* Result count */}
-            {hasActiveFilters && (
-              <span className="ml-auto text-xs text-gray-400">
-                {filteredMeetings.length} of {meetings.length} meetings
-              </span>
-            )}
-            {/* Pagination hint */}
-            {hasMoreMeetings && !hasActiveFilters && (
-              <span className="ml-auto text-xs text-gray-400">
-                Showing first 50 meetings
+            {hasActiveFilters && !loadingAll && (
+              <span className="ml-auto text-xs text-gray-400" data-testid="filtered-count">
+                {filteredMeetings.length} matching meeting{filteredMeetings.length !== 1 ? "s" : ""} (searched full history)
               </span>
             )}
           </div>
@@ -394,127 +524,109 @@ export default function Meetings() {
               </div>
             ))}
           </div>
-        ) : filteredMeetings.length === 0 ? (
-          <div className="text-center py-16 bg-white border border-gray-200 rounded-lg shadow-sm" data-testid="empty-meetings">
-            <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">No meetings found</p>
-            <p className="text-gray-400 text-sm mt-1">
-              {hasActiveFilters ? "Try adjusting your search or filters" : "Create your first supervision meeting"}
-            </p>
-            {hasActiveFilters ? (
+        ) : hasActiveFilters ? (
+          // ── Filtered/search mode — flat list over the FULL meeting history ──
+          loadingAll ? (
+            <div className="space-y-2" aria-busy="true" aria-label="Searching full meeting history">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                  <Skeleton className="h-4 w-2/3 mb-2" />
+                  <Skeleton className="h-3 w-40" />
+                </div>
+              ))}
+            </div>
+          ) : filteredMeetings.length === 0 ? (
+            <div className="text-center py-16 bg-white border border-gray-200 rounded-lg shadow-sm" data-testid="empty-meetings">
+              <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 font-medium">No meetings found</p>
+              <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
               <button onClick={clearFilters} className="mt-4 inline-flex items-center gap-2 text-[#1E3A8A] px-4 py-2 rounded-md text-sm font-medium border border-[#1E3A8A] hover:bg-blue-50 transition-colors">
                 <X className="w-4 h-4" />
                 Clear filters
               </button>
-            ) : (
-              <button onClick={() => navigate("/meetings/new")} className="mt-4 inline-flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors">
-                <Plus className="w-4 h-4" />
-                New Meeting
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-2" data-testid="meetings-list">
-            {filteredMeetings.map(meeting => (
-              <div
-                key={meeting.id}
-                onClick={deletingId === meeting.id ? undefined : getMeetingAction(meeting)}
-                className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
-                data-testid={`meeting-item-${meeting.id}`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-medium text-gray-900 truncate">{meeting.title}</h3>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>{formatDate(meeting.date || meeting.created_at)}</span>
-                      {meeting.location && <span>{meeting.location}</span>}
-                      {meeting.attendees?.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3 h-3" />
-                          {meeting.attendees.length} attendee{meeting.attendees.length !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                      {meeting.sign_off_manager_name && (
-                        <span>Manager: {meeting.sign_off_manager_name}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {/* Dynamic Prep shortcut — only for draft/stopped meetings, manager/admin */}
-                    {(user?.role === "manager" || user?.role === "admin") && ["draft", "stopped"].includes(meeting.status) && (
-                      <button
-                        onClick={e => { e.stopPropagation(); navigate(`/meetings/${meeting.id}/prepare`); }}
-                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors"
-                        title="Dynamic Supervision Prep"
-                        data-testid={`prepare-btn-${meeting.id}`}
-                      >
-                        <Sparkles className="w-3 h-3" /> Prepare
-                      </button>
-                    )}
-                    <StatusBadge status={meeting.status} />
-                    {canDelete && (
-                      deletingId === meeting.id ? (
-                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                          <span className="text-xs text-red-600 font-medium">Delete?</span>
-                          <button
-                            onClick={e => handleDelete(e, meeting.id)}
-                            disabled={deleteLoadingId === meeting.id}
-                            className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-60"
-                            data-testid={`delete-confirm-btn-${meeting.id}`}
-                          >
-                            {deleteLoadingId === meeting.id ? "..." : "Yes"}
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); setDeletingId(null); }}
-                            className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-                            data-testid={`delete-cancel-btn-${meeting.id}`}
-                          >
-                            No
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={e => handleDelete(e, meeting.id)}
-                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                          title="Delete meeting"
-                          data-testid={`delete-meeting-btn-${meeting.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )
-                    )}
-                    <ChevronRight className="w-4 h-4 text-gray-400 mt-0.5" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Load all meetings button — shown when initial 50-meeting batch may be truncated */}
-        {hasMoreMeetings && (
-          <div className="flex justify-center mt-4">
-            <button
-              onClick={loadAllMeetings}
-              disabled={loadingAll}
-              data-testid="load-all-meetings-btn"
-              className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors disabled:opacity-50"
-            >
-              {loadingAll ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  Loading all meetings…
-                </>
-              ) : (
-                "Load all meetings"
-              )}
+            </div>
+          ) : (
+            <div className="space-y-2" data-testid="meetings-list">
+              {filteredMeetings.map(renderMeetingCard)}
+            </div>
+          )
+        ) : !hasAnyMeetingsAtAll ? (
+          <div className="text-center py-16 bg-white border border-gray-200 rounded-lg shadow-sm" data-testid="empty-meetings">
+            <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 font-medium">No meetings found</p>
+            <p className="text-gray-400 text-sm mt-1">Create your first supervision meeting</p>
+            <button onClick={() => navigate("/meetings/new")} className="mt-4 inline-flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors">
+              <Plus className="w-4 h-4" />
+              New Meeting
             </button>
           </div>
+        ) : (
+          // ── Default grouped view — current month in full, past months collapsed ──
+          <div className="space-y-2" data-testid="meetings-list">
+            {currentMonthMeetings.length > 0 ? (
+              currentMonthMeetings
+                .slice()
+                .sort((a, b) => {
+                  const da = new Date(a.date || a.created_at || 0).getTime();
+                  const db = new Date(b.date || b.created_at || 0).getTime();
+                  return sortOrder === "desc" ? db - da : da - db;
+                })
+                .map(renderMeetingCard)
+            ) : (
+              <p className="text-sm text-gray-400 py-3">No meetings yet this month.</p>
+            )}
+
+            {monthSummaries.map(ms => {
+              const isExpanded = expandedKeys.has(ms.month_key);
+              const isExpanding = expandingKey === ms.month_key;
+              return (
+                <div key={ms.month_key} data-testid={`month-group-${ms.month_key}`}>
+                  <button
+                    onClick={() => toggleMonth(ms.month_key, ms.year, ms.month)}
+                    data-testid={`month-toggle-${ms.month_key}`}
+                    className="w-full flex items-center gap-3 py-3 group"
+                  >
+                    <span className="text-sm font-medium text-gray-600 group-hover:text-[#1E3A8A] whitespace-nowrap transition-colors">
+                      {ms.label}
+                    </span>
+                    <span className="flex-1 h-px bg-gray-200 group-hover:bg-[#1E3A8A]/30 transition-colors" />
+                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                      {ms.count} meeting{ms.count !== 1 ? "s" : ""}
+                      {formatStatusBreakdown(ms.status_counts) && (
+                        <span className="hidden sm:inline"> · {formatStatusBreakdown(ms.status_counts)}</span>
+                      )}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 group-hover:text-[#1E3A8A] transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                  </button>
+                  {isExpanded && (
+                    <div className="space-y-2 pb-2" data-testid={`month-meetings-${ms.month_key}`}>
+                      {isExpanding ? (
+                        [...Array(Math.min(ms.count, 3))].map((_, i) => (
+                          <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                            <Skeleton className="h-4 w-2/3 mb-2" />
+                            <Skeleton className="h-3 w-40" />
+                          </div>
+                        ))
+                      ) : (
+                        (monthCache[ms.month_key] || [])
+                          .filter(m => !m.is_historical)
+                          .slice()
+                          .sort((a, b) => {
+                            const da = new Date(a.date || a.created_at || 0).getTime();
+                            const db = new Date(b.date || b.created_at || 0).getTime();
+                            return sortOrder === "desc" ? db - da : da - db;
+                          })
+                          .map(renderMeetingCard)
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
 
-        {/* Historical meetings — staff who have since moved teams */}
+        {/* Historical meetings — staff who have since moved teams (from currently loaded months) */}
         {historicalMeetings.length > 0 && (
           <div className="mt-8" data-testid="historical-section">
             <button
