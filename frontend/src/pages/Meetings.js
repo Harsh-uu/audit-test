@@ -459,37 +459,7 @@ export default function Meetings() {
             </div>
           )}
 
-          {/* Org filter (admin/manager only, when org has settings) */}
-          {orgStructure.settings?.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap" data-testid="org-filter-bar">
-              <Building2 className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs text-gray-500 font-medium">Filter:</span>
-              <select
-                value={orgFilter.setting_id}
-                onChange={e => setOrgFilter({ setting_id: e.target.value, team_id: "" })}
-                className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] bg-white"
-                data-testid="setting-filter-select"
-              >
-                <option value="">All Settings</option>
-                {orgStructure.settings.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              {orgFilter.setting_id && (
-                <select
-                  value={orgFilter.team_id}
-                  onChange={e => setOrgFilter(f => ({ ...f, team_id: e.target.value }))}
-                  className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] bg-white"
-                  data-testid="team-filter-select"
-                >
-                  <option value="">All Teams</option>
-                  {(orgStructure.settings.find(s => s.id === orgFilter.setting_id)?.teams || []).map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
-
-          {/* Quick status chips */}
+          {/* Quick status chips + org filter (same row, filter pushed right) */}
           <div className="flex items-center gap-2 flex-wrap">
             {QUICK_FILTERS.map(f => (
               <button
@@ -514,9 +484,40 @@ export default function Meetings() {
                 )}
               </button>
             ))}
+
+            {/* Org filter (admin/manager only, when org has settings) — pushed to the right */}
+            {orgStructure.settings?.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap ml-auto" data-testid="org-filter-bar">
+                <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs text-gray-500 font-medium">Filter:</span>
+                <select
+                  value={orgFilter.setting_id}
+                  onChange={e => setOrgFilter({ setting_id: e.target.value, team_id: "" })}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] bg-white"
+                  data-testid="setting-filter-select"
+                >
+                  <option value="">All Settings</option>
+                  {orgStructure.settings.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                {orgFilter.setting_id && (
+                  <select
+                    value={orgFilter.team_id}
+                    onChange={e => setOrgFilter(f => ({ ...f, team_id: e.target.value }))}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] bg-white"
+                    data-testid="team-filter-select"
+                  >
+                    <option value="">All Teams</option>
+                    {(orgStructure.settings.find(s => s.id === orgFilter.setting_id)?.teams || []).map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
             {/* Result count */}
             {hasActiveFilters && !loadingAll && (
-              <span className="ml-auto text-xs text-gray-400" data-testid="filtered-count">
+              <span className={orgStructure.settings?.length > 0 ? "w-full text-xs text-gray-400" : "ml-auto text-xs text-gray-400"} data-testid="filtered-count">
                 {filteredMeetings.length} matching meeting{filteredMeetings.length !== 1 ? "s" : ""} (searched full history)
               </span>
             )}
