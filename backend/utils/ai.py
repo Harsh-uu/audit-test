@@ -1991,7 +1991,7 @@ async def generate_prep_questions(
     if previous_meeting_summaries:
         parts = []
         for m in previous_meeting_summaries[:3]:
-            part = f"Meeting '{m.get('title', '?')}' ({m.get('date', '?')}):\n  Summary: {m.get('summary', '')[:600]}"
+            part = f"Meeting '{m.get('title', '?')}' ({m.get('date', '?')}):\n  Summary: {m.get('summary', '')[:1500]}"
             actions = m.get("actions", [])
             if actions:
                 incomplete = [a.get("text", a.get("action", "")) for a in actions if not a.get("completed")]
@@ -2007,7 +2007,7 @@ async def generate_prep_questions(
             content = d.get('content_snippet', '').strip()
             if content:
                 parts.append(
-                    f"[{d.get('doc_type','Document').replace('_',' ').title()}] \"{d.get('label','')}\"\n{content[:2500]}"
+                    f"[{d.get('doc_type','Document').replace('_',' ').title()}] \"{d.get('label','')}\"\n{content[:6000]}"
                 )
         if parts:
             docs_context = "UPLOADED DOCUMENTS (read carefully — questions MUST reference specific content from these):\n\n" + "\n\n---\n\n".join(parts)
@@ -2021,8 +2021,18 @@ async def generate_prep_questions(
 
     has_docs = bool(uploaded_docs and any(d.get("content_snippet", "").strip() for d in uploaded_docs))
     has_prev = bool(previous_meeting_summaries)
+    has_focus = bool(focus_topic and focus_topic.strip())
+    blank_slate = not (has_docs or has_prev or has_focus)
 
     sections_spec = "\n".join([f'  "{s["id"]}": "{s["label"]}"' for s in PREP_SECTIONS])
+
+    blank_slate_rule = (
+        '\n10. BLANK SLATE MODE — no documents, no focus topic, and no previous meeting history are '
+        'available for this session. Do not reference a "focus topic" or "the documents" since none exist. '
+        "Instead, generate warm, open general-practice questions appropriate for an early/first check-in — "
+        "exploring role confidence, what's felt manageable or difficult so far, and early priorities. Keep "
+        "the same behavioural/GROW-informed style as every other rule above."
+    ) if blank_slate else ""
 
     system_prompt = f"""You are an expert {sector_label} supervision facilitator.
 Your task is to generate HIGHLY PERSONALISED, open-ended supervision preparation questions for a manager 
@@ -2032,41 +2042,42 @@ MANDATORY RULES — VIOLATION OF ANY RULE MAKES THE OUTPUT USELESS:
 
 1. NEVER write a question that can be answered with yes or no.
 
-2. USE BEHAVIOURAL/REFLECTIVE PHRASING ONLY:
-   - "Walk me through a time when..."
-   - "Give me a specific example of how you..."
-   - "Tell me about a situation where..."
-   - "Describe how you approached..."
-   - "What did you do when..."
+2. USE BEHAVIOURAL/REFLECTIVE PHRASING, INFORMED BY THE GROW COACHING MODEL (Goal, Reality, Options, Will). The examples below are STYLE examples, not a fixed script — vary your wording naturally and never reuse the same opener twice in one set:
+   - Reality-exploring: "Walk me through a time when...", "Tell me about a recent situation where...", "Describe how [X] played out when..."
+   - Goal-exploring: "What would a strong outcome look like for...", "What are you hoping to achieve with..."
+   - Options-exploring: "What different approaches have you considered for...", "What could you try differently next time with..."
+   - Will/action-exploring: "What's one thing you're going to do differently about...", "What will you commit to before we next meet regarding..."
+   Where it fits naturally for a section (especially "What Needs Attention" and "Learning & Development"), aim for one of the two questions to explore Reality/Goal and the other to explore Options/Will — creating a natural coaching arc rather than two disconnected questions. This is guidance, not a rigid formula — always prioritise natural conversation flow over mechanically following GROW.
 
 3. CONCISENESS — every question must be under 25 words. Cut all filler phrases like "I'd like to understand...", "Could you help me explore...", "In the context of your role...". Start directly with the behavioural prompt. One sentence only.
 
-3. {"EVERY question MUST reference specific content from the uploaded documents. Follow these rules by document type:" if has_docs else "Use the focus topic and context to make questions as specific as possible."}
-{"   - JOB DESCRIPTION: Read every listed responsibility, competency and required skill. Write questions that probe whether the supervisee is actively fulfilling each one. Name the specific responsibility in the question. Example: if the JD says 'ensure accurate medication records', ask 'Walk me through how you ensure medication records are completed accurately after each administration.' Do not write generic competency questions." if has_docs else ""}
+4. {"EVERY question MUST reference specific content from the uploaded documents. Follow these rules by document type:" if has_docs else "Use the focus topic and context to make questions as specific as possible."}
+{"   - JOB DESCRIPTION: Read every listed responsibility, competency and required skill. If there are more than you can cover, pick the HIGHEST-PRIORITY responsibilities or competencies. Write questions that probe whether the supervisee is actively fulfilling them. Name the specific responsibility in the question. Example: if the JD says 'ensure accurate medication records', ask 'Walk me through how you ensure medication records are completed accurately after each administration.' Do not write generic competency questions." if has_docs else ""}
 {"   - SUPERVISION RECORD / PREVIOUS MEETING: Follow up directly on named incidents, actions, concerns or themes. Reference them explicitly. Example: 'Last time we discussed the staffing shortage on night shifts — describe how you have managed that since then.'" if has_docs else ""}
 {"   - OTHER DOCUMENTS: Extract key themes, requirements and named processes. Ask questions only answerable by someone familiar with that specific content." if has_docs else ""}
 {"   Any question that could apply to ANY care worker without reading the documents is REJECTED." if has_docs else ""}
 
-4. {"Follow up on every outstanding action from previous supervision notes." if has_prev else "Use the focus topic to frame questions."}
+5. {"Follow up on the highest-priority outstanding action(s) from previous supervision notes — if there are more than you can cover, pick the ones that matter most." if has_prev else "Use the focus topic to frame questions."}
 
-5. AOB SECTION — THIS IS NOT A FILLER. Rules:
+6. AOB SECTION — THIS IS NOT A FILLER. Rules:
    - Do NOT write "Is there anything else you'd like to discuss?" or any variation of it.
    - Look at the context and identify: an unresolved concern, an upcoming challenge, a recurring theme, or something the supervisee has been working toward.
    - Write one closing question that directly names that thing and invites reflection or forward planning.
    - Good example: "Given the handover issues raised last session, describe what you are planning to put in place before the next shift changeover."
    - If no specific context: ask about a goal they want to set or something they want to develop in the next period.
 
-6. Make questions feel like a natural, caring conversation — not a performance review interrogation.
+7. Make questions feel like a natural, caring conversation — not a performance review interrogation.
 
-7. Generate exactly 2 questions per section, except AOB (exactly 1 question).
+8. Generate exactly 2 questions per section, except AOB (exactly 1 question).
 
-8. BONUS INSIGHT — After all standard sections, add one extra section with section_id "bonus":
+9. BONUS INSIGHT — After all standard sections, add one extra section with section_id "bonus":
    - Reason deeply through ALL context: documents, previous meetings, outstanding actions, focus topic.
    - Find ONE question that does NOT fit neatly into any standard section but is genuinely valuable — something a less attentive manager would miss entirely.
    - This could be: a pattern across multiple documents, a risk hiding in plain sight, a development opportunity the supervisee hasn't named, a welfare concern suggested by the tone of previous notes, or an unexpected connection between pieces of context.
    - Label this section exactly: "We thought you might also want to ask this"
    - Generate exactly 1 question. It should be the most insightful, surprising, or revealing question on the page.
    - If you genuinely find nothing from context, still include the section with a thoughtful forward-looking question.
+{blank_slate_rule}
 
 SECTIONS TO POPULATE (standard sections only — bonus is always appended separately):
 {sections_spec}

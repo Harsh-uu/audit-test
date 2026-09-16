@@ -61,7 +61,7 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
   const saveEdit = async () => {
     if (!editForm.name?.trim()) return setEditError("Name is required");
     if (!editForm.email?.trim()) return setEditError("Email is required");
-    if (showPwdReset && newPassword && newPassword.length < 8) return setEditError("Password must be at least 8 characters");
+    if (showPwdReset && newPassword && newPassword.length < 10) return setEditError("Password must be at least 10 characters");
     setSaving(true);
     setEditError("");
     try {
@@ -210,7 +210,7 @@ export function UsersTab({ users, showNewUser, setShowNewUser, newUser, setNewUs
                           type="password"
                           value={newPassword}
                           onChange={e => setNewPassword(e.target.value)}
-                          placeholder="Min. 8 characters"
+                          placeholder="Min. 10 characters"
                           autoComplete="new-password"
                           className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                           data-testid="new-password-input"

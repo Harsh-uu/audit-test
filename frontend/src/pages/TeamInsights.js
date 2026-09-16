@@ -1526,13 +1526,13 @@ export default function TeamInsights() {
           {(tab === "matrix" || tab === "themes") && (
             loading ? (
               tab === "themes" ? (
-                /* ── Themes skeleton — 3-col GapBar card grid ── */
+                /* ── Themes skeleton — 3-col GapBar card grid (lighter shimmer) ── */
                 <div className="space-y-8 p-6" aria-busy="true" aria-label="Loading standards coverage">
                   {/* Section heading */}
                   <div>
                     <div className="flex items-center gap-2 mb-4">
-                      <Skeleton className="w-4 h-4 rounded" />
-                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="w-4 h-4 rounded bg-gray-100" />
+                      <Skeleton className="h-4 w-48 bg-gray-100" />
                     </div>
                     {/* 3-column card grid */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1544,21 +1544,21 @@ export default function TeamInsights() {
                         <div key={ci} className="bg-white border border-gray-200 rounded-lg p-4">
                           {/* Card header: icon + title + count */}
                           <div className="flex items-center gap-1.5 mb-3">
-                            <Skeleton className="w-3.5 h-3.5 rounded" />
-                            <Skeleton className={`h-3.5`} style={{ width: col.w + 80 }} />
-                            <Skeleton className="ml-auto h-3 w-16" />
+                            <Skeleton className="w-3.5 h-3.5 rounded bg-gray-100" />
+                            <Skeleton className={`h-3.5 bg-gray-100`} style={{ width: col.w + 80 }} />
+                            <Skeleton className="ml-auto h-3 w-16 bg-gray-100" />
                           </div>
                           {/* GapBar rows */}
                           {[...Array(5)].map((_, ri) => (
                             <div key={ri} className="mb-3">
                               <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                  <Skeleton className="h-4 w-10 rounded flex-shrink-0" />
-                                  <Skeleton className="h-3.5 flex-1" style={{ maxWidth: `${50 + (ri % 4) * 12}%` }} />
+                                  <Skeleton className="h-4 w-10 rounded flex-shrink-0 bg-gray-100" />
+                                  <Skeleton className="h-3.5 flex-1 bg-gray-100" style={{ maxWidth: `${50 + (ri % 4) * 12}%` }} />
                                 </div>
-                                <Skeleton className="h-3 w-12 ml-2 flex-shrink-0" />
+                                <Skeleton className="h-3 w-12 ml-2 flex-shrink-0 bg-gray-100" />
                               </div>
-                              <Skeleton className="h-1.5 w-full rounded-full" />
+                              <Skeleton className="h-1.5 w-full rounded-full bg-gray-100" />
                             </div>
                           ))}
                         </div>
@@ -1567,30 +1567,30 @@ export default function TeamInsights() {
                   </div>
                 </div>
               ) : (
-              /* ── Matrix skeleton ── */
+              /* ── Matrix skeleton (lighter shimmer) ── */
               <div className="p-6 space-y-4" aria-busy="true" aria-label="Loading team insights">
                 {/* Filter bar shimmer */}
                 <div className="flex items-center gap-3 mb-2">
-                  <Skeleton className="h-8 w-40 rounded-md" />
-                  <Skeleton className="h-8 w-32 rounded-md" />
-                  <Skeleton className="h-8 w-28 rounded-md" />
+                  <Skeleton className="h-8 w-40 rounded-md bg-gray-100" />
+                  <Skeleton className="h-8 w-32 rounded-md bg-gray-100" />
+                  <Skeleton className="h-8 w-28 rounded-md bg-gray-100" />
                 </div>
                 {/* Table header */}
                 <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
-                  <Skeleton className="h-3 w-28 flex-shrink-0" />
+                  <Skeleton className="h-3 w-28 flex-shrink-0 bg-gray-100" />
                   {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-3 w-16 flex-1" />
+                    <Skeleton key={i} className="h-3 w-16 flex-1 bg-gray-100" />
                   ))}
                 </div>
                 {/* Staff rows */}
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-50">
                     <div className="flex items-center gap-2 w-28 flex-shrink-0">
-                      <Skeleton className="h-7 w-7 rounded-full flex-shrink-0" />
-                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-7 w-7 rounded-full flex-shrink-0 bg-gray-100" />
+                      <Skeleton className="h-3 w-16 bg-gray-100" />
                     </div>
                     {[...Array(5)].map((_, j) => (
-                      <Skeleton key={j} className="h-7 flex-1 rounded-md" />
+                      <Skeleton key={j} className="h-7 flex-1 rounded-md bg-gray-100" />
                     ))}
                   </div>
                 ))}

@@ -176,7 +176,7 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit }) {
           </div>
           <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none" data-testid="people-role-filter">
             <option value="all">All roles</option>
-            <option value="attendee">Care Worker</option>
+            <option value="attendee">Staff / Supervisee</option>
             <option value="manager">Manager</option>
             <option value="admin">Admin</option>
           </select>
@@ -342,7 +342,7 @@ function InvitesTab({ people, onRevoke }) {
 
 // ── Edit User Modal ───────────────────────────────────────────────────────────
 const ROLES = [
-  { value: "attendee", label: "Care Worker" },
+  { value: "attendee", label: "Staff / Supervisee" },
   { value: "manager",  label: "Manager" },
   { value: "shared_reviewer", label: "Shared Reviewer" },
   { value: "admin",    label: "Admin" },
@@ -378,7 +378,7 @@ function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, currentUs
   const save = async () => {
     if (!form.name.trim()) return setError("Name is required");
     if (!form.email.trim()) return setError("Email is required");
-    if (showPwd && newPwd && newPwd.length < 8) return setError("Password must be at least 8 characters");
+    if (showPwd && newPwd && newPwd.length < 10) return setError("Password must be at least 10 characters");
     setSaving(true); setError("");
     try {
       await axios.put(`${API}/admin/users/${person.user_id}`, form, getAuthConfig());

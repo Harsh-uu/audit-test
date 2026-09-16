@@ -150,7 +150,7 @@ async def update_user(user_id: str, data: UpdateUserRequest, current_user=Depend
     org_id = current_user.get("org_id", "")
 
     # SEC-003: Fetch target user's role before applying any changes
-    async with database.with_admin() as conn:
+    async with database.with_org(org_id) as conn:
         target = await conn.fetchrow("SELECT id, role FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
     if not target:
         raise HTTPException(404, "User not found")
@@ -184,11 +184,17 @@ async def update_user(user_id: str, data: UpdateUserRequest, current_user=Depend
 
     set_parts = [f"{k}=${i+2}" for i, k in enumerate(update_data.keys())]
     async with database.with_admin() as conn:
+        # Email-uniqueness check is genuinely global (must see all orgs) — stays with_admin()
         if "email" in update_data:
             clash = await conn.fetchrow("SELECT id FROM users WHERE email = $1 AND id <> $2", update_data["email"], user_id)
             if clash:
                 raise HTTPException(400, "Email address already in use")
-        await conn.execute(f"UPDATE users SET {', '.join(set_parts)} WHERE id=$1", user_id, *list(update_data.values()))
+        # Hardening: org_id filter added for defense-in-depth even though target
+        # was already confirmed to belong to org_id above
+        await conn.execute(
+            f"UPDATE users SET {', '.join(set_parts)} WHERE id=$1 AND org_id=${len(update_data) + 2}",
+            user_id, *list(update_data.values()), org_id,
+        )
     return {"message": "User updated"}
 
 
@@ -198,7 +204,7 @@ async def delete_user(user_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] != "admin":
         raise HTTPException(403, "Admin only")
     org_id = current_user.get("org_id", "")
-    async with database.with_admin() as conn:
+    async with database.with_org(org_id) as conn:
         u = await conn.fetchrow("SELECT id, must_change_password FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
         if not u:
             raise HTTPException(404, "User not found")
@@ -220,7 +226,7 @@ async def reset_user_password(user_id: str, data: ResetPasswordRequest, current_
     validate_password_strength(data.new_password)
     org_id = current_user.get("org_id", "")
     now = datetime.now(timezone.utc)
-    async with database.with_admin() as conn:
+    async with database.with_org(org_id) as conn:
         u = await conn.fetchrow("SELECT id FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
         if not u:
             raise HTTPException(404, "User not found")
@@ -248,7 +254,7 @@ async def list_standards(type: Optional[str] = None, current_user=Depends(get_cu
         raise HTTPException(403, "Admin/Manager only")
     org_id = current_user.get("org_id", "")
 
-    async with database.with_admin() as conn:
+    async with database.with_org(org_id) as conn:
         # Get org jurisdiction and service_type to filter system standards correctly
         org_row = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
         jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
@@ -336,7 +342,9 @@ async def create_standard(data: CreateStandardRequest, current_user=Depends(get_
 async def delete_standard(standard_id: str, current_user=Depends(get_current_user)):
     if current_user["role"] != "admin":
         raise HTTPException(403, "Admin only")
-    async with database.with_admin() as conn:
+    org_id = current_user.get("org_id", "")
+    # SEC-001: with_org() so RLS (org_id=current_org) rejects other orgs' standards
+    async with database.with_org(org_id) as conn:
         entry = await conn.fetchrow("SELECT id, is_system FROM standards_entries WHERE id = $1", standard_id)
         if not entry:
             raise HTTPException(404, "Standard not found")
@@ -571,7 +579,7 @@ async def save_template(request: Request, current_user=Depends(get_current_user)
         "updated_at": now,
         "updated_by_name": current_user.get("name", ""),
     }
-    async with database.with_admin() as conn:
+    async with database.with_org(org_id) as conn:
         await conn.execute(
             """INSERT INTO settings (id, org_id, data) VALUES ($1,$2,$3::jsonb)
                ON CONFLICT (id) DO UPDATE SET data=$3::jsonb""",
@@ -971,7 +979,7 @@ async def get_team_insights(
             }
 
     # Get org jurisdiction to load the correct framework standards
-    async with database.with_admin() as conn:
+    async with database.with_org(org_id) as conn:
         org_info = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
     org_jurisdiction = (org_info["jurisdiction"] if org_info else None) or "england"
     org_service_type = (org_info["service_type"] if org_info else None)
@@ -1838,7 +1846,8 @@ async def export_cc_excerpts(staff_ids: str = None, current_user=Depends(get_cur
     meeting_count = len({item["meeting_id"] for items in std_map.values() for item in items})
     staff_label = "All staff"
     if selected_ids:
-        async with database.with_admin() as conn:
+        # SEC-003: with_org() so RLS drops foreign-org user ids from selected_ids
+        async with database.with_org(org_id) as conn:
             u_rows = await conn.fetch("SELECT name FROM users WHERE id = ANY($1::uuid[])", selected_ids)
         names = [r["name"] for r in u_rows]
         staff_label = ", ".join(sorted(names)) if names else "Selected staff"
@@ -2329,6 +2338,7 @@ async def debug_user_by_email(email: str, current_user=Depends(get_current_user)
     """Admin: check a user's org membership and meeting visibility by email."""
     if current_user["role"] not in ("admin", "super_admin"):
         raise HTTPException(403, "Admin only")
+    caller_org = current_user.get("org_id", "")
     async with database.with_admin() as conn:
         u = await conn.fetchrow(
             "SELECT id, name, email, role, org_id, is_active, must_change_password FROM users WHERE LOWER(email)=LOWER($1)",
@@ -2337,6 +2347,9 @@ async def debug_user_by_email(email: str, current_user=Depends(get_current_user)
         if not u:
             raise HTTPException(404, "User not found")
         u = dict(u)
+        # SEC-002: plain admins may only debug users in their own org
+        if current_user["role"] != "super_admin" and u["org_id"] != caller_org:
+            raise HTTPException(404, "User not found")
 
         # Query across all orgs (admin context bypasses RLS).
         # Do NOT pass empty string for UUID org_id — query by user_id only.
@@ -2375,6 +2388,7 @@ async def debug_user(user_id: str, current_user=Depends(get_current_user)):
     """Admin: check a user's org membership and meeting visibility."""
     if current_user["role"] not in ("admin", "super_admin"):
         raise HTTPException(403, "Admin only")
+    caller_org = current_user.get("org_id", "")
     async with database.with_admin() as conn:
         u = await conn.fetchrow(
             "SELECT id, name, email, role, org_id, is_active, must_change_password FROM users WHERE id=$1",
@@ -2383,6 +2397,9 @@ async def debug_user(user_id: str, current_user=Depends(get_current_user)):
         if not u:
             raise HTTPException(404, "User not found")
         u = dict(u)
+        # SEC-002: plain admins may only debug users in their own org
+        if current_user["role"] != "super_admin" and u["org_id"] != caller_org:
+            raise HTTPException(404, "User not found")
 
         # Count meetings where this user is an attendee (raw SQL, bypasses RLS)
         meeting_count = await conn.fetchrow(
@@ -2459,10 +2476,11 @@ async def debug_meeting_attendees(meeting_id: str, current_user=Depends(get_curr
     """
     if current_user["role"] not in ("admin", "super_admin"):
         raise HTTPException(403, "Admin only")
+    caller_org = current_user.get("org_id", "")
 
     async with database.with_admin() as conn:
         row = await conn.fetchrow(
-            """SELECT id, title, status, created_by, sign_off_manager_id,
+            """SELECT id, title, status, created_by, sign_off_manager_id, org_id,
                       attendees, shared_with,
                       jsonb_typeof(attendees) AS attendees_typeof,
                       jsonb_typeof(shared_with) AS shared_with_typeof
@@ -2473,6 +2491,9 @@ async def debug_meeting_attendees(meeting_id: str, current_user=Depends(get_curr
             raise HTTPException(404, "Meeting not found")
 
         m = dict(row)
+        # SEC-002: plain admins may only debug meetings in their own org
+        if current_user["role"] != "super_admin" and m["org_id"] != caller_org:
+            raise HTTPException(404, "Meeting not found")
         # Enrich created_by name
         creator = await conn.fetchrow("SELECT name, email FROM users WHERE id=$1", m["created_by"])
         m["created_by_info"] = dict(creator) if creator else None
@@ -2517,11 +2538,12 @@ async def repair_add_attendee(meeting_id: str, data: AddAttendeeRequest, current
     """
     if current_user["role"] not in ("admin", "super_admin"):
         raise HTTPException(403, "Admin only")
+    caller_org = current_user.get("org_id", "")
 
     async with database.with_admin() as conn:
         # Find the user
         user_row = await conn.fetchrow(
-            "SELECT id, name, email, role FROM users WHERE LOWER(email)=LOWER($1)",
+            "SELECT id, name, email, role, org_id FROM users WHERE LOWER(email)=LOWER($1)",
             data.user_email,
         )
         if not user_row:
@@ -2529,10 +2551,15 @@ async def repair_add_attendee(meeting_id: str, data: AddAttendeeRequest, current
 
         # Find the meeting
         mtg_row = await conn.fetchrow(
-            "SELECT id, attendees FROM meetings WHERE id=$1", meeting_id
+            "SELECT id, org_id, attendees FROM meetings WHERE id=$1", meeting_id
         )
         if not mtg_row:
             raise HTTPException(404, "Meeting not found")
+
+        # SEC-002: plain admins may only repair meetings/users in their own org
+        if current_user["role"] != "super_admin":
+            if mtg_row["org_id"] != caller_org or user_row["org_id"] != caller_org:
+                raise HTTPException(404, "Meeting not found")
 
         uid = str(user_row["id"])
         raw = mtg_row["attendees"]

@@ -824,7 +824,7 @@ export default function SuperAdminDashboard() {
                     autoComplete="new-password"
                     value={userForm.password}
                     onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))}
-                    placeholder="Min. 8 characters"
+                    placeholder="Min. 10 characters"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
                   />
                 </div>

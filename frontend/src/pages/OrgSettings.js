@@ -177,7 +177,8 @@ function SecurityTab({ API, getAuthConfig, user, updateMfaStatus }) {
   const [success, setSuccess] = useState("");
 
   const isMfaOn    = Boolean(user?.mfa_enabled);
-  const isMandatory = user?.role === "super_admin";
+  // NOTE: super_admin's MFA is always mandatory, but super_admin never reaches this page
+  // (route is admin/manager only — see App.js) so there is no "mandatory" state to render here.
 
   const requestCode = async (enable) => {
     setError("");
@@ -217,11 +218,9 @@ function SecurityTab({ API, getAuthConfig, user, updateMfaStatus }) {
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-gray-900">Two-Factor Authentication</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              {isMandatory
-                ? "Required for your role. You will be emailed a code each time you sign in to protect sensitive staff and supervision data."
-                : isMfaOn
-                  ? "2FA is enabled. You will be asked for an email code on every sign-in."
-                  : "Add an extra layer of security. You will be emailed a code each time you sign in."}
+              {isMfaOn
+                ? "2FA is enabled. You will be asked for an email code on every sign-in."
+                : "Add an extra layer of security. You will be emailed a code each time you sign in."}
             </p>
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               <span
@@ -232,27 +231,12 @@ function SecurityTab({ API, getAuthConfig, user, updateMfaStatus }) {
               >
                 {isMfaOn ? "Enabled" : "Disabled"}
               </span>
-              {isMandatory && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-                  Mandatory for {user?.role}s
-                </span>
-              )}
             </div>
           </div>
         </div>
 
-        {isMandatory && (
-          <div className="mt-4 flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-md p-3">
-            <Shield className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-700 leading-relaxed">
-              2FA cannot be disabled for managers and admins. This is required due to the sensitive nature of the personal and clinical data processed by this platform, in line with UK GDPR obligations.
-            </p>
-          </div>
-        )}
-
-        {!isMandatory && (
-          <>
-            {success && (
+        <>
+          {success && (
               <div className="mt-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded p-3 text-sm">
                 <CheckCircle className="w-4 h-4 flex-shrink-0" />{success}
               </div>
@@ -315,14 +299,11 @@ function SecurityTab({ API, getAuthConfig, user, updateMfaStatus }) {
             </div>
           </form>
         )}
-          </>
-        )}
+        </>
       </div>
 
       <p className="mt-3 text-xs text-gray-400">
-        {isMandatory
-          ? "Codes expire after 10 minutes. 2FA is permanently required for this role."
-          : "Codes expire after 10 minutes. Your password is required to disable 2FA on the next sign-in regardless."}
+        Codes expire after 10 minutes. Your password is required to disable 2FA on the next sign-in regardless.
       </p>
     </div>
   );

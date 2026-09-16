@@ -191,14 +191,15 @@ async def delete_audio_after_grace(meeting_id: str):
     await asyncio.sleep(300)
     try:
         async with database.with_admin() as conn:
-            meeting_row = await conn.fetchrow("SELECT status, audio_file_id FROM meetings WHERE id=$1", meeting_id)
+            meeting_row = await conn.fetchrow("SELECT status, audio_file_id, org_id FROM meetings WHERE id=$1", meeting_id)
         if not meeting_row or meeting_row["status"] != "signed_off":
             return
         meeting = dict(meeting_row)
+        org_id = meeting.get("org_id", "")
         audio_file_id = meeting.get("audio_file_id")
         now = datetime.now(timezone.utc).isoformat()
         if audio_file_id:
-            async with database.with_admin() as conn:
+            async with database.with_org(org_id) as conn:
                 audio_row = await conn.fetchrow("SELECT storage_path FROM audio_files WHERE id=$1", audio_file_id)
             storage_path = audio_row["storage_path"] if audio_row else None
             if storage_path:
@@ -207,12 +208,12 @@ async def delete_audio_after_grace(meeting_id: str):
                 # job_worker recovery sweep retries it on its next pass — we only mark the
                 # row 'deleted' once the file is genuinely gone.
                 await delete_audio(storage_path)
-            async with database.with_admin() as conn:
+            async with database.with_org(org_id) as conn:
                 await conn.execute(
                     "UPDATE audio_files SET is_deleted=TRUE, deletion_status='deleted', deleted_at=$1 WHERE id=$2",
                     now, audio_file_id,
                 )
-        async with database.with_admin() as conn:
+        async with database.with_org(org_id) as conn:
             await conn.execute(
                 "UPDATE meetings SET audio_deletion_status='deleted', audio_deleted_at=$1, updated_at=$1 WHERE id=$2",
                 now, meeting_id,
@@ -491,7 +492,7 @@ async def update_evidence(meeting_id: str, evidence_id: str, data: UpdateEvidenc
                 # id like "cqc_69"/"cc_26"/"custom_3" (see utils/ai.py's mapping prompts),
                 # matched against the mapping JSON's own "id" field — not a foreign key to
                 # any UUID-keyed table.
-                async with database.with_admin() as fb_conn:
+                async with database.with_org(org_id) as fb_conn:
                     await fb_conn.execute(
                         """INSERT INTO evidence_feedback
                            (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
@@ -600,7 +601,7 @@ async def bulk_update_evidence(meeting_id: str, data: BulkEvidenceActionRequest,
                 now_ts,
             ))
         try:
-            async with database.with_admin() as fb_conn:
+            async with database.with_org(org_id) as fb_conn:
                 await fb_conn.executemany(
                     """INSERT INTO evidence_feedback
                        (id, meeting_id, org_id, user_id, user_name, evidence_item_id,
@@ -1286,7 +1287,7 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             org_jurisdiction = cached_org["jurisdiction"]
             org_service_type = cached_org["service_type"]
         else:
-            async with database.with_admin() as conn:
+            async with database.with_org(org_id) as conn:
                 org_row = await conn.fetchrow("SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id)
             org_jurisdiction = (org_row["jurisdiction"] if org_row else None) or "england"
             org_service_type = (org_row["service_type"] if org_row else None) or ""
@@ -1356,7 +1357,7 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             manager_name=rescan_manager_name, attendee_names=rescan_supervisee_names, meeting_type=rescan_meeting_type,
         )
 
-        async with database.with_admin() as conn:
+        async with database.with_org(org_id) as conn:
             await process_need_review_signals(conn, org_id, meeting_id, analysis_result, effective_jurisdiction)
         # Rescan deliberately never overwrites `risks` (only re-scans compliance mappings) —
         # but if a Need Reviewer threshold was JUST reached, merge that one flag in by id.
@@ -1921,7 +1922,7 @@ async def send_email_report(meeting_id: str, data: EmailRequest, background_task
 
     # SEC-003: Validate all recipients are active members of the org — prevents
     # using the platform to relay branded emails to arbitrary external addresses.
-    async with database.with_admin() as conn:
+    async with database.with_org(org_id) as conn:
         org_user_rows = await conn.fetch(
             "SELECT email FROM users WHERE org_id=$1 AND is_active=TRUE", org_id
         )
@@ -2001,7 +2002,7 @@ async def export_pdf(meeting_id: str, include_transcript: bool = False, current_
         raise HTTPException(status_code=400, detail="PDF export is only available for signed-off meetings")
 
     # Fetch org jurisdiction to drive dynamic section labels
-    async with database.with_admin() as conn:
+    async with database.with_org(org_id) as conn:
         org_row = await conn.fetchrow(
             "SELECT jurisdiction, service_type FROM organisations WHERE id=$1", org_id
         )

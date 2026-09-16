@@ -448,10 +448,17 @@ export default function StaffPortfolio() {
           <button
             onClick={exportPdf}
             disabled={exporting || stats.total_meetings === 0}
-            className="flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 bg-[#1E3A8A] text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-sm hover:bg-[#1E40AF] hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm disabled:cursor-not-allowed"
             data-testid="export-portfolio-btn"
           >
-            <Download className="w-4 h-4" />
+            {exporting ? (
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
             {exporting ? "Generating…" : "Export Portfolio PDF"}
           </button>
         </div>

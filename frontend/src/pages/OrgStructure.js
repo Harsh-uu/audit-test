@@ -309,7 +309,7 @@ export default function OrgStructure({ embedded = false }) {
   const saveEditUser = async () => {
     if (!editUserForm.name?.trim()) return setEditUserError("Name is required");
     if (!editUserForm.email?.trim()) return setEditUserError("Email is required");
-    if (showPwdReset && newPassword && newPassword.length < 8) return setEditUserError("Password must be at least 8 characters");
+    if (showPwdReset && newPassword && newPassword.length < 10) return setEditUserError("Password must be at least 10 characters");
     setSavingUser(true);
     setEditUserError("");
     try {
@@ -327,7 +327,7 @@ export default function OrgStructure({ embedded = false }) {
   const inviteUser = async () => {
     if (!inviteForm.name.trim()) return setInviteError("Name is required");
     if (!inviteForm.email.trim()) return setInviteError("Email is required");
-    if (inviteForm.password.length < 8) return setInviteError("Password must be at least 8 characters");
+    if (inviteForm.password.length < 10) return setInviteError("Password must be at least 10 characters");
     setSavingInvite(true);
     setInviteError("");
     try {
@@ -846,7 +846,7 @@ export default function OrgStructure({ embedded = false }) {
                 </select>
               </FormField>
               <FormField label="Temporary Password *">
-                <input type="password" value={inviteForm.password} onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 characters" className={inputCls} data-testid="invite-password-input" />
+                <input type="password" value={inviteForm.password} onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 10 characters" className={inputCls} data-testid="invite-password-input" />
               </FormField>
               {inviteError && <p className="text-xs text-red-600" data-testid="invite-error">{inviteError}</p>}
               <div className="flex gap-2 pt-1">
