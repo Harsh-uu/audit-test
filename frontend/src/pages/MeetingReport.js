@@ -62,8 +62,27 @@ export default function MeetingReport() {
   if (loading) {
     return (
       <Layout>
-        <div className="min-h-full flex items-center justify-center" data-testid="meeting-report-loading">
-          <div className="w-10 h-10 border-[3px] border-[#1E3A8A] border-t-transparent rounded-full spin" />
+        <div className="min-h-full bg-[#F8F9FA] flex flex-col items-center pt-8 pb-16 px-4" data-testid="meeting-report-loading">
+          <div className="w-full max-w-2xl animate-pulse">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 rounded-full bg-gray-200 mx-auto mb-4" />
+              <div className="h-5 w-56 bg-gray-200 rounded mx-auto mb-2" />
+              <div className="h-3.5 w-72 bg-gray-100 rounded mx-auto" />
+            </div>
+            <div className="h-1.5 w-full bg-gray-200 rounded-full mb-6" />
+            <div className="space-y-3">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 sm:px-5 py-3.5 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="h-3.5 w-40 bg-gray-200 rounded" />
+                    <div className="h-3 w-56 bg-gray-100 rounded" />
+                  </div>
+                  <div className="h-3 w-16 bg-gray-100 rounded flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </Layout>
     );

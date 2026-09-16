@@ -9,17 +9,17 @@ import {
 function getJurisdictionLabels(jurisdiction, serviceType) {
   switch (jurisdiction) {
     case "wales":
-      return { regHeader: "CIW Regulations", certHeader: "AWIF / SCW Standards", regBadge: "CIW" };
+      return { regHeader: "CIW Regulations", certHeader: "AWIF / SCW Standards", regBadge: "CIW", certBadge: "AWIF/SCW" };
     case "scotland":
-      return { regHeader: "Care Inspectorate Standards", certHeader: "SSSC Code Standards", regBadge: "CI" };
+      return { regHeader: "Care Inspectorate Standards", certHeader: "SSSC Code Standards", regBadge: "CI", certBadge: "SSSC" };
     case "northern_ireland":
-      return { regHeader: "RQIA Standards", certHeader: "NISCC Standards", regBadge: "RQIA" };
+      return { regHeader: "RQIA Standards", certHeader: "NISCC Standards", regBadge: "RQIA", certBadge: "NISCC" };
     case "ofsted":
-      if (serviceType === "early_years") return { regHeader: "EYFS Safeguarding & Welfare", certHeader: "EYFS Learning & Development", regBadge: "EYFS" };
-      if (serviceType === "childrens_home") return { regHeader: "Children's Homes Quality Standards", certHeader: "L3 Residential Diploma", regBadge: "CHQS" };
-      return { regHeader: "Ofsted EIF", certHeader: "Teachers' Standards", regBadge: "EIF" };
+      if (serviceType === "early_years") return { regHeader: "EYFS Safeguarding & Welfare", certHeader: "EYFS Learning & Development", regBadge: "EYFS", certBadge: "EYFS" };
+      if (serviceType === "childrens_home") return { regHeader: "Children's Homes Quality Standards", certHeader: "L3 Residential Diploma", regBadge: "CHQS", certBadge: "L3" };
+      return { regHeader: "Ofsted EIF", certHeader: "Teachers' Standards", regBadge: "EIF", certBadge: "TS" };
     default:
-      return { regHeader: "CQC Regulations", certHeader: "Care Certificate", regBadge: "CQC" };
+      return { regHeader: "CQC Regulations", certHeader: "Care Certificate", regBadge: "CQC", certBadge: "Care Cert" };
   }
 }
 
@@ -65,7 +65,7 @@ function KeyQuestionBadge({ label }) {
   );
 }
 
-function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence, type, onShowInTranscript, regBadge, defaultExpanded = true }) {
+function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence, type, onShowInTranscript, regBadge, certBadge, defaultExpanded = true }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(mapping.edited_evidence_summary || mapping.evidence_summary);
@@ -75,7 +75,7 @@ function EvidenceCard({ mapping, isReviewMode, canEditWording, onUpdateEvidence,
   const statusCfg = EVIDENCE_STATUS_CONFIG[mapping.status] || EVIDENCE_STATUS_CONFIG.pending;
 
   const cardBg = type === "cqc" ? "bg-purple-50 border-b border-purple-100" : type === "custom" ? "bg-teal-50 border-b border-teal-100" : "bg-blue-50 border-b border-blue-100";
-  const typeLabel = type === "cqc" ? (regBadge || "CQC") : type === "custom" ? "Policy" : "Care Cert";
+  const typeLabel = type === "cqc" ? (regBadge || "CQC") : type === "custom" ? "Policy" : (certBadge || "Care Cert");
   const typeIcon = type === "cqc"
     ? <Shield className="w-3.5 h-3.5 text-[#1E3A8A] flex-shrink-0" />
     : type === "custom"
@@ -318,7 +318,7 @@ const CONFIDENCE_ALIASES = {
 const INITIAL_EXPANDED_COUNT = 3;
 const INITIAL_VISIBLE_COUNT = 20;
 
-function EvidenceSection({ mappings, type, isReviewMode, canEditWording, onUpdateEvidence, onShowInTranscript, regBadge }) {
+function EvidenceSection({ mappings, type, isReviewMode, canEditWording, onUpdateEvidence, onShowInTranscript, regBadge, certBadge }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
   const visible = mappings.slice(0, visibleCount);
   const remaining = mappings.length - visible.length;
@@ -335,6 +335,7 @@ function EvidenceSection({ mappings, type, isReviewMode, canEditWording, onUpdat
           type={type}
           onShowInTranscript={onShowInTranscript}
           regBadge={regBadge}
+          certBadge={certBadge}
           defaultExpanded={idx < INITIAL_EXPANDED_COUNT}
         />
       ))}
@@ -353,7 +354,7 @@ function EvidenceSection({ mappings, type, isReviewMode, canEditWording, onUpdat
 
 export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canReview, updateEvidence, className, noMaxHeight = false, onShowInTranscript, isLocked = false, onBulkAccept, bulkAcceptingTier = null }) {
   const { user } = useAuth();
-  const { regHeader, certHeader, regBadge } = getJurisdictionLabels(user?.org_jurisdiction, user?.org_service_type);
+  const { regHeader, certHeader, regBadge, certBadge } = getJurisdictionLabels(user?.org_jurisdiction, user?.org_service_type);
   const allMappings = [
     ...(analysis.cqc_mappings || []),
     ...(analysis.care_cert_mappings || []),
@@ -445,7 +446,7 @@ export const ComplianceTab = React.memo(function ComplianceTab({ analysis, canRe
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{certHeader}</h3>
               <span className="text-xs text-gray-400">({analysis.care_cert_mappings.length})</span>
             </div>
-            <EvidenceSection mappings={analysis.care_cert_mappings} type="care_cert" isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} onShowInTranscript={onShowInTranscript} regBadge={regBadge} />
+            <EvidenceSection mappings={analysis.care_cert_mappings} type="care_cert" isReviewMode={canReview || isLocked} canEditWording={canReview && !isLocked} onUpdateEvidence={updateEvidence} onShowInTranscript={onShowInTranscript} certBadge={certBadge} />
           </div>
         )}
 
