@@ -159,6 +159,39 @@ def _extract_json(raw: str):
     raise json.JSONDecodeError("Could not extract valid JSON from AI response", text, 0)
 
 
+# Non-CQC jurisdictions have naturally-named frameworks (EIF, Teachers' Standards, CIW, etc)
+# and the model occasionally invents a matching JSON key (e.g. "eif_mappings") instead of the
+# fixed schema keys "cqc_mappings"/"care_cert_mappings" — silently dropping real evidence since
+# the pipeline only ever reads the two fixed keys. This merges any such stray key back in.
+_MAPPING_KEY_ALIASES = {
+    "wales": (["ciw_mappings", "risca_mappings"], ["awif_mappings", "scw_mappings"]),
+    "scotland": (["ci_mappings", "quality_indicator_mappings"], ["sssc_mappings"]),
+    "northern_ireland_domiciliary": (["rqia_mappings", "rqia_dom_mappings", "dom_std_mappings"], ["niscc_mappings"]),
+    "northern_ireland_residential": (["rqia_mappings", "rqia_res_mappings", "reg_mappings"], ["niscc_mappings"]),
+    "ofsted_school": (["eif_mappings"], ["teachers_standards_mappings", "ts_mappings"]),
+    "ofsted_early_years": (["eyfs_mappings", "eyfs_safeguarding_mappings", "eyfs_welfare_mappings"], ["eyfs_learning_mappings"]),
+    "ofsted_childrens_home": (["chqs_mappings", "quality_standards_mappings"], ["l3_residential_mappings", "diploma_mappings", "l3_mappings"]),
+}
+
+
+def _normalize_mapping_aliases(result: dict, jurisdiction: str) -> dict:
+    if not isinstance(result, dict):
+        return result
+    aliases = _MAPPING_KEY_ALIASES.get(jurisdiction)
+    if not aliases:
+        return result
+    reg_aliases, cert_aliases = aliases
+    for key in reg_aliases:
+        items = result.pop(key, None)
+        if isinstance(items, list) and items:
+            result["cqc_mappings"] = (result.get("cqc_mappings") or []) + items
+    for key in cert_aliases:
+        items = result.pop(key, None)
+        if isinstance(items, list) and items:
+            result["care_cert_mappings"] = (result.get("care_cert_mappings") or []) + items
+    return result
+
+
 def _sanitise_analysis(data: dict) -> dict:
     """
     Walk the analysis dict and apply UK language rules to all free-text fields.
@@ -477,6 +510,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 }
 
 Rules:
+- CRITICAL — FIELD NAMES ARE FIXED, NEVER RENAME THEM: the two arrays MUST always be called exactly `cqc_mappings` and `care_cert_mappings` in your JSON output, no matter what the actual regulatory framework is called below (even when it is EIF/Teachers' Standards, EYFS, Ofsted Quality Standards, CIW, CI, RQIA, SSSC, NISCC, AWIF, etc). `cqc_mappings` always holds evidence for whatever framework is listed under "REGULATIONS TO MAP AGAINST" below, and `care_cert_mappings` always holds evidence for whatever is listed under the second standards section — regardless of that framework's real name. Do NOT invent alternative field names such as `eif_mappings` or `teachers_standards_mappings` — this will cause the evidence to be silently discarded.
 - Map evidence that is described, demonstrated, or shown through practice narration, explained reasoning, or confirmed observation. Do NOT require speakers to name the regulation or standard — map what they describe doing or understanding.
 - For CQC mappings, use `regulation_ref` for BOTH Regulations (e.g. "Regulation 18") AND Quality Statements (e.g. "QS Caring 1", "QS Safe 3", "QS Well-led 2"). Quality Statements are first-class evidence items — map to them whenever the described behaviour matches, even if no Regulation is also applicable. Do not restrict mappings to Regulations only.
 - EVIDENCE CONFIDENCE — the MANDATORY DEFAULT for every mapping is "possible_evidence". Use "likely_evidence" ONLY when the evidence is rich, specific, and could stand alone in front of a regulator without further context. Do NOT use "possible_evidence" — it no longer exists. The ONLY valid output values are: likely_evidence, possible_evidence. YOUR ROLE IS TO SURFACE, NOT TO DECIDE: if there is any plausible connection to a standard, create the mapping as "possible_evidence" and let the manager decide. A missed piece of compliance evidence is worse than one a manager clicks reject on.
@@ -1127,6 +1161,7 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 }
 
 Rules:
+- CRITICAL — FIELD NAMES ARE FIXED, NEVER RENAME THEM: the two arrays MUST always be called exactly `cqc_mappings` and `care_cert_mappings` in your JSON output, regardless of what the actual regulatory framework is called (even for EIF/Teachers' Standards, EYFS, Ofsted Quality Standards, CIW, CI, RQIA, SSSC, NISCC, AWIF, etc). Do NOT invent alternative field names such as `eif_mappings` — this will cause the evidence to be silently discarded.
 - Map evidence that is described, demonstrated, or recorded in the document — including described practice, noted observations, identified learning needs, or explained reasoning. Do not require the standard or regulation to be named.
 - EVIDENCE CONFIDENCE — the MANDATORY DEFAULT for every mapping is "possible_evidence". Use "likely_evidence" ONLY when the evidence is rich, specific, and could stand alone in front of a regulator without further context. Do NOT use "possible_evidence" — it no longer exists. The ONLY valid output values are: likely_evidence, possible_evidence. YOUR ROLE IS TO SURFACE, NOT TO DECIDE: if there is any plausible connection to a standard, create the mapping as "possible_evidence" and let the manager decide. A missed piece of compliance evidence is worse than one a manager clicks reject on.
   ALWAYS use "possible_evidence" when ANY of the following are true (this covers the majority of mappings):
@@ -1237,6 +1272,7 @@ Provide your analysis as JSON only. Only map regulations/standards where there i
 
     try:
         result = await _ai_chat_json("o4-mini", DOC_EVIDENCE_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="high")
+        result = _normalize_mapping_aliases(result, jurisdiction)
         result.setdefault("cqc_mappings", [])
         result.setdefault("care_cert_mappings", [])
         result.setdefault("custom_mappings", [])
@@ -1943,6 +1979,7 @@ Provide your analysis as JSON. Only map regulations/standards where there is act
     # Parse JSON from response (retries once directly via OpenAI if the JSON body is malformed)
     try:
         result = await _ai_chat_json("o4-mini", ANALYSIS_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="high")
+        result = _normalize_mapping_aliases(result, jurisdiction)
         if "custom_mappings" not in result:
             result["custom_mappings"] = []
         return _sanitise_analysis(result)

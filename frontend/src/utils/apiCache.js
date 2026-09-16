@@ -25,6 +25,7 @@ const TTL_MAP = {
   "/schedules/due":              30_000,   // 30 s   — due-date calculations; must be before /schedules/
   "/schedules/":                 30_000,   // 30 s   — full schedule list
   "/prep/focus-topics":         300_000,   // 5 min
+  "/resources":                 600_000,   // 10 min — curated content, rarely changes
 };
 
 // Minimum item count for array responses before the result is considered
