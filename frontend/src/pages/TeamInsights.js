@@ -1452,12 +1452,12 @@ export default function TeamInsights() {
 
   const MAIN_TABS = [
     { key: "matrix",         label: "Evidence Matrix",    icon: Grid3x3,       accent: null },
-    { key: "themes",         label: "Standards Coverage", icon: TrendingUp,    accent: null },
+    { key: "ai_accuracy",    label: "AI Accuracy",        icon: Sparkles,      accent: "#7C3AED" },
     { key: "achievements",   label: "Achievements",       icon: Award,         accent: "#059669" },
     { key: "learning_needs", label: "Learning Needs",     icon: BookOpen,      accent: "#0D9488" },
     { key: "risks",          label: "Attention",          icon: AlertTriangle, accent: "#DC2626" },
     { key: "actions",        label: "Actions",            icon: ClipboardList, accent: "#D97706" },
-    { key: "ai_accuracy",    label: "AI Accuracy",        icon: Sparkles,      accent: "#7C3AED" },
+    { key: "themes",         label: "Standards Coverage", icon: TrendingUp,    accent: null },
   ];
 
   return (
