@@ -95,8 +95,13 @@ export default function AdminLibrary() {
     setLoading(false);
   };
 
-  const cqcStandards = standards.filter(s => s.type === "cqc");
-  const ccStandards = standards.filter(s => s.type === "care_cert");
+  // "Regulations" bucket vs "Induction/Cert" bucket — must match every jurisdiction's system
+  // standard `type` values, not just England's literal "cqc"/"care_cert" (pre-existing bug:
+  // Wales/Scotland/NI/Ofsted standards were silently hidden because their type values
+  // (ciw, ci, rqia_dom, rqia_res, eif, eyfs_safeguarding, chqs, etc.) never matched "cqc").
+  const REG_TYPES = new Set(["cqc", "ciw", "ci", "rqia_dom", "rqia_res", "eif", "eyfs_safeguarding", "chqs"]);
+  const cqcStandards = standards.filter(s => REG_TYPES.has(s.type));
+  const ccStandards = standards.filter(s => !REG_TYPES.has(s.type));
 
   const handleCreateStandard = async () => {
     setError("");
