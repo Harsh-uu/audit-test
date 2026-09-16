@@ -1034,6 +1034,35 @@ function AiAccuracyView({ API, getAuthConfig }) {
   const [stats, setStats] = useState(null);
   const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sortKey, setSortKey] = useState("timestamp");
+  const [sortDir, setSortDir] = useState("desc");
+
+  const toggleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedFeedback = React.useMemo(() => {
+    const getVal = (f) => {
+      switch (sortKey) {
+        case "standard": return `${f.standard_ref || ""} ${f.standard_name || ""}`.toLowerCase();
+        case "attendee": return (f.attendee_name || "").toLowerCase();
+        case "manager": return (f.user_name || "").toLowerCase();
+        case "confidence": return CONFIDENCE_LABEL[f.ai_confidence] || f.ai_confidence || "";
+        case "decision": return ACTION_LABEL[f.manager_action] || f.manager_action || "";
+        default: return f.timestamp || "";
+      }
+    };
+    const sorted = [...feedback].sort((a, b) => {
+      const va = getVal(a), vb = getVal(b);
+      return va < vb ? -1 : va > vb ? 1 : 0;
+    });
+    return sortDir === "desc" ? sorted.reverse() : sorted;
+  }, [feedback, sortKey, sortDir]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1137,7 +1166,7 @@ function AiAccuracyView({ API, getAuthConfig }) {
         </div>
       )}
 
-      {/* Recent feedback list */}
+      {/* Recent feedback table */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden" data-testid="ai-accuracy-feedback-list">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-900">Recent evidence decisions</h3>
@@ -1151,28 +1180,63 @@ function AiAccuracyView({ API, getAuthConfig }) {
             Export CSV
           </button>
         </div>
-        <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-100">
-          {feedback.map((f, i) => (
-            <div key={f.id} className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`} data-testid={`ai-accuracy-row-${f.id}`}>
-              <div className="min-w-0 flex-1">
-                <p className="text-gray-900 truncate">
-                  <span className="font-medium">{f.standard_ref}</span> — {f.standard_name}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">
-                  {f.meeting_title || "Meeting deleted"} · {f.user_name} · {(f.timestamp || "").slice(0, 10)}
-                </p>
-              </div>
-              <span className="text-xs text-gray-400 flex-shrink-0">{CONFIDENCE_LABEL[f.ai_confidence] || f.ai_confidence}</span>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                f.manager_action === "accepted" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                : f.manager_action === "rejected" ? "bg-red-50 text-red-700 border border-red-200"
-                : f.manager_action === "needs_followup" ? "bg-amber-50 text-amber-700 border border-amber-200"
-                : "bg-gray-100 text-gray-500 border border-gray-200"
-              }`}>
-                {ACTION_LABEL[f.manager_action] || f.manager_action}
-              </span>
-            </div>
-          ))}
+        <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead className="sticky top-0 bg-gray-50 z-10">
+              <tr className="border-b border-gray-200">
+                {[
+                  { key: "standard", label: "Standard" },
+                  { key: "manager", label: "Manager" },
+                  { key: "attendee", label: "Attendee" },
+                  { key: "timestamp", label: "Date" },
+                  { key: "confidence", label: "AI Confidence" },
+                  { key: "decision", label: "Decision" },
+                ].map(col => (
+                  <th
+                    key={col.key}
+                    onClick={() => toggleSort(col.key)}
+                    className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-700 whitespace-nowrap"
+                    data-testid={`ai-accuracy-sort-${col.key}`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {col.label}
+                      {sortKey === col.key && (
+                        <span className="text-gray-400">{sortDir === "asc" ? "▲" : "▼"}</span>
+                      )}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {sortedFeedback.map((f, i) => (
+                <tr key={f.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} data-testid={`ai-accuracy-row-${f.id}`}>
+                  <td className="px-4 py-2.5 min-w-0 max-w-[280px]">
+                    <p className="text-gray-900 truncate">
+                      <span className="font-medium">{f.standard_ref}</span> — {f.standard_name}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">{f.meeting_title || "Meeting deleted"}</p>
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{f.user_name || "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{f.attendee_name || "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">
+                    {f.timestamp ? new Date(f.timestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap">{CONFIDENCE_LABEL[f.ai_confidence] || f.ai_confidence}</td>
+                  <td className="px-4 py-2.5 whitespace-nowrap">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      f.manager_action === "accepted" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : f.manager_action === "rejected" ? "bg-red-50 text-red-700 border border-red-200"
+                      : f.manager_action === "needs_followup" ? "bg-amber-50 text-amber-700 border border-amber-200"
+                      : "bg-gray-100 text-gray-500 border border-gray-200"
+                    }`}>
+                      {ACTION_LABEL[f.manager_action] || f.manager_action}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -1206,7 +1206,7 @@ async def list_evidence_feedback(
 
     async with database.with_org(org_id) as conn:
         rows = await conn.fetch(
-            f"""SELECT ef.id, ef.meeting_id, m.title AS meeting_title, ef.user_name,
+            f"""SELECT ef.id, ef.meeting_id, m.title AS meeting_title, m.attendees, ef.user_name,
                        ef.evidence_type, ef.standard_ref, ef.standard_name,
                        ef.ai_confidence, ef.manager_action, ef.timestamp
                 FROM evidence_feedback ef
@@ -1217,7 +1217,13 @@ async def list_evidence_feedback(
             *params,
         )
 
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        attendees = d.pop("attendees", None) or []
+        d["attendee_name"] = ", ".join(a.get("name", "") for a in attendees if a.get("name")) or None
+        result.append(d)
+    return result
 
 
 async def _reg_resolve_staff(conn, org_id: str, current_user: dict, team_id: Optional[str], setting_id: Optional[str]) -> list:
