@@ -28,7 +28,7 @@ function RoleInfoTooltip() {
 }
 
 const ROLES = [
-  { value: "attendee", label: "Care Worker / Attendee" },
+  { value: "attendee", label: "Staff / Supervisee" },
   { value: "manager", label: "Manager" },
   { value: "shared_reviewer", label: "Shared Reviewer" },
   { value: "admin", label: "Admin" },
