@@ -66,8 +66,9 @@ function formatDate(dateStr) {
 function formatStatusBreakdown(statusCounts) {
   const known = STATUS_BREAKDOWN_ORDER.filter(s => statusCounts[s] > 0);
   const unknown = Object.keys(statusCounts).filter(s => !STATUS_BREAKDOWN_ORDER.includes(s) && statusCounts[s] > 0);
+  const titleCase = (s) => s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   return [...known, ...unknown]
-    .map(s => `${statusCounts[s]} ${(STATUS_CONFIG[s] || {}).label || s}`)
+    .map(s => `${statusCounts[s]} ${(STATUS_CONFIG[s] || {}).label || titleCase(s)}`)
     .join(" · ");
 }
 
@@ -175,6 +176,11 @@ export default function Meetings() {
   const historicalMeetings = useMemo(() => allLoadedMeetings.filter(m => m.is_historical === true), [allLoadedMeetings]);
 
   const hasActiveFilters = search || statusFilter !== "all" || dateFrom || dateTo || orgFilter.setting_id || orgFilter.team_id;
+
+  // Chip counts reflect whatever is currently loaded — once a filter triggers
+  // the full-history fetch, switch the counts to that complete set too so
+  // they don't visibly change again once the filter is cleared.
+  const chipCountSource = (hasActiveFilters && allMeetings) ? allMeetings.filter(m => !m.is_historical) : activeMeetingsLoaded;
 
   // The moment any search/filter is applied, fetch the complete history once
   // (like the old "Load all meetings" button) so filtering isn't limited to
@@ -491,7 +497,7 @@ export default function Meetings() {
                 {f.label}
                 {f.value !== "all" && (
                   <span className="ml-1.5 opacity-70">
-                    {activeMeetingsLoaded.filter(m => m.status === f.value).length}
+                    {chipCountSource.filter(m => m.status === f.value).length}
                   </span>
                 )}
               </button>
