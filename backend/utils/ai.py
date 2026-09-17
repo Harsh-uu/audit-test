@@ -107,7 +107,29 @@ _UK_REPLACEMENTS = [
     (r'^(Potential safeguarding|Escalation gap|Collective normalisation|Communication pattern|Pattern synthesis|Wellbeing synthesis)\s*:\s*', r'\1 — '),
 ]
 
+# Care-sector homophone corrections — AssemblyAI mis-hears these words fairly
+# often because "rota" (staff duty schedule) has no US-English equivalent in
+# its training data and gets auto-corrected to the nearest real word,
+# "rotor". This is a mis-transcription fix (same word intended, ASR error),
+# not a wording change, so it's safe to apply to a verbatim transcript.
 import re as _re_mod
+
+_ASR_HOMOPHONE_FIXES = [
+    (r'\brotors\b', 'rotas'),
+    (r'\brotor\b', 'rota'),
+]
+_ASR_HOMOPHONE_COMPILED = [(_re_mod.compile(p, _re_mod.IGNORECASE), r) for p, r in _ASR_HOMOPHONE_FIXES]
+
+
+def _fix_case(match, replacement):
+    word = match.group(0)
+    if word.isupper():
+        return replacement.upper()
+    if word[0].isupper():
+        return replacement.capitalize()
+    return replacement
+
+
 _UK_SPELLING_COMPILED = [(_re_mod.compile(p, _re_mod.IGNORECASE), r) for p, r in _UK_SPELLING_RULES]
 _UK_COMPILED = [(_re_mod.compile(p, _re_mod.IGNORECASE), r) for p, r in _UK_REPLACEMENTS]
 
@@ -120,6 +142,8 @@ def _apply_uk_spelling(text: str) -> str:
         return text
     for pattern, replacement in _UK_SPELLING_COMPILED:
         text = pattern.sub(replacement, text)
+    for pattern, replacement in _ASR_HOMOPHONE_COMPILED:
+        text = pattern.sub(lambda m: _fix_case(m, replacement), text)
     return text
 
 
@@ -764,7 +788,7 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
         language_detection=True,
         content_safety=False,              # Disabled — over-flags benign care sector discussions
         word_boost=[                        # Reinforce UK adult social care terminology
-            "CQC", "safeguarding", "MCA", "DoLS", "LPS", "Care Certificate",
+            "rota", "rotas", "CQC", "safeguarding", "MCA", "DoLS", "LPS", "Care Certificate",
             "duty of candour", "deprivation of liberty", "best interests",
             "risk assessment", "care plan", "pressure ulcer", "dysphagia",
             "DNACPR", "mental capacity", "lasting power of attorney",
