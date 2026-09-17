@@ -698,7 +698,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/change-password")
-async def change_password(data: ChangePasswordRequest, current_user=Depends(get_current_user)):
+async def change_password(data: ChangePasswordRequest, response: Response, current_user=Depends(get_current_user)):
     validate_password_strength(data.new_password)
     async with database.with_admin() as conn:
         user = await conn.fetchrow(
@@ -741,6 +741,16 @@ async def change_password(data: ChangePasswordRequest, current_user=Depends(get_
                supabase_password_set=(supabase_password_set OR $3) WHERE id=$4""",
             await hash_password(data.new_password), now, supabase_ok, current_user["id"],
         )
+    # password_changed_at just moved forward, which makes the access/refresh tokens
+    # already in this browser's cookies stale (pwd_ts check) — without reissuing them
+    # here, the very next request (e.g. the frontend's post-change /auth/me call)
+    # gets rejected and the refresh endpoint rejects the equally-stale refresh token
+    # too, logging the user out of the session they just used to change their own
+    # password. Mirrors accept-invite's same pwd_ts-refresh pattern below.
+    fresh_pwd_ts = _to_pwd_ts({"password_changed_at": now})
+    access_token = create_access_token(current_user["id"], current_user["email"], current_user.get("org_id"), fresh_pwd_ts)
+    refresh_token = create_refresh_token(current_user["id"], fresh_pwd_ts)
+    _set_auth_cookies(response, access_token, refresh_token)
     return {"message": "Password changed successfully"}
 
 
