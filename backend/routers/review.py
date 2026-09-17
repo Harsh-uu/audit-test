@@ -1365,16 +1365,22 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
 
         cqc_kq_map = {s.get("reference"): s.get("key_questions") or [] for s in cqc_standards}
         for item in analysis_result.get("cqc_mappings", []):
+            # Regenerate a globally-unique id — the model's own "cqc_1", "cqc_2"... ids
+            # are only unique WITHIN one analysis call and collide across rescans,
+            # corrupting per-item accept/reject tracking.
+            item["id"] = f"cqc_{uuid.uuid4().hex[:12]}"
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
             if not item.get("key_questions"):
                 item["key_questions"] = cqc_kq_map.get(item.get("regulation_ref", ""), [])
         for item in analysis_result.get("care_cert_mappings", []):
+            item["id"] = f"cc_{uuid.uuid4().hex[:12]}"
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
         for item in analysis_result.get("custom_mappings", []):
+            item["id"] = f"custom_{uuid.uuid4().hex[:12]}"
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
@@ -1394,9 +1400,15 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             return val if isinstance(val, list) else []
 
         def _merge(existing, fresh, key_field):
-            """Keep existing items not covered by fresh; fresh items take precedence for shared keys."""
+            """Reviewed items (status != 'pending', i.e. accepted/rejected/needs_followup)
+            are permanently preserved — a rescan must never silently overwrite a manager's
+            decision. Only PENDING existing items can be superseded by a fresh item sharing
+            the same standard ref; anything the fresh scan didn't re-find is kept either way."""
             fresh_keys = {item.get(key_field) for item in fresh if item.get(key_field)}
-            kept = [item for item in existing if item.get(key_field) not in fresh_keys]
+            kept = [
+                item for item in existing
+                if item.get("status") != "pending" or item.get(key_field) not in fresh_keys
+            ]
             return fresh + kept
 
         existing_cqc = _jlist_local(existing_row["cqc_mappings"] if existing_row else [])

@@ -317,31 +317,46 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
         elif org_jurisdiction == "ofsted":
             effective_jurisdiction = f"ofsted_{org_service_type or 'school'}"
 
-        results = await asyncio.gather(
-            analyze_meeting(
-                timestamped_plain, cqc_standards, care_cert_standards, paused_periods, custom_standards,
-                supervision_template, jurisdiction=effective_jurisdiction,
-                manager_name=manager_name, attendee_names=supervisee_names, meeting_type=meeting_type,
-            ),
-            diarize_coro,
-            generate_meeting_summary(timestamped_plain, manager_name=manager_name, attendee_names=supervisee_names, jurisdiction=effective_jurisdiction),   # runs concurrently — zero added latency
-            return_exceptions=True,
-        )
-        analysis_result = results[0]
-        speaker_text = results[1]
-        dedicated_summary = results[2]
-
-        if isinstance(analysis_result, Exception):
-            raise analysis_result
-        if isinstance(speaker_text, Exception) or not speaker_text:
-            logger.warning(f"Diarization non-fatal failure for meeting {meeting_id}: {speaker_text}")
+        # Diarisation MUST complete before evidence analysis — the evidence-mapping
+        # prompt relies on knowing WHO said what (a worker narrating their own practice
+        # vs a manager confirming an observation) to apply its evidence framework
+        # correctly. Feeding it an unlabelled transcript causes it to play it safe and
+        # under-detect real evidence (confirmed: rescanning the SAME transcript once it
+        # has speaker labels finds substantially more valid evidence). Analysis and the
+        # dedicated summary can still run concurrently with EACH OTHER — just not with
+        # diarisation any more.
+        try:
+            speaker_text = await diarize_coro
+        except Exception as diarize_err:
             speaker_text = None
+            logger.warning(f"Diarization non-fatal failure for meeting {meeting_id}: {diarize_err}")
+        if not speaker_text:
+            logger.warning(f"Diarization produced no speaker text for meeting {meeting_id}; falling back to unlabelled transcript for analysis")
         else:
             async with database.with_admin() as conn:
                 await conn.execute(
                     "UPDATE transcripts SET speaker_text=$1 WHERE id=$2",
                     speaker_text, transcript_id,
                 )
+
+        # Fall back to the unlabelled transcript only if diarisation genuinely failed —
+        # a diarisation hiccup should never block evidence analysis entirely.
+        analysis_input_text = speaker_text or timestamped_plain
+
+        results = await asyncio.gather(
+            analyze_meeting(
+                analysis_input_text, cqc_standards, care_cert_standards, paused_periods, custom_standards,
+                supervision_template, jurisdiction=effective_jurisdiction,
+                manager_name=manager_name, attendee_names=supervisee_names, meeting_type=meeting_type,
+            ),
+            generate_meeting_summary(analysis_input_text, manager_name=manager_name, attendee_names=supervisee_names, jurisdiction=effective_jurisdiction),   # runs concurrently with analysis — zero added latency
+            return_exceptions=True,
+        )
+        analysis_result = results[0]
+        dedicated_summary = results[1]
+
+        if isinstance(analysis_result, Exception):
+            raise analysis_result
 
         # Replace the compliance analyst's summary (produced as a side-effect of evidence
         # extraction) with the dedicated summariser's output, which focuses entirely on
@@ -352,16 +367,23 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         cqc_kq_map = {s["reference"]: s.get("key_questions") or [] for s in cqc_standards}
         for item in analysis_result.get("cqc_mappings", []):
+            # Regenerate a globally-unique id — the model's own "cqc_1", "cqc_2"... ids
+            # are only unique WITHIN one analysis call and collide across rescans
+            # (confirmed: two different mappings sharing "cqc_6" found live in the DB),
+            # corrupting per-item accept/reject tracking.
+            item["id"] = f"cqc_{uuid.uuid4().hex[:12]}"
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
             if not item.get("key_questions"):
                 item["key_questions"] = cqc_kq_map.get(item.get("regulation_ref", ""), [])
         for item in analysis_result.get("care_cert_mappings", []):
+            item["id"] = f"cc_{uuid.uuid4().hex[:12]}"
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
         for item in analysis_result.get("custom_mappings", []):
+            item["id"] = f"custom_{uuid.uuid4().hex[:12]}"
             item.setdefault("status", "pending")
             item.setdefault("edited_evidence_summary", None)
             item.setdefault("notes", "")
