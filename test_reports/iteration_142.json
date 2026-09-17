@@ -1,0 +1,23 @@
+{
+  "summary": "Verified session-continuity fix for POST /api/auth/change-password via full frontend flow. Created dedicated attendee test user with must_change_password=TRUE, logged in with temp password, landed on /set-password, submitted new password via SetPassword.js — NO 'Session expired' error appeared, user was redirected to /dashboard and rendered authenticated content (sidebar, org header 'IDOR Test Org B', 'Welcome back, MustChange'). Regression check on ChangePasswordModal (Layout user-menu → Change password) also passed: submitted change from dashboard, modal closed cleanly, page reload after modal stayed on /dashboard (still authenticated, no bounce to /login). Fix confirmed working end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/_setup_mustchange_user.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SetPassword.js calls navigate() then window.location.reload() — the reload effectively discards the SPA navigation and re-fetches; harmless but the navigate() call is redundant since reload will re-run the router with fresh /auth/me. Consider using AuthContext setUser (per the code's own TODO comment) instead of a full reload for smoother UX.",
+    "SetPassword.js relies on cachedGet for /auth/me right after change-password — since the endpoint now returns fresh cookies, this works, but any stale cached /auth/me entry from before the change could theoretically short-circuit the must_change_password refresh. Not observed in this run but worth reviewing cachedGet's invalidation policy."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% (2/2 flows)"},
+  "test_credentials": "Temporary test user mustchange-test@supervision.com / TempPass123! (must_change_password=TRUE, role=attendee, org=IDOR Test Org B) — created and DELETED after test. No other test-credentials touched. admin@supervision.com password Admin123!X (as noted in test_credentials.md) not exercised this run.",
+  "seed_data_creation": "Created attendee user mustchange-test@supervision.com in org 3628a11d (IDOR Test Org B) with must_change_password=TRUE, supabase_password_set=FALSE, bcrypt hash for TempPass123! — deleted after test via DELETE FROM users WHERE email=... (DELETE 1).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix for change-password session-continuity is verified frontend-side. Helper /app/backend/tests/_setup_mustchange_user.py can be re-used to spin up a must_change_password=TRUE attendee (no MFA) for any future retesting.",
+  "rca of the issue": "Original bug: /api/auth/change-password updated users.password_changed_at (which invalidates existing tokens via the pwd_ts claim in get_current_user) but did NOT issue new cookies, so the very next request from SetPassword.js (GET /auth/me) returned 401 'Session expired' and the axios refresh interceptor also failed (refresh token still had stale pwd_ts). Fix: change_password() now mints fresh access + refresh tokens with the new pwd_ts and calls _set_auth_cookies(), mirroring accept_invite(). Frontend flow now redirects cleanly to /dashboard (or /super-admin) without a bounce to /login."
+}

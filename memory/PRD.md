@@ -11,7 +11,13 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
-## Evidence Under-Detection Root Cause + Rescan Data Integrity Fixes (Sep 2026) — DONE, tested
+## Auth Bug: "Session Expired" on Set-New-Password (Sep 2026) — DONE, tested
+- **RCA**: `POST /api/auth/change-password` updates `password_changed_at` (which by design invalidates the current session's tokens via the `pwd_ts` claim checked in `deps.py::get_current_user`), but never issued FRESH cookies afterward — so the very next request (SetPassword.js's own follow-up `/auth/me` call) got 401 "Session expired", and the axios refresh-interceptor also failed since the refresh token had the same stale `pwd_ts`. The password change itself always succeeded (hence "works fine when you log in again") — only the immediate post-change session broke.
+- **Fix**: `change_password()` now mints fresh access+refresh tokens with the new `pwd_ts` and sets them via `_set_auth_cookies()`, mirroring the sibling `accept_invite()` endpoint which already did this correctly.
+- Verified via live curl (login→change-password→immediate `/auth/me` with new cookies→200) AND testing_agent frontend flow (iteration_142.json, 100% pass, 2/2 flows: SetPassword.js must-change flow + regular ChangePasswordModal regression).
+- NOTE: `admin@supervision.com`'s password is now `Admin123!X` (was `Admin123!`, 9 chars — didn't meet the 10-char minimum on revert during live testing). Updated in test_credentials.md.
+
+
 - **RCA**: rescanning found far more valid evidence than the initial automatic scan (20→46→51 across repeated rescans). Root cause: `transcription_pipeline.py` ran evidence analysis CONCURRENTLY with diarisation (`asyncio.gather`) instead of after it, so the initial scan read a transcript with NO speaker names (`[00:24] some text`) — the evidence framework depends on knowing who's speaking (worker narrating own practice vs manager observing) and played it safe without that info. Rescan reads `transcripts.speaker_text` (properly labelled), hence the gap. NOT a prompt-wording issue.
 - **Fix 1**: `transcription_pipeline.py` now `await`s diarisation FIRST, then runs `analyze_meeting()` + `generate_meeting_summary()` concurrently against the labelled transcript. Adds a few seconds to background processing (hidden behind the existing PII-review step the manager is doing anyway).
 - **Fix 2**: `cqc_mappings`/`care_cert_mappings`/`custom_mappings` items now get a globally-unique id (`cqc_<12-hex-uuid>` etc.) instead of the model's own sequential `cqc_1`/`cqc_2`, which collided across rescans (confirmed real collision cases in DB, e.g. two different mappings both `cqc_6`).
