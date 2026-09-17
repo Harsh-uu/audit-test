@@ -59,8 +59,18 @@ export default function AdminLibrary() {
     const hasParsingDocs = docs.some(d => d.parse_status === "parsing" || d.parse_status === "uploaded");
     if (hasParsingDocs && !pollRef.current) {
       pollRef.current = setInterval(async () => {
+        // Bump the SAME counter fetchAll() uses — poll and fetchAll now share one
+        // monotonic request-order guard, so whichever call started LAST always wins,
+        // regardless of which resolves first. Poll also bypasses the 120s doc cache
+        // (via plain axios.get, not cachedGet) since its entire purpose is to observe
+        // parse_status changes in near-real-time — a cached response would just replay
+        // the same snapshot for up to 2 minutes.
+        fetchReqRef.current += 1;
+        const req = fetchReqRef.current;
         try {
-          const { data } = await cachedGet(`${API}/admin/standards/documents`, getAuthConfig());
+          const { data } = await axios.get(`${API}/admin/standards/documents`, getAuthConfig());
+          if (req !== fetchReqRef.current) return; // superseded by a newer fetchAll/poll
+          invalidateCache("/admin/standards/documents");
           setDocs(data);
           const stillParsing = data.some(d => d.parse_status === "parsing" || d.parse_status === "uploaded");
           if (!stillParsing && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -179,6 +189,7 @@ export default function AdminLibrary() {
     formData.append("label", uploadLabel || file.name.replace(/\.[^.]+$/, ""));
     try {
       await axios.post(`${API}/admin/standards/upload`, formData, {
+        ...getAuthConfig(),
         headers: { "Content-Type": "multipart/form-data" },
       });
       setMessage("Document uploaded — AI is now extracting criteria (this takes ~10 seconds)");
@@ -193,6 +204,7 @@ export default function AdminLibrary() {
   const handleToggleDoc = async (id, is_active) => {
     try {
       await axios.patch(`${API}/admin/standards/documents/${id}`, { is_active }, getAuthConfig());
+      fetchReqRef.current += 1; // supersede any in-flight poll/fetchAll before this optimistic update
       setDocs(docs.map(d => d.id === id ? { ...d, is_active } : d));
       invalidateCache("/admin/standards/documents");
     } catch (err) { console.error("Toggle document failed:", err.message); setError("Failed to update document status."); }
@@ -202,6 +214,7 @@ export default function AdminLibrary() {
     if (!window.confirm("Delete this document? It will no longer be used in evidence matching.")) return;
     try {
       await axios.delete(`${API}/admin/standards/documents/${id}`, getAuthConfig());
+      fetchReqRef.current += 1; // supersede any in-flight poll/fetchAll before this optimistic update
       setDocs(docs.filter(d => d.id !== id));
       setMessage("Document deleted");
       invalidateCache("/admin/standards/documents");

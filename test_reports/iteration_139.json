@@ -1,0 +1,33 @@
+{
+  "summary": "Targeted frontend test of the AdminLibrary.js fetchReqRef race-condition fix on the /admin → Custom Standards tab. Logged in as admin@supervision.com, performed 6 fresh-page-load → immediate-upload cycles across two runs. Fix works for the mount-race path (uploads consistently appear in the list, success banner shown every time, tab counter increments correctly across the run — went from 2 → 7 docs total). Regression check passed (CQC / Care Cert / Users tabs all load & switch correctly). HOWEVER, a closely-related race remains uncovered by this fix: the polling useEffect (AdminLibrary.js lines 58–74) also calls setDocs(data) inside a setInterval without any request-ID guard. When a doc is in 'parsing'/'uploaded' state (which is the norm immediately after an upload for ~10s), the poll fires every 3s and any stale poll response arriving AFTER a fresh post-upload fetchAll silently overwrites the new state with a pre-upload snapshot. Reproduced in attempt 2 of the second run: after a successful upload (banner shown), the doc count stayed at 6 for the full 12-second observation window even though the upload had succeeded (confirmed by later navigation showing the doc present).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "AdminLibrary Custom Standards upload → refresh (polling race)",
+        "issue": "Polling useEffect in AdminLibrary.js (lines 58–74) calls setDocs(data) directly with no request-ID guard. This is the same class of race the fetchReqRef fix addressed for fetchAll(), but via the polling code path. A slow poll response (started before an upload's fetchAll) can arrive after the post-upload fetchAll and overwrite fresh state with the pre-upload snapshot. Reproduced: after successful upload+banner, docs list count stayed stale for >12s in 1/3 attempts. Same user-visible symptom as the originally reported bug (doc appears to vanish, then reappears on next unrelated refresh).",
+        "affected_selectors": ["[data-testid='documents-list']", "[data-testid^='doc-card-']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Extend the same fetchReqRef stale-response guard to the polling setInterval in AdminLibrary.js (lines 58–74). Either (a) reuse fetchReqRef by having the poll call fetchAll() instead of its own cachedGet+setDocs, or (b) add a separate pollReqRef counter and only apply setDocs(data) when the poll's captured req === pollReqRef.current AND no fetchAll superseded it (safest: bump fetchReqRef inside the poll too, so any fetchAll/poll uses one monotonically increasing counter and only the newest wins).",
+    "Also consider: handleToggleDoc / handleDeleteDoc do optimistic local setDocs updates without calling fetchAll — these are fine, but they don't bump the guard counter, so a poll response that started before the optimistic update could still overwrite it. Bumping fetchReqRef in every mutation handler would close this."
+  ],
+  "critical_code_review_comments": [
+    "fetchReqRef fix in fetchAll() itself is correct and idiomatic (matches the loadReqRef pattern from TeamInsights.js).",
+    "Polling useEffect uses setDocs(data) without a guard — the same race class the fix intended to eliminate is still reachable via the poll path whenever parse_status is 'parsing' or 'uploaded' (which is exactly the window right after an upload).",
+    "handleUploadDoc omits getAuthConfig() on the axios.post — it works only because axios.defaults.withCredentials=true is set globally; not a bug but inconsistent with the other handlers in the same file which all pass getAuthConfig() explicitly."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only test)", "frontend": "83% (5/6 uploads reflected within observation window; 1/6 exhibited the related polling race)"},
+  "test_credentials": "admin@supervision.com / Admin123! (used as instructed)",
+  "seed_data_creation": "Created 6 small .txt test documents in /tmp during testing (label prefix 'TEST_race_' and 'TEST_racePoll_'). All are now visible in the Custom Standards tab and should be cleaned up by admin if desired.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The fetchReqRef guard on fetchAll() is verified working — no need to re-test that in isolation. What needs retesting after main agent extends the guard to the polling useEffect: repeat the 'fresh /admin load → click Custom Standards → immediate upload' loop 5+ times back-to-back and observe the docs-list count timeline for 12s per attempt. Every successful upload (green banner) MUST produce a count increment within a few seconds and never regress. Also verify parsing→parsed transition still happens correctly (polling still works, just guarded).",
+  "rca of the issue": "Root cause: AdminLibrary.js has TWO code paths that call setDocs(data): (1) fetchAll() — now guarded by fetchReqRef ✓, and (2) the polling setInterval inside the useEffect at lines 58–74 — still UNGUARDED. Trigger: after an upload, the new doc is created in 'uploaded'/'parsing' state, which flips hasParsingDocs=true and starts the 3s poll. The upload also calls fetchAll(). If a poll cachedGet was already in flight (or fires between the upload POST and the post-upload fetchAll), its response may arrive after the fetchAll response and overwrite fresh state with a pre-upload snapshot — reproducing the exact symptom the fix was meant to eliminate. Mitigation: apply the same request-ID guard (fetchReqRef or a new shared counter) inside the poll callback before setDocs."
+}
