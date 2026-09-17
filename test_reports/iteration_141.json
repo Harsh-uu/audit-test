@@ -1,0 +1,29 @@
+{
+  "summary": "Backend-only regression run for iter 141 — verified the 3 AI-pipeline / rescan data-integrity fixes. Wrote pytest module test_iter141_rescan_diarize_fixes.py (5 tests, all passing in 95s including a real LLM rescan round-trip). FIX 1 (diarisation now awaited before analyze_meeting) verified via source-code assertions on /app/backend/utils/transcription_pipeline.py — full end-to-end pipeline requires fresh multi-speaker audio which isn't practical here. FIX 2 (uuid-hex mapping ids) and FIX 3 (rescan preserves reviewed items) verified end-to-end against a live meeting (25b5a9be…, analysis 5d0c91ed…): triggered PUT /review/{id}/evidence/{eid} to accept a pending cqc item, then POST /review/{id}/rescan-evidence, polled meetings.rescan_status until 'done', and asserted (a) the accepted item and 5 other pre-existing reviewed items are still present with unchanged status, (b) every freshly-generated mapping across cqc/care_cert/custom carries the new '<prefix>_<12hex>' id, no duplicates, no old 'cqc_1'-style ids. Role-gate check confirms attendee cannot rescan (403).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter141_rescan_diarize_fixes.py",
+    "/app/test_reports/pytest/iter141.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FIX 1 is code-verified only. A true regression test needs a fresh multi-speaker recording — worth adding a synthetic 2-speaker fixture (e.g. tiny WAV or a mocked transcribe/diarize) so future refactors can't silently re-parallelise diarisation with analysis without CI catching it.",
+    "The _merge() function in review.py preserves *all* non-pending items unconditionally — this is correct per spec but does mean the mappings list can grow unboundedly across repeated rescans. Consider capping or dedupe-by-(ref, status) if this ever becomes an issue in the UI. Not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only request)"},
+  "test_credentials": "admin@supervision.com / Admin123! (used for rescan); user@supervision.com / AnotherNew789! (attendee role-gate check). Both credentials from /app/memory/test_credentials.md, confirmed working.",
+  "seed_data_creation": "None. Reused existing in_review meeting 25b5a9be-9f01-4a7d-8f70-9eff81c89bb4 (analysis 5d0c91ed…) in the Test Company org. One pending cqc mapping was flipped to 'accepted' during the test — post-run its status remains 'accepted' (preserved by rescan as designed).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Meeting 25b5a9be-9f01-4a7d-8f70-9eff81c89bb4 (analysis 5d0c91ed-51fa-479d-8e86-9fc9bac306dc) now has a mix of new-style (12-hex uuid) and legacy (sequential 'cqc_1'/'cc_5'/'custom_2') mapping ids after the iter141 rescan — this is expected and intentionally reflects the fix's merge behaviour. If re-running this test suite, note that additional 'accepted' items will accumulate over time; the pytest handles this by picking any current pending item dynamically. Rescan takes ~90s end-to-end via Vertex/OpenAI fallback.",
+  "rca of the issue": "N/A — all fixes verified working. Original bug (rescan finding more evidence than initial scan) was rooted in analyze_meeting reading an unlabelled transcript because diarisation ran concurrently via asyncio.gather; now diarisation is awaited first (see transcription_pipeline.py lines 328-340) so speaker labels are always present before evidence analysis, closing the gap between initial-scan and rescan quality."
+}

@@ -11,6 +11,19 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Evidence Under-Detection Root Cause + Rescan Data Integrity Fixes (Sep 2026) — DONE, tested
+- **RCA**: rescanning found far more valid evidence than the initial automatic scan (20→46→51 across repeated rescans). Root cause: `transcription_pipeline.py` ran evidence analysis CONCURRENTLY with diarisation (`asyncio.gather`) instead of after it, so the initial scan read a transcript with NO speaker names (`[00:24] some text`) — the evidence framework depends on knowing who's speaking (worker narrating own practice vs manager observing) and played it safe without that info. Rescan reads `transcripts.speaker_text` (properly labelled), hence the gap. NOT a prompt-wording issue.
+- **Fix 1**: `transcription_pipeline.py` now `await`s diarisation FIRST, then runs `analyze_meeting()` + `generate_meeting_summary()` concurrently against the labelled transcript. Adds a few seconds to background processing (hidden behind the existing PII-review step the manager is doing anyway).
+- **Fix 2**: `cqc_mappings`/`care_cert_mappings`/`custom_mappings` items now get a globally-unique id (`cqc_<12-hex-uuid>` etc.) instead of the model's own sequential `cqc_1`/`cqc_2`, which collided across rescans (confirmed real collision cases in DB, e.g. two different mappings both `cqc_6`).
+- **Fix 3**: `_merge()` in `review.py`'s rescan logic now permanently preserves any evidence item with status accepted/rejected/needs_followup — a rescan can never silently overwrite a manager's review decision, even if that standard isn't re-found. Pending items are still replaced 1:1 when the fresh scan re-touches that standard ref (unbounded pending-item growth for untouched refs is a known, accepted tradeoff — user is aware rescan is a low-frequency/admin tool, not something to fully redesign right now).
+- Verified via testing_agent (iteration_141.json): 5/5 pytest tests, 100% pass, real LLM rescan round-trip confirmed accepted items survive + new uuid ids applied with no duplicates + role-gate (403 for non-manager) intact.
+
+## Team Themes Tab Swap + "rota"/"rotor" ASR Fix + AdminLibrary Upload Race Condition (Sep 2026) — DONE, tested
+- Swapped "Standards Coverage"/"AI Accuracy" tab positions on Team Themes page.
+- Added "rotor"→"rota" homophone correction (case-preserved) to `_apply_uk_spelling()`; added "rota"/"rotas" to AssemblyAI word_boost.
+- Fixed AdminLibrary.js document upload race: `fetchAll()` + parse-status poll shared no request-order guard, so a stale response could overwrite a fresh post-upload list. Added shared `fetchReqRef` counter; poll also switched from `cachedGet` (was replaying a 120s-stale response) to live `axios.get`. Tested via testing_agent (iteration_139/140), 100% pass.
+
+
 ## AI Analysis: Missing "Record on File" Actions (Sep 2026) — DONE, verified live
 - **RCA**: user reported a report where the summary correctly noted "Helen will record positive feedback on Megan's file" but no corresponding action item was generated. Root cause: the ACTIONS prompt rule in `ANALYSIS_SYSTEM_PROMPT` (utils/ai.py) was generic ("list only concrete tasks...") with no explicit instruction that a commitment to formally RECORD/DOCUMENT/LOG/FILE something discussed counts as an action — the model under-weighted these as descriptive narrative (captured in summary) rather than an actionable follow-up, especially for low-key/administrative commitments (positive feedback) vs. substantive ones (training, referrals).
 - Fix: added explicit rule directly after the ACTIONS instruction requiring any "will add to file/record/log/document" commitment to be captured as an action, regardless of whether it's already reflected in the summary, for positive feedback, complaints, or incidents alike.
