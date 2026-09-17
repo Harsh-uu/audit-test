@@ -73,7 +73,16 @@ export default function AdminLibrary() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docs]);
 
+  // Stale-request guard: fetchAll() is called both on mount and after every
+  // mutation (upload/create/delete). Without this, a slow mount-time request
+  // can resolve AFTER a later post-mutation refresh and silently overwrite
+  // fresh state with the pre-mutation snapshot (e.g. an uploaded document
+  // briefly "disappearing" until the next unrelated refresh happens to win the race).
+  const fetchReqRef = useRef(0);
+
   const fetchAll = async () => {
+    fetchReqRef.current += 1;
+    const req = fetchReqRef.current;
     setLoading(true);
     try {
       const requests = [
@@ -84,15 +93,16 @@ export default function AdminLibrary() {
         requests.push(cachedGet(`${API}/admin/users`, getAuthConfig()));
       }
       const results = await Promise.all(requests);
+      if (req !== fetchReqRef.current) return; // a newer fetchAll superseded this one
       const [stdRes, docRes] = results;
       setStandards(stdRes.data);
       setDocs(docRes.data);
       if (user?.role === "admin" && results[2]) setUsers(results[2].data);
     } catch (err) {
       console.error("Admin fetchAll failed:", err.message);
-      setError("Failed to load admin data. Please refresh.");
+      if (req === fetchReqRef.current) setError("Failed to load admin data. Please refresh.");
     }
-    setLoading(false);
+    if (req === fetchReqRef.current) setLoading(false);
   };
 
   // "Regulations" bucket vs "Induction/Cert" bucket — must match every jurisdiction's system
