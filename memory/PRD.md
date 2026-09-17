@@ -11,6 +11,13 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
+## Team Themes Tab Order Swap + "rota"/"rotor" ASR Fix + AdminLibrary Upload Race Condition (Sep 2026) — DONE, tested
+- Swapped "Standards Coverage" and "AI Accuracy" tab positions on Team Themes page (was matrix,themes,...,ai_accuracy → now matrix,ai_accuracy,...,themes).
+- Added homophone-correction to `_apply_uk_spelling()` in `utils/ai.py`: "rotor"/"rotors" → "rota"/"rotas" (case-preserved), applied to verbatim transcripts AND all AI-generated text. Also added "rota"/"rotas" to AssemblyAI `word_boost` list.
+- **AdminLibrary.js document upload race condition** (user-reported: "uploaded doc, no indication it worked" → "uploaded 2nd doc, both appeared"): `fetchAll()` (mount + post-mutation) and the parse-status polling `setInterval` both called `setDocs()` independently with no ordering guard, so a slow mount-time or stale poll response could resolve AFTER a fresh post-upload refresh and silently overwrite it. Fixed by giving `fetchAll()`, the poll, `handleToggleDoc`, and `handleDeleteDoc` one shared monotonic `fetchReqRef` counter — whichever request was issued LAST always wins on write, regardless of resolution order. Poll also switched from `cachedGet` (was replaying a 120s-stale cached response every 3s tick) to plain `axios.get` + `invalidateCache`, since its purpose is near-real-time parse_status observation. Tested via testing_agent (iteration_139.json found the poll-race, iteration_140.json confirmed 100% fix, 6/6 upload cycles, 0 regressions).
+- NOTE: test docs (`TEST_race_*`, `TEST_racePoll_*`, `TEST_it140*`) left in Test Company's Custom Standards library from testing — safe to delete via UI if desired.
+
+
 ## AI Accuracy Sortable Table (Sep 2026) — DONE, tested
 - Route `/admin/team?tab=ai_accuracy` (NOT `/team-insights` — that path doesn't exist; App.js:94 confirms actual route).
 - "Recent evidence decisions" converted from flat list to sortable `<table>`: columns Standard, Manager, Attendee, Date, AI Confidence, Decision. All 6 independently sortable (click=asc, click again=desc, ▲/▼ indicator).

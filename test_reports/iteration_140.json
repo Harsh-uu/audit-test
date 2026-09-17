@@ -1,0 +1,25 @@
+{
+  "summary": "Retest of AdminLibrary.js polling race-condition fix. The fix (poll using plain axios.get + invalidateCache + shared fetchReqRef counter across fetchAll/poll/toggle/delete) is verified working. Ran 6+ fresh-page-load -> immediate-upload cycles as admin@supervision.com on /admin > Custom Standards. Every upload produced a green 'Document uploaded' banner, the new doc appeared in the list within a few seconds (documents-list count went 8 -> 9 -> 10 -> 11 -> 12 -> 17 -> 19 -> 21 with zero regressions), and parse_status transitioned from Parsing... to Ready within ~6-15s while the poll was active (proving the poll now fetches LIVE data, not a 120s-cached snapshot). Regression checks: (a) toggling a doc's active state immediately after upload while polling active — NOT reverted after 10s of poll ticks; (b) deleting a doc immediately after upload — NOT reappearing after 10s of poll ticks; (c) CQC / Care Certificate / Users / Custom Standards tabs all load & switch correctly. The exact scenario iteration_139.json reproduced (1/6 stale) did NOT reoccur in any of 6+ back-to-back attempts.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix in AdminLibrary.js is correct and idiomatic: both fetchAll() and the polling setInterval now share the same monotonic fetchReqRef counter, so whichever request was issued LAST wins regardless of resolution order — resolving the fetchAll-vs-poll race. handleToggleDoc and handleDeleteDoc bump fetchReqRef before their optimistic setDocs() calls, closing the mutation-vs-in-flight-poll gap as well.",
+    "Poll deliberately uses plain axios.get (bypassing the 120s cachedGet TTL) plus invalidateCache('/admin/standards/documents') after each success — necessary because the poll's whole purpose is to observe parse_status transitions in near-real-time. Correct trade-off.",
+    "Minor consistency nit (pre-existing, not part of this fix): handleUploadDoc omits getAuthConfig() on the axios.post — works only because axios.defaults.withCredentials=true is set globally. Other handlers in the same file all pass getAuthConfig() explicitly.",
+    "Small subtlety: fetchReqRef is declared (line 91) AFTER it is referenced inside the polling useEffect (line 68). This works because the useEffect body runs after render (by which time the ref is initialised) and the eslint react-hooks/exhaustive-deps is disabled — but it's a readability wart. Consider hoisting the useRef declaration above both useEffects for clarity."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only test)", "frontend": "100% (6/6 uploads reflected in list within observation window with correct parse_status transition; 0 regressions across toggle/delete/tab switches)"},
+  "test_credentials": "admin@supervision.com / Admin123!",
+  "seed_data_creation": "Created 7 small .txt files in /tmp (it140_doc_1..7.txt). Uploaded as ~8 docs total labelled TEST_it140r_1..5, TEST_it140status_*, TEST_it140togg_*, TEST_it140final_* into the Test Company admin standards library. TEST_it140final_* was deleted as part of the delete-regression test. Remaining TEST_it140* docs are safe to leave, ignore, or clean up by admin (also earlier TEST_race_ / TEST_racePoll_ from iteration 139 still present).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "AdminLibrary.js fetchAll/poll/mutation race condition is fully resolved — no need to re-test unless the file is modified in that area again. If it is, key evidence to look for: (1) after a fresh /admin -> Custom Standards -> immediate upload, docs-list count increments within ~1s and never regresses over the next 15s; (2) parse_status badge visibly transitions Parsing... -> Ready within the window; (3) toggling / deleting a just-uploaded doc doesn't revert or reappear within 10s of poll ticks.",
+  "rca of the issue": "Root cause (now fixed): the previous fetchReqRef guard only protected fetchAll(); the polling setInterval had a second call site to setDocs(data) that used cachedGet with 120s TTL AND lacked a request-order guard, so any stale poll response arriving after a fresh post-upload/toggle/delete state update would replay a pre-mutation snapshot. Fix (verified): poll now (a) uses plain axios.get + invalidateCache to always hit the network and clear the TTL, and (b) bumps and checks the same fetchReqRef counter that fetchAll uses. Mutation handlers (handleToggleDoc, handleDeleteDoc) bump the counter before their optimistic setDocs, so any in-flight poll's stale response is discarded on arrival. Whichever call was issued LAST always wins."
+}
