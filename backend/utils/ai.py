@@ -767,7 +767,7 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
     """
     Transcribe + diarise with AssemblyAI (Universal model, speaker_labels=True).
     Works reliably on mono audio from browser MediaRecorder.
-    Returns (plain_text, speaker_labeled_text_or_none).
+    Returns (plain_text, speaker_labeled_text_or_none, timestamped_plain, warnings, audio_duration_seconds).
     speaker_labeled_text uses "Speaker A:", "Speaker B:" labels.
     Falls back to None if only 1 speaker found (GPT-4o will diarise from text).
     Pass speakers_expected (from meeting attendee count) to improve diarization accuracy.
@@ -837,10 +837,10 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
             ts_lines = [f"[{_ms_to_mmss(u.start)}] {ct}" for u, ct in cleaned_utterances]
             timestamped_plain = "\n".join(ts_lines)
             logger.info("AssemblyAI diarization usable — GPT-4o will map names only")
-            return plain_text, speaker_text, timestamped_plain, warnings
+            return plain_text, speaker_text, timestamped_plain, warnings, transcript.audio_duration
 
     logger.info("AssemblyAI found only 1 speaker — GPT-4o will diarise from text")
-    return plain_text, None, plain_text, warnings
+    return plain_text, None, plain_text, warnings, transcript.audio_duration
 
 
 

@@ -5,6 +5,7 @@ import asyncio
 import os
 import logging
 import html
+import calendar
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timezone, timedelta
@@ -31,6 +32,39 @@ NI_SERVICE_TYPES = ("residential", "domiciliary")
 OFSTED_SERVICE_TYPES = ("early_years", "childrens_home", "school")
 VALID_SERVICE_TYPES = NI_SERVICE_TYPES + OFSTED_SERVICE_TYPES
 
+# Placeholder pricing tiers ahead of the real Stripe connection — manually set
+# per org for now (super admin picks a tier, included_hours_monthly auto-fills
+# but stays editable for founding-member/custom deals). Mirrors supervision2.co.uk/#pricing.
+PRICING_TIERS = {
+    "starter":    {"label": "Starter",    "included_hours": 10},
+    "growth":     {"label": "Growth",     "included_hours": 30},
+    "scale":      {"label": "Scale",      "included_hours": 70},
+    "enterprise": {"label": "Enterprise", "included_hours": None},  # tailored allocation, no fixed cap
+}
+VALID_STRIPE_STATUSES = ("active", "trialing", "past_due", "canceled", "unpaid", "incomplete")
+
+
+def _billing_period(anchor: datetime, now: datetime) -> tuple:
+    """Return (period_start, period_end) for the monthly billing cycle anchored
+    to `anchor`'s day-of-month (the org's signup date) that `now` falls within —
+    per-org usage is tracked against each org's own renewal date, not a shared
+    calendar month. Clamps to the last day of shorter months (e.g. day 31
+    anchor -> Feb 28)."""
+    def _clamped(year, month, day):
+        last_day = calendar.monthrange(year, month)[1]
+        return anchor.replace(year=year, month=month, day=min(day, last_day))
+
+    anchor_day = anchor.day
+    start = _clamped(now.year, now.month, anchor_day)
+    if start > now:
+        prev_month = now.month - 1 or 12
+        prev_year = now.year - 1 if now.month == 1 else now.year
+        start = _clamped(prev_year, prev_month, anchor_day)
+    end_month = start.month + 1 if start.month < 12 else 1
+    end_year = start.year + 1 if start.month == 12 else start.year
+    end = _clamped(end_year, end_month, anchor_day)
+    return start, end
+
 
 class CreateOrgRequest(BaseModel):
     name: str
@@ -43,6 +77,17 @@ class UpdateOrgRequest(BaseModel):
     status: Optional[str] = None
     jurisdiction: Optional[str] = None
     service_type: Optional[str] = None
+
+
+class UpdateOrgBillingRequest(BaseModel):
+    pricing_tier: Optional[str] = None
+    included_hours_monthly: Optional[float] = None
+    is_trial: Optional[bool] = None
+    trial_ends_at: Optional[str] = None
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_status: Optional[str] = None
+    stripe_current_period_end: Optional[str] = None
+    billing_notes: Optional[str] = None
 
 
 class OrgBrandingUpdate(BaseModel):
@@ -67,6 +112,7 @@ class UpdateOrgUserRequest(BaseModel):
 @router.get("/orgs")
 async def list_orgs(current_user=Depends(get_current_user)):
     _require_super_admin(current_user)
+    now = datetime.now(timezone.utc)
     async with database.with_admin() as conn:
         # Batched: one query with per-org counts as correlated subqueries,
         # instead of 2 extra round-trips per org (was 2N+1 queries total).
@@ -76,16 +122,115 @@ async def list_orgs(current_user=Depends(get_current_user)):
                       (SELECT COUNT(*) FROM meetings m WHERE m.org_id = o.id) AS meeting_count
                FROM organisations o ORDER BY o.name ASC"""
         )
+        # Audio usage rows, batched for ALL orgs in one query rather than N queries —
+        # only meetings with a captured duration count (historical meetings recorded
+        # before this feature shipped are NOT backfilled, by design).
+        usage_rows = await conn.fetch(
+            "SELECT org_id, created_at, audio_duration_seconds FROM meetings WHERE audio_duration_seconds IS NOT NULL"
+        )
+        usage_by_org = {}
+        for r in usage_rows:
+            ts = datetime.fromisoformat(r["created_at"]) if r["created_at"] else now
+            usage_by_org.setdefault(r["org_id"], []).append((ts, float(r["audio_duration_seconds"])))
+
         result = []
         for org in org_rows:
+            anchor = datetime.fromisoformat(org["created_at"]) if org["created_at"] else now
+            period_start, period_end = _billing_period(anchor, now)
+            rows = usage_by_org.get(org["id"], [])
+            cumulative_hours = round(sum(secs for _, secs in rows) / 3600, 2)
+            period_hours = round(sum(secs for ts, secs in rows if period_start <= ts < period_end) / 3600, 2)
+            included_hours = org["included_hours_monthly"]
             result.append({
                 "id": org["id"], "name": org["name"], "slug": org["slug"],
                 "status": org["status"], "jurisdiction": org.get("jurisdiction") or "england",
                 "service_type": org.get("service_type"),
                 "created_at": org["created_at"],
                 "user_count": org["user_count"], "meeting_count": org["meeting_count"],
+                "pricing_tier": org.get("pricing_tier"),
+                "included_hours_monthly": float(included_hours) if included_hours is not None else None,
+                "is_trial": org.get("is_trial", False),
+                "trial_ends_at": org.get("trial_ends_at"),
+                "stripe_customer_id": org.get("stripe_customer_id"),
+                "stripe_subscription_status": org.get("stripe_subscription_status"),
+                "stripe_current_period_end": org.get("stripe_current_period_end"),
+                "billing_notes": org.get("billing_notes"),
+                "current_period_start": period_start.isoformat(),
+                "current_period_end": period_end.isoformat(),
+                "current_period_hours": period_hours,
+                "cumulative_hours": cumulative_hours,
+                "hours_overage": included_hours is not None and period_hours > float(included_hours),
             })
     return result
+
+
+@router.get("/orgs/{org_id}/usage-history")
+async def org_usage_history(org_id: str, current_user=Depends(get_current_user)):
+    _require_super_admin(current_user)
+    now = datetime.now(timezone.utc)
+    async with database.with_admin() as conn:
+        org = await conn.fetchrow("SELECT created_at FROM organisations WHERE id=$1", org_id)
+        if not org:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        rows = await conn.fetch(
+            "SELECT created_at, audio_duration_seconds FROM meetings WHERE org_id=$1 AND audio_duration_seconds IS NOT NULL",
+            org_id,
+        )
+    anchor = datetime.fromisoformat(org["created_at"]) if org["created_at"] else now
+    usage = [
+        (datetime.fromisoformat(r["created_at"]) if r["created_at"] else now, float(r["audio_duration_seconds"]))
+        for r in rows
+    ]
+    cycles = []
+    cursor_now = now
+    for _ in range(12):
+        period_start, period_end = _billing_period(anchor, cursor_now)
+        seconds = sum(secs for ts, secs in usage if period_start <= ts < period_end)
+        cycles.append({
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+            "hours": round(seconds / 3600, 2),
+        })
+        cursor_now = period_start - timedelta(seconds=1)
+        if cursor_now < anchor:
+            break
+    cycles.reverse()
+    return cycles
+
+
+@router.patch("/orgs/{org_id}/billing")
+async def update_org_billing(org_id: str, data: UpdateOrgBillingRequest, current_user=Depends(get_current_user)):
+    _require_super_admin(current_user)
+    updates = {}
+    if data.pricing_tier is not None:
+        updates["pricing_tier"] = data.pricing_tier if data.pricing_tier in PRICING_TIERS else None
+    if data.included_hours_monthly is not None:
+        updates["included_hours_monthly"] = data.included_hours_monthly if data.included_hours_monthly >= 0 else None
+    if data.is_trial is not None:
+        updates["is_trial"] = data.is_trial
+    if data.trial_ends_at is not None:
+        updates["trial_ends_at"] = data.trial_ends_at or None
+    if data.stripe_customer_id is not None:
+        updates["stripe_customer_id"] = data.stripe_customer_id.strip() or None
+    if data.stripe_subscription_status is not None:
+        updates["stripe_subscription_status"] = data.stripe_subscription_status if data.stripe_subscription_status in VALID_STRIPE_STATUSES else None
+    if data.stripe_current_period_end is not None:
+        updates["stripe_current_period_end"] = data.stripe_current_period_end or None
+    if data.billing_notes is not None:
+        updates["billing_notes"] = data.billing_notes.strip() or None
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    async with database.with_admin() as conn:
+        org = await conn.fetchrow("SELECT id FROM organisations WHERE id=$1", org_id)
+        if not org:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        set_clause = ", ".join(f"{k}=${i + 2}" for i, k in enumerate(updates.keys()))
+        await conn.execute(
+            f"UPDATE organisations SET {set_clause} WHERE id=$1",
+            org_id, *updates.values(),
+        )
+    return {"message": "Billing info updated"}
 
 
 @router.post("/orgs")

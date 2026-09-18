@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy, Pencil, Trash2, Check, HelpCircle } from "lucide-react";
+import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy, Pencil, Trash2, Check, HelpCircle, Clock, CreditCard, Download, ArrowUpDown } from "lucide-react";
 
 const ROLE_DESCRIPTIONS = {
   manager:         "Creates meetings, signs off supervision records, views all staff in their team scope.",
@@ -35,6 +35,73 @@ const API = "/api";
 
 const ROLE_OPTIONS = ["manager", "admin", "attendee", "shared_reviewer"];
 const ROLE_LABELS = { manager: "Manager", admin: "Admin", attendee: "Staff", shared_reviewer: "Shared Reviewer" };
+
+// Placeholder pricing tiers ahead of the real Stripe connection — mirrors
+// supervision2.co.uk/#pricing. included_hours auto-fills the form but stays
+// editable per org (founding-member/custom deals differ from list price).
+const PRICING_TIERS = {
+  starter:    { label: "Starter",    included_hours: 10 },
+  growth:     { label: "Growth",     included_hours: 30 },
+  scale:      { label: "Scale",      included_hours: 70 },
+  enterprise: { label: "Enterprise", included_hours: null },
+};
+const STRIPE_STATUS_LABELS = {
+  active: "Active", trialing: "Trialing", past_due: "Past Due",
+  canceled: "Canceled", unpaid: "Unpaid", incomplete: "Incomplete",
+};
+const STRIPE_STATUS_BAD = new Set(["past_due", "canceled", "unpaid", "incomplete"]);
+
+function TierBadge({ tier }) {
+  if (!tier || !PRICING_TIERS[tier]) return <span className="text-xs text-gray-400">No tier set</span>;
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+      {PRICING_TIERS[tier].label}
+    </span>
+  );
+}
+
+function StripeStatusBadge({ status }) {
+  if (!status) return <span className="text-xs text-gray-400">Not connected</span>;
+  const bad = STRIPE_STATUS_BAD.has(status);
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+      bad ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+    }`}>
+      <CreditCard className="w-3 h-3" />
+      {STRIPE_STATUS_LABELS[status] || status}
+    </span>
+  );
+}
+
+function UsageBar({ org }) {
+  const included = org.included_hours_monthly;
+  const used = org.current_period_hours || 0;
+  const pct = included ? Math.min(100, Math.round((used / included) * 100)) : null;
+  return (
+    <div data-testid={`org-usage-${org.id}`}>
+      <div className="flex items-baseline justify-between mb-1">
+        <span className={`text-xs font-medium ${org.hours_overage ? "text-red-600" : "text-gray-600"}`}>
+          {used.toFixed(1)} hrs{included != null ? ` / ${included} hrs this cycle` : " this cycle"}
+          {pct != null && ` (${pct}%)`}
+        </span>
+        {org.hours_overage && (
+          <span className="text-xs font-bold text-red-600 flex items-center gap-0.5" data-testid={`org-overage-flag-${org.id}`}>
+            <AlertCircle className="w-3 h-3" /> Over
+          </span>
+        )}
+      </div>
+      {included != null && (
+        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${org.hours_overage ? "bg-red-500" : "bg-[#1E3A8A]"}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+      <p className="text-[11px] text-gray-400 mt-0.5">{org.cumulative_hours.toFixed(1)} hrs all-time</p>
+    </div>
+  );
+}
 
 function StatusBadge({ status }) {
   const isActive = status === "active";
@@ -85,6 +152,19 @@ export default function SuperAdminDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Billing/usage filters + sort, and the org detail drawer's billing edit form
+  const [tierFilter, setTierFilter] = useState("all");
+  const [stripeFilter, setStripeFilter] = useState("all");
+  const [overageOnly, setOverageOnly] = useState(false);
+  const [sortBy, setSortBy] = useState("name");
+  const [billingForm, setBillingForm] = useState({
+    pricing_tier: "", included_hours_monthly: "", is_trial: false, trial_ends_at: "",
+    stripe_customer_id: "", stripe_subscription_status: "", stripe_current_period_end: "", billing_notes: "",
+  });
+  const [savingBilling, setSavingBilling] = useState(false);
+  const [usageHistory, setUsageHistory] = useState([]);
+  const [usageHistoryLoading, setUsageHistoryLoading] = useState(false);
+
   const loadOrgs = useCallback(async () => {
     setLoading(true);
     try {
@@ -99,10 +179,58 @@ export default function SuperAdminDashboard() {
 
   useEffect(() => { loadOrgs(); }, [loadOrgs]);
 
+  const visibleOrgs = useMemo(() => {
+    let list = orgs;
+    if (tierFilter !== "all") list = list.filter(o => (o.pricing_tier || "none") === tierFilter);
+    if (stripeFilter !== "all") list = list.filter(o => (o.stripe_subscription_status || "none") === stripeFilter);
+    if (overageOnly) list = list.filter(o => o.hours_overage);
+    list = [...list];
+    if (sortBy === "usage_desc") list.sort((a, b) => b.current_period_hours - a.current_period_hours);
+    else if (sortBy === "overage_first") list.sort((a, b) => (b.hours_overage ? 1 : 0) - (a.hours_overage ? 1 : 0));
+    else list.sort((a, b) => a.name.localeCompare(b.name));
+    return list;
+  }, [orgs, tierFilter, stripeFilter, overageOnly, sortBy]);
+
+  const exportUsageCSV = () => {
+    const header = ["Organisation", "Tier", "Included Hours", "Hours This Cycle", "Cumulative Hours", "Overage", "Stripe Status", "Next Payment Date", "Users", "Meetings"];
+    const rows = visibleOrgs.map(o => [
+      o.name,
+      PRICING_TIERS[o.pricing_tier]?.label || "—",
+      o.included_hours_monthly ?? "—",
+      o.current_period_hours,
+      o.cumulative_hours,
+      o.hours_overage ? "YES" : "NO",
+      STRIPE_STATUS_LABELS[o.stripe_subscription_status] || "—",
+      o.stripe_current_period_end ? new Date(o.stripe_current_period_end).toLocaleDateString("en-GB") : "—",
+      o.user_count,
+      o.meeting_count,
+    ]);
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `org-usage-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const loadOrgUsers = async (org) => {
     setSelectedOrg(org);
     setOrgUsers([]);
     setUsersLoading(true);
+    setBillingForm({
+      pricing_tier: org.pricing_tier || "",
+      included_hours_monthly: org.included_hours_monthly ?? "",
+      is_trial: org.is_trial || false,
+      trial_ends_at: org.trial_ends_at ? org.trial_ends_at.slice(0, 10) : "",
+      stripe_customer_id: org.stripe_customer_id || "",
+      stripe_subscription_status: org.stripe_subscription_status || "",
+      stripe_current_period_end: org.stripe_current_period_end ? org.stripe_current_period_end.slice(0, 10) : "",
+      billing_notes: org.billing_notes || "",
+    });
+    setUsageHistory([]);
+    setUsageHistoryLoading(true);
     try {
       const { data } = await axios.get(`${API}/super-admin/orgs/${org.id}/users`, getAuthConfig());
       setOrgUsers(data);
@@ -110,6 +238,49 @@ export default function SuperAdminDashboard() {
       setOrgUsers([]);
     } finally {
       setUsersLoading(false);
+    }
+    try {
+      const { data } = await axios.get(`${API}/super-admin/orgs/${org.id}/usage-history`, getAuthConfig());
+      setUsageHistory(data);
+    } catch {
+      setUsageHistory([]);
+    } finally {
+      setUsageHistoryLoading(false);
+    }
+  };
+
+  const handleTierSelect = (tier) => {
+    setBillingForm(f => ({
+      ...f,
+      pricing_tier: tier,
+      included_hours_monthly: tier && PRICING_TIERS[tier]?.included_hours != null
+        ? String(PRICING_TIERS[tier].included_hours)
+        : f.included_hours_monthly,
+    }));
+  };
+
+  const handleSaveBilling = async () => {
+    if (!selectedOrg) return;
+    setSavingBilling(true);
+    setError("");
+    try {
+      const payload = {
+        pricing_tier: billingForm.pricing_tier || "",
+        included_hours_monthly: billingForm.included_hours_monthly === "" ? null : parseFloat(billingForm.included_hours_monthly),
+        is_trial: billingForm.is_trial,
+        trial_ends_at: billingForm.trial_ends_at || "",
+        stripe_customer_id: billingForm.stripe_customer_id.trim() || "",
+        stripe_subscription_status: billingForm.stripe_subscription_status || "",
+        stripe_current_period_end: billingForm.stripe_current_period_end || "",
+        billing_notes: billingForm.billing_notes.trim() || "",
+      };
+      await axios.patch(`${API}/super-admin/orgs/${selectedOrg.id}/billing`, payload, getAuthConfig());
+      toast.success("Billing info updated");
+      await loadOrgs();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to update billing info");
+    } finally {
+      setSavingBilling(false);
     }
   };
 
@@ -292,6 +463,58 @@ export default function SuperAdminDashboard() {
         </div>
       )}
 
+      {/* Billing/usage filter toolbar */}
+      {!loading && orgs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-5 bg-white border border-gray-200 rounded-lg p-3">
+          <select
+            value={tierFilter}
+            onChange={e => setTierFilter(e.target.value)}
+            data-testid="filter-tier-select"
+            className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+          >
+            <option value="all">All tiers</option>
+            {Object.entries(PRICING_TIERS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            <option value="none">No tier set</option>
+          </select>
+          <select
+            value={stripeFilter}
+            onChange={e => setStripeFilter(e.target.value)}
+            data-testid="filter-stripe-select"
+            className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+          >
+            <option value="all">All Stripe statuses</option>
+            {Object.entries(STRIPE_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <option value="none">Not connected</option>
+          </select>
+          <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 px-1 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={overageOnly}
+              onChange={e => setOverageOnly(e.target.checked)}
+              data-testid="filter-overage-only-checkbox"
+              className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+            />
+            Overage only
+          </label>
+          <button
+            onClick={() => setSortBy(sortBy === "usage_desc" ? "name" : "usage_desc")}
+            data-testid="sort-usage-btn"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              sortBy === "usage_desc" ? "bg-[#1E3A8A] text-white border-[#1E3A8A]" : "border-gray-300 text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" /> Sort by usage
+          </button>
+          <button
+            onClick={exportUsageCSV}
+            data-testid="export-usage-csv-btn"
+            className="flex items-center gap-1.5 ml-auto px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" /> Export usage CSV
+          </button>
+        </div>
+      )}
+
       {/* Orgs Grid */}
       {loading ? (
         <div className="flex items-center justify-center py-20 text-gray-400 gap-3">
@@ -306,7 +529,7 @@ export default function SuperAdminDashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {orgs.map(org => (
+          {visibleOrgs.map(org => (
             <div
               key={org.id}
               data-testid={`org-card-${org.id}`}
@@ -344,7 +567,7 @@ export default function SuperAdminDashboard() {
                 </div>
               </div>
 
-              <div className="flex gap-4 mb-4">
+              <div className="flex gap-4 mb-3">
                 <div className="flex items-center gap-1.5 text-gray-500">
                   <Users className="w-3.5 h-3.5" />
                   <span className="text-sm">{org.user_count} user{org.user_count !== 1 ? "s" : ""}</span>
@@ -353,6 +576,25 @@ export default function SuperAdminDashboard() {
                   <FileText className="w-3.5 h-3.5" />
                   <span className="text-sm">{org.meeting_count} meeting{org.meeting_count !== 1 ? "s" : ""}</span>
                 </div>
+              </div>
+
+              {/* Billing & usage snapshot — placeholder ahead of the real Stripe connection */}
+              <div className="flex items-center gap-2 mb-2">
+                <TierBadge tier={org.pricing_tier} />
+                <StripeStatusBadge status={org.stripe_subscription_status} />
+                {org.is_trial && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+                    <Clock className="w-3 h-3" /> Trial
+                  </span>
+                )}
+              </div>
+              <div className="mb-4 p-2.5 bg-[#F8F9FA] rounded-lg">
+                <UsageBar org={org} />
+                {org.stripe_current_period_end && (
+                  <p className={`text-[11px] mt-1.5 ${STRIPE_STATUS_BAD.has(org.stripe_subscription_status) ? "text-red-600 font-semibold" : "text-gray-400"}`}>
+                    Next payment: {new Date(org.stripe_current_period_end).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -414,6 +656,148 @@ export default function SuperAdminDashboard() {
                 <div className="bg-[#F8F9FA] rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold text-[#1E3A8A] font-display">{selectedOrg.meeting_count}</p>
                   <p className="text-xs text-gray-500">Meetings</p>
+                </div>
+              </div>
+
+              {/* Billing & usage — manual placeholder fields ahead of the real Stripe connection */}
+              <div className="mb-6 border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+                  <CreditCard className="w-4 h-4 text-gray-400" /> Billing & Usage
+                </h3>
+                <div className="mb-3 p-2.5 bg-[#F8F9FA] rounded-lg">
+                  <UsageBar org={selectedOrg} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Pricing tier</label>
+                    <select
+                      value={billingForm.pricing_tier}
+                      onChange={e => handleTierSelect(e.target.value)}
+                      data-testid="billing-tier-select"
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                    >
+                      <option value="">No tier set</option>
+                      {Object.entries(PRICING_TIERS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Included hrs/month</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={billingForm.included_hours_monthly}
+                      onChange={e => setBillingForm(f => ({ ...f, included_hours_monthly: e.target.value }))}
+                      placeholder="e.g. custom for Enterprise"
+                      data-testid="billing-included-hours-input"
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={billingForm.is_trial}
+                    onChange={e => setBillingForm(f => ({ ...f, is_trial: e.target.checked }))}
+                    data-testid="billing-is-trial-checkbox"
+                    className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  On trial
+                  {billingForm.is_trial && (
+                    <input
+                      type="date"
+                      value={billingForm.trial_ends_at}
+                      onChange={e => setBillingForm(f => ({ ...f, trial_ends_at: e.target.value }))}
+                      data-testid="billing-trial-ends-input"
+                      className="ml-2 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                    />
+                  )}
+                </label>
+
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Stripe customer ID</label>
+                    <input
+                      type="text"
+                      value={billingForm.stripe_customer_id}
+                      onChange={e => setBillingForm(f => ({ ...f, stripe_customer_id: e.target.value }))}
+                      placeholder="cus_..."
+                      data-testid="billing-stripe-customer-input"
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Stripe status</label>
+                    <select
+                      value={billingForm.stripe_subscription_status}
+                      onChange={e => setBillingForm(f => ({ ...f, stripe_subscription_status: e.target.value }))}
+                      data-testid="billing-stripe-status-select"
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                    >
+                      <option value="">Not connected</option>
+                      {Object.entries(STRIPE_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mb-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Next payment date</label>
+                  <input
+                    type="date"
+                    value={billingForm.stripe_current_period_end}
+                    onChange={e => setBillingForm(f => ({ ...f, stripe_current_period_end: e.target.value }))}
+                    data-testid="billing-next-payment-input"
+                    className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                  />
+                </div>
+
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Billing notes</label>
+                  <textarea
+                    value={billingForm.billing_notes}
+                    onChange={e => setBillingForm(f => ({ ...f, billing_notes: e.target.value }))}
+                    rows={2}
+                    placeholder="Any manual notes for this org's billing arrangement"
+                    data-testid="billing-notes-textarea"
+                    className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] resize-none"
+                  />
+                </div>
+
+                <button
+                  onClick={handleSaveBilling}
+                  disabled={savingBilling}
+                  data-testid="save-billing-btn"
+                  className="w-full flex items-center justify-center gap-2 py-2 bg-[#1E3A8A] text-white rounded-lg text-sm font-semibold hover:bg-[#1e40af] disabled:opacity-60 transition-colors"
+                >
+                  {savingBilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Save Billing Info
+                </button>
+
+                {/* Monthly usage history — last 12 cycles, anchored to signup date */}
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-600 mb-2">Usage history (last 12 cycles)</p>
+                  {usageHistoryLoading ? (
+                    <div className="flex items-center gap-2 text-gray-400 text-xs py-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...
+                    </div>
+                  ) : usageHistory.length === 0 ? (
+                    <p className="text-xs text-gray-400">No usage recorded yet</p>
+                  ) : (
+                    <div className="space-y-1 max-h-40 overflow-y-auto" data-testid="usage-history-list">
+                      {usageHistory.slice().reverse().map((c, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 last:border-0">
+                          <span className="text-gray-500">
+                            {new Date(c.period_start).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            {" – "}
+                            {new Date(c.period_end).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                          </span>
+                          <span className="font-medium text-gray-700">{c.hours.toFixed(1)} hrs</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

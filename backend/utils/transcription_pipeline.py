@@ -198,7 +198,7 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         if assemblyai_key:
             try:
-                transcript_text, numbered_speaker_text, timestamped_plain, transcript_warnings = await transcribe_with_assemblyai(
+                transcript_text, numbered_speaker_text, timestamped_plain, transcript_warnings, audio_duration_seconds = await transcribe_with_assemblyai(
                     audio_data, speakers_expected=attendee_count
                 )
             except Exception as aai_err:
@@ -221,8 +221,8 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             )
             await conn.execute(
                 """UPDATE meetings SET transcript_id=$1, status='analyzing', updated_at=$2,
-                   transcript_has_warnings=$3 WHERE id=$4""",
-                transcript_id, now, len(transcript_warnings) > 0, meeting_id,
+                   transcript_has_warnings=$3, audio_duration_seconds=$4 WHERE id=$5""",
+                transcript_id, now, len(transcript_warnings) > 0, audio_duration_seconds, meeting_id,
             )
 
         # Load org jurisdiction — from cache (no DB hit if already seen)

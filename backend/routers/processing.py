@@ -332,7 +332,7 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
 
     attendee_count = len(_jlist(meeting.get("attendees"))) or None
     try:
-        plain_text, numbered_speaker_text, _, _ = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
+        plain_text, numbered_speaker_text, _, _, _ = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
     except Exception as e:
         logger.error(f"Retranscribe: AssemblyAI failed for {meeting_id}: {e}")
         async with database.with_org(org_id) as conn:
