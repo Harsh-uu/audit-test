@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/sonner";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { EulaGate } from "@/components/EulaGate";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Auth/public pages — loaded eagerly so login is instant
@@ -70,6 +71,7 @@ function App() {
       <BrowserRouter>
         <RouteErrorBoundary>
         <ScrollToTop />
+        <EulaGate />
         <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />

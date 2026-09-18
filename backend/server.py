@@ -23,6 +23,7 @@ from routers.schedules import router as schedules_router  # noqa: E402
 from routers.doc_uploads import router as doc_uploads_router  # noqa: E402
 from routers.prep import router as prep_router  # noqa: E402
 from routers.resources import router as resources_router  # noqa: E402
+from routers.eula import router as eula_router  # noqa: E402
 from utils.storage import init_storage  # noqa: E402
 from utils.seed import seed_all  # noqa: E402
 from utils.job_worker import start_worker  # noqa: E402
@@ -155,6 +156,7 @@ api_router.include_router(schedules_router, prefix="/schedules", tags=["schedule
 api_router.include_router(doc_uploads_router, prefix="/doc-uploads", tags=["doc-uploads"])
 api_router.include_router(prep_router, tags=["prep"])
 api_router.include_router(resources_router, prefix="/resources", tags=["resources"])
+api_router.include_router(eula_router, prefix="/eula", tags=["eula"])
 app.include_router(api_router)
 
 

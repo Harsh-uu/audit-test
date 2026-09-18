@@ -74,14 +74,14 @@ async def get_current_user(
         async with database.with_admin() as conn:
             row = await conn.fetchrow(
                 "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
-                "must_change_password, mfa_enabled "
+                "must_change_password, mfa_enabled, eula_accepted_version "
                 "FROM users WHERE id = $1 AND is_active = TRUE", user_id
             )
     else:
         async with database.with_org(org_id) as conn:
             row = await conn.fetchrow(
                 "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
-                "must_change_password, mfa_enabled "
+                "must_change_password, mfa_enabled, eula_accepted_version "
                 "FROM users WHERE id = $1 AND org_id = $2 AND is_active = TRUE", user_id, org_id
             )
 
