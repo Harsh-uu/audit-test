@@ -1,3 +1,30 @@
+## Super Admin Org Detail — Full Page (Sep 2026) — DONE, tested
+Converted the Super Admin "Manage" action on `/super-admin` from a right-hand slide-out drawer into
+a dedicated page at `/super-admin/orgs/:orgId` (`SuperAdminOrgDetail.js`, new route in `App.js`).
+- **Dashboard unchanged by design** (per explicit user request): org cards, filters (tier/Stripe/
+  overage), sort-by-usage, CSV export, New/Edit Organisation modals, Suspend/Activate — all left
+  exactly as-is. Only the drawer + its 3 modals (Add User, Invite Admin, Delete User confirm) were
+  removed from `SuperAdminDashboard.js` (1411→644 lines) along with their now-dead state/handlers
+  (`selectedOrg`, `orgUsers`, `billingForm`, `loadOrgUsers`, `handleSaveBilling`, `handleCreateUser`,
+  `handleInviteAdmin`, etc.) and unused icon/component imports (`RoleBadge`, `RoleInfoTooltip`,
+  `Mail`/`Copy`/`Trash2`/`Check`/`HelpCircle`).
+- `SuperAdminOrgDetail.js` (939 lines) has everything the drawer had: header w/ status badge +
+  Suspend/Activate, stat cards, full Billing & Usage form (all 8 fields, same data-testids), usage
+  history (last 12 cycles), Users list with Add User / Invite Admin / inline edit / delete, and a
+  graceful "Organisation not found" state for bad/deleted org ids. Reuses the pre-existing
+  `GET /orgs/{org_id}`, `GET /orgs/{org_id}/usage-history`, `PATCH /orgs/{org_id}/billing`,
+  `POST /orgs/{org_id}/invite` endpoints (all already built in a prior session) — zero backend
+  changes needed this round.
+- "Manage" button now `navigate(`/super-admin/orgs/${org.id}`)` instead of opening the drawer.
+- **Tested via testing_agent** (iteration_144): 100% pass — dashboard regression clean (no drawer
+  markup left in DOM), new page renders/navigates correctly, all data-testids preserved from the
+  old drawer, billing save + 404 org-not-found state both verified live. No bugs found.
+- Non-blocking code-review notes (backlog P3): `SuperAdminOrgDetail.js` is over the 700-line soft
+  limit; `TierBadge`/`StripeStatusBadge`/`UsageBar`/`StatusBadge`/`PRICING_TIERS`/`STRIPE_STATUS_*`
+  are now duplicated verbatim between `SuperAdminDashboard.js` and `SuperAdminOrgDetail.js` — could
+  extract to `/components/superadmin/` later; `loadUsers`/`loadUsageHistory` still fire even when
+  `loadOrg` 404s (harmless, swallowed into empty arrays, just 2 extra console 404s on a bad org id).
+
 # Supervision 2.0 — PRD
 
 ## Original Problem Statement
