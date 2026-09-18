@@ -35,6 +35,7 @@ const Schedules         = lazy(() => import("@/pages/Schedules"));
 const CareCertPrep      = lazy(() => import("@/pages/CareCertPrep"));
 const OrgSettings       = lazy(() => import("@/pages/OrgSettings"));
 const SuperAdminDashboard = lazy(() => import("@/pages/SuperAdminDashboard"));
+const SuperAdminOrgDetail = lazy(() => import("@/pages/SuperAdminOrgDetail"));
 
 import "@/App.css";
 
@@ -77,6 +78,7 @@ function App() {
           <Route path="/set-password" element={<SetPassword />} />
           <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
           <Route path="/super-admin" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminDashboard /></ProtectedRoute>} />
+          <Route path="/super-admin/orgs/:orgId" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminOrgDetail /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/meetings" element={<ProtectedRoute><Meetings /></ProtectedRoute>} />
           <Route path="/resources" element={<ProtectedRoute><Resources /></ProtectedRoute>} />

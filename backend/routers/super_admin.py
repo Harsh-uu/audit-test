@@ -109,6 +109,37 @@ class UpdateOrgUserRequest(BaseModel):
     password: Optional[str] = None
 
 
+def _enrich_org(org, usage_rows, now) -> dict:
+    """Shared enrichment: billing-cycle usage math for one org row, given its
+    own (created_at, audio_duration_seconds) meeting rows. Used by both the
+    list and single-org endpoints so the math can't drift between them."""
+    anchor = datetime.fromisoformat(org["created_at"]) if org["created_at"] else now
+    period_start, period_end = _billing_period(anchor, now)
+    cumulative_hours = round(sum(secs for _, secs in usage_rows) / 3600, 2)
+    period_hours = round(sum(secs for ts, secs in usage_rows if period_start <= ts < period_end) / 3600, 2)
+    included_hours = org["included_hours_monthly"]
+    return {
+        "id": org["id"], "name": org["name"], "slug": org["slug"],
+        "status": org["status"], "jurisdiction": org.get("jurisdiction") or "england",
+        "service_type": org.get("service_type"),
+        "created_at": org["created_at"],
+        "user_count": org["user_count"], "meeting_count": org["meeting_count"],
+        "pricing_tier": org.get("pricing_tier"),
+        "included_hours_monthly": float(included_hours) if included_hours is not None else None,
+        "is_trial": org.get("is_trial", False),
+        "trial_ends_at": org.get("trial_ends_at"),
+        "stripe_customer_id": org.get("stripe_customer_id"),
+        "stripe_subscription_status": org.get("stripe_subscription_status"),
+        "stripe_current_period_end": org.get("stripe_current_period_end"),
+        "billing_notes": org.get("billing_notes"),
+        "current_period_start": period_start.isoformat(),
+        "current_period_end": period_end.isoformat(),
+        "current_period_hours": period_hours,
+        "cumulative_hours": cumulative_hours,
+        "hours_overage": included_hours is not None and period_hours > float(included_hours),
+    }
+
+
 @router.get("/orgs")
 async def list_orgs(current_user=Depends(get_current_user)):
     _require_super_admin(current_user)
@@ -133,35 +164,30 @@ async def list_orgs(current_user=Depends(get_current_user)):
             ts = datetime.fromisoformat(r["created_at"]) if r["created_at"] else now
             usage_by_org.setdefault(r["org_id"], []).append((ts, float(r["audio_duration_seconds"])))
 
-        result = []
-        for org in org_rows:
-            anchor = datetime.fromisoformat(org["created_at"]) if org["created_at"] else now
-            period_start, period_end = _billing_period(anchor, now)
-            rows = usage_by_org.get(org["id"], [])
-            cumulative_hours = round(sum(secs for _, secs in rows) / 3600, 2)
-            period_hours = round(sum(secs for ts, secs in rows if period_start <= ts < period_end) / 3600, 2)
-            included_hours = org["included_hours_monthly"]
-            result.append({
-                "id": org["id"], "name": org["name"], "slug": org["slug"],
-                "status": org["status"], "jurisdiction": org.get("jurisdiction") or "england",
-                "service_type": org.get("service_type"),
-                "created_at": org["created_at"],
-                "user_count": org["user_count"], "meeting_count": org["meeting_count"],
-                "pricing_tier": org.get("pricing_tier"),
-                "included_hours_monthly": float(included_hours) if included_hours is not None else None,
-                "is_trial": org.get("is_trial", False),
-                "trial_ends_at": org.get("trial_ends_at"),
-                "stripe_customer_id": org.get("stripe_customer_id"),
-                "stripe_subscription_status": org.get("stripe_subscription_status"),
-                "stripe_current_period_end": org.get("stripe_current_period_end"),
-                "billing_notes": org.get("billing_notes"),
-                "current_period_start": period_start.isoformat(),
-                "current_period_end": period_end.isoformat(),
-                "current_period_hours": period_hours,
-                "cumulative_hours": cumulative_hours,
-                "hours_overage": included_hours is not None and period_hours > float(included_hours),
-            })
+        result = [_enrich_org(org, usage_by_org.get(org["id"], []), now) for org in org_rows]
     return result
+
+
+@router.get("/orgs/{org_id}")
+async def get_org(org_id: str, current_user=Depends(get_current_user)):
+    _require_super_admin(current_user)
+    now = datetime.now(timezone.utc)
+    async with database.with_admin() as conn:
+        org = await conn.fetchrow(
+            """SELECT o.*,
+                      (SELECT COUNT(*) FROM users u WHERE u.org_id = o.id) AS user_count,
+                      (SELECT COUNT(*) FROM meetings m WHERE m.org_id = o.id) AS meeting_count
+               FROM organisations o WHERE o.id = $1""",
+            org_id,
+        )
+        if not org:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        usage_rows = await conn.fetch(
+            "SELECT created_at, audio_duration_seconds FROM meetings WHERE org_id=$1 AND audio_duration_seconds IS NOT NULL",
+            org_id,
+        )
+    usage = [(datetime.fromisoformat(r["created_at"]) if r["created_at"] else now, float(r["audio_duration_seconds"])) for r in usage_rows]
+    return _enrich_org(org, usage, now)
 
 
 @router.get("/orgs/{org_id}/usage-history")

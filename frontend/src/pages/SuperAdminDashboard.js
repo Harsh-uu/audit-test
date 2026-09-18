@@ -1,40 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Mail, Copy, Pencil, Trash2, Check, HelpCircle, Clock, CreditCard, Download, ArrowUpDown } from "lucide-react";
-
-const ROLE_DESCRIPTIONS = {
-  manager:         "Creates meetings, signs off supervision records, views all staff in their team scope.",
-  admin:           "Full org access — manage users, standards library, exports, and org settings.",
-  attendee:        "Records meetings and marks their own copy as reviewed.",
-  shared_reviewer: "View-only access to meetings explicitly shared with them. Cannot edit or sign off.",
-};
-
-function RoleInfoTooltip() {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help inline-block ml-1 align-middle" />
-      </TooltipTrigger>
-      <TooltipContent side="right" className="max-w-xs text-left">
-        <p className="font-semibold mb-1.5">Role permissions:</p>
-        <ul className="space-y-1.5 text-xs">
-          {Object.entries(ROLE_DESCRIPTIONS).map(([role, desc]) => (
-            <li key={role}><span className="font-medium">{ROLE_LABELS[role] || role}</span> — {desc}</li>
-          ))}
-        </ul>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Pencil, Clock, CreditCard, Download, ArrowUpDown } from "lucide-react";
 
 const API = "/api";
-
-const ROLE_OPTIONS = ["manager", "admin", "attendee", "shared_reviewer"];
-const ROLE_LABELS = { manager: "Manager", admin: "Admin", attendee: "Staff", shared_reviewer: "Shared Reviewer" };
 
 // Placeholder pricing tiers ahead of the real Stripe connection — mirrors
 // supervision2.co.uk/#pricing. included_hours auto-fills the form but stays
@@ -115,55 +87,23 @@ function StatusBadge({ status }) {
   );
 }
 
-function RoleBadge({ role }) {
-  const colours = {
-    admin: "bg-purple-100 text-purple-700",
-    manager: "bg-blue-100 text-blue-700",
-    attendee: "bg-gray-100 text-gray-600",
-    shared_reviewer: "bg-amber-100 text-amber-700",
-  };
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${colours[role] || colours.attendee}`}>
-      {ROLE_LABELS[role] || role}
-    </span>
-  );
-}
-
 export default function SuperAdminDashboard() {
   const { getAuthConfig } = useAuth();
+  const navigate = useNavigate();
   const [orgs, setOrgs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedOrg, setSelectedOrg] = useState(null);
-  const [orgUsers, setOrgUsers] = useState([]);
-  const [usersLoading, setUsersLoading] = useState(false);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
-  const [showCreateUser, setShowCreateUser] = useState(false);
-  const [editingUserId, setEditingUserId] = useState(null);
-  const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "", password: "" });
   const [showEditOrg, setShowEditOrg] = useState(false);
   const [editOrgForm, setEditOrgForm] = useState({ name: "", jurisdiction: "england", service_type: "domiciliary" });
-  const [showInviteAdmin, setShowInviteAdmin] = useState(false);
   const [orgForm, setOrgForm] = useState({ name: "", jurisdiction: "england", service_type: "domiciliary" });
-  const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "manager" });
-  const [inviteForm, setInviteForm] = useState({ name: "", email: "" });
-  const [inviteResult, setInviteResult] = useState(null); // { message, invite_link?, email_failed? }
-  const [userToDelete, setUserToDelete] = useState(null); // user object pending deletion
-  const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // Billing/usage filters + sort, and the org detail drawer's billing edit form
+  // Billing/usage filters + sort
   const [tierFilter, setTierFilter] = useState("all");
   const [stripeFilter, setStripeFilter] = useState("all");
   const [overageOnly, setOverageOnly] = useState(false);
   const [sortBy, setSortBy] = useState("name");
-  const [billingForm, setBillingForm] = useState({
-    pricing_tier: "", included_hours_monthly: "", is_trial: false, trial_ends_at: "",
-    stripe_customer_id: "", stripe_subscription_status: "", stripe_current_period_end: "", billing_notes: "",
-  });
-  const [savingBilling, setSavingBilling] = useState(false);
-  const [usageHistory, setUsageHistory] = useState([]);
-  const [usageHistoryLoading, setUsageHistoryLoading] = useState(false);
 
   const loadOrgs = useCallback(async () => {
     setLoading(true);
@@ -213,75 +153,6 @@ export default function SuperAdminDashboard() {
     a.download = `org-usage-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const loadOrgUsers = async (org) => {
-    setSelectedOrg(org);
-    setOrgUsers([]);
-    setUsersLoading(true);
-    setBillingForm({
-      pricing_tier: org.pricing_tier || "",
-      included_hours_monthly: org.included_hours_monthly ?? "",
-      is_trial: org.is_trial || false,
-      trial_ends_at: org.trial_ends_at ? org.trial_ends_at.slice(0, 10) : "",
-      stripe_customer_id: org.stripe_customer_id || "",
-      stripe_subscription_status: org.stripe_subscription_status || "",
-      stripe_current_period_end: org.stripe_current_period_end ? org.stripe_current_period_end.slice(0, 10) : "",
-      billing_notes: org.billing_notes || "",
-    });
-    setUsageHistory([]);
-    setUsageHistoryLoading(true);
-    try {
-      const { data } = await axios.get(`${API}/super-admin/orgs/${org.id}/users`, getAuthConfig());
-      setOrgUsers(data);
-    } catch {
-      setOrgUsers([]);
-    } finally {
-      setUsersLoading(false);
-    }
-    try {
-      const { data } = await axios.get(`${API}/super-admin/orgs/${org.id}/usage-history`, getAuthConfig());
-      setUsageHistory(data);
-    } catch {
-      setUsageHistory([]);
-    } finally {
-      setUsageHistoryLoading(false);
-    }
-  };
-
-  const handleTierSelect = (tier) => {
-    setBillingForm(f => ({
-      ...f,
-      pricing_tier: tier,
-      included_hours_monthly: tier && PRICING_TIERS[tier]?.included_hours != null
-        ? String(PRICING_TIERS[tier].included_hours)
-        : f.included_hours_monthly,
-    }));
-  };
-
-  const handleSaveBilling = async () => {
-    if (!selectedOrg) return;
-    setSavingBilling(true);
-    setError("");
-    try {
-      const payload = {
-        pricing_tier: billingForm.pricing_tier || "",
-        included_hours_monthly: billingForm.included_hours_monthly === "" ? null : parseFloat(billingForm.included_hours_monthly),
-        is_trial: billingForm.is_trial,
-        trial_ends_at: billingForm.trial_ends_at || "",
-        stripe_customer_id: billingForm.stripe_customer_id.trim() || "",
-        stripe_subscription_status: billingForm.stripe_subscription_status || "",
-        stripe_current_period_end: billingForm.stripe_current_period_end || "",
-        billing_notes: billingForm.billing_notes.trim() || "",
-      };
-      await axios.patch(`${API}/super-admin/orgs/${selectedOrg.id}/billing`, payload, getAuthConfig());
-      toast.success("Billing info updated");
-      await loadOrgs();
-    } catch (err) {
-      setError(err.response?.data?.detail || "Failed to update billing info");
-    } finally {
-      setSavingBilling(false);
-    }
   };
 
   const handleCreateOrg = async (e) => {
@@ -335,10 +206,6 @@ export default function SuperAdminDashboard() {
       toast.success("Organisation updated");
       setShowEditOrg(false);
       await loadOrgs();
-      // Refresh slide-over if it's the currently selected org
-      if (selectedOrg?.id === showEditOrg.id) {
-        setSelectedOrg(prev => ({ ...prev, ...payload, service_type: payload.service_type || null }));
-      }
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to update organisation");
     } finally {
@@ -346,92 +213,13 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  const handleCreateUser = async (e) => {
-    e.preventDefault();
-    if (!userForm.name.trim() || !userForm.email.trim() || !userForm.password) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      await axios.post(`${API}/super-admin/orgs/${selectedOrg.id}/users`, userForm, getAuthConfig());
-      setUserForm({ name: "", email: "", password: "", role: "manager" });
-      setShowCreateUser(false);
-      await loadOrgUsers(selectedOrg);
-      // Refresh org stats
-      await loadOrgs();
-    } catch (err) {
-      setError(err.response?.data?.detail || "Failed to create user");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleUpdateUser = async (userId) => {
-    setSubmitting(true); setError("");
-    try {
-      const payload = {};
-      if (editUserForm.name.trim()) payload.name = editUserForm.name.trim();
-      if (editUserForm.email.trim()) payload.email = editUserForm.email.trim();
-      if (editUserForm.role) payload.role = editUserForm.role;
-      if (editUserForm.password) payload.password = editUserForm.password;
-      await axios.patch(`${API}/super-admin/orgs/${selectedOrg.id}/users/${userId}`, payload, getAuthConfig());
-      setEditingUserId(null);
-      await loadOrgUsers(selectedOrg);
-    } catch (err) {
-      setError(err.response?.data?.detail || "Failed to update user");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteUser = async () => {
-    if (!userToDelete) return;
-    setDeleting(true);
-    try {
-      const { data } = await axios.delete(
-        `${API}/super-admin/orgs/${selectedOrg.id}/users/${userToDelete.id}`,
-        getAuthConfig()
-      );
-      toast.success(data.message || "User deleted successfully");
-      setUserToDelete(null);
-      await loadOrgUsers(selectedOrg);
-      await loadOrgs(); // refresh user count on org cards
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to delete user");
-      setUserToDelete(null);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const toggleOrgStatus = async (org) => {
     const newStatus = org.status === "active" ? "suspended" : "active";
     try {
       await axios.patch(`${API}/super-admin/orgs/${org.id}`, { status: newStatus }, getAuthConfig());
-      if (selectedOrg?.id === org.id) setSelectedOrg({ ...selectedOrg, status: newStatus });
       await loadOrgs();
     } catch {
       setError("Failed to update status");
-    }
-  };
-
-  const handleInviteAdmin = async (e) => {
-    e.preventDefault();
-    if (!inviteForm.name.trim() || !inviteForm.email.trim()) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      const { data } = await axios.post(
-        `${API}/super-admin/orgs/${selectedOrg.id}/invite`,
-        inviteForm,
-        getAuthConfig()
-      );
-      setInviteResult(data);
-      setInviteForm({ name: "", email: "" });
-      await loadOrgs();
-    } catch (err) {
-      setError(err.response?.data?.detail || "Failed to send invitation");
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -600,7 +388,7 @@ export default function SuperAdminDashboard() {
               <div className="flex items-center gap-2">
                 <button
                   data-testid={`manage-org-${org.id}`}
-                  onClick={() => loadOrgUsers(org)}
+                  onClick={() => navigate(`/super-admin/orgs/${org.id}`)}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E3A8A] text-white text-xs font-semibold hover:bg-[#1e40af] transition-colors"
                 >
                   Manage
@@ -629,307 +417,6 @@ export default function SuperAdminDashboard() {
             </div>
           ))}
         </div>
-      )}
-
-      {/* ── Org Detail Slide-Over ──────────────────────────────────────── */}
-      {selectedOrg && (
-        <>
-          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setSelectedOrg(null)} />
-          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
-            <div className="flex items-center justify-between p-5 border-b border-gray-200">
-              <div>
-                <h2 className="font-bold font-display text-[#1E3A8A] text-lg">{selectedOrg.name}</h2>
-                <StatusBadge status={selectedOrg.status} />
-              </div>
-              <button onClick={() => setSelectedOrg(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5">
-              {/* Stats */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="bg-[#F8F9FA] rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-[#1E3A8A] font-display">{selectedOrg.user_count}</p>
-                  <p className="text-xs text-gray-500">Users</p>
-                </div>
-                <div className="bg-[#F8F9FA] rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-[#1E3A8A] font-display">{selectedOrg.meeting_count}</p>
-                  <p className="text-xs text-gray-500">Meetings</p>
-                </div>
-              </div>
-
-              {/* Billing & usage — manual placeholder fields ahead of the real Stripe connection */}
-              <div className="mb-6 border border-gray-200 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
-                  <CreditCard className="w-4 h-4 text-gray-400" /> Billing & Usage
-                </h3>
-                <div className="mb-3 p-2.5 bg-[#F8F9FA] rounded-lg">
-                  <UsageBar org={selectedOrg} />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Pricing tier</label>
-                    <select
-                      value={billingForm.pricing_tier}
-                      onChange={e => handleTierSelect(e.target.value)}
-                      data-testid="billing-tier-select"
-                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                    >
-                      <option value="">No tier set</option>
-                      {Object.entries(PRICING_TIERS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Included hrs/month</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={billingForm.included_hours_monthly}
-                      onChange={e => setBillingForm(f => ({ ...f, included_hours_monthly: e.target.value }))}
-                      placeholder="e.g. custom for Enterprise"
-                      data-testid="billing-included-hours-input"
-                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                    />
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={billingForm.is_trial}
-                    onChange={e => setBillingForm(f => ({ ...f, is_trial: e.target.checked }))}
-                    data-testid="billing-is-trial-checkbox"
-                    className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                  />
-                  On trial
-                  {billingForm.is_trial && (
-                    <input
-                      type="date"
-                      value={billingForm.trial_ends_at}
-                      onChange={e => setBillingForm(f => ({ ...f, trial_ends_at: e.target.value }))}
-                      data-testid="billing-trial-ends-input"
-                      className="ml-2 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                    />
-                  )}
-                </label>
-
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Stripe customer ID</label>
-                    <input
-                      type="text"
-                      value={billingForm.stripe_customer_id}
-                      onChange={e => setBillingForm(f => ({ ...f, stripe_customer_id: e.target.value }))}
-                      placeholder="cus_..."
-                      data-testid="billing-stripe-customer-input"
-                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Stripe status</label>
-                    <select
-                      value={billingForm.stripe_subscription_status}
-                      onChange={e => setBillingForm(f => ({ ...f, stripe_subscription_status: e.target.value }))}
-                      data-testid="billing-stripe-status-select"
-                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                    >
-                      <option value="">Not connected</option>
-                      {Object.entries(STRIPE_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="mb-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Next payment date</label>
-                  <input
-                    type="date"
-                    value={billingForm.stripe_current_period_end}
-                    onChange={e => setBillingForm(f => ({ ...f, stripe_current_period_end: e.target.value }))}
-                    data-testid="billing-next-payment-input"
-                    className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Billing notes</label>
-                  <textarea
-                    value={billingForm.billing_notes}
-                    onChange={e => setBillingForm(f => ({ ...f, billing_notes: e.target.value }))}
-                    rows={2}
-                    placeholder="Any manual notes for this org's billing arrangement"
-                    data-testid="billing-notes-textarea"
-                    className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A] resize-none"
-                  />
-                </div>
-
-                <button
-                  onClick={handleSaveBilling}
-                  disabled={savingBilling}
-                  data-testid="save-billing-btn"
-                  className="w-full flex items-center justify-center gap-2 py-2 bg-[#1E3A8A] text-white rounded-lg text-sm font-semibold hover:bg-[#1e40af] disabled:opacity-60 transition-colors"
-                >
-                  {savingBilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  Save Billing Info
-                </button>
-
-                {/* Monthly usage history — last 12 cycles, anchored to signup date */}
-                <div className="mt-4 pt-3 border-t border-gray-100">
-                  <p className="text-xs font-semibold text-gray-600 mb-2">Usage history (last 12 cycles)</p>
-                  {usageHistoryLoading ? (
-                    <div className="flex items-center gap-2 text-gray-400 text-xs py-2">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...
-                    </div>
-                  ) : usageHistory.length === 0 ? (
-                    <p className="text-xs text-gray-400">No usage recorded yet</p>
-                  ) : (
-                    <div className="space-y-1 max-h-40 overflow-y-auto" data-testid="usage-history-list">
-                      {usageHistory.slice().reverse().map((c, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 last:border-0">
-                          <span className="text-gray-500">
-                            {new Date(c.period_start).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                            {" – "}
-                            {new Date(c.period_end).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                          </span>
-                          <span className="font-medium text-gray-700">{c.hours.toFixed(1)} hrs</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Users */}
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-700">Users</h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    data-testid="invite-admin-btn"
-                    onClick={() => { setShowInviteAdmin(true); setInviteResult(null); setError(""); }}
-                    className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold hover:underline"
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                    Invite Admin
-                  </button>
-                  <span className="text-gray-200 text-xs">|</span>
-                  <button
-                    data-testid="add-user-btn"
-                    onClick={() => { setShowCreateUser(true); setError(""); }}
-                    className="flex items-center gap-1.5 text-xs text-[#1E3A8A] font-semibold hover:underline"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add User
-                  </button>
-                </div>
-              </div>
-
-              {usersLoading ? (
-                <div className="flex items-center gap-2 text-gray-400 text-sm py-4">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading users...
-                </div>
-              ) : orgUsers.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">No users in this organisation</p>
-              ) : (
-                <div className="space-y-2">
-                  {orgUsers.map(u => (
-                    <div key={u.id} className="border border-gray-100 rounded-lg bg-[#F8F9FA] overflow-hidden">
-                      {/* View row */}
-                      {editingUserId !== u.id ? (
-                        <div className="flex items-center gap-3 p-3">
-                          <div className="w-8 h-8 rounded-full bg-[#1E3A8A]/10 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-[#1E3A8A]">{u.name?.charAt(0)?.toUpperCase()}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                            <p className="text-xs text-gray-400 truncate">{u.email}</p>
-                          </div>
-                          <RoleBadge role={u.role} />
-                          <button
-                            onClick={() => { setEditingUserId(u.id); setEditUserForm({ name: u.name, email: u.email, role: u.role, password: "" }); setError(""); }}
-                            className="p-1.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-                            title="Edit user"
-                            data-testid={`edit-user-btn-${u.id}`}
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setUserToDelete(u)}
-                            className="p-1.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
-                            title="Delete user"
-                            data-testid={`delete-user-btn-${u.id}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        /* Edit row */
-                        <div className="p-3 space-y-2">
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              type="text"
-                              value={editUserForm.name}
-                              onChange={e => setEditUserForm(f => ({ ...f, name: e.target.value }))}
-                              placeholder="Full name"
-                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                              data-testid="edit-user-name"
-                            />
-                            <input
-                              type="email"
-                              value={editUserForm.email}
-                              onChange={e => setEditUserForm(f => ({ ...f, email: e.target.value }))}
-                              placeholder="Email"
-                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                              data-testid="edit-user-email"
-                            />
-                            <select
-                              value={editUserForm.role}
-                              onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))}
-                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                              data-testid="edit-user-role"
-                            >
-                              <option value="admin">Admin</option>
-                              <option value="manager">Manager</option>
-                              <option value="attendee">Attendee</option>
-                              <option value="shared_reviewer">Shared Reviewer</option>
-                            </select>
-                            <input
-                              type="password"
-                              value={editUserForm.password}
-                              onChange={e => setEditUserForm(f => ({ ...f, password: e.target.value }))}
-                              placeholder="New password (optional)"
-                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
-                              data-testid="edit-user-password"
-                            />
-                          </div>
-                          {error && <p className="text-xs text-red-600">{error}</p>}
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              onClick={() => handleUpdateUser(u.id)}
-                              disabled={submitting}
-                              className="flex items-center gap-1 bg-[#1E3A8A] text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-[#1E40AF] disabled:opacity-60 transition-colors"
-                              data-testid="save-user-btn"
-                            >
-                              <Check className="w-3 h-3" /> Save
-                            </button>
-                            <button
-                              onClick={() => { setEditingUserId(null); setError(""); }}
-                              className="px-3 py-1.5 rounded text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-                              data-testid="cancel-edit-user-btn"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
       )}
 
       {/* ── Create Organisation Modal ──────────────────────────────────── */}
@@ -1151,259 +638,6 @@ export default function SuperAdminDashboard() {
         </>
       )}
 
-      {/* ── Create User Modal ─────────────────────────────────────────── */}
-      {showCreateUser && selectedOrg && (        <>
-          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setShowCreateUser(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="font-bold font-display text-[#1E3A8A] text-lg">Add User</h2>
-                <button onClick={() => setShowCreateUser(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <p className="text-xs text-gray-400 mb-5">Adding to: <span className="font-medium text-gray-600">{selectedOrg.name}</span></p>
-              {error && (
-                <p className="mb-3 text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>
-              )}
-              <form onSubmit={handleCreateUser} className="space-y-3">
-                <div>
-                  <label htmlFor="create-user-name" className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
-                  <input
-                    id="create-user-name"
-                    name="name"
-                    data-testid="user-name-input"
-                    type="text"
-                    required
-                    autoFocus
-                    value={userForm.name}
-                    onChange={e => setUserForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="Jane Smith"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="create-user-email" className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    id="create-user-email"
-                    name="email"
-                    data-testid="user-email-input"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    value={userForm.email}
-                    onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))}
-                    placeholder="jane@example.com"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="create-user-password" className="block text-xs font-medium text-gray-700 mb-1">Password</label>
-                  <input
-                    id="create-user-password"
-                    name="password"
-                    data-testid="user-password-input"
-                    type="password"
-                    required
-                    autoComplete="new-password"
-                    value={userForm.password}
-                    onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))}
-                    placeholder="Min. 10 characters"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="create-user-role" className="block text-xs font-medium text-gray-700 mb-1 flex items-center">Role <RoleInfoTooltip /></label>
-                  <select
-                    id="create-user-role"
-                    name="role"
-                    data-testid="user-role-select"
-                    value={userForm.role}
-                    onChange={e => setUserForm(f => ({ ...f, role: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
-                  >
-                    {ROLE_OPTIONS.map(r => (
-                      <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateUser(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    data-testid="create-user-submit"
-                    type="submit"
-                    disabled={submitting || !userForm.name.trim() || !userForm.email.trim() || !userForm.password}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#1E3A8A] text-white rounded-lg text-sm font-semibold hover:bg-[#1e40af] disabled:opacity-50"
-                  >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    Add User
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ── Invite Admin Modal ────────────────────────────────────────── */}
-      {showInviteAdmin && selectedOrg && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => { setShowInviteAdmin(false); setInviteResult(null); }} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="font-bold font-display text-[#1E3A8A] text-lg">Invite Admin</h2>
-                <button onClick={() => { setShowInviteAdmin(false); setInviteResult(null); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <p className="text-xs text-gray-400 mb-5">
-                For: <span className="font-medium text-gray-600">{selectedOrg.name}</span>
-                <span className="ml-2 text-gray-300">·</span>
-                <span className="ml-2">A welcome email with a one-time activation link will be sent</span>
-              </p>
-
-              {inviteResult ? (
-                <div className="space-y-4">
-                  <div className={`flex items-start gap-3 p-4 rounded-lg ${inviteResult.email_failed ? "bg-amber-50 border border-amber-200" : "bg-emerald-50 border border-emerald-200"}`}>
-                    {inviteResult.email_failed
-                      ? <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                      : <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold ${inviteResult.email_failed ? "text-amber-700" : "text-emerald-700"}`}>
-                        {inviteResult.email_failed ? "User created — email failed to send" : "Invitation sent!"}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">{inviteResult.message}</p>
-                      {inviteResult.invite_link && (
-                        <div className="mt-3">
-                          <p className="text-xs font-semibold text-gray-600 mb-1">Share this link manually:</p>
-                          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                            <span className="text-xs text-gray-500 truncate flex-1">{inviteResult.invite_link}</span>
-                            <button
-                              onClick={() => navigator.clipboard.writeText(inviteResult.invite_link)}
-                              className="text-[#1E3A8A] hover:text-[#1e40af] flex-shrink-0"
-                              title="Copy link"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => { setShowInviteAdmin(false); setInviteResult(null); loadOrgUsers(selectedOrg); }}
-                    className="w-full py-2 bg-[#1E3A8A] text-white rounded-lg text-sm font-semibold hover:bg-[#1e40af]"
-                  >
-                    Done
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleInviteAdmin} className="space-y-3">
-                  {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
-                  <div>
-                    <label htmlFor="invite-admin-name" className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
-                    <input
-                      id="invite-admin-name"
-                      name="name"
-                      data-testid="invite-name-input"
-                      type="text"
-                      required
-                      autoFocus
-                      autoComplete="name"
-                      value={inviteForm.name}
-                      onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
-                      placeholder="Jane Smith"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="invite-admin-email" className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-                    <input
-                      id="invite-admin-email"
-                      name="email"
-                      data-testid="invite-email-input"
-                      type="email"
-                      required
-                      autoComplete="email"
-                      value={inviteForm.email}
-                      onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
-                      placeholder="admin@organisation.com"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-400 flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 flex-shrink-0" />
-                    They will receive an email with a link to set their own password
-                  </p>
-                  <div className="flex gap-2 pt-1">
-                    <button type="button" onClick={() => setShowInviteAdmin(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
-                      Cancel
-                    </button>
-                    <button
-                      data-testid="send-invite-submit"
-                      type="submit"
-                      disabled={submitting || !inviteForm.name.trim() || !inviteForm.email.trim()}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-semibold hover:bg-emerald-800 disabled:opacity-50"
-                    >
-                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                      Send Invite
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-      {/* ── Delete User Confirmation Modal ──────────────────────────── */}
-      {userToDelete && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => !deleting && setUserToDelete(null)} />
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
-              <div className="flex items-start gap-4 mb-5">
-                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Trash2 className="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-base">Delete User</h3>
-                  <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-                    Are you sure you want to delete <strong className="text-gray-800">{userToDelete.name}</strong>?
-                    Their schedules and login sessions will also be removed.
-                    <span className="block mt-1 text-red-500 font-medium">This cannot be undone.</span>
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setUserToDelete(null)}
-                  disabled={deleting}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                  data-testid="cancel-delete-user-btn"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteUser}
-                  disabled={deleting}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-60 transition-colors"
-                  data-testid="confirm-delete-user-btn"
-                >
-                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                  {deleting ? "Deleting..." : "Delete User"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
     </div>
     </Layout>
   );
