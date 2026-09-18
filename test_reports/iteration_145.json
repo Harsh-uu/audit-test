@@ -1,0 +1,33 @@
+{
+  "summary": "Full frontend + backend E2E verification of the EULA acceptance gate. Created a fresh throwaway attendee via super-admin API, logged in via UI, and exercised the whole 3-strikes-then-hard-block flow, plus a smoke check that an existing backfilled admin is not gated. All 8 features from the review request PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_verified": [
+    "Fresh user (attendee) sees EULA modal (data-testid=eula-modal) immediately on first login on /dashboard — eula-content, eula-agree-btn, and eula-remind-later-btn all present; eula-hard-block-notice NOT present at decline_count=0. Placeholder text 'END USER LICENCE AGREEMENT — PLACEHOLDER…' rendered correctly.",
+    "Clicking 'Remind me later' fires POST /api/eula/decline → 200 {decline_count:1}, modal closes for the session, and does NOT reappear on client-side navigation within the same session (verified /meetings nav).",
+    "Modal reappears on FULL PAGE RELOAD when decline_count is 1 and 2 — persistence via server-side counter works.",
+    "After 3 total 'Remind me later' dismissals, on the 4th appearance the eula-remind-later-btn is REMOVED (count=0), eula-hard-block-notice is shown with copy 'You must accept this agreement to continue using 1two.one.', and both ESC key and backdrop click do NOT close the modal.",
+    "Clicking 'I Agree' calls POST /api/eula/accept, modal closes, and does NOT reappear on subsequent reloads (DB confirmed eula_accepted_version=1, decline_count reset to 0).",
+    "Existing backfilled admin (admin@supervision.com, eula_accepted_version=1) does NOT see the modal at all on /dashboard. /api/eula/current returns needs_acceptance=false, decline_count=0 for this user.",
+    "EulaGate does NOT render on /login even when the user is logged in with needs_acceptance=true would be true (PUBLIC_PATHS gate verified by navigating to /login while session cookie present — modal count=0).",
+    "No new console errors introduced by EulaGate. Only pre-existing /auth 401 noise on the login page (normal AuthContext bootstrap when unauthenticated)."
+  ],
+  "critical_code_review_comments": [
+    "EulaGate.js line 24 uses raw `/api` prefix relying on the Kubernetes ingress rewrite; axios.defaults.baseURL is set in AuthContext so this happens to work, but it's inconsistent with the rest of the codebase which uses REACT_APP_BACKEND_URL — consider aligning for clarity (non-blocking).",
+    "Hard-block-notice copy is only rendered once decline_count>=3, but if the accept POST fails the modal is re-shown with a still-hidden remind-later button (canDismiss is computed from stale eula.decline_count). Edge case only; not user-visible under normal use.",
+    "eula-modal-backdrop is a sibling div, not a click target overlay ABOVE the modal — clicking it programmatically has no dismiss handler, so 'no backdrop click close' requirement is satisfied by construction. Good."
+  ],
+  "updated_files": [],
+  "test_report_links": ["/app/backend/tests/create_eula_test_user.py"],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Created & then deleted eula-test-1789757946@example.com / EulaTest123! (attendee, Test Company org). Used admin@supervision.com/Admin123!X (backfilled) for non-gated verification. Super-admin used for user provisioning via API.",
+  "seed_data_creation": "Ephemeral: created one attendee via POST /api/super-admin/orgs/{org_id}/users, cleaned up via DELETE at end. No residual data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Helper script /app/backend/tests/create_eula_test_user.py supports create/delete/show/reset_eula for future EULA tests. Note: super-admin-created users always have must_change_password=true — flip that off in DB before testing EulaGate directly, otherwise the /set-password redirect fires first (EulaGate correctly no-ops when must_change_password=true, tested via that gate)."
+}

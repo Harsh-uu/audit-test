@@ -1,3 +1,39 @@
+## EULA Acceptance Gate (Sep 2026) — DONE, tested
+Backend + frontend "preparations" for a EULA acceptance flow, built ahead of the user finalizing
+the legal text — then swapped to the REAL text once the user supplied the final PDF the same day.
+- Per explicit user decisions: ALL roles gated; EXISTING/demo accounts backfilled as already-
+  accepted (not disrupted); versioned (future content updates re-gate everyone incl. backfilled
+  accounts); EULA text lives in a new DB table (editable without a redeploy); up to 3 "Remind me
+  later" dismissals allowed, then a true hard block (no dismiss option) until "I Agree" is clicked.
+- `m026_eula.py`: new `eula_versions` table (global platform content, no org_id — same pattern as
+  `m023_resources.py`) + `users.eula_accepted_version`/`eula_accepted_at`/`eula_decline_count`.
+  Backfills all pre-existing users to version 1/accepted at migration time.
+- `m027_eula_real_content.py`: swaps the placeholder text for the real "Itwo.one EULA & Terms of
+  Service" text the user supplied (extracted from their PDF) — updates version 1 IN PLACE (no
+  version bump) since the placeholder was never a genuine acceptance by anyone, so no reason to
+  re-gate the already-backfilled demo accounts.
+- `routers/eula.py`: `GET /eula/current` (version/content/needs_acceptance/decline_count),
+  `POST /eula/accept`, `POST /eula/decline` — all any authenticated role. `deps.py::get_current_user`
+  now also selects `eula_accepted_version` (flows through to `/auth/me` automatically).
+- `components/EulaGate.js`: mounted ONCE at the app root (`App.js`, alongside `ScrollToTop`, not
+  inside `ProtectedRoute` which re-mounts per route) — fetches `/eula/current` once per login,
+  renders a blocking modal when `needs_acceptance` is true. Skips public paths (login/reset-password/
+  accept-invite/set-password) and while `must_change_password` is true (that flow's own redirect
+  takes priority; EulaGate picks up right after). `decline_count < 3` shows "Remind me later";
+  at 3 it's removed entirely and a hard-block notice is shown instead — no backdrop/ESC dismiss.
+- **Tested via testing_agent** (iteration_145): 100% pass — fresh user gated correctly, 3-strikes-
+  then-hard-block verified across reloads, accept persists and never re-prompts, existing backfilled
+  admin never sees it, no regression on public pages, no console errors. Real-content swap
+  self-verified live via screenshot post-test (real EULA text renders correctly in the modal).
+- Non-blocking code-review notes (backlog P3): `EulaGate.js` uses a bare `/api` prefix (relies on
+  ingress rewrite, works today but inconsistent with `REACT_APP_BACKEND_URL` used elsewhere); if the
+  accept POST fails, the modal re-shows with a stale `decline_count`-derived dismiss state (edge
+  case, not user-visible under normal use).
+- **Next step for the user**: to publish a FUTURE EULA update, insert a new `eula_versions` row with
+  a higher `version` + `is_active=TRUE` (and flip the old one to `is_active=FALSE`) — every user,
+  including today's backfilled ones, will be re-gated automatically. No admin UI for this exists yet
+  (out of scope this round) — ask to add a simple super-admin editor if that'd help.
+
 ## Super Admin Org Detail — Full Page (Sep 2026) — DONE, tested
 Converted the Super Admin "Manage" action on `/super-admin` from a right-hand slide-out drawer into
 a dedicated page at `/super-admin/orgs/:orgId` (`SuperAdminOrgDetail.js`, new route in `App.js`).
