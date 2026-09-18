@@ -11,7 +11,12 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
-## Auth Bug: "Session Expired" on Set-New-Password (Sep 2026) — DONE, tested
+## Supabase Security Advisor RCA (Sep 2026) — DONE
+- **"Policy Exists RLS Disabled" (jobs/login_attempts/password_reset_tokens, CRITICAL)**: stale finding from before `m020_disable_rls_drift.py` (a prior session's fix) — live DB confirms RLS correctly disabled + zero orphaned policies on all 3. These tables are intentionally excluded from org-scoped RLS (pre-org-context lookups / admin-bypass-only system table). User needs to refresh the Supabase linter to clear it; nothing to fix in code.
+- **"Auth RLS Initialization Plan" (need_review_signals)**: REAL issue, fixed via `m024_fix_need_review_signals_initplan.py`. `m022`'s policy called `current_setting('app.current_org_id', true)` unwrapped instead of `(SELECT current_setting(...))` (the pattern every other table's policy in `m001_core_tables.py` uses) — caused per-row re-evaluation instead of once-per-query. Performance-only, isolation logic was always correct. Verified live: policy now wrapped correctly, org-scoped query still returns correct row count.
+- **"Leaked Password Protection Disabled" (Auth)**: Supabase project-level Auth setting, not part of app schema/migrations — user needs to toggle it on in Supabase Dashboard → Authentication → Policies/Providers themselves.
+
+
 - **RCA**: `POST /api/auth/change-password` updates `password_changed_at` (which by design invalidates the current session's tokens via the `pwd_ts` claim checked in `deps.py::get_current_user`), but never issued FRESH cookies afterward — so the very next request (SetPassword.js's own follow-up `/auth/me` call) got 401 "Session expired", and the axios refresh-interceptor also failed since the refresh token had the same stale `pwd_ts`. The password change itself always succeeded (hence "works fine when you log in again") — only the immediate post-change session broke.
 - **Fix**: `change_password()` now mints fresh access+refresh tokens with the new `pwd_ts` and sets them via `_set_auth_cookies()`, mirroring the sibling `accept_invite()` endpoint which already did this correctly.
 - Verified via live curl (login→change-password→immediate `/auth/me` with new cookies→200) AND testing_agent frontend flow (iteration_142.json, 100% pass, 2/2 flows: SetPassword.js must-change flow + regular ChangePasswordModal regression).

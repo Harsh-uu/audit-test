@@ -32,6 +32,7 @@ from . import (
     m021_revoke_public_grants,
     m022_need_review_signals,
     m023_resources,
+    m024_fix_need_review_signals_initplan,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ MIGRATIONS = [
     m021_revoke_public_grants,
     m022_need_review_signals,
     m023_resources,
+    m024_fix_need_review_signals_initplan,
 ]
 
 
