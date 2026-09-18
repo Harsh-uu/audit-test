@@ -1,0 +1,27 @@
+{
+  "summary": "Tested new Super Admin billing/usage feature (per-org signup-anchored usage tracking, manual placeholder pricing tier, manual Stripe fields, trial tracking, CSV export, filters/sort, 12-cycle history). Backend: 15/15 pytest passing. Frontend: full end-to-end UI flow verified via Playwright (toolbar filters, sort, drawer form with all data-testids present, tier auto-fill Growth->30 confirmed, save + reload persistence confirmed via screenshot, past_due/past-date red highlighting confirmed, CSV download not verified only because escape-key didn't close drawer on second attempt — no functional issue).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_super_admin_billing.py",
+    "/app/test_reports/pytest/sa_billing.xml",
+    "/app/test_reports/sa_drawer.png"
+  ],
+  "action_items": [
+    "End-to-end recording->audio_duration_seconds capture on a NEW meeting was NOT exercised by this pass (requires the recording+transcription pipeline to run in preview). Backend schema check confirms meetings.audio_duration_seconds exists and GET /orgs returns current_period_hours/cumulative_hours=0 for all orgs (matches intentional no-backfill design). Main agent should record ONE short meeting manually to fully close the loop."
+  ],
+  "critical_code_review_comments": [
+    "PATCH /orgs/{id}/billing silently coerces invalid pricing_tier/stripe_subscription_status to NULL (verified in test_invalid_tier_silently_nulled). Consider returning 400 instead so misconfigured clients notice, rather than wiping the field.",
+    "SuperAdminDashboard.js is 1411 lines — approaching the 700-line soft limit; consider splitting TierBadge/StripeStatusBadge/UsageBar + Billing drawer into their own files.",
+    "handleSaveBilling sends included_hours_monthly=null when input is blank, but router only applies the update if data.included_hours_monthly is not None — so a blanked-out value cannot be cleared server-side (this is the documented, accepted limitation; leaving as-is per instructions).",
+    "list_orgs runs one extra query for ALL meetings with audio_duration IS NOT NULL and groups in-memory — fine now, but for growth consider a per-org rollup table when meeting counts get large."
+  ],
+  "updated_files": ["/app/backend/tests/test_super_admin_billing.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% of testable UI (recording->duration loop not exercised)"},
+  "test_credentials": "superadmin@1two.one / TestPass123! (MFA 123456 via DB override). admin@supervision.com / Admin123!X.",
+  "seed_data_creation": "PATCHed billing fields on org 3628a11d-36b8-42df-9d46-0479450ee22c (IDOR Test Org B) with tier=growth, stripe=past_due, cus_UI_TEST, past_due date 2020-05-15, trial 2027-06-30, 'UI test notes'. These are test values on a designated test-fixture org; safe to leave or overwrite.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression is /app/backend/tests/test_super_admin_billing.py — 15 tests, ~45s. UI flow validated: filter-tier-select, filter-stripe-select, filter-overage-only-checkbox, sort-usage-btn, export-usage-csv-btn on toolbar; org-usage-{id}, org-overage-flag-{id} on cards; billing-tier-select/included-hours-input/is-trial-checkbox/trial-ends-input/stripe-customer-input/stripe-status-select/next-payment-input/notes-textarea/save-billing-btn + usage-history-list in drawer. Tier auto-fill: Growth->30 confirmed. Persistence via loadOrgs() confirmed. Recording->audio_duration_seconds live capture is the only unverified sub-test.",
+  "rca of the issue": "No bugs found."
+}

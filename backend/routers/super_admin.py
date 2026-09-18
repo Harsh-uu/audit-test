@@ -203,7 +203,9 @@ async def update_org_billing(org_id: str, data: UpdateOrgBillingRequest, current
     _require_super_admin(current_user)
     updates = {}
     if data.pricing_tier is not None:
-        updates["pricing_tier"] = data.pricing_tier if data.pricing_tier in PRICING_TIERS else None
+        if data.pricing_tier and data.pricing_tier not in PRICING_TIERS:
+            raise HTTPException(status_code=400, detail=f"Invalid pricing_tier. Must be one of: {', '.join(PRICING_TIERS)}")
+        updates["pricing_tier"] = data.pricing_tier or None
     if data.included_hours_monthly is not None:
         updates["included_hours_monthly"] = data.included_hours_monthly if data.included_hours_monthly >= 0 else None
     if data.is_trial is not None:
@@ -213,7 +215,9 @@ async def update_org_billing(org_id: str, data: UpdateOrgBillingRequest, current
     if data.stripe_customer_id is not None:
         updates["stripe_customer_id"] = data.stripe_customer_id.strip() or None
     if data.stripe_subscription_status is not None:
-        updates["stripe_subscription_status"] = data.stripe_subscription_status if data.stripe_subscription_status in VALID_STRIPE_STATUSES else None
+        if data.stripe_subscription_status and data.stripe_subscription_status not in VALID_STRIPE_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Invalid stripe_subscription_status. Must be one of: {', '.join(VALID_STRIPE_STATUSES)}")
+        updates["stripe_subscription_status"] = data.stripe_subscription_status or None
     if data.stripe_current_period_end is not None:
         updates["stripe_current_period_end"] = data.stripe_current_period_end or None
     if data.billing_notes is not None:

@@ -11,7 +11,17 @@ transcript find & replace, segregated inspection pages, organisation sub-tenant 
 React (Vite prod build, hot reload OFF) + FastAPI + PostgreSQL (asyncpg) + Supabase Storage.
 AI: Google Cloud Vertex AI (Gemini 2.5 Flash), OpenAI GPT-4o fallback.
 
-## Supabase Security Advisor RCA (Sep 2026) — DONE
+## Super Admin Billing/Usage Groundwork (Sep 2026) — DONE, tested, ready for Stripe
+- Confirmed AssemblyAI's `transcript.audio_duration` (seconds) is accessible via the Python SDK — this is now captured on EVERY new meeting and stored in `meetings.audio_duration_seconds` (migration `m025_org_billing_usage.py`). NOT backfilled for historical meetings (test data, per product decision) — usage counts from this ship date forward. Verified end-to-end with a real 6-second test recording → `audio_duration_seconds` captured as exactly `6`.
+- Usage tracked per-org against each org's OWN signup date (`organisations.created_at` day-of-month), not a shared calendar month — `_billing_period()` helper in `super_admin.py`.
+- Manual placeholder billing fields on `organisations` (pricing_tier, included_hours_monthly, is_trial, trial_ends_at, stripe_customer_id, stripe_subscription_status, stripe_current_period_end, billing_notes) — hand-editable now via a new "Billing & Usage" section in the org detail drawer, will sync from real Stripe webhooks later. Tiers mirror supervision2.co.uk/#pricing: Starter=10hrs, Growth=30hrs, Scale=70hrs, Enterprise=custom/no cap.
+- Org exceeding included hours is red-highlighted (never auto-disabled — stays a manual super-admin decision, per explicit requirement).
+- New endpoints: `GET /orgs` (enriched with usage+billing fields), `GET /orgs/{id}/usage-history` (last 12 cycles), `PATCH /orgs/{id}/billing`.
+- SuperAdminDashboard.js: tier/Stripe-status/overage filters, sort-by-usage, CSV export, usage bar + tier/Stripe/trial badges per org card, full billing edit form + 12-cycle usage history in the drawer.
+- Tested via testing_agent (iteration_143.json): 15/15 backend pytest, 100% of testable frontend UI flows, 0 bugs found. One code-review nit fixed post-test: PATCH now returns 400 for an invalid tier/Stripe status instead of silently nulling it.
+- KNOWN LIMITATION (accepted, by design): `included_hours_monthly` can't be cleared back to blank once set via the form (backend can't distinguish "not sent" from "explicit null" for that one numeric field) — all other fields support clearing via empty string.
+
+
 - **"Policy Exists RLS Disabled" (jobs/login_attempts/password_reset_tokens, CRITICAL)**: stale finding from before `m020_disable_rls_drift.py` (a prior session's fix) — live DB confirms RLS correctly disabled + zero orphaned policies on all 3. These tables are intentionally excluded from org-scoped RLS (pre-org-context lookups / admin-bypass-only system table). User needs to refresh the Supabase linter to clear it; nothing to fix in code.
 - **"Auth RLS Initialization Plan" (need_review_signals)**: REAL issue, fixed via `m024_fix_need_review_signals_initplan.py`. `m022`'s policy called `current_setting('app.current_org_id', true)` unwrapped instead of `(SELECT current_setting(...))` (the pattern every other table's policy in `m001_core_tables.py` uses) — caused per-row re-evaluation instead of once-per-query. Performance-only, isolation logic was always correct. Verified live: policy now wrapped correctly, org-scoped query still returns correct row count.
 - **"Leaked Password Protection Disabled" (Auth)**: Supabase project-level Auth setting, not part of app schema/migrations — user needs to toggle it on in Supabase Dashboard → Authentication → Policies/Providers themselves.
