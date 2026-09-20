@@ -1,4 +1,16 @@
-## Meeting Types Dropdown Update (Sep 2026) — DONE, tested (iteration_147.json)
+## Header Title Alignment Fix (Sep 2026) — DONE, verified live
+User-reported bug: meeting title in the org-colour header bar was centered, but the date/location
+line below it was left-aligned instead of centered underneath.
+- **RCA**: `MeetingReport.js`'s `meetingHeaderCenter` wraps both lines in a parent with inherited
+  `text-center` (set in `Layout.js`). The title line is a plain block div (respects text-align),
+  but the date/location line used `flex items-center` — flex containers position children via
+  `justify-content` (default `flex-start`), which ignores the ancestor's `text-align`, so it
+  rendered flush-left instead of centered.
+- **Fix**: added `justify-center` to that flex div (`MeetingReport.js`).
+- **Verified live** via screenshot_tool (real meeting `/meetings/{id}/report`) — both lines now
+  centered correctly. Single-line CSS fix, self-tested, no testing_agent round used.
+
+ (Sep 2026) — DONE, tested (iteration_147.json)
 Replaced the "New Meeting" page's fixed 6-option meeting type dropdown with the user's requested
 14 options (default Supervision) + an "Other" free-text fallback, per explicit user choice
 (fixed list + Other, NOT fully free-text; existing old-value meetings left untouched, no migration).

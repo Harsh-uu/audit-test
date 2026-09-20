@@ -94,7 +94,7 @@ export default function MeetingReport() {
   const meetingHeaderCenter = (
     <div className="min-w-0" data-testid="meeting-header-title">
       <div className="text-white font-semibold text-[15px] leading-tight line-clamp-2 sm:line-clamp-1">{meeting.title}</div>
-      <div className="text-white/70 text-[11px] mt-0.5 truncate flex items-center gap-1">
+      <div className="text-white/70 text-[11px] mt-0.5 truncate flex items-center justify-center gap-1">
         <span>
           {new Date(meeting.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
           {meeting.location ? ` · ${meeting.location}` : ""}
