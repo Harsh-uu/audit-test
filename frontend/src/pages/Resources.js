@@ -1,11 +1,81 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import { Link } from "react-router-dom";
-import { BookOpen, Download, GraduationCap, Sparkles, ExternalLink, Loader2, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
+import {
+  BookOpen, Download, GraduationCap, Sparkles, ExternalLink, Loader2, ArrowRight,
+  Share2, Copy, Check, Mail, Linkedin, MessageSquareShare,
+} from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cachedGet } from "@/utils/apiCache";
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
+
+function ShareCourseButton() {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const shareUrl = `${window.location.origin}/resources`;
+  const shareText = "Free 9-module supervision course from 1two.one — practical training for care supervisors.";
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    toast.success("Link copied!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const links = [
+    { label: "WhatsApp", icon: MessageSquareShare, href: `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}` },
+    { label: "LinkedIn", icon: Linkedin, href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}` },
+    { label: "Email", icon: Mail, href: `mailto:?subject=${encodeURIComponent("Free Supervision Course")}&body=${encodeURIComponent(`${shareText}\n\n${shareUrl}`)}` },
+  ];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        data-testid="share-course-btn"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors"
+      >
+        <Share2 className="w-3.5 h-3.5" /> Share this course
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden" data-testid="share-course-menu">
+          <button
+            onClick={handleCopy}
+            data-testid="share-course-copy"
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-gray-400" />}
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+          <div className="border-t border-gray-100">
+            {links.map(({ label, icon: Icon, href }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid={`share-course-${label.toLowerCase()}`}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <Icon className="w-4 h-4 text-gray-400" /> {label}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Resources() {
   const { user } = useAuth();
@@ -111,11 +181,14 @@ export default function Resources() {
         </div>
 
         <div data-testid="resources-course-section">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <GraduationCap className="w-4 h-4 text-emerald-600" />
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <GraduationCap className="w-4 h-4 text-emerald-600" />
+              </div>
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">Supervision Course</h2>
             </div>
-            <h2 className="text-base md:text-lg font-semibold text-gray-900">Supervision Course</h2>
+            <ShareCourseButton />
           </div>
           {!loading && data.courses.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

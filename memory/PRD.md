@@ -1,3 +1,11 @@
+## Share This Course CTA (Sep 2026) — DONE, self-tested
+Added a "Share this course" button next to the Supervision Course heading on `/resources` (visible
+to everyone, anonymous or logged-in) — driving the "share far and wide" goal from the public page.
+- `Resources.js`: new `ShareCourseButton` — dropdown with Copy link (clipboard + toast), WhatsApp,
+  LinkedIn, and Email share, all pointing at `${origin}/resources` with a short pitch line.
+- **Self-tested**: screenshot-verified open/close + copy-link click at both 1920x800 and 390x844,
+  no horizontal overflow on mobile.
+
 ## Free Supervision Course — Real Content Live (Sep 2026) — DONE, self-tested
 Populated the "Supervision Course" section on the public `/resources` page with the user's real
 9-module PDF course, replacing the "Coming soon" placeholder.
