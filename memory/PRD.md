@@ -1,3 +1,22 @@
+## Free Supervision Course — Real Content Live (Sep 2026) — DONE, self-tested
+Populated the "Supervision Course" section on the public `/resources` page with the user's real
+9-module PDF course, replacing the "Coming soon" placeholder.
+- `m028_resources_storage.py`: added `storage_path`/`content_type` to `resources` (existing external
+  `url` column stays for the one Skills for Care download link; self-hosted course PDFs use both).
+- `routers/resources.py`: new public `GET /resources/course/{id}/file` — streams the PDF straight
+  from Supabase Storage (`DOCS_BUCKET`, same bucket/helpers as `standards_documents`), no auth,
+  `Content-Disposition: inline` so it opens in a new tab like the existing external download link.
+- `scripts/seed_course_modules.py`: one-off (re-runnable) uploader — downloads each PDF, calls
+  `put_document()`, inserts a `resources` row with `url=/api/resources/course/{id}/file`. All 9
+  modules uploaded: 1 What Supervision Is For, 2 Preparing Properly, 3 Conducting the Session,
+  4 Challenging Conversations, 5 Documentation & Follow-Up, 6 Frequency & New to Role,
+  7 Measuring the Difference, 8 (bonus) Supervision to Appraisal, 9 (bonus) Active Listening In
+  Depth. Descriptions written from each PDF's actual content (via `analyze_file_tool`).
+- **Self-tested**: curl-verified `GET /api/resources/` returns all 9 courses correctly sorted,
+  `GET /api/resources/course/{id}/file` returns a valid `application/pdf` with zero auth on two
+  spot-checked ids; screenshot confirms all 9 cards render on `/resources` and the "Coming soon"
+  placeholder is gone.
+
 ## Public Resources Page (Sep 2026) — DONE, tested
 Made `/resources` the ONE intentionally public page in the app, to share the free course/downloads
 widely without requiring login. Every other route stays behind auth (unchanged).
