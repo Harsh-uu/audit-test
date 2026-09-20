@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
-import { BookOpen, Download, GraduationCap, Sparkles, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
+import { BookOpen, Download, GraduationCap, Sparkles, ExternalLink, Loader2, ArrowRight } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { cachedGet } from "@/utils/apiCache";
 
 const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
 export default function Resources() {
+  const { user } = useAuth();
   const [data, setData] = useState({ downloads: [], courses: [] });
   const [loading, setLoading] = useState(true);
 
@@ -16,9 +19,37 @@ export default function Resources() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Auth state is still resolving — avoid flashing the anonymous sidebar
+  // for a split second before we know whether there's a real session.
+  if (user === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-8 h-8 animate-spin text-[#1E3A8A]" />
+      </div>
+    );
+  }
+
   return (
     <Layout>
       <div className="p-6 md:p-10 fade-in max-w-4xl mx-auto">
+        {!user && (
+          <div
+            className="mb-8 rounded-2xl bg-[#1E3A8A] px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between"
+            data-testid="public-resources-cta"
+          >
+            <div>
+              <p className="text-white font-semibold text-sm sm:text-base">This is a free resource from 1two.one</p>
+              <p className="text-blue-200 text-xs sm:text-sm mt-0.5">Sign in to run supervision meetings with built-in evidence tracking.</p>
+            </div>
+            <Link
+              to="/login"
+              data-testid="public-resources-cta-signin"
+              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-white text-[#1E3A8A] rounded-lg text-sm font-semibold hover:bg-blue-50 transition-colors flex-shrink-0"
+            >
+              Sign In <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">

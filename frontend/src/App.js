@@ -78,12 +78,12 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/set-password" element={<SetPassword />} />
+          <Route path="/resources" element={<Resources />} />
           <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
           <Route path="/super-admin" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/super-admin/orgs/:orgId" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminOrgDetail /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/meetings" element={<ProtectedRoute><Meetings /></ProtectedRoute>} />
-          <Route path="/resources" element={<ProtectedRoute><Resources /></ProtectedRoute>} />
           <Route path="/meetings/new" element={<ProtectedRoute><NewMeeting /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/record" element={<ProtectedRoute><RecordingScreen /></ProtectedRoute>} />
           <Route path="/meetings/:meetingId/prepare" element={<ProtectedRoute roles={["admin","manager"]}><MeetingPrep /></ProtectedRoute>} />

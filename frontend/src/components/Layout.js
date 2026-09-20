@@ -5,7 +5,7 @@ import axios from "axios";
 import {
   LayoutDashboard, Mic, LogOut, ChevronLeft, Menu, BookOpen, CalendarClock,
   TrendingUp, BarChart2, X, Building2, Calendar, FileUp, LayoutGrid, ClipboardCheck,
-  Pencil, Check, Loader2, KeyRound, Settings, Award, UserCircle, ChevronDown,
+  Pencil, Check, Loader2, KeyRound, Settings, Award, UserCircle, ChevronDown, Lock,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 
@@ -34,7 +34,7 @@ const MANAGE_NAV_ITEMS = [
 // it needs from Layout is now passed in explicitly as a prop.
 function SidebarContent({
   onNavClick, collapsed, onToggleCollapsed, onMobileClose,
-  orgLogoUrl, orgPrimary, navItems, isActive, pathname, canManage,
+  orgLogoUrl, orgPrimary, navItems, isActive, pathname, canManage, isAnonymous,
 }) {
   return (
     <div className="flex flex-col h-full">
@@ -83,16 +83,18 @@ function SidebarContent({
           return (
             <Link
               key={path}
-              to={path}
+              to={isAnonymous ? "/login" : path}
               onClick={onNavClick}
               data-testid={`nav-${label.toLowerCase().replace(/\s/g, "-")}`}
+              title={isAnonymous ? "Sign in to access" : undefined}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                active ? "text-white" : "text-gray-600 hover:bg-gray-100"
+                isAnonymous ? "text-gray-400 hover:bg-gray-50" : active ? "text-white" : "text-gray-600 hover:bg-gray-100"
               }`}
-              style={active ? { backgroundColor: orgPrimary } : {}}
+              style={!isAnonymous && active ? { backgroundColor: orgPrimary } : {}}
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
-              {!collapsed && <span>{label}</span>}
+              {!collapsed && <span className="flex-1">{label}</span>}
+              {isAnonymous && !collapsed && <Lock className="w-3 h-3 flex-shrink-0" />}
             </Link>
           );
         })}
@@ -161,6 +163,7 @@ export default function Layout({ children, headerCenter }) {
   const [savingOrgName, setSavingOrgName] = useState(false);
 
   const canManage = user?.role === "admin" || user?.role === "manager";
+  const isAnonymous = !user;
 
   const saveOrgName = async () => {
     const trimmed = orgNameDraft.trim();
@@ -303,6 +306,7 @@ export default function Layout({ children, headerCenter }) {
           isActive={isActive}
           pathname={location.pathname}
           canManage={canManage}
+          isAnonymous={isAnonymous}
         />
       </aside>
 
@@ -327,6 +331,7 @@ export default function Layout({ children, headerCenter }) {
           isActive={isActive}
           pathname={location.pathname}
           canManage={canManage}
+          isAnonymous={isAnonymous}
         />
       </aside>
 
@@ -380,7 +385,7 @@ export default function Layout({ children, headerCenter }) {
               </>
             ) : (
               <>
-                <span className="text-sm font-semibold text-white whitespace-nowrap max-w-[90px] sm:max-w-none truncate">{user?.org_name || "Organisation"}</span>
+                <span className="text-sm font-semibold text-white whitespace-nowrap max-w-[90px] sm:max-w-none truncate">{isAnonymous ? "Free Resources" : (user?.org_name || "Organisation")}</span>
                 {user?.role === "admin" && (
                   <button onClick={() => { setEditingOrgName(true); setOrgNameDraft(user?.org_name || ""); }} className="hidden sm:inline-flex p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors" data-testid="org-name-edit" title="Rename organisation">
                     <Pencil className="w-3.5 h-3.5" />
@@ -401,6 +406,16 @@ export default function Layout({ children, headerCenter }) {
 
           {/* ── User menu (top right) ──────────────────────────────────────── */}
           <div className="ml-auto flex-shrink-0 relative" ref={userMenuRef}>
+            {isAnonymous ? (
+              <Link
+                to="/login"
+                data-testid="public-sign-in-btn"
+                className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-white/15 hover:bg-white/25 text-white text-sm font-semibold transition-colors"
+              >
+                Sign In
+              </Link>
+            ) : (
+            <>
             <button
               onClick={() => setShowUserMenu(v => !v)}
               className="flex items-center gap-2 px-2.5 py-1 rounded-md hover:bg-white/10 transition-colors group"
@@ -450,6 +465,8 @@ export default function Layout({ children, headerCenter }) {
                   </button>
                 </div>
               </div>
+            )}
+            </>
             )}
           </div>
         </div>

@@ -1,14 +1,15 @@
-"""GET /api/resources — curated downloads + course modules, global (not org-scoped)."""
+"""GET /api/resources — curated downloads + course modules, global (not org-scoped).
+Public — no auth. Anyone with the link can view the free course/downloads;
+this is the ONLY page in the app that is intentionally public."""
 
-from fastapi import APIRouter, Depends
-from deps import get_current_user
+from fastapi import APIRouter
 import database
 
 router = APIRouter()
 
 
 @router.get("/")
-async def list_resources(current_user=Depends(get_current_user)):
+async def list_resources():
     async with database.with_admin() as conn:
         rows = await conn.fetch(
             """SELECT id, category, title, description, url, source_label
