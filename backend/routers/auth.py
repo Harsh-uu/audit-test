@@ -192,6 +192,12 @@ def create_mfa_session_token(user_id: str) -> str:
 
 async def _generate_and_send_mfa(conn, user: dict) -> None:
     """Generate a 6-digit OTP, hash it, store it, and email it to the user."""
+    from utils.rate_limit import check_rate_limit
+    await check_rate_limit(
+        conn, identifier=f"mfa_send:{user['id']}",
+        max_attempts=8, window_minutes=1440,
+        error_detail="Too many verification codes requested today. Please wait a while before trying again, or contact support.",
+    )
     code = f"{secrets.randbelow(1000000):06d}"
     code_hash = (await asyncio.to_thread(bcrypt.hashpw, code.encode(), bcrypt.gensalt())).decode()
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()

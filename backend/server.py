@@ -122,15 +122,16 @@ app.add_middleware(GZipMiddleware, minimum_size=500)  # compress JSON ≥ 500 by
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(ContentSizeLimitMiddleware)
 
-cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 
 # H3: Restrict CORS to the specific methods and headers the API actually uses.
-# Wildcards increase the attack surface unnecessarily. Guard against accidental
-# misconfiguration that sets CORS_ORIGINS to "*" (would allow any origin with credentials).
-if "*" in cors_origins:
-    logger.critical(
-        "SECURITY: CORS_ORIGINS contains '*' — this is unsafe with allow_credentials=True. "
-        "Set an explicit allowlist of trusted origins."
+# Wildcards increase the attack surface unnecessarily. Hard-fail on startup rather
+# than just warning — a misconfigured "*"/empty allowlist with allow_credentials=True
+# is a critical security bug, not something that should silently keep running.
+if not cors_origins or "*" in cors_origins:
+    raise RuntimeError(
+        "SECURITY: CORS_ORIGINS must be set to an explicit, non-empty allowlist of "
+        "trusted origins (comma-separated) — refusing to start with '*' or empty."
     )
 
 app.add_middleware(

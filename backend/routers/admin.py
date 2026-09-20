@@ -227,12 +227,30 @@ async def reset_user_password(user_id: str, data: ResetPasswordRequest, current_
     org_id = current_user.get("org_id", "")
     now = datetime.now(timezone.utc)
     async with database.with_org(org_id) as conn:
-        u = await conn.fetchrow("SELECT id FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
+        u = await conn.fetchrow("SELECT id, email, supabase_password_set FROM users WHERE id = $1 AND org_id = $2", user_id, org_id)
         if not u:
             raise HTTPException(404, "User not found")
+
+        from utils import supabase_auth
+        try:
+            await supabase_auth.create_user(str(u["id"]), u["email"])  # no-op if already provisioned
+            await supabase_auth.set_password(str(u["id"]), data.new_password)
+            supabase_ok = True
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error("Supabase Auth password set failed for %s: %s", u["email"], exc)
+            supabase_ok = False
+
+        if u["supabase_password_set"] and not supabase_ok:
+            # Login checks Supabase first for this user — silently updating only
+            # bcrypt would strand them on their OLD Supabase password. Fail loudly.
+            raise HTTPException(status_code=503, detail="Unable to reset this user's password right now. Please try again shortly.")
+
         await conn.execute(
-            "UPDATE users SET password_hash=$1, must_change_password=TRUE, password_changed_at=$2 WHERE id=$3",
-            await hash_password(data.new_password), now, user_id,
+            """UPDATE users SET password_hash=$1, must_change_password=TRUE, password_changed_at=$2,
+               supabase_migrated=(supabase_migrated OR $4), supabase_password_set=(supabase_password_set OR $4)
+               WHERE id=$3""",
+            await hash_password(data.new_password), now, user_id, supabase_ok,
         )
     return {"message": "Password reset successfully"}
 

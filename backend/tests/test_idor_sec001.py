@@ -21,10 +21,10 @@ fe = dotenv_values("/app/frontend/.env")
 BASE = fe["REACT_APP_BACKEND_URL"].rstrip("/") + "/api"
 DSN = be["DATABASE_URL"]
 
-TARGET_MEETING = "0383953a-9a17-4f7f-9924-ed5ec30b42b6"
+TARGET_MEETING = "4b948235-5483-4f60-af2e-3f9591e3978b"
 
 CREDS = {
-    "jane": ("jane@supervision.com", "Jane123!"),
+    "jane": ("jane@supervision.com", "JaneNew456!"),
     "staff": ("user@supervision.com", "Staff123!"),
     "manager": ("manager@supervision.com", "Manager123!"),
 }
@@ -104,7 +104,7 @@ class TestPreconditions:
     def test_jane_same_org_but_not_on_meeting(self, jane, meeting_row):
         s, me = jane
         assert me["role"] == "attendee", f"jane role changed: {me['role']}"
-        assert me["org_id"] == meeting_row["org_id"], "jane not in same org as target meeting"
+        assert me["org_id"] == str(meeting_row["org_id"]), "jane not in same org as target meeting"
         assert me["id"] not in _ids(meeting_row["attendees"])
         assert me["id"] not in _ids(meeting_row["shared_with"])
         assert me["id"] != (meeting_row["created_by"] or "")

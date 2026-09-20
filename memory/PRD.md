@@ -6,6 +6,42 @@ to everyone, anonymous or logged-in) — driving the "share far and wide" goal f
 - **Self-tested**: screenshot-verified open/close + copy-link click at both 1920x800 and 390x844,
   no horizontal overflow on mobile.
 
+## Security Audit Hardening (Sep 2026) — DONE, self-tested
+Ran `security_audit_agent` on the full app (auth, RLS multi-tenancy, new public resources endpoint,
+EULA gate, super-admin access control) — **PASS, no critical/high/medium findings**. Fixed all 4
+low-priority (P3) items found:
+1. **MFA/OTP email-bombing**: `_generate_and_send_mfa` (auth.py) now enforces `check_rate_limit`
+   (8 codes/user/24h) before sending — verified via curl (8x 200, 9th+ → 429).
+2. **Stale IDOR test file**: `tests/test_idor_sec001.py` had dead credentials/meeting id (all 401,
+   meeting deleted). Reset jane/user/manager@supervision.com passwords (jane+user are Supabase-
+   backed, reset via `utils.supabase_auth.set_password()` not bcrypt), found a fresh signed-off
+   fixture meeting, fixed a str/UUID comparison bug surfaced along the way — all 17 tests pass now.
+3. **CORS wildcard**: `server.py` now hard-fails app startup (`raise RuntimeError`) if `CORS_ORIGINS`
+   is empty or contains `*`, instead of just logging a warning. Verified this env's real allowlist
+   still boots fine.
+4. **Admin password reset not syncing to Supabase**: `admin.py::reset_user_password` only touched
+   the bcrypt column, silently stranding Supabase-backed users on their OLD password. Now mirrors
+   `auth.py`'s self-service reset pattern — calls `supabase_auth.set_password()`, fails loudly (503)
+   if that user was already Supabase-migrated and the call errors. Verified end-to-end: admin-reset
+   jane@supervision.com's password via the API → old password now 401s, new one 200s.
+- Course completion tracker explicitly declined by user this round.
+
+## Production DB Password Rotation Incident (Sep 2026) — RESOLVED
+User rotated their PRODUCTION Supabase "postgres" role password via the dashboard, which broke
+`DATABASE_URL`-based endpoints (500s on /resources, /auth/login) since the app also uses a SEPARATE
+custom `app_default` role (least-privilege, RLS-enforced — see `m011_least_privilege_role.py`) with
+its own independent password that Supabase's reset button does NOT touch. Mid-fix, the new
+`postgres` password was accidentally pasted into the `app_default`-paired field too, breaking that
+connection as well. Resolved by minting a fresh `app_default` password via `ALTER ROLE` in SQL
+Editor and setting all 3 deployment fields (`DATABASE URL`, `APP DATABASE URL`, `APP DB PASSWORD`)
+correctly, then redeploying. **Documented for the user**: rotating via Supabase's dashboard button
+only ever touches `DATABASE_URL` (the `postgres` role) — `app_default`'s password requires a
+separate `ALTER ROLE app_default WITH PASSWORD ...` SQL step + updating its own 2 fields; never mix
+the two.
+- Also seeded the 9-module free course (uploaded via a one-off script using the production
+  Supabase project's REST/Storage APIs, service_role key) onto production after discovering staging
+  and production are separate Supabase projects — confirmed live on 1two.one/resources.
+
 ## Free Supervision Course — Real Content Live (Sep 2026) — DONE, self-tested
 Populated the "Supervision Course" section on the public `/resources` page with the user's real
 9-module PDF course, replacing the "Coming soon" placeholder.
