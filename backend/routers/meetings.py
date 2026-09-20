@@ -58,7 +58,7 @@ class CreateMeetingRequest(BaseModel):
     title: str
     date: str
     location: Optional[str] = None
-    meeting_type: str = "supervision"
+    meeting_type: str = "Supervision"
     attendee_ids: List[str] = []
     sign_off_manager_id: Optional[str] = None
     schedule_id: Optional[str] = None
@@ -70,6 +70,16 @@ class CreateMeetingRequest(BaseModel):
             datetime.fromisoformat(v)
         except ValueError:
             raise ValueError("date must be a valid ISO-8601 date/datetime string")
+        return v
+
+    @field_validator("meeting_type")
+    @classmethod
+    def _meeting_type_not_blank(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("meeting_type must not be blank")
+        if len(v) > 100:
+            raise ValueError("meeting_type must be 100 characters or fewer")
         return v
 
 

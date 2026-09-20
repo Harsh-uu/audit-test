@@ -34,17 +34,25 @@ function localNow() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-const TYPE_LABELS = {
-  supervision: "Supervision",
-  appraisal: "Appraisal",
-  observation: "Observation",
-  team_meeting: "Team Meeting",
-  competency_review: "Competency Review",
-  other: "Meeting",
-};
+const MEETING_TYPES = [
+  "Supervision",
+  "Appraisal",
+  "Competency assessment",
+  "Disciplinary",
+  "Grievance",
+  "Safeguarding investigation",
+  "Learner Review",
+  "Probation review",
+  "Absence review",
+  "Exit interview",
+  "Team meeting",
+  "Incident review",
+  "Audit review",
+  "Quality assurance review",
+];
 
 function buildTitle(meetingType, selectedUsers) {
-  const label = TYPE_LABELS[meetingType] || "Meeting";
+  const label = meetingType || "Meeting";
   if (selectedUsers.length === 0) return label;
   if (selectedUsers.length === 1) return `${label} with ${selectedUsers[0].name}`;
   if (selectedUsers.length === 2) return `${label} with ${selectedUsers[0].name} & ${selectedUsers[1].name}`;
@@ -65,11 +73,15 @@ export default function NewMeeting() {
   const [form, setForm] = useState({
     date: localNow(),
     location: "",
-    meeting_type: "supervision",
+    meeting_type: "Supervision",
+    custom_meeting_type: "",
     attendee_ids: prefillAttendeeId ? [prefillAttendeeId] : [],
     sign_off_manager_id: "",
     schedule_id: prefillScheduleId || undefined,
   });
+
+  const isOtherType = form.meeting_type === "Other";
+  const effectiveMeetingType = isOtherType ? (form.custom_meeting_type.trim() || "Other") : form.meeting_type;
 
   useEffect(() => {
     cachedGet(`${API}/admin/users?ignore_scope=true`, getAuthConfig())
@@ -96,7 +108,7 @@ export default function NewMeeting() {
     () => selectedAttendees.filter(u => !["manager", "admin"].includes(u.role)),
     [selectedAttendees]
   );
-  const titlePreview = buildTitle(form.meeting_type, supervisees.length > 0 ? supervisees : selectedAttendees);
+  const titlePreview = buildTitle(effectiveMeetingType, supervisees.length > 0 ? supervisees : selectedAttendees);
 
   const toggleAttendee = (userId) => {
     setForm(f => {
@@ -117,11 +129,13 @@ export default function NewMeeting() {
 
   const submit = async () => {
     if (form.attendee_ids.length === 0) return setError("Please select at least one attendee");
+    if (isOtherType && !form.custom_meeting_type.trim()) return setError("Please enter a custom meeting type");
     setLoading(true);
     setError("");
     try {
       const { data } = await axios.post(`${API}/meetings/`, {
         ...form,
+        meeting_type: effectiveMeetingType,
         title: titlePreview,
       }, getAuthConfig());
       // Bust the dashboard cache so the new meeting appears immediately on return
@@ -183,14 +197,7 @@ export default function NewMeeting() {
                 Meeting Type
                 <InfoTooltip side="right">
                   <p className="font-semibold mb-1">How type affects AI analysis:</p>
-                  <ul className="space-y-0.5 text-xs">
-                    <li><span className="font-medium">Supervision</span> — full CQC / Care Certificate evidence mapping</li>
-                    <li><span className="font-medium">Appraisal</span> — performance evidence, CC alignment</li>
-                    <li><span className="font-medium">Observation</span> — practice observation, competency mapping</li>
-                    <li><span className="font-medium">Team Meeting</span> — actions extracted, no individual mapping</li>
-                    <li><span className="font-medium">Competency Review</span> — skills &amp; Care Certificate focus</li>
-                    <li><span className="font-medium">Other</span> — actions only</li>
-                  </ul>
+                  <p className="text-xs">The AI uses the meeting type as context when analysing the transcript — e.g. a Disciplinary or Grievance is read for process and outcomes, while a Supervision or Appraisal is mapped against CQC / Care Certificate evidence.</p>
                 </InfoTooltip>
               </label>
               <select
@@ -201,13 +208,20 @@ export default function NewMeeting() {
                 className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
                 data-testid="meeting-type-select"
               >
-                <option value="supervision">Supervision</option>
-                <option value="appraisal">Appraisal</option>
-                <option value="observation">Observation</option>
-                <option value="team_meeting">Team Meeting</option>
-                <option value="competency_review">Competency Review</option>
-                <option value="other">Other</option>
+                {MEETING_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                <option value="Other">Other</option>
               </select>
+              {isOtherType && (
+                <input
+                  type="text"
+                  value={form.custom_meeting_type}
+                  onChange={e => setForm(f => ({ ...f, custom_meeting_type: e.target.value }))}
+                  placeholder="Enter meeting type…"
+                  maxLength={100}
+                  className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white"
+                  data-testid="meeting-type-custom-input"
+                />
+              )}
             </div>
 
             <div>
