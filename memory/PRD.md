@@ -1,3 +1,24 @@
+## Public Resources Page (Sep 2026) — DONE, tested
+Made `/resources` the ONE intentionally public page in the app, to share the free course/downloads
+widely without requiring login. Every other route stays behind auth (unchanged).
+- Backend: `routers/resources.py` — dropped `Depends(get_current_user)`, `GET /api/resources/` now
+  serves globally-curated, non-sensitive download/course rows with zero auth.
+- Frontend: `/resources` route moved OUT of `<ProtectedRoute>` in `App.js`. Per explicit user
+  choice, anonymous visitors see the SAME app shell (not a separate marketing page):
+  `Layout.js` gained `isAnonymous = !user` — greys out + locks the other sidebar nav items
+  (Dashboard/Meetings/New Meeting/My Portfolio, each routes to `/login` on click), org banner reads
+  "Free Resources", and the top-right user-menu area is replaced with a `Sign In` button
+  (`public-sign-in-btn`). Zero change for authenticated users (isAnonymous is always false for them).
+  `Resources.js` shows a loading spinner while `user===undefined` (avoids a flash of the wrong
+  sidebar before auth resolves), and renders an extra blue CTA banner (`public-resources-cta` /
+  `public-resources-cta-signin`) above the content for anonymous visitors.
+- Explicitly deferred (user's call): page `<title>`/Open Graph meta tags — user plans to interlink
+  this with a separate marketing site's own `/free-course` page later; not ready yet, revisit then.
+- **Tested via testing_agent** (iteration_146): 100% pass — anonymous access works with correct
+  locked-nav/Sign-In/CTA UI, all other routes still redirect to `/login`, logged-in experience on
+  `/resources` is pixel/functionally identical to before (real org name, working user menu, unlocked
+  nav). No bugs found; one unrelated benign 401 console log noted on the logged-in view, not blocking.
+
 ## EULA Acceptance Gate (Sep 2026) — DONE, tested
 Backend + frontend "preparations" for a EULA acceptance flow, built ahead of the user finalizing
 the legal text — then swapped to the REAL text once the user supplied the final PDF the same day.
