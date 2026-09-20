@@ -1,4 +1,16 @@
-## Header Title Alignment Fix (Sep 2026) — DONE, verified live
+## EULA Text Update — Sept 2026 Version (Sep 2026) — DONE, verified live
+User supplied an updated EULA PDF (adds Section 11: Customer Onboarding & Key Facts Sheet incl.
+meeting taxonomy, plus minor wording). Per explicit user choice ("just swap the text - there will
+be new test users next week for plenty of testing"), updated the content IN PLACE rather than
+bumping the version — no existing user is re-gated.
+- `m029_eula_sept_update.py`: `UPDATE eula_versions SET content = $1 WHERE is_active = TRUE` with
+  the new extracted text (same pattern as `m027`, but targets whichever row is active rather than
+  hardcoding version=1, for correctness if a version bump ever happens later).
+- **Verified live**: `GET /api/eula/current` for an already-accepted user (admin@supervision.com)
+  → `version` unchanged (1), `needs_acceptance: false` (confirms no re-gate), new content present
+  (`"CUSTOMER ONBOARDING"` and `"Flexible Working Request"` both found in the returned text).
+
+
 User-reported bug: meeting title in the org-colour header bar was centered, but the date/location
 line below it was left-aligned instead of centered underneath.
 - **RCA**: `MeetingReport.js`'s `meetingHeaderCenter` wraps both lines in a parent with inherited
