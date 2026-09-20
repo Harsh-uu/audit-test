@@ -1,3 +1,33 @@
+## Meeting Types Dropdown Update (Sep 2026) — DONE, tested (iteration_147.json)
+Replaced the "New Meeting" page's fixed 6-option meeting type dropdown with the user's requested
+14 options (default Supervision) + an "Other" free-text fallback, per explicit user choice
+(fixed list + Other, NOT fully free-text; existing old-value meetings left untouched, no migration).
+- `NewMeeting.js`: new `MEETING_TYPES` const (Supervision, Appraisal, Competency assessment,
+  Disciplinary, Grievance, Safeguarding investigation, Learner Review, Probation review, Absence
+  review, Exit interview, Team meeting, Incident review, Audit review, Quality assurance review)
+  rendered as dropdown options + a trailing "Other" option. Selecting "Other" reveals
+  `data-testid="meeting-type-custom-input"` free-text field; `effectiveMeetingType` resolves to
+  the custom text (or "Other" if left blank at title-preview time) and is what's actually POSTed
+  as `meeting_type`. Submit blocks with an inline error if "Other" is selected but left empty.
+  Simplified `buildTitle()` to use the selected/typed string directly (old `TYPE_LABELS` map
+  removed — no longer needed since dropdown values ARE the display labels now).
+- `meetings.py`: `CreateMeetingRequest.meeting_type` default changed `"supervision"` →
+  `"Supervision"`; added `field_validator` rejecting blank/whitespace-only or >100 char values.
+  No enum restriction (by design — "Other" allows arbitrary text).
+- `ai.py`: no change needed — confirmed `meeting_type` is only ever used as free-text prompt
+  context (`f"Meeting type: {meeting_type}"` in `analyze_meeting`/`diarize_transcript`/
+  `map_speaker_numbers_to_names`), never branched on specific enum values.
+- Old meetings with legacy lowercase values (`supervision`/`appraisal`/`observation`/
+  `team_meeting`/`competency_review`/`other`) intentionally left untouched (no migration run,
+  per user choice) — confirmed via testing_agent they still load fine in list/detail views.
+- **Tested via testing_agent** (iteration_147): 25/25 backend pytest pass (validator, all 14
+  fixed strings, Other custom text, blank/whitespace/101-char rejection, default value, legacy
+  data regression) + all frontend UI checks pass (15-option dropdown order, custom input
+  show/hide, title preview composition, full create-meeting flow, empty-Other validation error).
+  Main agent also self-verified via curl + screenshot_tool (desktop 1920x800 + mobile 390x844, no
+  overflow) before dispatching to testing_agent. Test data cleaned up post-test.
+
+
 ## Share This Course CTA (Sep 2026) — DONE, self-tested
 Added a "Share this course" button next to the Supervision Course heading on `/resources` (visible
 to everyone, anonymous or logged-in) — driving the "share far and wide" goal from the public page.
