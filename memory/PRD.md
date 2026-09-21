@@ -1,4 +1,24 @@
-## EULA Text Update — Sept 2026 Version (Sep 2026) — DONE, verified live
+## Perf Fix #1: Per-Pool statement_cache_size — FIXED (Sep 2026), verified live
+User-flagged (git-history audit): `f770ccd` (20 Aug) added `statement_cache_size=0` to BOTH
+asyncpg pools in `database.py` as a blanket "safe everywhere" setting, anticipating production's
+`DATABASE_URL` moving to Supabase's transaction-mode pooler (`:6543`) — where disabling the
+client-side prepared-statement cache is genuinely required. Confirmed today: `APP_DATABASE_URL`
+(main `pool`, used by `with_org()` on every authenticated page load) is a **direct** connection
+(`:5432`) in both preview and production — it never needed the cache disabled, only paid the cost.
+- **Fix**: new `_stmt_cache_size(dsn)` helper — returns `0` only if `":6543" in dsn` (pooler),
+  else asyncpg's own default (`100`). Applied independently per pool from its own DSN
+  (`APP_DATABASE_URL` for `pool`, `DATABASE_URL` for `admin_pool`) — self-correcting in every
+  environment, no manual per-env toggling, safe if the admin pool is ever moved off the pooler too.
+- **Verified live**: isolated benchmark against this env's real `APP_DATABASE_URL` (20
+  queries × 15 runs) — cache=0 averaged 4217ms vs cache=100 averaged 2186ms (~93% overhead
+  removed). Confirmed no runtime DDL executes through the main pool during request handling (only
+  one-time migrations/seed via admin pool) — no cached-plan/schema-drift risk. Post-fix: both
+  pools start cleanly, 10/10 repeated `GET /dashboard` calls consistent (200, no stale-plan
+  errors), full create→fetch→delete meeting write cycle through the main pool succeeded, admin +
+  super-admin login (admin_pool) both still 200. No testing_agent round used (single-file,
+  isolated infra config change, fully self-tested).
+
+
 User supplied an updated EULA PDF (adds Section 11: Customer Onboarding & Key Facts Sheet incl.
 meeting taxonomy, plus minor wording). Per explicit user choice ("just swap the text - there will
 be new test users next week for plenty of testing"), updated the content IN PLACE rather than

@@ -19,6 +19,16 @@ pool: asyncpg.Pool | None = None
 admin_pool: asyncpg.Pool | None = None
 
 
+def _stmt_cache_size(dsn: str) -> int:
+    """asyncpg's own default (100) is safe and faster on a direct connection.
+    It must be forced to 0 only when the DSN points at a transaction-mode
+    pooler (Supavisor/PgBouncer, e.g. Supabase's pooler on port 6543) —
+    each query there can land on a different physical backend connection,
+    so a client-side cached prepared statement may not exist on whichever
+    backend the pooler routes the next query to."""
+    return 0 if ":6543" in dsn else 100
+
+
 def _encode_timestamp(value):
     """Accept either a datetime object or an ISO-8601 string as a query param for
     TIMESTAMPTZ/TIMESTAMP columns — Postgres's own input parser accepts ISO-8601
@@ -113,25 +123,24 @@ async def create_pool() -> asyncpg.Pool:
     """Create both pools. Must be called AFTER migrations (init_db.create_schema())
     have run at least once, since app_default (m011) doesn't exist before that."""
     global pool, admin_pool
+    app_dsn = os.environ["APP_DATABASE_URL"]
     pool = await asyncpg.create_pool(
-        os.environ["APP_DATABASE_URL"],
+        app_dsn,
         ssl="require",
         min_size=2,
         max_size=15,
         init=_init_connection,
-        # Required when DATABASE_URL points at a transaction-mode pooler
-        # (Supavisor/PgBouncer, e.g. Supabase's transaction pooler on port
-        # 6543): each query can land on a different physical backend
-        # connection, so asyncpg's client-side prepared-statement cache
-        # must be disabled — a cached statement may not exist on whichever
-        # backend the pooler routes the next query to. Harmless no-op on a
-        # direct connection (port 5432).
-        statement_cache_size=0,
+        # See _stmt_cache_size — 0 only if this DSN is a transaction-mode
+        # pooler (port 6543), asyncpg's own default (100) otherwise. On a
+        # direct connection (port 5432) forcing 0 was pure overhead with no
+        # correctness benefit — measured ~27-90%+ slower per round-trip.
+        statement_cache_size=_stmt_cache_size(app_dsn),
     )
     logger.info("PostgreSQL pool created (app_default, RLS-enforced by default)")
 
+    admin_dsn = os.environ["DATABASE_URL"]
     admin_pool = await asyncpg.create_pool(
-        os.environ["DATABASE_URL"],
+        admin_dsn,
         ssl="require",
         min_size=1,
         # Kept small on purpose: with_admin() is now only a handful of
@@ -143,7 +152,7 @@ async def create_pool() -> asyncpg.Pool:
         # existed). 15 + 5 = 20/instance restores 3 safe copies with margin.
         max_size=5,
         init=_init_connection,
-        statement_cache_size=0,
+        statement_cache_size=_stmt_cache_size(admin_dsn),
     )
     logger.info("PostgreSQL admin pool created (postgres, RLS bypass — with_admin() only)")
     return pool
