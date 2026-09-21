@@ -1,4 +1,39 @@
-## Perf Fix #1: Per-Pool statement_cache_size — FIXED (Sep 2026), verified live
+## Perf Fix #2: Redundant Auth-Then-Handler DB Blocks — PARTIALLY FIXED (Sep 2026), verified live
+Structural issue: `get_current_user()` opens its own `with_org()`/`with_admin()` block just to
+fetch the user row, then the route handler immediately opens a SECOND separate block for its own
+query — back-to-back, same request, ~636ms round-trip floor paid twice. Confirmed app-wide via
+code trace (334 total `with_org`/`with_admin` call sites; `login()`=7 blocks, `_build_portfolio_data()`=8,
+both exact-verified) — too large a blast radius for one mechanical sweep, so scoped carefully.
+- **Mechanism implemented**: new opt-in `get_current_user_conn()` yield-based dependency in
+  `deps.py` (existing `get_current_user()` left completely untouched — zero risk to the other
+  ~330 call sites) — stashes its still-open connection on `request.state.db_conn` /
+  `request.state.db_conn_org_id`. Route handlers check "is this the same org_id, still open?"
+  before reusing it; falls back to a fresh block otherwise (defensive, never assumed).
+- **Applied to**: `GET /api/meetings/` and `GET /api/meetings/month-summary` — both switched to
+  `get_current_user_conn`; `_list_meetings_data()`/`get_month_summary()`'s admin/manager branch
+  (only) now reuses the connection via a new optional `reused_conn` param. `dashboard.py`'s call
+  to `_list_meetings_data()` doesn't pass it — 100% unaffected, still opens its own fresh block.
+- **Excluded after discovering real blockers during implementation** (found via code-level
+  verification, not assumed):
+  - `GET /api/auth/me` — its 2nd block (`organisations` lookup) MUST stay on `with_admin()`:
+    verified `organisations` has RLS `ENABLE`+`FORCE` with **zero `CREATE POLICY` statements** in
+    migrations, so the `app_rls_user` role used by `with_org()` gets zero rows by Postgres's
+    default-deny — merging would either break org branding for every non-super-admin user, or
+    require reversing the SEC-DB-001 least-privilege hardening on the user self-lookup. Not worth
+    either tradeoff for one endpoint's ~636ms.
+  - `GET /api/dashboard/` — its "5th block" is the 4-way `asyncio.gather()` fan-out, which has no
+    natural second block to merge into without either restructuring the (already-correct,
+    deliberately concurrent) fan-out or holding the auth connection open unused for no benefit.
+    Left untouched rather than risk the tuned concurrency.
+- **Verified live**: full role matrix tested — admin (reuse path, 53 meetings), manager
+  (reuse path, org-level scope), attendee (fallback path, no reuse, 19 meetings) — all 200,
+  correct data. Full write→read consistency check: created a meeting via the unaffected POST
+  endpoint, confirmed it appeared immediately in the connection-reusing GET. 20 concurrent
+  requests across both endpoints — all 200, no pool exhaustion, no errors in logs. No
+  testing_agent round used (backend-only, targeted, fully self-tested across every role branch).
+- **Backlog**: `/auth/me` and `/dashboard/` remain open — not attempted, documented reasons above.
+
+
 User-flagged (git-history audit): `f770ccd` (20 Aug) added `statement_cache_size=0` to BOTH
 asyncpg pools in `database.py` as a blanket "safe everywhere" setting, anticipating production's
 `DATABASE_URL` moving to Supabase's transaction-mode pooler (`:6543`) — where disabling the

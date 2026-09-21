@@ -28,10 +28,19 @@ def get_db(request: Request):
     return request.app.state.pool
 
 
-async def get_current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-):
+_SENTINEL = object()
+
+_USER_SELECT_COLS = (
+    "id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
+    "must_change_password, mfa_enabled, eula_accepted_version"
+)
+
+
+def _decode_access_token(request: Request, credentials: HTTPAuthorizationCredentials):
+    """Shared token-decoding + payload-validation logic used by both
+    get_current_user() and get_current_user_conn() below — kept identical
+    between the two so the connection-reusing variant can never diverge in
+    its auth checks from the original."""
     # P3b: HttpOnly cookie takes priority; fall back to Authorization header
     # for backward-compat with any sessions that pre-date the cookie migration.
     token = request.cookies.get("supervision_access")
@@ -55,39 +64,23 @@ async def get_current_user(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
-    # SEC-DB-001: use the least-privilege, org-scoped connection for this
-    # self-lookup instead of the RLS-bypass admin connection — this dependency
-    # runs on nearly every request, so it was previously the single biggest
-    # consumer of the admin/bypass pool. A token minted before this fix has no
-    # "org_id" key at all (distinct from a super_admin's legitimate org_id=None)
-    # — treat that the same as the existing pwd_ts upgrade path: a clean 401
-    # that the frontend's axios interceptor silently turns into a refresh,
-    # which mints a new token carrying the claim.
-    _SENTINEL = object()
+    # A token minted before the org_id claim existed has no "org_id" key at
+    # all (distinct from a super_admin's legitimate org_id=None) — treat
+    # that the same as the pwd_ts upgrade path below: a clean 401 that the
+    # frontend's axios interceptor silently turns into a refresh, which
+    # mints a new token carrying the claim.
     org_id = payload.get("org_id", _SENTINEL)
     if org_id is _SENTINEL:
         raise HTTPException(status_code=401, detail="Session expired — please sign in again.")
 
-    if org_id is None:
-        # super_admin has no single org to scope to — this is the exact
-        # "handful of operations that genuinely need it" exception.
-        async with database.with_admin() as conn:
-            row = await conn.fetchrow(
-                "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
-                "must_change_password, mfa_enabled, eula_accepted_version "
-                "FROM users WHERE id = $1 AND is_active = TRUE", user_id
-            )
-    else:
-        async with database.with_org(org_id) as conn:
-            row = await conn.fetchrow(
-                "SELECT id, org_id, email, name, role, team_id, setting_id, password_changed_at, "
-                "must_change_password, mfa_enabled, eula_accepted_version "
-                "FROM users WHERE id = $1 AND org_id = $2 AND is_active = TRUE", user_id, org_id
-            )
+    return user_id, org_id, payload
 
+
+def _finalize_user_row(row: dict | None, payload: dict) -> dict:
+    """Shared row-validation logic (not found / stale-password-token check)
+    used by both get_current_user() and get_current_user_conn() below."""
     if not row:
         raise HTTPException(status_code=401, detail="User not found or inactive")
-
     user = dict(row)
 
     # SEC-001: reject access tokens issued before the user's last password
@@ -98,8 +91,88 @@ async def get_current_user(
     token_pwd_ts = payload.get("pwd_ts")
     if token_pwd_ts is None or token_pwd_ts < _pwd_ts_of(user):
         raise HTTPException(status_code=401, detail="Session expired — please sign in again.")
-
     return user
+
+
+async def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    user_id, org_id, payload = _decode_access_token(request, credentials)
+
+    # SEC-DB-001: use the least-privilege, org-scoped connection for this
+    # self-lookup instead of the RLS-bypass admin connection — this dependency
+    # runs on nearly every request, so it was previously the single biggest
+    # consumer of the admin/bypass pool.
+    if org_id is None:
+        # super_admin has no single org to scope to — this is the exact
+        # "handful of operations that genuinely need it" exception.
+        async with database.with_admin() as conn:
+            row = await conn.fetchrow(
+                f"SELECT {_USER_SELECT_COLS} FROM users WHERE id = $1 AND is_active = TRUE", user_id
+            )
+    else:
+        async with database.with_org(org_id) as conn:
+            row = await conn.fetchrow(
+                f"SELECT {_USER_SELECT_COLS} FROM users WHERE id = $1 AND org_id = $2 AND is_active = TRUE",
+                user_id, org_id,
+            )
+
+    return _finalize_user_row(row, payload)
+
+
+async def get_current_user_conn(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """PERF: opt-in variant of get_current_user() for a small allowlist of
+    read-only endpoints that can reuse THIS dependency's own connection/
+    transaction for their own query, instead of opening a second, separate
+    with_org() block immediately afterward for the exact same org_id — each
+    with_org()/with_admin() block costs ~5-6 DB round trips (BEGIN, set
+    context, role switch, query, COMMIT), so removing one redundant block
+    per request is a real, measured win (~636ms in this environment).
+
+    Stashes the still-open connection on request.state.db_conn /
+    request.state.db_conn_org_id so the route handler can check "is this
+    the same org_id I need, on a connection that's still open?" before
+    deciding to reuse it — falling back to opening its own fresh block
+    otherwise. Yield-based (FastAPI's standard "acquire once, release after
+    the response" pattern) so the transaction commits/releases automatically
+    once the handler (and response) is done.
+
+    NOT a replacement for get_current_user() app-wide — only safe for plain
+    GET handlers with:
+      - no background_tasks.add_task() calls (the connection is released the
+        moment the response is generated, before any background task runs)
+      - no writes (holding a transaction open for the whole handler is fine
+        for reads; on a write it extends how long row locks are held)
+    Every other route keeps using get_current_user() above, unchanged.
+    """
+    user_id, org_id, payload = _decode_access_token(request, credentials)
+
+    if org_id is None:
+        async with database.with_admin() as conn:
+            row = await conn.fetchrow(
+                f"SELECT {_USER_SELECT_COLS} FROM users WHERE id = $1 AND is_active = TRUE", user_id
+            )
+            user = _finalize_user_row(row, payload)
+            request.state.db_conn = conn
+            request.state.db_conn_org_id = None
+            yield user
+    else:
+        async with database.with_org(org_id) as conn:
+            row = await conn.fetchrow(
+                f"SELECT {_USER_SELECT_COLS} FROM users WHERE id = $1 AND org_id = $2 AND is_active = TRUE",
+                user_id, org_id,
+            )
+            user = _finalize_user_row(row, payload)
+            request.state.db_conn = conn
+            request.state.db_conn_org_id = org_id
+            yield user
+
+
+
 
 
 def require_roles(*roles):

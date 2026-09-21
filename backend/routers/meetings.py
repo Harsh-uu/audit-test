@@ -1,11 +1,11 @@
 import json
 import uuid
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, field_validator
 from datetime import datetime, timezone
 from typing import Optional, List
-from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
+from deps import get_db, get_current_user, get_current_user_conn, get_manager_scope, get_scoped_staff_ids
 import database
 from utils.supabase_storage import delete_audio
 from utils.backdate_check import detect_backdate_mismatch
@@ -225,13 +225,21 @@ async def create_meeting(data: CreateMeetingRequest, current_user=Depends(get_cu
 
 @router.get("/")
 async def list_meetings(
+    request: Request,
     limit: int = Query(500, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None, ge=1, le=12),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user_conn),
 ):
-    return await _list_meetings_data(current_user, limit=limit, offset=offset, year=year, month=month)
+    # PERF: get_current_user_conn() already opened+authenticated a with_org()
+    # connection for this exact org_id to fetch the user row above — reuse it
+    # here instead of paying for a second, separate with_org() block (see
+    # deps.py's docstring). Only safe when the org_id matches exactly; falls
+    # back to a fresh block otherwise (_list_meetings_data's default).
+    org_id = current_user.get("org_id", "")
+    reusable_conn = request.state.db_conn if request.state.db_conn_org_id == org_id else None
+    return await _list_meetings_data(current_user, limit=limit, offset=offset, year=year, month=month, reused_conn=reusable_conn)
 
 
 def _month_bounds(year: int, month: int):
@@ -242,7 +250,13 @@ def _month_bounds(year: int, month: int):
     return start, end
 
 
-async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int = 0, year: int = None, month: int = None) -> list:
+async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int = 0, year: int = None, month: int = None, reused_conn=None) -> list:
+    """reused_conn: optional already-open with_org() connection for this
+    exact org_id (PERF — see get_current_user_conn's docstring), reused ONLY
+    in the admin/manager branch below where the caller already guaranteed
+    it's scoped to the same org_id. Every other branch is untouched and
+    always opens its own fresh block, exactly as before — dashboard.py's
+    call site doesn't pass this at all, so it is 100% unaffected."""
     role = current_user["role"]
     if role == "super_admin":
         return []
@@ -332,13 +346,14 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
         return [_parse_meeting_row(dict(r)) for r in rows]
 
     # ── Admins and Managers — use RLS via with_org ────────────────────────────
-    async with database.with_org(org_id) as conn:
+    async def _run_admin_manager_query(conn):
         if role == "admin":
             date_where = "WHERE COALESCE(date, created_at) BETWEEN $3 AND $4" if date_range else ""
             rows = await conn.fetch(
                 f"SELECT {_LIST_COLS} FROM meetings {date_where} ORDER BY created_at DESC LIMIT $1 OFFSET $2",
                 limit, offset, *(date_range or []),
             )
+            return [_parse_meeting_row(dict(r)) for r in rows]
 
         elif role == "manager":
             if scope["level"] == "org":
@@ -348,6 +363,7 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                     f"SELECT {_LIST_COLS} FROM meetings {date_where} ORDER BY created_at DESC LIMIT $1 OFFSET $2",
                     limit, offset, *(date_range or []),
                 )
+                return [_parse_meeting_row(dict(r)) for r in rows]
             else:
                 # Scoped manager — get current team/setting members
                 scoped_staff_ids_list = await get_scoped_staff_ids(conn, org_id, scope)
@@ -393,9 +409,17 @@ async def _list_meetings_data(current_user: dict, limit: int = 500, offset: int 
                 return result
 
         else:
-            rows = []  # safety fallback; all non-admin/manager roles are handled above
+            return []  # safety fallback; all non-admin/manager roles are handled above
 
-    return [_parse_meeting_row(dict(r)) for r in rows]
+    # PERF: reuse the caller-supplied connection (already open, same org_id,
+    # via get_current_user_conn) when available instead of opening a second
+    # with_org() block for the exact same org context — see reused_conn's
+    # docstring above. Falls back to a fresh block exactly as before
+    # whenever no reusable connection was supplied (e.g. dashboard.py).
+    if reused_conn is not None:
+        return await _run_admin_manager_query(reused_conn)
+    async with database.with_org(org_id) as conn:
+        return await _run_admin_manager_query(conn)
 
 
 # Month names for the collapsed month-divider rows on the Meetings page.
@@ -406,7 +430,7 @@ _MONTH_NAMES = [
 
 
 @router.get("/month-summary")
-async def get_month_summary(current_user=Depends(get_current_user)):
+async def get_month_summary(request: Request, current_user=Depends(get_current_user_conn)):
     """
     Cheap GROUP BY month+status count, used to render collapsed month-divider
     rows on the Meetings page without fetching full meeting rows for every
@@ -450,24 +474,33 @@ async def get_month_summary(current_user=Depends(get_current_user)):
                 user_id, org_id,
             )
     else:
-        async with database.with_org(org_id) as conn:
+        async def _run_admin_manager_month_summary(conn):
             if role == "admin" or scope["level"] == "org":
-                rows = await conn.fetch(
+                return await conn.fetch(
                     f"SELECT {month_expr} AS month_key, status, COUNT(*) AS n FROM meetings GROUP BY month_key, status"
                 )
-            else:
-                scoped_staff_ids_list = await get_scoped_staff_ids(conn, org_id, scope)
-                all_scoped_str = [str(uid) for uid in (set(scoped_staff_ids_list or []) | {user_id})]
-                rows = await conn.fetch(
-                    f"""SELECT {month_expr} AS month_key, status, COUNT(*) AS n FROM meetings
-                       WHERE created_by::text = ANY($1)
-                          OR sign_off_manager_id::text = ANY($1)
-                          OR EXISTS (SELECT 1 FROM jsonb_array_elements(
-                              CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END
-                          ) a WHERE a->>'user_id' = ANY($1))
-                       GROUP BY month_key, status""",
-                    all_scoped_str,
-                )
+            scoped_staff_ids_list = await get_scoped_staff_ids(conn, org_id, scope)
+            all_scoped_str = [str(uid) for uid in (set(scoped_staff_ids_list or []) | {user_id})]
+            return await conn.fetch(
+                f"""SELECT {month_expr} AS month_key, status, COUNT(*) AS n FROM meetings
+                   WHERE created_by::text = ANY($1)
+                      OR sign_off_manager_id::text = ANY($1)
+                      OR EXISTS (SELECT 1 FROM jsonb_array_elements(
+                          CASE WHEN jsonb_typeof(COALESCE(attendees,'null'::jsonb))='array' THEN attendees ELSE '[]'::jsonb END
+                      ) a WHERE a->>'user_id' = ANY($1))
+                   GROUP BY month_key, status""",
+                all_scoped_str,
+            )
+
+        # PERF: reuse get_current_user_conn()'s already-open connection for
+        # this exact org_id instead of a second with_org() block — see
+        # deps.py's docstring. Falls back to a fresh block if unavailable.
+        reused_conn = request.state.db_conn if request.state.db_conn_org_id == org_id else None
+        if reused_conn is not None:
+            rows = await _run_admin_manager_month_summary(reused_conn)
+        else:
+            async with database.with_org(org_id) as conn:
+                rows = await _run_admin_manager_month_summary(conn)
 
     months = {}
     for r in rows:
