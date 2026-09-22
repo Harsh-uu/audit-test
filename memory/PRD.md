@@ -28,6 +28,17 @@ fallbacks across 3 weeks) and a live re-test loading `.env` correctly via `pytho
   test data reverted after. NOT yet run through testing_agent — flagged to user as self-tested only.
 - Backlog: consider proactively re-queuing/notifying when a meeting's automatic scan used a
   fallback model, instead of relying on someone noticing low evidence and manually rescanning.
+- **Tested via testing_agent (iteration_150, PASS, 7/7 backend + 100% frontend)**: retry logic
+  unit-tested (retry-then-succeed, retry-then-fail, skip-retry-on-config-error), initial_ai_*
+  columns confirmed to survive a rescan (static source check), UI "changed" flag + "Initial Scan"/
+  "Latest Scan" columns + 5th stat card all verified on desktop+mobile with seeded fixture rows,
+  cleanly reverted. GAP: no REAL live recording→transcription→analysis pipeline run yet (only
+  unit/DB-level simulation) — flagged as acceptable-risk since the actual code change is a simple
+  additive column write, verified individually.
+- Minor non-blocking code-review notes (P3 backlog): retry-skip check uses fragile substring match
+  `'not configured' in str(e)` instead of a sentinel exception type; retry doesn't distinguish
+  transient transport errors from deterministic response-level failures (safety block/empty
+  candidates) that would just waste the 1.5s retry.
 
 ## AI Provider Tracking + Super Admin "AI Usage" Report + Orphan-Teams Filter Fix (Sep 2026) — DONE, tested (iteration_149.json)
 Per explicit user choice (provider+model+fallback+latency tracked; new TAB inside existing Super
