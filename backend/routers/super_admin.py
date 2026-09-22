@@ -595,3 +595,91 @@ async def invite_org_admin(org_id: str, data: InviteAdminRequest, current_user=D
         }
 
     return {"message": f"Invitation sent to {data.email}", "user_id": user_id}
+
+
+@router.get("/ai-usage-report")
+async def ai_usage_report(
+    org_id: Optional[str] = None,
+    provider: Optional[str] = None,
+    fallback_only: bool = False,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user=Depends(get_current_user),
+):
+    """Which AI provider (Gemini vs OpenAI) actually served each meeting's
+    evidence analysis, and whether it was a fallback — for Super Admin RCA
+    on evidence-scan discrepancies. Never surfaced on individual meetings,
+    by explicit user request. Only covers analyses run after m030 shipped
+    (ai_provider IS NOT NULL) — older rows predate this tracking."""
+    _require_super_admin(current_user)
+    conditions = ["a.ai_provider IS NOT NULL"]
+    params = []
+    if org_id:
+        params.append(org_id)
+        conditions.append(f"a.org_id = ${len(params)}")
+    if provider:
+        params.append(provider)
+        conditions.append(f"a.ai_provider = ${len(params)}")
+    if fallback_only:
+        conditions.append("a.ai_fallback_used = TRUE")
+    if from_date:
+        params.append(from_date)
+        conditions.append(f"a.created_at >= ${len(params)}")
+    if to_date:
+        params.append(to_date)
+        conditions.append(f"a.created_at <= ${len(params)}")
+    where_clause = " AND ".join(conditions)
+
+    async with database.with_admin() as conn:
+        items_rows = await conn.fetch(
+            f"""SELECT a.id AS analysis_id, a.meeting_id, a.org_id, a.ai_provider, a.ai_fallback_used,
+                       a.ai_fallback_reason, a.ai_latency_ms, a.created_at,
+                       a.rescanned_at, m.title AS meeting_title, o.name AS org_name
+                FROM analyses a
+                LEFT JOIN meetings m ON m.id = a.meeting_id
+                LEFT JOIN organisations o ON o.id = a.org_id
+                WHERE {where_clause}
+                ORDER BY a.created_at DESC
+                LIMIT 200""",
+            *params,
+        )
+        totals_row = await conn.fetchrow(
+            f"""SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE a.ai_fallback_used) AS fallback_count,
+                       AVG(a.ai_latency_ms) AS avg_latency_ms
+                FROM analyses a WHERE {where_clause}""",
+            *params,
+        )
+        provider_rows = await conn.fetch(
+            f"""SELECT a.ai_provider, COUNT(*) AS cnt FROM analyses a WHERE {where_clause}
+                GROUP BY a.ai_provider""",
+            *params,
+        )
+
+    total = totals_row["total"] or 0
+    fallback_count = totals_row["fallback_count"] or 0
+    return {
+        "items": [
+            {
+                "analysis_id": r["analysis_id"],
+                "meeting_id": r["meeting_id"],
+                "meeting_title": r["meeting_title"],
+                "org_id": r["org_id"],
+                "org_name": r["org_name"],
+                "ai_provider": r["ai_provider"],
+                "ai_fallback_used": r["ai_fallback_used"],
+                "ai_fallback_reason": r["ai_fallback_reason"],
+                "ai_latency_ms": r["ai_latency_ms"],
+                "analyzed_at": r["created_at"],
+                "rescanned_at": r["rescanned_at"],
+            }
+            for r in items_rows
+        ],
+        "stats": {
+            "total": total,
+            "fallback_count": fallback_count,
+            "fallback_rate_pct": round((fallback_count / total) * 100, 1) if total else 0,
+            "avg_latency_ms": round(float(totals_row["avg_latency_ms"]), 0) if totals_row["avg_latency_ms"] is not None else None,
+            "by_provider": {r["ai_provider"]: r["cnt"] for r in provider_rows},
+        },
+    }

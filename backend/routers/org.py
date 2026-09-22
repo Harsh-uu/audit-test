@@ -14,6 +14,11 @@ import database
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Virtual setting id (never a real org_settings row) surfaced in the
+# Meetings-page filter dropdown for teams with no setting assigned
+# (setting_id IS NULL) — must match Meetings.js's UNASSIGNED_SETTING_ID.
+UNASSIGNED_SETTING_ID = "unassigned"
+
 
 # ── Manager scope enforcement helpers ─────────────────────────────────────────
 
@@ -222,6 +227,22 @@ async def get_structure_lite_data(current_user: dict, reused_conn=None) -> dict:
         for s in s_dicts:
             s["teams"] = teams_by_setting.get(s["id"], [])
             settings.append(s)
+
+        # Orphan teams (setting_id IS NULL) were previously invisible in this
+        # dropdown entirely — surface them as a virtual "Unassigned" setting so
+        # they're still filterable. Org-level scope only: a setting/team-scoped
+        # manager can never own a team with no setting.
+        if scope["level"] == "org":
+            orphan_rows = await conn.fetch(
+                "SELECT id, name FROM teams WHERE org_id=$1 AND setting_id IS NULL ORDER BY name ASC",
+                org_id,
+            )
+            if orphan_rows:
+                settings.append({
+                    "id": UNASSIGNED_SETTING_ID,
+                    "name": "Unassigned (no setting)",
+                    "teams": [{"id": t["id"], "name": t["name"]} for t in orphan_rows],
+                })
         return settings
 
     if reused_conn is not None:

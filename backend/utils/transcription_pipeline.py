@@ -343,11 +343,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
         # a diarisation hiccup should never block evidence analysis entirely.
         analysis_input_text = speaker_text or timestamped_plain
 
+        ai_tracker = {}
         results = await asyncio.gather(
             analyze_meeting(
                 analysis_input_text, cqc_standards, care_cert_standards, paused_periods, custom_standards,
                 supervision_template, jurisdiction=effective_jurisdiction,
                 manager_name=manager_name, attendee_names=supervisee_names, meeting_type=meeting_type,
+                ai_tracker=ai_tracker,
             ),
             generate_meeting_summary(analysis_input_text, manager_name=manager_name, attendee_names=supervisee_names, jurisdiction=effective_jurisdiction),   # runs concurrently with analysis — zero added latency
             return_exceptions=True,
@@ -441,6 +443,17 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 )
             except Exception as _col_err:
                 logger.warning(f"learning_needs update skipped (column may not exist yet): {_col_err}")
+            # AI provider tracking (Super Admin AI Usage report) — populated by
+            # analyze_meeting's tracker; optional UPDATE so a missing migration
+            # never blocks the core analysis from saving.
+            try:
+                await conn.execute(
+                    "UPDATE analyses SET ai_provider=$1, ai_fallback_used=$2, ai_fallback_reason=$3, ai_latency_ms=$4 WHERE id=$5",
+                    ai_tracker.get("provider"), ai_tracker.get("fallback_used", False),
+                    ai_tracker.get("fallback_reason"), ai_tracker.get("latency_ms"), analysis_id,
+                )
+            except Exception as _col_err:
+                logger.warning(f"ai_provider tracking update skipped (column may not exist yet): {_col_err}")
             await conn.execute(
                 "UPDATE meetings SET analysis_id=$1, status='in_review', processing_error=NULL, updated_at=$2 WHERE id=$3",
                 analysis_id, datetime.now(timezone.utc).isoformat(), meeting_id,

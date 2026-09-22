@@ -1351,10 +1351,12 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
             effective_jurisdiction = f"northern_ireland_{org_service_type or 'domiciliary'}"
         elif org_jurisdiction == "ofsted":
             effective_jurisdiction = f"ofsted_{org_service_type or 'school'}"
+        rescan_ai_tracker = {}
         analysis_result = await _analyze_meeting(
             transcript_text, cqc_standards, care_cert_standards, paused_periods,
             custom_standards, supervision_template, custom_prompt, jurisdiction=effective_jurisdiction,
             manager_name=rescan_manager_name, attendee_names=rescan_supervisee_names, meeting_type=rescan_meeting_type,
+            ai_tracker=rescan_ai_tracker,
         )
 
         async with database.with_org(org_id) as conn:
@@ -1446,6 +1448,16 @@ async def _run_rescan_background(meeting_id: str, meeting: dict, transcript_text
                 )
             except Exception as _ach_err:
                 logger.warning(f"achievements rescan update skipped: {_ach_err}")
+            # AI provider tracking (Super Admin AI Usage report) — a rescan overwrites
+            # the prior scan's provider info, since it reflects the LATEST analysis run.
+            try:
+                await conn.execute(
+                    "UPDATE analyses SET ai_provider=$1, ai_fallback_used=$2, ai_fallback_reason=$3, ai_latency_ms=$4 WHERE id=$5",
+                    rescan_ai_tracker.get("provider"), rescan_ai_tracker.get("fallback_used", False),
+                    rescan_ai_tracker.get("fallback_reason"), rescan_ai_tracker.get("latency_ms"), analysis_id,
+                )
+            except Exception as _col_err:
+                logger.warning(f"ai_provider tracking rescan update skipped: {_col_err}")
             await conn.execute("UPDATE meetings SET rescan_status='done' WHERE id=$1", meeting_id)
             await _log_edit(conn, meeting_id, org_id, "evidence_rescan", user_id, user_name,
                             f"Compliance evidence re-scanned{' with guidance: ' + custom_prompt if custom_prompt else ' from corrected transcript'}")

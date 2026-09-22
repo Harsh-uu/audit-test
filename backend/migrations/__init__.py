@@ -38,6 +38,7 @@ from . import (
     m027_eula_real_content,
     m028_resources_storage,
     m029_eula_sept_update,
+    m030_ai_provider_tracking,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ MIGRATIONS = [
     m027_eula_real_content,
     m028_resources_storage,
     m029_eula_sept_update,
+    m030_ai_provider_tracking,
 ]
 
 

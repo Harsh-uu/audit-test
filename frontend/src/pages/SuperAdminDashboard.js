@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Pencil, Clock, CreditCard, Download, ArrowUpDown } from "lucide-react";
+import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Pencil, Clock, CreditCard, Download, ArrowUpDown, Cpu } from "lucide-react";
+import SuperAdminAIUsage from "@/components/superadmin/SuperAdminAIUsage";
 
 const API = "/api";
 
@@ -90,6 +91,7 @@ function StatusBadge({ status }) {
 export default function SuperAdminDashboard() {
   const { getAuthConfig } = useAuth();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("orgs");
   const [orgs, setOrgs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
@@ -227,21 +229,49 @@ export default function SuperAdminDashboard() {
     <Layout>
     <div className="min-h-full bg-[#F8F9FA] p-6 lg:p-8">
       {/* Page Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold font-display text-[#1E3A8A]">Organisations</h1>
           <p className="text-sm text-gray-500 mt-0.5">{orgs.length} organisation{orgs.length !== 1 ? "s" : ""} registered</p>
         </div>
+        {activeTab === "orgs" && (
+          <button
+            data-testid="create-org-btn"
+            onClick={() => { setShowCreateOrg(true); setError(""); }}
+            className="flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1e40af] transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Organisation
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-6 border-b border-gray-200" data-testid="super-admin-tabs">
         <button
-          data-testid="create-org-btn"
-          onClick={() => { setShowCreateOrg(true); setError(""); }}
-          className="flex items-center gap-2 bg-[#1E3A8A] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1e40af] transition-colors"
+          data-testid="tab-orgs"
+          onClick={() => setActiveTab("orgs")}
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === "orgs" ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          New Organisation
+          <Building2 className="w-4 h-4" /> Organisations
+        </button>
+        <button
+          data-testid="tab-ai-usage"
+          onClick={() => setActiveTab("ai_usage")}
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === "ai_usage" ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Cpu className="w-4 h-4" /> AI Usage
         </button>
       </div>
 
+      {activeTab === "ai_usage" ? (
+        <SuperAdminAIUsage getAuthConfig={getAuthConfig} orgs={orgs} />
+      ) : (
+      <>
       {/* Global error */}
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
@@ -417,6 +447,8 @@ export default function SuperAdminDashboard() {
             </div>
           ))}
         </div>
+      )}
+      </>
       )}
 
       {/* ── Create Organisation Modal ──────────────────────────────────── */}

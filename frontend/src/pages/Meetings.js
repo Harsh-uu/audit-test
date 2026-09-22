@@ -24,6 +24,10 @@ const STATUS_CONFIG = {
 // Order status-breakdown text on collapsed month rows in a sensible reading order.
 const STATUS_BREAKDOWN_ORDER = ["draft", "processing", "transcribing", "analyzing", "in_review", "reviewed", "signed_off", "shared", "processing_failed"];
 
+// Virtual setting id for teams with no setting assigned (setting_id IS NULL) —
+// must match org.py's UNASSIGNED_SETTING_ID sentinel.
+const UNASSIGNED_SETTING_ID = "unassigned";
+
 // Filled (active-state) version of each status's badge color, for the quick-filter chips.
 const FILLED_STATUS_COLORS = {
   draft:      "bg-gray-600 text-white border-gray-600",
@@ -228,7 +232,11 @@ export default function Meetings() {
           if (mDate > new Date(dateTo + "T23:59:59")) return false;
         }
         if (orgFilter.team_id && m.team_id !== orgFilter.team_id) return false;
-        if (!orgFilter.team_id && orgFilter.setting_id && m.setting_id !== orgFilter.setting_id) return false;
+        if (!orgFilter.team_id && orgFilter.setting_id) {
+          if (orgFilter.setting_id === UNASSIGNED_SETTING_ID) {
+            if (m.setting_id) return false;
+          } else if (m.setting_id !== orgFilter.setting_id) return false;
+        }
         return true;
       })
       .sort((a, b) => {

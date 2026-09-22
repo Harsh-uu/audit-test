@@ -354,33 +354,56 @@ async def _gemini_chat(system: str, user: str, reasoning_effort: str = None, tim
     return await asyncio.wait_for(asyncio.to_thread(_vertex_generate_sync, system, user, reasoning_effort), timeout=timeout_secs)
 
 
-async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360) -> str:
+async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, tracker: dict = None) -> str:
     """Primary entry point for every AI text call in this module.
     Tries Vertex AI Gemini 2.5 Flash first (UK/EU data residency); falls back
     to OpenAI on any failure so the feature keeps working end-to-end.
-    """
+
+    tracker: optional dict this call fills in with which provider actually
+    served the request (for the Super Admin AI Usage report) — provider,
+    fallback_used, fallback_reason, latency_ms. Left untouched (None) by
+    every existing caller that doesn't pass it, zero behaviour change."""
+    start = time.monotonic()
     try:
         result = await _gemini_chat(system, user, reasoning_effort, timeout_secs)
         logger.info(f"[AI] served by gemini-2.5-flash (fallback model would have been {openai_model})")
+        if tracker is not None:
+            tracker["provider"] = "gemini-2.5-flash"
+            tracker["fallback_used"] = False
+            tracker["fallback_reason"] = None
+            tracker["latency_ms"] = int((time.monotonic() - start) * 1000)
         return result
     except Exception as e:
         logger.warning(f"[Vertex AI] Gemini call failed ({e}) — falling back to OpenAI {openai_model}")
-        return await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+        result = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+        if tracker is not None:
+            tracker["provider"] = openai_model
+            tracker["fallback_used"] = True
+            tracker["fallback_reason"] = str(e)[:300]
+            tracker["latency_ms"] = int((time.monotonic() - start) * 1000)
+        return result
 
 
-async def _ai_chat_json(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360):
+async def _ai_chat_json(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, tracker: dict = None):
     """Like _ai_chat but guarantees a parsed JSON object/list. Gemini occasionally
     returns a well-formed HTTP response with an invalid/unterminated JSON body
     (model-side non-determinism, not a transport error) — _ai_chat's fallback
     doesn't catch that since parsing happens after it returns. This retries the
     prompt directly against OpenAI once before giving up, so a single malformed
     Gemini response never dead-ends into an empty analysis for the user."""
-    raw = await _ai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+    raw = await _ai_chat(openai_model, system, user, reasoning_effort, timeout_secs, tracker=tracker)
     try:
         return _extract_json(raw)
     except json.JSONDecodeError:
         logger.warning(f"[AI] Response failed JSON parse — retrying directly via OpenAI {openai_model}")
+        retry_start = time.monotonic()
         raw2 = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+        if tracker is not None:
+            tracker["provider"] = openai_model
+            tracker["fallback_used"] = True
+            reason = "gemini_json_parse_failed_retried_openai"
+            tracker["fallback_reason"] = f"{tracker['fallback_reason']}; {reason}" if tracker.get("fallback_reason") else reason
+            tracker["latency_ms"] = tracker.get("latency_ms", 0) + int((time.monotonic() - retry_start) * 1000)
         return _extract_json(raw2)
 
 # UK adult social care terminology — fed to Deepgram nova-3-medical keyterm prompting
@@ -1319,6 +1342,7 @@ async def analyze_meeting(
     manager_name: str = "",
     attendee_names: list = None,
     meeting_type: str = "",
+    ai_tracker: dict = None,
 ) -> dict:
     # Build jurisdiction-aware labels for prompts
     if jurisdiction == "wales":
@@ -2003,7 +2027,7 @@ Provide your analysis as JSON. Only map regulations/standards where there is act
 
     # Parse JSON from response (retries once directly via OpenAI if the JSON body is malformed)
     try:
-        result = await _ai_chat_json("o4-mini", ANALYSIS_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="high")
+        result = await _ai_chat_json("o4-mini", ANALYSIS_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="high", tracker=ai_tracker)
         result = _normalize_mapping_aliases(result, jurisdiction)
         if "custom_mappings" not in result:
             result["custom_mappings"] = []
