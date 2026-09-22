@@ -1,3 +1,28 @@
+## Prompt Fix: Unfair "Insufficient Engagement" Risk on Rushed/Cut-Short Sessions (Sep 2026) — FIXED, self-tested
+User found a real production case: manager cut a 10-min session short due to being busy, and the
+AI flagged the STAFF MEMBER for "Communication pattern — insufficient engagement" (implying
+reluctance/dismissiveness) based on brief answers — when the true cause was the manager's own time
+pressure, not the worker's engagement. Unfair to the worker.
+- `utils/ai.py` CONCERNING COMMUNICATION PATTERNS section: added an "ATTRIBUTION CHECK — SESSION
+  TIME PRESSURE" rule (hard MUST NOT, not just a soft check) before GLOSSING OVER/DEFLECTION —
+  when the manager signals the session is rushed/short on time/cut short, do NOT generate a
+  worker-blaming "Communication pattern" risk for brief answers; if worth flagging at all, frame
+  it as a "Supervision quality"/process risk with resolutions directed at the MANAGER instead.
+- First attempt (a softer "check first" wording) only worked ~50% of the time across repeated
+  runs on the same transcript (LLM non-determinism) — strengthened to an explicit MUST NOT rule,
+  then verified consistent across 3 repeated runs on the exact reported scenario (manager says
+  "sorry this has to be quick... back to back meetings", worker gives short answers) — all 3 runs
+  now correctly produced ONLY a "Supervision quality — rushed session" risk, zero worker-blaming
+  "Communication pattern" risk.
+- Verified the fix does NOT over-suppress: a genuinely evasive worker in a full, unhurried session
+  (manager explicitly has an hour, worker repeatedly dismisses a real safety incident as "fine"/
+  "nothing" under direct, repeated questioning) still correctly triggers "Escalation gap" +
+  "Communication pattern — premature closure/minimising" + "insufficient engagement" risks.
+- Self-tested only (3 live Gemini calls on the reported scenario + 1 on a genuine-evasion control
+  case) — NOT yet run through testing_agent. Given this is a live-prompt/analysis-quality change
+  (not a code-path change), recommend either a testing_agent pass or accepting self-test as
+  sufficient before the user's next production test.
+
 ## RCA Follow-up: Provider-Fallback Gap Causing Low-Evidence First Pass (Sep 2026) — FIXED, self-tested
 Production RCA: user rescanned a meeting (29→52 items) and confirmed via the AI Usage report that
 the rescan used Gemini. Diarisation-ordering fix (below) was verified STILL correctly in place
