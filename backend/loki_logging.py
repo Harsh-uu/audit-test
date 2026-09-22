@@ -104,6 +104,15 @@ class LokiHandler(logging.Handler):
 
 def attach_loki(loki_url: str, loki_user: str, loki_token: str, app_name: str = "supervision2", env: str = "production") -> LokiHandler:
     """Attach a Loki handler to the root logger. Call once at startup."""
+    # httpx logs every outgoing HTTP call at INFO ("HTTP Request: POST ... 200 OK") —
+    # including the Loki push call this handler itself makes. Since the handler is
+    # on the ROOT logger, that self-referential "I just pushed to Loki" message was
+    # being re-shipped to Loki as log content: 78% of all shipped lines were pure
+    # "HTTP/1.1 204 No Content" noise from httpx describing its own push requests,
+    # drowning out real application logs. Silence httpx/httpcore's own INFO chatter.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     handler = LokiHandler(
         url=loki_url,
         user=loki_user,

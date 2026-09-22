@@ -40,9 +40,10 @@ logger = logging.getLogger(__name__)
 _loki_url = os.environ.get("LOKI_URL", "")
 _loki_user = os.environ.get("LOKI_USER", "")
 _loki_token = os.environ.get("LOKI_TOKEN", "")
+_app_env = os.environ.get("APP_ENV", "production")
 if _loki_url and _loki_user and _loki_token:
-    attach_loki(_loki_url, _loki_user, _loki_token)
-    logger.info("Loki log shipping enabled → %s", _loki_url)
+    attach_loki(_loki_url, _loki_user, _loki_token, env=_app_env)
+    logger.info("Loki log shipping enabled → %s (env=%s)", _loki_url, _app_env)
 else:
     logger.warning("Loki credentials not set — logging to console only")
 
