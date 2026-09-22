@@ -1,3 +1,40 @@
+## AI Provider Tracking + Super Admin "AI Usage" Report + Orphan-Teams Filter Fix (Sep 2026) — DONE, tested (iteration_149.json)
+Per explicit user choice (provider+model+fallback+latency tracked; new TAB inside existing Super
+Admin dashboard, not a standalone page; items + aggregate stats incl. fallback rate). Also fixed
+the P3 backlog bug in the same round per user's "do both" choice.
+- `m030_ai_provider_tracking.py`: adds `ai_provider`, `ai_fallback_used`, `ai_fallback_reason`,
+  `ai_latency_ms` to `analyses`. Applied live.
+- `utils/ai.py`: `_ai_chat`/`_ai_chat_json` take an optional `tracker: dict` (unused by every
+  existing caller — zero behaviour change elsewhere), fill in provider/fallback/reason/latency.
+  `analyze_meeting()` takes an optional `ai_tracker: dict` passed straight through.
+- `utils/transcription_pipeline.py` (main pipeline) and `routers/review.py` (rescan) both create
+  a tracker, pass it into `analyze_meeting`, and persist it onto the `analyses` row after saving
+  (rescan overwrites with the LATEST run's data, since that reflects the current state).
+- `routers/super_admin.py`: new `GET /ai-usage-report` (super_admin only) — filters by org_id/
+  provider/fallback_only/from_date/to_date, returns `items` (joined meeting title + org name) +
+  `stats` (total, fallback_count, fallback_rate_pct, avg_latency_ms, by_provider). Only covers
+  analyses run after this shipped (`ai_provider IS NOT NULL`) — historical rows predate tracking.
+- `SuperAdminDashboard.js`: new tab bar (Organisations / AI Usage) wrapping the existing
+  dashboard content in `{activeTab === "orgs" && ...}` — zero change to org-listing behaviour.
+  New `components/superadmin/SuperAdminAIUsage.js` — filter bar, 4 stat cards, items table
+  (wrapped `overflow-x-auto` after a mobile-overflow fix found during self-testing) linking out
+  to each meeting's report.
+- **Orphan-teams fix**: `org.py`'s `get_structure_lite_data()` (powers the Meetings-page Setting/
+  Team filter) now appends a virtual `{id: "unassigned", name: "Unassigned (no setting)"}` entry
+  (org-level scope only) containing any team with `setting_id IS NULL` — previously invisible
+  entirely. `Meetings.js` filter logic special-cases this sentinel (`UNASSIGNED_SETTING_ID`).
+- **Tested via testing_agent** (iteration_149): 8/8 backend pytest, 100% frontend UI flows —
+  stats math verified (fallback rate/avg latency/by-provider), filters work, access control
+  correct (401/403/200), orphan team ("Team Alpha", pre-existing in Test Company org) now
+  selectable in the filter and correctly scopes results. No bugs found. Main agent additionally
+  ran a real live `analyze_meeting()` call end-to-end post-test to confirm the tracker actually
+  populates from a genuine AI call (not just simulated via direct DB UPDATE) — confirmed working
+  (fell back to OpenAI `o4-mini` since this preview env has no Vertex AI credentials configured;
+  tracker correctly captured `fallback_used=True` + the real error reason + latency).
+- Non-blocking code-review notes (backlog P3): `to_date` filter requires caller to append time-of-
+  day to be inclusive of that whole day (frontend already does this); `LIMIT 200` on items has no
+  pagination/truncation flag.
+
 ## Evidence Scan RCA + Fix: Contradictory Confidence-Tier Instruction (Sep 2026) — FIXED, awaiting user re-scan verification
 User reported a recent evidence scan flagged everything as "possible_evidence" with a dramatic
 drop in item count, and it "felt like GPT" despite Gemini being the primary provider. RCA (no code
