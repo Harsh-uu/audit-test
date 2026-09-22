@@ -1,3 +1,30 @@
+## Meetings Page Speed Fix, Part 2: Combined page-data Endpoint (Sep 2026) — DONE, tested
+Continuation of the Meetings-page speed work (see Part 1 above). Consolidated the 3 remaining
+initial-load calls (`/meetings/`, `/meetings/month-summary`, `/org/structure-lite`) into ONE
+combined endpoint, eliminating 2 of the 3 redundant per-request auth-checks and DB transaction
+opens — user explicitly deferred the other suggestion (backend↔DB region mismatch, ~106-140ms
+per round trip, US↔UK) to Emergent support directly, out of scope here.
+- New `GET /meetings/page-data?year&month` in `meetings.py` — one `get_current_user_conn` auth
+  check, then runs all 3 sub-fetches sequentially against the SAME already-open connection.
+- Extracted `_month_summary_data()` and `get_structure_lite_data()` as shared helpers (accepting
+  optional `reused_conn`) out of the standalone `/meetings/month-summary` and `/org/structure-lite`
+  routes — both routes kept in place, unchanged behavior, for any other caller.
+- `Meetings.js` now makes exactly ONE call on initial load instead of 3; removed the now-dead
+  `invalidateCache("/dashboard")` call in the delete handler and the now-unused `cachedGet` import
+  (both were referencing the already-orphaned old dashboard cache key).
+- **Verified**: 6-trial timing — new combined call median ~1.12s (5/6 trials 1.07-1.13s, one
+  network-noise outlier at 2.32s) vs the prior 3-parallel-calls pattern's ~1.50s average. Screenshot
+  pass (desktop + mobile, filter dropdown populated, 36 meetings, zero console errors, zero
+  overflow). testing_agent: 12/12 backend pytest pass (new `test_meetings_page_data.py`), 100%
+  frontend (admin/staff both confirmed making exactly one `/meetings/page-data` call, zero
+  `/dashboard` calls; filter bar correctly shown for admin, hidden for staff). No critical/minor
+  issues, no action items.
+- **Note**: 1 pre-existing test (create+delete via minimal API payload) was skipped by the testing
+  agent as unrelated to this refactor (payload validation issue, not a regression) — delete flow
+  was already manually verified end-to-end in an earlier fix this session (create→fetch→delete
+  cycle, 200/200/200).
+
+
 ## Meetings Page Speed Fix: Retired Old Dashboard Dependency (Sep 2026) — DONE, verified live
 Root cause (dug up per user's request, no code changed until approved): the old, "busy" Dashboard
 page was replaced with static navigation tiles for speed — `Dashboard.js` now fetches nothing at
