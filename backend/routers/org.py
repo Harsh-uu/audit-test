@@ -179,16 +179,12 @@ async def get_structure(current_user=Depends(get_current_user)):
     return {"settings": settings, "unassigned_users": unassigned}
 
 
-@router.get("/structure-lite")
-async def get_structure_lite(current_user=Depends(get_current_user)):
-    """Lightweight settings+teams list (id/name only, no member detail) —
-    used by pages that only need it to populate a filter dropdown (e.g. the
-    Meetings page's Setting/Team filter). Logic moved here unchanged from
-    dashboard.py's fetch_structure(), which is now dead code: nothing calls
-    GET /dashboard/ any more, so its heavier due-schedules/action-stats
-    computation never has to run just to serve this small dropdown list.
-    Admin/manager only — every other role gets an empty settings list, same
-    as before, so the Meetings page's filter bar stays hidden for them."""
+async def get_structure_lite_data(current_user: dict, reused_conn=None) -> dict:
+    """Shared logic behind GET /org/structure-lite — extracted so the
+    combined GET /meetings/page-data endpoint can call it directly, reusing
+    the SAME already-open connection instead of opening a separate block.
+    reused_conn: optional already-open with_org() connection for this exact
+    org_id (see get_current_user_conn's docstring)."""
     role = current_user["role"]
     if role not in ("admin", "manager"):
         return {"settings": [], "unassigned_users": []}
@@ -196,7 +192,8 @@ async def get_structure_lite(current_user=Depends(get_current_user)):
     if not org_id:
         return {"settings": [], "unassigned_users": []}
     scope = get_manager_scope(current_user)
-    async with database.with_org(org_id) as conn:
+
+    async def _run(conn):
         if scope["level"] == "org":
             s_rows = await conn.fetch("SELECT id, name FROM org_settings ORDER BY name ASC")
         else:
@@ -225,7 +222,27 @@ async def get_structure_lite(current_user=Depends(get_current_user)):
         for s in s_dicts:
             s["teams"] = teams_by_setting.get(s["id"], [])
             settings.append(s)
+        return settings
+
+    if reused_conn is not None:
+        settings = await _run(reused_conn)
+    else:
+        async with database.with_org(org_id) as conn:
+            settings = await _run(conn)
     return {"settings": settings, "unassigned_users": []}
+
+
+@router.get("/structure-lite")
+async def get_structure_lite(current_user=Depends(get_current_user)):
+    """Lightweight settings+teams list (id/name only, no member detail) —
+    used by pages that only need it to populate a filter dropdown (e.g. the
+    Meetings page's Setting/Team filter). Logic moved here unchanged from
+    dashboard.py's fetch_structure(), which is now dead code: nothing calls
+    GET /dashboard/ any more, so its heavier due-schedules/action-stats
+    computation never has to run just to serve this small dropdown list.
+    Admin/manager only — every other role gets an empty settings list, same
+    as before, so the Meetings page's filter bar stays hidden for them."""
+    return await get_structure_lite_data(current_user)
 
 
 @router.get("/settings")

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UkDatePicker } from "@/components/ui/uk-date-picker";
@@ -118,15 +117,13 @@ export default function Meetings() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    Promise.all([
-      cachedGet(`${API}/org/structure-lite`, getAuthConfig()),
-      axios.get(`${API}/meetings/?year=${currentYear}&month=${currentMonth}`, getAuthConfig()),
-      axios.get(`${API}/meetings/month-summary`, getAuthConfig()),
-    ])
-      .then(([structRes, curRes, sumRes]) => {
-        if (structRes.data) setOrgStructure(structRes.data);
-        setMonthCache({ [currentMonthKey]: curRes.data });
-        setMonthSummaries(sumRes.data);
+    // PERF: single combined call instead of 3 separate ones — see
+    // backend's GET /meetings/page-data docstring.
+    axios.get(`${API}/meetings/page-data?year=${currentYear}&month=${currentMonth}`, getAuthConfig())
+      .then(({ data }) => {
+        if (data.org_structure) setOrgStructure(data.org_structure);
+        setMonthCache({ [currentMonthKey]: data.meetings });
+        setMonthSummaries(data.month_summary);
       })
       .catch(err => console.error("Meetings load failed", err.message))
       .finally(() => setLoading(false));
@@ -268,8 +265,6 @@ export default function Meetings() {
         return next;
       });
       if (allMeetings !== null) setAllMeetings(prev => prev.filter(m => m.id !== meetingId));
-      // Bust the dashboard cache so navigating back re-fetches a fresh list
-      invalidateCache("/dashboard");
     } catch (err) {
       alert(err.response?.data?.detail || "Delete failed");
     } finally {

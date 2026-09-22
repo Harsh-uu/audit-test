@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 from datetime import datetime, timezone
 from typing import Optional, List
 from deps import get_db, get_current_user, get_current_user_conn, get_manager_scope, get_scoped_staff_ids
+from routers.org import get_structure_lite_data
 import database
 from utils.supabase_storage import delete_audio
 from utils.backdate_check import detect_backdate_mismatch
@@ -429,13 +430,13 @@ _MONTH_NAMES = [
 ]
 
 
-@router.get("/month-summary")
-async def get_month_summary(request: Request, current_user=Depends(get_current_user_conn)):
-    """
-    Cheap GROUP BY month+status count, used to render collapsed month-divider
-    rows on the Meetings page without fetching full meeting rows for every
-    past month. Excludes the current calendar month (fetched in full instead).
-    """
+async def _month_summary_data(current_user: dict, reused_conn=None) -> list:
+    """Shared logic behind GET /meetings/month-summary — extracted so the
+    combined GET /meetings/page-data endpoint can call it directly, reusing
+    the SAME already-open connection instead of opening a separate block.
+    reused_conn: optional already-open with_org() connection for this exact
+    org_id (only used in the admin/manager branch, same guarantee as
+    _list_meetings_data's reused_conn — see get_current_user_conn's docstring)."""
     role = current_user["role"]
     if role == "super_admin":
         return []
@@ -492,10 +493,10 @@ async def get_month_summary(request: Request, current_user=Depends(get_current_u
                 all_scoped_str,
             )
 
-        # PERF: reuse get_current_user_conn()'s already-open connection for
-        # this exact org_id instead of a second with_org() block — see
-        # deps.py's docstring. Falls back to a fresh block if unavailable.
-        reused_conn = request.state.db_conn if request.state.db_conn_org_id == org_id else None
+        # PERF: reuse the caller-supplied connection (already open, same
+        # org_id) when available instead of opening a second with_org()
+        # block — see get_current_user_conn's docstring. Falls back to a
+        # fresh block otherwise, exactly as before.
         if reused_conn is not None:
             rows = await _run_admin_manager_month_summary(reused_conn)
         else:
@@ -521,6 +522,43 @@ async def get_month_summary(request: Request, current_user=Depends(get_current_u
         })
     result.sort(key=lambda x: x["month_key"], reverse=True)
     return result
+
+
+@router.get("/month-summary")
+async def get_month_summary(request: Request, current_user=Depends(get_current_user_conn)):
+    """
+    Cheap GROUP BY month+status count, used to render collapsed month-divider
+    rows on the Meetings page without fetching full meeting rows for every
+    past month. Excludes the current calendar month (fetched in full instead).
+    """
+    org_id = current_user.get("org_id", "")
+    reused_conn = request.state.db_conn if request.state.db_conn_org_id == org_id else None
+    return await _month_summary_data(current_user, reused_conn=reused_conn)
+
+
+@router.get("/page-data")
+async def get_meetings_page_data(
+    request: Request,
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    current_user=Depends(get_current_user_conn),
+):
+    """PERF: combines the Meetings page's 3 initial-load calls — current
+    month's meetings, the collapsed-month summary, and the Setting/Team
+    filter dropdown data — into ONE request. Each sub-fetch below is the
+    exact same helper/logic used by the standalone /meetings/,
+    /meetings/month-summary and /org/structure-lite endpoints (all left in
+    place, unchanged, for any other caller) — just run against the SAME
+    already-open connection instead of each opening (and paying for) its
+    own separate auth-check + transaction."""
+    org_id = current_user.get("org_id", "")
+    reused_conn = request.state.db_conn if request.state.db_conn_org_id == org_id else None
+
+    meetings = await _list_meetings_data(current_user, limit=500, offset=0, year=year, month=month, reused_conn=reused_conn)
+    month_summary = await _month_summary_data(current_user, reused_conn=reused_conn)
+    org_structure = await get_structure_lite_data(current_user, reused_conn=reused_conn)
+
+    return {"meetings": meetings, "month_summary": month_summary, "org_structure": org_structure}
 
 
 @router.get("/{meeting_id}")
