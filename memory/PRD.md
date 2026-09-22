@@ -1,3 +1,33 @@
+## Evidence Scan RCA + Fix: Contradictory Confidence-Tier Instruction (Sep 2026) — FIXED, awaiting user re-scan verification
+User reported a recent evidence scan flagged everything as "possible_evidence" with a dramatic
+drop in item count, and it "felt like GPT" despite Gemini being the primary provider. RCA (no code
+changed until user approved the fix):
+- Root cause: `6c69710` (Aug 12) renamed the confidence tiers (`needs_review`→`possible_evidence`,
+  removed `not_enough_evidence`) but left a mis-edited leftover instruction reading *"Do NOT use
+  'possible_evidence' — it no longer exists"* right next to *"the MANDATORY DEFAULT for every
+  mapping is 'possible_evidence'"* — a direct self-contradiction (should have said `needs_review`,
+  the retired name, not `possible_evidence`). Present, unpatched, in BOTH prompt locations
+  (`ANALYSIS_SYSTEM_PROMPT` line 540, `DOC_EVIDENCE_SYSTEM_PROMPT` line 1191) since Aug 12, through
+  ~15 subsequent `ai.py`-touching commits — not caused by anything in this session.
+  fewer items (model avoiding a classification it's told doesn't exist), everything skewed to
+  "possible" (the mandated default for anything else).
+  → this call already uses `_ai_chat_json` (guaranteed-JSON path). Theory: on this test, the
+  contradiction likely confused Gemini into a malformed JSON response, silently triggering the
+  fallback to OpenAI — which resolves the same contradiction more conservatively, matching the
+  "felt like GPT" observation. Not independently confirmed (no per-meeting provider logging exists
+  yet — flagged as a good follow-up, not implemented, user wants to think about it separately).
+- **Fix applied**: removed the contradictory "it no longer exists" clause from both prompt
+  locations (single `replace_all` search_replace, identical text in both spots) — kept everything
+  else (mandatory default, when to use likely_evidence, "surface don't decide" framing) unchanged.
+  Backend restarted cleanly, syntax verified.
+- **Status**: user will re-scan the same test meeting themselves and compare before/after. Not yet
+  independently re-tested by agent per user's explicit request ("i will then re-scan and compare").
+- **Backlog** (user said they'll think about these, not requested yet): per-meeting `ai_provider`
+  field to make Gemini-vs-OpenAI-fallback verifiable after the fact; checking production Loki logs
+  around the test's timestamp for `"[AI] served by"` / `"falling back to OpenAI"` / `"Response
+  failed JSON parse"` to confirm the fallback theory directly.
+
+
 ## Meetings Page Speed Fix, Part 2: Combined page-data Endpoint (Sep 2026) — DONE, tested
 Continuation of the Meetings-page speed work (see Part 1 above). Consolidated the 3 remaining
 initial-load calls (`/meetings/`, `/meetings/month-summary`, `/org/structure-lite`) into ONE
