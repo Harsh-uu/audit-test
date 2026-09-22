@@ -119,12 +119,12 @@ export default function Meetings() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     Promise.all([
-      cachedGet(`${API}/dashboard/`, getAuthConfig()),
+      cachedGet(`${API}/org/structure-lite`, getAuthConfig()),
       axios.get(`${API}/meetings/?year=${currentYear}&month=${currentMonth}`, getAuthConfig()),
       axios.get(`${API}/meetings/month-summary`, getAuthConfig()),
     ])
-      .then(([dashRes, curRes, sumRes]) => {
-        if (dashRes.data.org_structure) setOrgStructure(dashRes.data.org_structure);
+      .then(([structRes, curRes, sumRes]) => {
+        if (structRes.data) setOrgStructure(structRes.data);
         setMonthCache({ [currentMonthKey]: curRes.data });
         setMonthSummaries(sumRes.data);
       })

@@ -122,9 +122,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const _prewarmDashboard = (role) => {
-    // Fire-and-forget: start fetching dashboard data before the user lands on it.
-    // The result is stored in apiCache so Dashboard renders instantly on mount.
-    cachedGet(`${API}/dashboard/`).catch(() => {});
+    // Fire-and-forget: pre-fetch data the next page will need, before the
+    // user lands on it, so it renders instantly on mount (already in apiCache).
+    // Pre-warm the Meetings page's Setting/Team filter dropdown data.
+    cachedGet(`${API}/org/structure-lite`).catch(() => {});
     // Pre-warm the users list used by New Meeting — attendee checkboxes render instantly.
     // Only admin/manager may call this endpoint; skip for other roles to avoid a 403.
     if (["admin", "manager"].includes(role)) {

@@ -179,6 +179,55 @@ async def get_structure(current_user=Depends(get_current_user)):
     return {"settings": settings, "unassigned_users": unassigned}
 
 
+@router.get("/structure-lite")
+async def get_structure_lite(current_user=Depends(get_current_user)):
+    """Lightweight settings+teams list (id/name only, no member detail) —
+    used by pages that only need it to populate a filter dropdown (e.g. the
+    Meetings page's Setting/Team filter). Logic moved here unchanged from
+    dashboard.py's fetch_structure(), which is now dead code: nothing calls
+    GET /dashboard/ any more, so its heavier due-schedules/action-stats
+    computation never has to run just to serve this small dropdown list.
+    Admin/manager only — every other role gets an empty settings list, same
+    as before, so the Meetings page's filter bar stays hidden for them."""
+    role = current_user["role"]
+    if role not in ("admin", "manager"):
+        return {"settings": [], "unassigned_users": []}
+    org_id = current_user.get("org_id", "")
+    if not org_id:
+        return {"settings": [], "unassigned_users": []}
+    scope = get_manager_scope(current_user)
+    async with database.with_org(org_id) as conn:
+        if scope["level"] == "org":
+            s_rows = await conn.fetch("SELECT id, name FROM org_settings ORDER BY name ASC")
+        else:
+            s_rows = await conn.fetch(
+                "SELECT id, name FROM org_settings WHERE id=$1", scope["setting_id"]
+            )
+        s_dicts = [dict(r) for r in s_rows]
+        setting_ids = [s["id"] for s in s_dicts]
+
+        # Batched: one teams query for all settings instead of one per setting.
+        if scope["level"] == "team":
+            t_rows = await conn.fetch(
+                "SELECT id, name, setting_id FROM teams WHERE setting_id = ANY($1::uuid[]) AND id=$2 ORDER BY name ASC",
+                setting_ids, scope["team_id"],
+            )
+        else:
+            t_rows = await conn.fetch(
+                "SELECT id, name, setting_id FROM teams WHERE setting_id = ANY($1::uuid[]) ORDER BY name ASC",
+                setting_ids,
+            )
+        teams_by_setting = {sid: [] for sid in setting_ids}
+        for t in t_rows:
+            teams_by_setting.setdefault(t["setting_id"], []).append({"id": t["id"], "name": t["name"]})
+
+        settings = []
+        for s in s_dicts:
+            s["teams"] = teams_by_setting.get(s["id"], [])
+            settings.append(s)
+    return {"settings": settings, "unassigned_users": []}
+
+
 @router.get("/settings")
 async def list_settings(current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")

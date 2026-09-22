@@ -13,6 +13,7 @@ const TTL_MAP = {
   "/auth/me":                    60_000,   // 1 min
   "/dashboard":                  30_000,   // 30 s — combined dashboard endpoint
   "/org/branding":              300_000,   // 5 min
+  "/org/structure-lite":        300_000,   // 5 min — settings/teams names rarely change
   "/org/structure":              60_000,   // 1 min
   "/admin/users":                30_000,   // 30 s
   "/admin/people-stats":         30_000,   // 30 s

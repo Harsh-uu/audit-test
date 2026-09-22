@@ -1,3 +1,46 @@
+## Meetings Page Speed Fix: Retired Old Dashboard Dependency (Sep 2026) — DONE, verified live
+Root cause (dug up per user's request, no code changed until approved): the old, "busy" Dashboard
+page was replaced with static navigation tiles for speed — `Dashboard.js` now fetches nothing at
+all. But the backend endpoint that powered the OLD dashboard (`GET /dashboard/`, a 4-way concurrent
+fan-out: meetings list, due schedules, action stats, org structure) was never retired. `Meetings.js`
+kept calling it solely to get one small unrelated field (`org_structure`, for its Setting/Team
+filter dropdown) — paying for the two heaviest parts every load (`fetch_due`: 5 chained queries in
+one transaction; `fetch_action_stats`: a ~211ms unindexed JSONB lateral-join aggregation) and
+discarding both results entirely.
+- **Fix**: new `GET /org/structure-lite` in `org.py` — the exact settings+teams (id/name only, no
+  member lists) logic already written as `dashboard.py`'s `fetch_structure()`, just relocated to
+  its own tiny endpoint. Admin/manager only, matches prior scoping exactly (org-level sees all
+  settings, setting/team-scoped managers see only their own).
+- `Meetings.js` now calls `/org/structure-lite` instead of `/dashboard/` in its `Promise.all`.
+- `AuthContext.js`'s post-login prewarm now warms `/org/structure-lite` instead of the now-orphaned
+  `/dashboard/`.
+- Added a 5-min cache TTL for `/org/structure-lite` in `apiCache.js` (settings/teams rarely change)
+  — placed before the shorter `/org/structure` pattern so the substring-prefix match resolves
+  correctly (existing file convention).
+- `GET /dashboard/` itself left untouched/in place (not deleted) — confirmed zero remaining
+  callers in the app, but kept as a conservative choice per "don't impact anything else"; safe
+  candidate for removal in a future cleanup pass if desired.
+- **Verified live**: 5-trial fair comparison, same session, same time window — new pattern
+  (`structure-lite` + `meetings` + `month-summary` concurrent) averaged **~1.50s with very low
+  variance** (1.482–1.511s); old pattern (`dashboard/` + same two) averaged **~2.85s with much
+  higher variance** (1.745–5.457s). Full role-matrix regression: admin (org-level, full settings
+  list), manager (org-level scope, same), staff/attendee (empty settings, filter bar correctly
+  hidden) — all 200, correct shapes. Confirmed `/org/structure` (People/Organisation page) is a
+  completely separate code path, untouched, still returns full member/manager-name detail.
+  Screenshot: Meetings page renders correctly, filter dropdown populated with real settings/teams,
+  zero console errors. No testing_agent round used (self-tested end-to-end across backend + UI).
+
+## Correction to Perf Fix #2's RCA (found while investigating the Meetings page, Sep 2026)
+While digging into `/org/structure-lite`'s teams query, discovered `organisations` DOES have an
+RLS policy after all (`organisations_rls`, `id = current_setting('app.current_org_id')::uuid`) —
+created dynamically in a loop in `m006_phase2_uuid.py` (`org_policies` array), not via a literal
+`CREATE POLICY ... ON organisations` string, which is why the earlier grep-based check missed it.
+This means the earlier claim that `/auth/me`'s org-branding lookup "must stay on `with_admin()`
+because `organisations` has zero RLS policies" was WRONG — a normal user's own org row IS
+readable under `app_rls_user` via `with_org()`. Flagging for the record; `/auth/me` was not
+touched in this session and remains on the backlog if revisited.
+
+
 ## Perf Fix #2: Redundant Auth-Then-Handler DB Blocks — PARTIALLY FIXED (Sep 2026), verified live
 Structural issue: `get_current_user()` opens its own `with_org()`/`with_admin()` block just to
 fetch the user row, then the route handler immediately opens a SECOND separate block for its own
