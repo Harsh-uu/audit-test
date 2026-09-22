@@ -29,7 +29,7 @@ function ProviderBadge({ provider, fallback }) {
 
 export default function SuperAdminAIUsage({ getAuthConfig, orgs }) {
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState({ items: [], stats: { total: 0, fallback_count: 0, fallback_rate_pct: 0, avg_latency_ms: null, by_provider: {} } });
+  const [data, setData] = useState({ items: [], stats: { total: 0, fallback_count: 0, fallback_rate_pct: 0, avg_latency_ms: null, by_provider: {}, provider_changed_on_rescan_count: 0 } });
   const [orgFilter, setOrgFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [fallbackOnly, setFallbackOnly] = useState(false);
@@ -119,7 +119,7 @@ export default function SuperAdminAIUsage({ getAuthConfig, orgs }) {
       ) : (
         <>
           {/* Stat cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
             <StatCard testId="ai-usage-stat-total" label="Total Analyses" value={data.stats.total} />
             <StatCard
               testId="ai-usage-stat-fallback"
@@ -132,6 +132,13 @@ export default function SuperAdminAIUsage({ getAuthConfig, orgs }) {
               testId="ai-usage-stat-latency"
               label="Avg Latency"
               value={data.stats.avg_latency_ms != null ? `${(data.stats.avg_latency_ms / 1000).toFixed(1)}s` : "—"}
+            />
+            <StatCard
+              testId="ai-usage-stat-provider-changed"
+              label="Provider Changed on Rescan"
+              value={data.stats.provider_changed_on_rescan_count ?? 0}
+              sub="likely explains a different evidence count"
+              warn={(data.stats.provider_changed_on_rescan_count ?? 0) > 0}
             />
             <div className="bg-white border border-gray-200 rounded-lg p-4" data-testid="ai-usage-stat-by-provider">
               <p className="text-xs text-gray-500 font-medium mb-1.5">By Provider</p>
@@ -163,7 +170,8 @@ export default function SuperAdminAIUsage({ getAuthConfig, orgs }) {
                   <tr>
                     <th className="text-left px-4 py-2.5 font-medium">Meeting</th>
                     <th className="text-left px-4 py-2.5 font-medium">Organisation</th>
-                    <th className="text-left px-4 py-2.5 font-medium">Provider</th>
+                    <th className="text-left px-4 py-2.5 font-medium">Initial Scan</th>
+                    <th className="text-left px-4 py-2.5 font-medium">Latest Scan</th>
                     <th className="text-left px-4 py-2.5 font-medium">Latency</th>
                     <th className="text-left px-4 py-2.5 font-medium">Date</th>
                     <th className="text-left px-4 py-2.5 font-medium">Fallback Reason</th>
@@ -184,7 +192,27 @@ export default function SuperAdminAIUsage({ getAuthConfig, orgs }) {
                         {item.rescanned_at && <span className="text-[11px] text-gray-400">rescanned</span>}
                       </td>
                       <td className="px-4 py-2.5 text-gray-600">{item.org_name || "—"}</td>
-                      <td className="px-4 py-2.5"><ProviderBadge provider={item.ai_provider} fallback={item.ai_fallback_used} /></td>
+                      <td className="px-4 py-2.5">
+                        <ProviderBadge provider={item.initial_ai_provider || item.ai_provider} fallback={item.initial_ai_fallback_used} />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {item.rescanned_at ? (
+                          <span className="flex items-center gap-1.5">
+                            <ProviderBadge provider={item.ai_provider} fallback={item.ai_fallback_used} />
+                            {item.provider_changed_on_rescan && (
+                              <span
+                                className="text-[11px] text-red-600 font-semibold flex items-center gap-0.5"
+                                title="Provider changed between initial scan and rescan — likely explains a different evidence count"
+                                data-testid={`ai-usage-provider-changed-${item.analysis_id}`}
+                              >
+                                <AlertTriangle className="w-3 h-3" /> changed
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">— not rescanned —</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-gray-600">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="w-3 h-3 text-gray-400" />

@@ -39,6 +39,7 @@ from . import (
     m028_resources_storage,
     m029_eula_sept_update,
     m030_ai_provider_tracking,
+    m031_ai_provider_initial_scan,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ MIGRATIONS = [
     m028_resources_storage,
     m029_eula_sept_update,
     m030_ai_provider_tracking,
+    m031_ai_provider_initial_scan,
 ]
 
 

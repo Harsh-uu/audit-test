@@ -634,7 +634,9 @@ async def ai_usage_report(
         items_rows = await conn.fetch(
             f"""SELECT a.id AS analysis_id, a.meeting_id, a.org_id, a.ai_provider, a.ai_fallback_used,
                        a.ai_fallback_reason, a.ai_latency_ms, a.created_at,
-                       a.rescanned_at, m.title AS meeting_title, o.name AS org_name
+                       a.rescanned_at, a.initial_ai_provider, a.initial_ai_fallback_used,
+                       a.initial_ai_fallback_reason, a.initial_ai_latency_ms,
+                       m.title AS meeting_title, o.name AS org_name
                 FROM analyses a
                 LEFT JOIN meetings m ON m.id = a.meeting_id
                 LEFT JOIN organisations o ON o.id = a.org_id
@@ -655,6 +657,12 @@ async def ai_usage_report(
                 GROUP BY a.ai_provider""",
             *params,
         )
+        changed_row = await conn.fetchrow(
+            f"""SELECT COUNT(*) AS cnt FROM analyses a
+                WHERE {where_clause} AND a.rescanned_at IS NOT NULL
+                  AND a.initial_ai_provider IS NOT NULL AND a.initial_ai_provider != a.ai_provider""",
+            *params,
+        )
 
     total = totals_row["total"] or 0
     fallback_count = totals_row["fallback_count"] or 0
@@ -672,6 +680,14 @@ async def ai_usage_report(
                 "ai_latency_ms": r["ai_latency_ms"],
                 "analyzed_at": r["created_at"],
                 "rescanned_at": r["rescanned_at"],
+                "initial_ai_provider": r["initial_ai_provider"],
+                "initial_ai_fallback_used": r["initial_ai_fallback_used"],
+                "initial_ai_fallback_reason": r["initial_ai_fallback_reason"],
+                "initial_ai_latency_ms": r["initial_ai_latency_ms"],
+                "provider_changed_on_rescan": bool(
+                    r["rescanned_at"] and r["initial_ai_provider"] and r["ai_provider"]
+                    and r["initial_ai_provider"] != r["ai_provider"]
+                ),
             }
             for r in items_rows
         ],
@@ -681,5 +697,6 @@ async def ai_usage_report(
             "fallback_rate_pct": round((fallback_count / total) * 100, 1) if total else 0,
             "avg_latency_ms": round(float(totals_row["avg_latency_ms"]), 0) if totals_row["avg_latency_ms"] is not None else None,
             "by_provider": {r["ai_provider"]: r["cnt"] for r in provider_rows},
+            "provider_changed_on_rescan_count": changed_row["cnt"] or 0,
         },
     }

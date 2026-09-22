@@ -354,34 +354,51 @@ async def _gemini_chat(system: str, user: str, reasoning_effort: str = None, tim
     return await asyncio.wait_for(asyncio.to_thread(_vertex_generate_sync, system, user, reasoning_effort), timeout=timeout_secs)
 
 
+_GEMINI_RETRY_DELAY_SECS = 1.5
+
+
 async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, tracker: dict = None) -> str:
     """Primary entry point for every AI text call in this module.
-    Tries Vertex AI Gemini 2.5 Flash first (UK/EU data residency); falls back
-    to OpenAI on any failure so the feature keeps working end-to-end.
+    Tries Vertex AI Gemini 2.5 Flash first (UK/EU data residency) — with one
+    quick retry on a transient failure (network blip, one-off 429, etc.)
+    before falling back to OpenAI, since a single blip was silently and
+    permanently downgrading that meeting's evidence quality to a materially
+    weaker model with zero retry. Skips the retry entirely when the failure
+    is a genuine config problem (missing/invalid credentials) — retrying
+    that is pointless, it'll fail identically every time.
 
     tracker: optional dict this call fills in with which provider actually
     served the request (for the Super Admin AI Usage report) — provider,
     fallback_used, fallback_reason, latency_ms. Left untouched (None) by
     every existing caller that doesn't pass it, zero behaviour change."""
     start = time.monotonic()
-    try:
-        result = await _gemini_chat(system, user, reasoning_effort, timeout_secs)
-        logger.info(f"[AI] served by gemini-2.5-flash (fallback model would have been {openai_model})")
-        if tracker is not None:
-            tracker["provider"] = "gemini-2.5-flash"
-            tracker["fallback_used"] = False
-            tracker["fallback_reason"] = None
-            tracker["latency_ms"] = int((time.monotonic() - start) * 1000)
-        return result
-    except Exception as e:
-        logger.warning(f"[Vertex AI] Gemini call failed ({e}) — falling back to OpenAI {openai_model}")
-        result = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
-        if tracker is not None:
-            tracker["provider"] = openai_model
-            tracker["fallback_used"] = True
-            tracker["fallback_reason"] = str(e)[:300]
-            tracker["latency_ms"] = int((time.monotonic() - start) * 1000)
-        return result
+    last_err = None
+    for attempt in range(2):
+        try:
+            result = await _gemini_chat(system, user, reasoning_effort, timeout_secs)
+            logger.info(f"[AI] served by gemini-2.5-flash (fallback model would have been {openai_model})")
+            if tracker is not None:
+                tracker["provider"] = "gemini-2.5-flash"
+                tracker["fallback_used"] = False
+                tracker["fallback_reason"] = None
+                tracker["latency_ms"] = int((time.monotonic() - start) * 1000)
+            return result
+        except Exception as e:
+            last_err = e
+            if "not configured" in str(e):
+                break  # config problem, not transient — retrying won't help
+            if attempt == 0:
+                logger.warning(f"[Vertex AI] Gemini call failed (attempt 1/2): {e} — retrying once before falling back")
+                await asyncio.sleep(_GEMINI_RETRY_DELAY_SECS)
+
+    logger.warning(f"[Vertex AI] Gemini call failed ({last_err}) — falling back to OpenAI {openai_model}")
+    result = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+    if tracker is not None:
+        tracker["provider"] = openai_model
+        tracker["fallback_used"] = True
+        tracker["fallback_reason"] = str(last_err)[:300]
+        tracker["latency_ms"] = int((time.monotonic() - start) * 1000)
+    return result
 
 
 async def _ai_chat_json(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, tracker: dict = None):

@@ -1,3 +1,34 @@
+## RCA Follow-up: Provider-Fallback Gap Causing Low-Evidence First Pass (Sep 2026) — FIXED, self-tested
+Production RCA: user rescanned a meeting (29→52 items) and confirmed via the AI Usage report that
+the rescan used Gemini. Diarisation-ordering fix (below) was verified STILL correctly in place
+(rescan reads the exact same persisted, labelled speaker_text as the initial pass) — ruled out as
+cause. Real root cause: `_ai_chat` had ZERO retry on a Gemini transport failure — one transient
+blip permanently downgraded that meeting's automatic first pass to OpenAI (which finds
+meaningfully less evidence on this prompt than Gemini), while the later manual rescan hit Gemini
+cleanly and found far more. Also surfaced (and corrected in real-time): a preview-env test script
+I ran via `bash source .env` mangled the multi-line JSON in GCP_SERVICE_ACCOUNT_JSON, causing me to
+INCORRECTLY tell the user preview lacked Vertex credentials — verified false by checking real
+backend logs (457 successful `[AI] served by gemini-2.5-flash` calls, only 21 genuine 429-quota
+fallbacks across 3 weeks) and a live re-test loading `.env` correctly via `python-dotenv`.
+- `utils/ai.py::_ai_chat`: added one retry on Gemini (skips retry for genuine "not configured"
+  errors, only retries transient failures) before falling back to OpenAI. Verified via two
+  monkeypatched tests: (1) fail-once-then-succeed → retries → lands on Gemini, no downgrade;
+  (2) fail-twice → correctly falls back to OpenAI as before.
+- `m031_ai_provider_initial_scan.py`: new `initial_ai_provider`/`initial_ai_fallback_used`/
+  `initial_ai_fallback_reason`/`initial_ai_latency_ms` columns on `analyses`, set ONCE by
+  `transcription_pipeline.py` at initial-scan time and never touched again — the existing
+  `ai_provider` etc columns now represent the LATEST scan (rescan still overwrites those, as
+  before), so both the original and latest provider are visible side by side.
+- `super_admin.py::/ai-usage-report`: now returns `initial_*` fields + `provider_changed_on_rescan`
+  bool per item, and a `provider_changed_on_rescan_count` aggregate stat.
+- `SuperAdminAIUsage.js`: table now shows "Initial Scan" vs "Latest Scan" provider columns with a
+  red "changed" flag, plus a 5th stat card "Provider Changed on Rescan".
+- Self-tested: reproduced the user's exact scenario by seeding a test row (initial=o4-mini
+  fallback, latest=gemini, rescanned) — report/UI correctly flagged `provider_changed_on_rescan`;
+  test data reverted after. NOT yet run through testing_agent — flagged to user as self-tested only.
+- Backlog: consider proactively re-queuing/notifying when a meeting's automatic scan used a
+  fallback model, instead of relying on someone noticing low evidence and manually rescanning.
+
 ## AI Provider Tracking + Super Admin "AI Usage" Report + Orphan-Teams Filter Fix (Sep 2026) — DONE, tested (iteration_149.json)
 Per explicit user choice (provider+model+fallback+latency tracked; new TAB inside existing Super
 Admin dashboard, not a standalone page; items + aggregate stats incl. fallback rate). Also fixed

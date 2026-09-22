@@ -445,10 +445,14 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
                 logger.warning(f"learning_needs update skipped (column may not exist yet): {_col_err}")
             # AI provider tracking (Super Admin AI Usage report) — populated by
             # analyze_meeting's tracker; optional UPDATE so a missing migration
-            # never blocks the core analysis from saving.
+            # never blocks the core analysis from saving. initial_* is set ONCE
+            # here and never touched again (even by a later rescan) so we can
+            # always see what served the ORIGINAL automatic scan, separate
+            # from whatever the latest rescan used.
             try:
                 await conn.execute(
-                    "UPDATE analyses SET ai_provider=$1, ai_fallback_used=$2, ai_fallback_reason=$3, ai_latency_ms=$4 WHERE id=$5",
+                    "UPDATE analyses SET ai_provider=$1, ai_fallback_used=$2, ai_fallback_reason=$3, ai_latency_ms=$4, "
+                    "initial_ai_provider=$1, initial_ai_fallback_used=$2, initial_ai_fallback_reason=$3, initial_ai_latency_ms=$4 WHERE id=$5",
                     ai_tracker.get("provider"), ai_tracker.get("fallback_used", False),
                     ai_tracker.get("fallback_reason"), ai_tracker.get("latency_ms"), analysis_id,
                 )
