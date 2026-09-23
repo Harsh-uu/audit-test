@@ -13,7 +13,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import {
   Building2, Users, Plus, Edit2, Trash2, X, Check,
   MapPin, AlertCircle, CheckCircle, Pencil,
-  MoreVertical, UserPlus, Eye, ArrowRightLeft,
+  MoreVertical, UserPlus, Eye, ArrowRightLeft, Search,
 } from "lucide-react";
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -321,6 +321,10 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   // "View" popover — one open at a time
   const [viewingUserId, setViewingUserId] = useState(null);
 
+  // Whole-tree staff search (left pane)
+  const [staffSearch, setStaffSearch] = useState("");
+  const [staffSearchFocused, setStaffSearchFocused] = useState(false);
+
   // Modals
   const [showAddSetting, setShowAddSetting] = useState(false);
   const [editingSetting, setEditingSetting] = useState(null);
@@ -407,6 +411,41 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   }, [structure]);
 
   const selectedSetting = structure.settings.find(s => s.id === selectedSettingId) || null;
+
+  // Whole-tree staff index — flattens every member across every Setting/Team
+  // plus the unassigned pool, built from data already in `structure` (no
+  // extra API call). Filtered client-side as the admin types.
+  const allStaffFlat = useMemo(() => {
+    const flat = [];
+    structure.settings.forEach(s => (s.teams || []).forEach(t => (t.members || []).forEach(m => {
+      flat.push({ ...m, settingId: s.id, settingName: s.name, teamName: t.name });
+    })));
+    structure.unassigned_users.forEach(u => {
+      flat.push({ ...u, settingId: null, settingName: null, teamName: null });
+    });
+    return flat;
+  }, [structure]);
+
+  const staffSearchResults = useMemo(() => {
+    const q = staffSearch.trim().toLowerCase();
+    if (!q) return [];
+    return allStaffFlat
+      .filter(u => (u.name || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [allStaffFlat, staffSearch]);
+
+  // Jump to a search result: switch the master-detail pane to that person's
+  // Setting (or open the Unassigned modal) and pop their View card straight open.
+  const jumpToStaff = (u) => {
+    setStaffSearch("");
+    if (u.settingId) {
+      setShowUnassignedModal(false);
+      setSelectedSettingId(u.settingId);
+    } else {
+      setShowUnassignedModal(true);
+    }
+    setViewingUserId(u.id);
+  };
 
   // ── Move user (used by the "Move to…" menu) ─────────────────────────────
   const moveUser = async (userId, fromTeamId, toTeamId) => {
@@ -619,7 +658,7 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
           <div className="flex flex-col lg:flex-row gap-5" style={{ alignItems: "flex-start" }}>
 
             {/* ══ LEFT: Settings master list ══════════════════════════════ */}
-            <div className="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden lg:sticky lg:top-4" data-testid="settings-master-list">
+            <div className="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm lg:sticky lg:top-4" data-testid="settings-master-list">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Settings ({structure.settings.length})</span>
                 {canManage && (
@@ -628,6 +667,41 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                     className="text-xs font-medium text-[#1E3A8A] hover:underline"
                     data-testid="add-setting-btn"
                   >+ Add</button>
+                )}
+              </div>
+              <div className="px-3 py-2.5 border-b border-gray-100 relative">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={staffSearch}
+                    onChange={e => setStaffSearch(e.target.value)}
+                    onFocus={() => setStaffSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setStaffSearchFocused(false), 150)}
+                    placeholder="Search staff org-wide…"
+                    className="w-full pl-7 pr-3 py-1.5 border border-gray-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A8A]"
+                    data-testid="staff-search-input"
+                  />
+                </div>
+                {staffSearchFocused && staffSearch.trim() && (
+                  <div className="absolute left-3 right-3 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto z-20" data-testid="staff-search-results">
+                    {staffSearchResults.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-gray-400 text-center">No staff match "{staffSearch}"</div>
+                    ) : staffSearchResults.map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => jumpToStaff(u)}
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0"
+                        data-testid={`staff-search-result-${u.id}`}
+                      >
+                        <Avatar name={u.name} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-900 truncate">{u.name || "Unnamed user"}</p>
+                          <p className="text-[11px] text-gray-400 truncate">{u.settingName ? `${u.teamName}, ${u.settingName}` : "Unassigned"}</p>
+                        </div>
+                        <RoleBadge role={u.role} />
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
               <div className="max-h-[70vh] overflow-y-auto">
