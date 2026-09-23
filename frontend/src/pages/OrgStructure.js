@@ -393,6 +393,23 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   };
 
   const managerUsers = allUsers.filter(u => ["admin", "manager"].includes(u.role));
+
+  // Group manager/admin candidates by the Setting they already belong to, so
+  // Setting-manager / Team-supervisor pickers don't just show one long flat
+  // list — "Unassigned" (safest picks for a brand-new home) always sorts first.
+  const groupedManagerOptions = useMemo(() => {
+    const settingNameById = {};
+    structure.settings.forEach(s => { settingNameById[s.id] = s.name; });
+    const groups = {};
+    managerUsers.forEach(u => {
+      const label = u.setting_id ? (settingNameById[u.setting_id] || "Other setting") : "Unassigned";
+      (groups[label] = groups[label] || []).push(u);
+    });
+    const otherLabels = Object.keys(groups).filter(l => l !== "Unassigned").sort();
+    const orderedLabels = [...(groups["Unassigned"] ? ["Unassigned"] : []), ...otherLabels];
+    return orderedLabels.map(label => ({ label, users: groups[label] }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allUsers, structure]);
   const statsByUser = useMemo(() => {
     const map = {};
     peopleStats.forEach(p => { map[p.user_id] = p; });
@@ -834,7 +851,11 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                           className={selectCls}
                         >
                           <option value="">Supervisor — optional</option>
-                          {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                          {groupedManagerOptions.map(g => (
+                            <optgroup key={g.label} label={g.label}>
+                              {g.users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                            </optgroup>
+                          ))}
                         </select>
                         <div className="flex gap-2">
                           <button
@@ -872,7 +893,11 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                 <FormField label="Manager">
                   <select value={settingForm.manager_user_id} onChange={e => setSettingForm(f => ({ ...f, manager_user_id: e.target.value }))} className={selectCls}>
                     <option value="">None</option>
-                    {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+                    {groupedManagerOptions.map(g => (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+                      </optgroup>
+                    ))}
                   </select>
                 </FormField>
                 <div className="flex gap-2 pt-1">
@@ -895,7 +920,11 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                 <FormField label="Supervisor">
                   <select value={teamForm.supervisor_user_id} onChange={e => setTeamForm(f => ({ ...f, supervisor_user_id: e.target.value }))} className={selectCls}>
                     <option value="">None</option>
-                    {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    {groupedManagerOptions.map(g => (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </optgroup>
+                    ))}
                   </select>
                 </FormField>
                 <div className="flex gap-2 pt-1">
