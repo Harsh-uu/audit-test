@@ -252,7 +252,7 @@ def _sanitise_analysis(data: dict) -> dict:
     return cleaned
 
 
-async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360) -> str:
+async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, warm: bool = False) -> str:
     """Single-shot OpenAI chat completion — direct to OpenAI, no proxy."""
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -267,7 +267,7 @@ async def _openai_chat(model: str, system: str, user: str, reasoning_effort: str
     if reasoning_effort and model.startswith("o"):
         kwargs["reasoning_effort"] = reasoning_effort
     else:
-        kwargs["temperature"] = 0.3
+        kwargs["temperature"] = 0.3 if warm else 0.0
     response = await client.chat.completions.create(**kwargs)
     return (response.choices[0].message.content or "").strip()
 
@@ -315,7 +315,7 @@ def _get_vertex_client():
 _THINKING_BUDGETS = {"high": 16384, "medium": 4096, None: 0}
 
 
-def _vertex_generate_sync(system: str, user: str, reasoning_effort: str = None):
+def _vertex_generate_sync(system: str, user: str, reasoning_effort: str = None, warm: bool = False):
     from google.genai import types
     client = _get_vertex_client()
     safety_settings = [
@@ -323,16 +323,28 @@ def _vertex_generate_sync(system: str, user: str, reasoning_effort: str = None):
         for c in ("HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_HARASSMENT",
                   "HARM_CATEGORY_DANGEROUS_CONTENT", "HARM_CATEGORY_SEXUALLY_EXPLICIT")
     ]
+    # Precise (default): temperature 0.0 / top_p 0.1 / top_k 1 — deterministic sampling for
+    # extraction, mapping and classification tasks (evidence scan, PII scan, diarization, etc.)
+    # to remove sampling drift that was causing evidence-count variance between scans.
+    # Warm: temperature 0.3, top_p/top_k left at Gemini defaults — reserved for the handful of
+    # calls that synthesise human-facing, conversational text (summaries, prep questions, risk
+    # resolution suggestions) where some natural variation in phrasing is desirable.
+    generation_kwargs = dict(
+        system_instruction=system,
+        max_output_tokens=65535,
+        safety_settings=safety_settings,
+        thinking_config=types.ThinkingConfig(thinking_budget=_THINKING_BUDGETS.get(reasoning_effort, 0)),
+    )
+    if warm:
+        generation_kwargs["temperature"] = 0.3
+    else:
+        generation_kwargs["temperature"] = 0.0
+        generation_kwargs["top_p"] = 0.1
+        generation_kwargs["top_k"] = 1
     response = client.models.generate_content(
         model=GEMINI_MODEL,
         contents=user,
-        config=types.GenerateContentConfig(
-            system_instruction=system,
-            temperature=0.3,
-            max_output_tokens=65535,
-            safety_settings=safety_settings,
-            thinking_config=types.ThinkingConfig(thinking_budget=_THINKING_BUDGETS.get(reasoning_effort, 0)),
-        ),
+        config=types.GenerateContentConfig(**generation_kwargs),
     )
     candidates = getattr(response, "candidates", None)
     if not candidates:
@@ -347,17 +359,17 @@ def _vertex_generate_sync(system: str, user: str, reasoning_effort: str = None):
     return text.strip()
 
 
-async def _gemini_chat(system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360) -> str:
+async def _gemini_chat(system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, warm: bool = False) -> str:
     client = _get_vertex_client()
     if client is None:
         raise ValueError("Vertex AI not configured (missing GCP_PROJECT_ID/GCP_LOCATION/GCP_SERVICE_ACCOUNT_JSON)")
-    return await asyncio.wait_for(asyncio.to_thread(_vertex_generate_sync, system, user, reasoning_effort), timeout=timeout_secs)
+    return await asyncio.wait_for(asyncio.to_thread(_vertex_generate_sync, system, user, reasoning_effort, warm), timeout=timeout_secs)
 
 
 _GEMINI_RETRY_DELAY_SECS = 1.5
 
 
-async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, tracker: dict = None) -> str:
+async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, tracker: dict = None, warm: bool = False) -> str:
     """Primary entry point for every AI text call in this module.
     Tries Vertex AI Gemini 2.5 Flash first (UK/EU data residency) — with one
     quick retry on a transient failure (network blip, one-off 429, etc.)
@@ -375,7 +387,7 @@ async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: 
     last_err = None
     for attempt in range(2):
         try:
-            result = await _gemini_chat(system, user, reasoning_effort, timeout_secs)
+            result = await _gemini_chat(system, user, reasoning_effort, timeout_secs, warm)
             logger.info(f"[AI] served by gemini-2.5-flash (fallback model would have been {openai_model})")
             if tracker is not None:
                 tracker["provider"] = "gemini-2.5-flash"
@@ -392,7 +404,7 @@ async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: 
                 await asyncio.sleep(_GEMINI_RETRY_DELAY_SECS)
 
     logger.warning(f"[Vertex AI] Gemini call failed ({last_err}) — falling back to OpenAI {openai_model}")
-    result = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+    result = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs, warm)
     if tracker is not None:
         tracker["provider"] = openai_model
         tracker["fallback_used"] = True
@@ -401,20 +413,20 @@ async def _ai_chat(openai_model: str, system: str, user: str, reasoning_effort: 
     return result
 
 
-async def _ai_chat_json(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, tracker: dict = None):
+async def _ai_chat_json(openai_model: str, system: str, user: str, reasoning_effort: str = None, timeout_secs: int = 360, tracker: dict = None, warm: bool = False):
     """Like _ai_chat but guarantees a parsed JSON object/list. Gemini occasionally
     returns a well-formed HTTP response with an invalid/unterminated JSON body
     (model-side non-determinism, not a transport error) — _ai_chat's fallback
     doesn't catch that since parsing happens after it returns. This retries the
     prompt directly against OpenAI once before giving up, so a single malformed
     Gemini response never dead-ends into an empty analysis for the user."""
-    raw = await _ai_chat(openai_model, system, user, reasoning_effort, timeout_secs, tracker=tracker)
+    raw = await _ai_chat(openai_model, system, user, reasoning_effort, timeout_secs, tracker=tracker, warm=warm)
     try:
         return _extract_json(raw)
     except json.JSONDecodeError:
         logger.warning(f"[AI] Response failed JSON parse — retrying directly via OpenAI {openai_model}")
         retry_start = time.monotonic()
-        raw2 = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs)
+        raw2 = await _openai_chat(openai_model, system, user, reasoning_effort, timeout_secs, warm)
         if tracker is not None:
             tracker["provider"] = openai_model
             tracker["fallback_used"] = True
@@ -492,6 +504,10 @@ Workers and managers rarely cite regulations by name. Evidence is present when p
   4. IDENTIFY A LEARNING NEED — a gap or development area is named OR implied: "I'm not confident about X yet" evidences self-awareness; a manager agreeing to "monitor his approach to X" signals an implicit practice gap in that area (maps to Care Certificate Standard 2).
 Do NOT require speakers to name a regulation or standard. Map based on what they describe, demonstrate, or understand.
 Care Certificate standards describe competencies workers should DEMONSTRATE in practice. A worker narrating a real practice example is the strongest possible evidence — map it generously but accurately to the most specific sub-outcome ref.
+
+CRITICAL SCAN MANDATE: Perform an exhaustive line-by-line inventory of the transcript BEFORE mapping to JSON schemas. You must execute a 2-step mental process during reasoning:
+1. Inventory Pass: Scan every utterance and identify ALL distinct statements of worker actions, competencies, and system workflows.
+2. Multi-Standard Assignment: Evaluate each identified statement against ALL candidate standards (CQC Quality Statements, Care Certificate, Custom Standards). A single utterance can and SHOULD map to multiple standards if relevant. Do NOT stop after assigning a statement to a single standard.
 
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
 {
@@ -992,6 +1008,7 @@ async def analyze_custom_only(transcript_text: str, doc: dict) -> list:
     criteria_ctx = "\n".join([f"  - {c['ref']}: {c['name']} — {c.get('description', '')}" for c in criteria])
     system = """Map evidence from a meeting transcript against provided criteria.
 Evidence includes described practice ("I always do X"), explained reasoning ("I did it because..."), manager-confirmed observations, and identified learning needs. You do NOT require the criterion to be named explicitly — map based on what participants describe doing or understanding.
+CRITICAL SCAN MANDATE: Perform an exhaustive line-by-line inventory of the transcript BEFORE mapping to JSON. First identify every distinct statement of worker action or competency, then evaluate each against ALL provided criteria — a single statement can map to multiple criteria if relevant.
 Return valid JSON only:
 {"mappings": [{"id": "custom_n", "document_id": "the document_id value", "document_name": "doc name", "criterion_ref": "ref", "criterion_name": "name", "evidence_summary": "brief description", "transcript_excerpt": "exact quote", "confidence": "likely_evidence|possible_evidence"}]}
 Only include criteria with actual evidence. Return empty mappings array if nothing found.
@@ -1180,7 +1197,7 @@ async def generate_meeting_summary(transcript_text: str, manager_name: str = "",
         + "\n".join(attendee_lines) + "\n\n"
     ) if attendee_lines else ""
     user_prompt = f"{attendee_context}Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
-    result = await _ai_chat("o4-mini", SUMMARY_ONLY_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="medium")
+    result = await _ai_chat("o4-mini", SUMMARY_ONLY_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="medium", warm=True)
     return _apply_uk_language(result)
 
 
@@ -1188,6 +1205,10 @@ DOC_EVIDENCE_SYSTEM_PROMPT = _PROMPT_INJECTION_GUARD + """You are a compliance e
 Analyse this supervision document to identify evidence of worker competency and organisational compliance with CQC regulations, Care Certificate standards, and any additional custom standards provided.
 
 Evidence is present when the document contains descriptions of practice, explained reasoning, manager observations, or identified learning needs — not only when standards are cited by name. A written record stating a worker "demonstrates safe medication management" or "explained her approach to consent" is direct competency evidence.
+
+CRITICAL SCAN MANDATE: Perform an exhaustive line-by-line inventory of the document BEFORE mapping to JSON schemas. You must execute a 2-step mental process during reasoning:
+1. Inventory Pass: Scan every passage and identify ALL distinct statements of worker actions, competencies, and system workflows.
+2. Multi-Standard Assignment: Evaluate each identified statement against ALL candidate standards (CQC Quality Statements, Care Certificate, Custom Standards). A single passage can and SHOULD map to multiple standards if relevant. Do NOT stop after assigning a statement to a single standard.
 
 Your output must be valid JSON only (no markdown, no extra text) in this exact structure:
 {
@@ -2233,7 +2254,7 @@ FINAL CHECKS BEFORE GENERATING:
 - All questions must be open-ended and behavioural. Generate them now."""
 
     try:
-        data = await _ai_chat_json("o4-mini", system_prompt, user_prompt, reasoning_effort="high")
+        data = await _ai_chat_json("o4-mini", system_prompt, user_prompt, reasoning_effort="high", warm=True)
         # Validate / fill IDs
         seen_ids: set = set()
         for section in data.get("sections", []):
@@ -2321,7 +2342,7 @@ Transcript:
 Find the transcript excerpt evidencing this risk and provide resolution suggestions."""
 
     try:
-        data = await _ai_chat_json("gpt-4o", system_prompt, user_prompt)
+        data = await _ai_chat_json("gpt-4o", system_prompt, user_prompt, warm=True)
         result = {
             "transcript_excerpt": data.get("transcript_excerpt", ""),
             "suggested_resolutions": data.get("suggested_resolutions", []),
