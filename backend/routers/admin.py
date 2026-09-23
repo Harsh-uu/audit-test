@@ -1044,7 +1044,7 @@ async def get_people_stats(current_user=Depends(get_current_user)):
     async with database.with_org(org_id) as conn:
         user_rows = await conn.fetch(
             """SELECT id, name, email, role, team_id, setting_id,
-                      is_active, must_change_password, created_at
+                      is_active, mfa_enabled, must_change_password, created_at
                FROM users WHERE org_id=$1 ORDER BY name""",
             org_id,
         )
@@ -1101,6 +1101,7 @@ async def get_people_stats(current_user=Depends(get_current_user)):
             "setting_id": str(u["setting_id"]) if u["setting_id"] else None,
             "setting_name": setting_map.get(str(u["setting_id"] or ""), ""),
             "is_active": u["is_active"],
+            "mfa_enabled": bool(u["mfa_enabled"]),
             "pending_invite": bool(u["must_change_password"]),
             "created_at": str(u["created_at"] or "")[:10],
             "meeting_count": meeting_count,

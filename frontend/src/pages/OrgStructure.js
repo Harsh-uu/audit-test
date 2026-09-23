@@ -5,9 +5,10 @@ import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import Layout from "@/components/Layout";
+import { EditUserModal } from "@/components/admin/EditUserModal";
 import {
   Building2, Users, ChevronRight, ChevronDown, Plus, Edit2, Trash2, X, Check,
-  MapPin, UserCog, Loader2, AlertCircle, CheckCircle, Pencil, KeyRound,
+  MapPin, UserCog, Loader2, AlertCircle, CheckCircle, Pencil,
   GripVertical, UserPlus, Search, UserCheck, Layers,
 } from "lucide-react";
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -141,7 +142,6 @@ export default function OrgStructure({ embedded = false }) {
 
   // Saving states
   const [saving, setSaving] = useState(false);
-  const [savingUser, setSavingUser] = useState(false);
   const [savingInvite, setSavingInvite] = useState(false);
 
   // People pool search
@@ -154,14 +154,10 @@ export default function OrgStructure({ embedded = false }) {
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [showInviteUser, setShowInviteUser] = useState(false);
-  const [showPwdReset, setShowPwdReset] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
 
   // Forms
   const [settingForm, setSettingForm] = useState({ name: "", description: "", manager_user_id: "" });
   const [teamForm, setTeamForm] = useState({ name: "", description: "", supervisor_user_id: "" });
-  const [editUserForm, setEditUserForm] = useState({});
-  const [editUserError, setEditUserError] = useState("");
   const [inviteForm, setInviteForm] = useState({ name: "", email: "", password: "", role: "attendee" });
   const [inviteError, setInviteError] = useState("");
 
@@ -298,30 +294,18 @@ export default function OrgStructure({ embedded = false }) {
   };
 
   // ── User management ────────────────────────────────────────────────────────
+  // Structure tree's member/unassigned-user rows are a trimmed subset (id/name/
+  // email/role only) — look up the full record (mfa_enabled, team_id, etc.) from
+  // allUsers so the shared EditUserModal has everything it needs, same as PeopleHub.
   const openEditUser = (u) => {
-    setEditingUser(u);
-    setEditUserForm({ name: u.name, email: u.email, role: u.role, is_active: u.is_active !== false, mfa_enabled: Boolean(u.mfa_enabled) });
-    setEditUserError("");
-    setShowPwdReset(false);
-    setNewPassword("");
+    const full = allUsers.find(au => au.id === u.id) || u;
+    setEditingUser(full);
   };
 
-  const saveEditUser = async () => {
-    if (!editUserForm.name?.trim()) return setEditUserError("Name is required");
-    if (!editUserForm.email?.trim()) return setEditUserError("Email is required");
-    if (showPwdReset && newPassword && newPassword.length < 10) return setEditUserError("Password must be at least 10 characters");
-    setSavingUser(true);
-    setEditUserError("");
-    try {
-      await axios.put(`${API}/admin/users/${editingUser.id}`, editUserForm, getAuthConfig());
-      if (showPwdReset && newPassword.trim()) {
-        await axios.post(`${API}/admin/users/${editingUser.id}/reset-password`, { new_password: newPassword }, getAuthConfig());
-      }
-      await refreshData();
-      flash("User updated");
-      setEditingUser(null);
-    } catch (err) { setEditUserError(err.response?.data?.detail || "Failed to save"); }
-    setSavingUser(false);
+  const onUserSaved = async () => {
+    await refreshData();
+    flash("User updated");
+    setEditingUser(null);
   };
 
   const inviteUser = async () => {
@@ -861,65 +845,14 @@ export default function OrgStructure({ embedded = false }) {
 
         {/* Edit User */}
         {editingUser && (
-          <Modal title={`Edit — ${editingUser.name}`} onClose={() => setEditingUser(null)}>
-            <div className="space-y-3">
-              <FormField label="Full name">
-                <input value={editUserForm.name} onChange={e => setEditUserForm(f => ({ ...f, name: e.target.value }))} className={inputCls} data-testid="edit-user-name" />
-              </FormField>
-              <FormField label="Email address">
-                <input type="email" value={editUserForm.email} onChange={e => setEditUserForm(f => ({ ...f, email: e.target.value }))} className={inputCls} data-testid="edit-user-email" />
-              </FormField>
-              <FormField label="Role">
-                <select value={editUserForm.role} onChange={e => setEditUserForm(f => ({ ...f, role: e.target.value }))} className={selectCls} data-testid="edit-user-role">
-                  {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-              </FormField>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="edit-user-active" checked={editUserForm.is_active} onChange={e => setEditUserForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4 accent-[#1E3A8A]" data-testid="edit-user-active" />
-                <label htmlFor="edit-user-active" className="text-sm text-gray-700 cursor-pointer">{editUserForm.is_active ? "Active" : "Inactive"}</label>
-              </div>
-              {(editUserForm.role === "admin" || editUserForm.role === "manager") && (
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id="edit-user-mfa" checked={Boolean(editUserForm.mfa_enabled)} onChange={e => setEditUserForm(f => ({ ...f, mfa_enabled: e.target.checked }))} className="w-4 h-4 accent-[#1E3A8A]" data-testid="edit-user-mfa" />
-                  <label htmlFor="edit-user-mfa" className="text-sm text-gray-700 cursor-pointer">
-                    Two-Factor Authentication (2FA)
-                  </label>
-                  {Boolean(editUserForm.mfa_enabled) && (
-                    <span className="text-xs text-emerald-600 font-medium">Enabled</span>
-                  )}
-                </div>
-              )}
-              <div className="pt-2 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => { setShowPwdReset(p => !p); setNewPassword(""); }}
-                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors"
-                  data-testid="toggle-reset-password"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  {showPwdReset ? "Cancel password change" : "Reset password"}
-                  <ChevronDown className={`w-3 h-3 transition-transform ${showPwdReset ? "rotate-180" : ""}`} />
-                </button>
-                {showPwdReset && (
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
-                    placeholder="New password (min. 8 chars)"
-                    className={`mt-2 ${inputCls}`}
-                    data-testid="new-password-input"
-                  />
-                )}
-              </div>
-              {editUserError && <p className="text-xs text-red-600" data-testid="edit-user-error">{editUserError}</p>}
-              <div className="flex gap-2 pt-1">
-                <button onClick={saveEditUser} disabled={savingUser} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-edit-user-btn">
-                  <Check className="w-3.5 h-3.5" />{savingUser ? "Saving…" : "Save"}
-                </button>
-                <button onClick={() => setEditingUser(null)} className="border border-gray-300 text-gray-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50">Cancel</button>
-              </div>
-            </div>
-          </Modal>
+          <EditUserModal
+            person={editingUser}
+            onClose={() => setEditingUser(null)}
+            onSaved={onUserSaved}
+            API={API}
+            getAuthConfig={getAuthConfig}
+            currentUserRole={currentUser?.role}
+          />
         )}
 
       </div>{/* end main content */}
