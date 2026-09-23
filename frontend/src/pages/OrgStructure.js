@@ -202,8 +202,11 @@ function MemberRow({ m, teamId, teams, canManage, statsByUser, viewing, onView, 
         <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-50 group/member" data-testid={`member-${m.id}`}>
           <Avatar name={m.name} />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-gray-900 truncate">{m.name}</p>
-            <RoleBadge role={m.role} />
+            <p className="text-xs font-medium text-gray-900 truncate">{m.name || "Unnamed user"}</p>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <RoleBadge role={m.role} />
+              {m.email && <span className="text-[10px] text-gray-400 truncate">{m.email}</span>}
+            </div>
           </div>
           {canManage && (
             <DropdownMenu>
@@ -213,7 +216,7 @@ function MemberRow({ m, teamId, teams, canManage, statsByUser, viewing, onView, 
                   data-testid={`member-menu-${m.id}`}
                 ><MoreVertical className="w-3.5 h-3.5" /></button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40 text-sm">
+              <DropdownMenuContent align="end" className="w-40 text-sm" onCloseAutoFocus={(e) => e.preventDefault()}>
                 <DropdownMenuItem onClick={onView} data-testid={`member-view-${m.id}`}>
                   <Eye className="w-3.5 h-3.5" /> View
                 </DropdownMenuItem>

@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only regression on rewritten OrgStructure.js Master-Detail layout. 11/12 tested flows pass. Layout, testids, master-detail selection, member '...' menu (View/Move/Edit), Move-to submenu with Unassign, invite modal scoped team-select, disabled+tooltip Add User for zero-team settings, amber unassigned banner + Manage modal (no Unassign item), optimistic move w/ persistence after reload, Add Setting/Add Team modals, People & Usage + Invites tabs — all working. NO drag-and-drop artefacts remain (0 draggable elements). ONE critical bug: 'View' profile popover briefly renders then auto-closes ~300-700ms later before the user can read it (dropdown-close event triggers Popover onInteractOutside → onOpenChange(false)).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "OrgStructure.js MemberRow — View action",
+        "issue": "Clicking 'View' in the '...' menu opens the profile popover but Radix DropdownMenu's close/focus-return event fires an onInteractOutside on the Popover, immediately closing it (~300-700ms). Popover DOM was verified present at 100ms & 300ms after click, then removed at 700ms without user interaction. Same result via mouse click AND keyboard Enter on the menu item. Net effect: View feature is unusable — popover flashes and disappears.",
+        "selector": "[data-testid^=\"member-view-\"] → [data-testid^=\"member-view-popover-\"]",
+        "priority": "HIGH",
+        "suggested_fix": "Any ONE of: (a) call setViewingUserId inside setTimeout(fn, 0) in onView so the state update runs after Radix menu-close focus events settle; (b) add onCloseAutoFocus={(e)=>e.preventDefault()} to <DropdownMenuContent>; (c) add onInteractOutside on <PopoverContent> that ignores events whose target is inside a [data-radix-menu-content] ancestor; (d) restructure so Popover trigger is not a sibling under the same DropdownMenu subtree."
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Team card / member row",
+       "issues": ["Member with empty name renders as a bare '-' with no email visible in row (email is hidden because MemberRow shows only name + RoleBadge). Consider fallback 'Unnamed user' + always show email as secondary line for staff without a name — currently the row is visually confusing."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "FIX (HIGH): 'View' profile popover auto-closes immediately after opening. See suggested_fix in ui_bugs above — option (b) `onCloseAutoFocus={e=>e.preventDefault()}` on <DropdownMenuContent> is the smallest change and is the standard Radix workaround for exactly this menu→popover interaction.",
+    "MINOR: Add a display fallback for members with blank names in <MemberRow> (currently renders '-')."
+  ],
+  "critical_code_review_comments": [
+    "OrgStructure.js is 913 lines — approaching the 700-line split threshold. Consider extracting MemberRow, TeamCard, ViewProfileCard, and the various Modals into separate files under /components/org/ for maintainability.",
+    "Popover open state is controlled by a single top-level `viewingUserId`; every MemberRow subscribes to it. Fine functionally but couples all rows to re-render on view toggle — acceptable at current scale.",
+    "The move optimistic update (moveUserInStructure) is nicely pure and includes revert-on-failure per prior sessions — verified working end-to-end (banner count 8→9 on unassign, persisted after reload)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested per request)", "frontend": "91% (11/12 flows pass; View popover flow fails)"},
+  "test_credentials": "admin@supervision.com / Admin123!X (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Used existing fixtures. Test performed a real unassign+reassign of user 9b162554-2603-4e90-a508-046bba24958a in Iter159 Setting A / Iter159 Team A — reassigned back so state is restored.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All Master-Detail flows verified except View popover. If retesting, key assertion: click [data-testid^=member-menu-] → click [data-testid^=member-view-] → wait 1500ms → [data-testid^=member-view-popover-] MUST still be visible. Currently it renders at ~100ms then disappears by ~700ms. Reproduces 100% of the time on desktop 1920x1080. Test user with menu in Iter159 Setting A. Note: frontend runs `vite build && vite preview`, so after E1 fixes, `sudo supervisorctl restart frontend` will trigger a ~20-30s rebuild before change is live.",
+  "rca_of_the_issue": "View popover premature close — RCA: Radix DropdownMenu on close (after clicking an item) restores focus to its trigger button, which fires a focus/pointerdown-like event in the same tick that the Popover just opened. Radix Popover's onInteractOutside detector interprets this as an outside interaction and calls onOpenChange(false); our controlled handler `onOpenChange={(o)=>{ if(!o) onCloseView(); }}` then resets viewingUserId to null → Popover unmounts. Confirmed by observing the popover DOM node exists for 100-300ms then is removed by 700ms with no user input. Mitigation: prevent the menu-close focus event from being seen as outside interaction (see suggested fixes)."
+}
