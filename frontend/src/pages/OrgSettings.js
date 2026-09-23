@@ -3,12 +3,13 @@ import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield, Mic } from "lucide-react";
+import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield, Mic, History } from "lucide-react";
 import { TemplateTab } from "@/components/admin/TemplateTab";
 import { ExportTab } from "@/components/admin/ExportTab";
 import { BrandingTab } from "@/components/admin/BrandingTab";
 import { TranscriptExportTab } from "@/components/admin/TranscriptExportTab";
 import { DownloadAudioTab } from "@/components/admin/DownloadAudioTab";
+import { ActivityLogTab } from "@/components/admin/ActivityLogTab";
 import { toast } from "sonner";
 
 function FocusTopicsTab({ API, getAuthConfig }) {
@@ -327,6 +328,7 @@ function TabBtn({ active, onClick, children }) {
 export default function OrgSettings({ embedded = false }) {
   const { getAuthConfig, API, user, updateMfaStatus } = useAuth();
   const canBrand = user?.role === "admin" || user?.role === "manager";
+  const isAdmin = user?.role === "admin";
   const [tab, setTab] = useState(user?.role === "manager" ? "security" : "template");
   const [message, setMessage] = useState("");
   const [error, setError]     = useState("");
@@ -513,6 +515,11 @@ export default function OrgSettings({ embedded = false }) {
               <Mic className="w-3.5 h-3.5" />Download Audio
             </TabBtn>
           )}
+          {isAdmin && (
+            <TabBtn active={tab === "activity"} onClick={() => setTab("activity")}>
+              <History className="w-3.5 h-3.5" />Activity Log
+            </TabBtn>
+          )}
           <TabBtn active={tab === "focus"} onClick={() => setTab("focus")}>
             <Target className="w-3.5 h-3.5" />Focus Topics
           </TabBtn>
@@ -580,6 +587,8 @@ export default function OrgSettings({ embedded = false }) {
         {tab === "branding" && canBrand && <BrandingTab />}
 
         {tab === "audio" && canBrand && <DownloadAudioTab />}
+
+        {tab === "activity" && isAdmin && <ActivityLogTab />}
 
         {tab === "focus" && <FocusTopicsTab API={API} getAuthConfig={getAuthConfig} />}
 

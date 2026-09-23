@@ -209,7 +209,7 @@ async def delete_user(user_id: str, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         u = await conn.fetchrow(
-            "SELECT id, role, team_id, setting_id, must_change_password FROM users WHERE id=$1 AND org_id=$2",
+            "SELECT id, name, email, role, team_id, setting_id, must_change_password FROM users WHERE id=$1 AND org_id=$2",
             user_id, org_id,
         )
         if not u:
@@ -225,9 +225,13 @@ async def delete_user(user_id: str, current_user=Depends(get_current_user)):
         if u["must_change_password"]:
             # Pending invite — safe to delete entirely
             await conn.execute("DELETE FROM users WHERE id=$1", user_id)
+            await _audit(conn, None, org_id, "invite_revoked", current_user["id"], current_user.get("name", ""),
+                         f"Revoked pending invite for {u['name']} ({u['email']})")
         else:
             # Active user — just deactivate
             await conn.execute("UPDATE users SET is_active=FALSE WHERE id=$1", user_id)
+            await _audit(conn, None, org_id, "user_deactivated", current_user["id"], current_user.get("name", ""),
+                         f"Deactivated {u['name']} ({u['email']})")
     return {"message": "User removed"}
 
 
@@ -253,7 +257,7 @@ async def hard_delete_user(user_id: str, current_user=Depends(get_current_user))
         raise HTTPException(400, "You cannot delete your own account")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        target = await conn.fetchrow("SELECT id, name, is_active FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
+        target = await conn.fetchrow("SELECT id, name, email, is_active FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
         if not target:
             raise HTTPException(404, "User not found")
         if target["is_active"]:
@@ -291,6 +295,8 @@ async def hard_delete_user(user_id: str, current_user=Depends(get_current_user))
         await conn.execute("DELETE FROM schedules WHERE staff_user_id=$1", user_id)
         await conn.execute("DELETE FROM invitations WHERE user_id=$1", user_id)
         await conn.execute("DELETE FROM users WHERE id=$1", user_id)
+        await _audit(conn, None, org_id, "user_hard_deleted", current_user["id"], current_user.get("name", ""),
+                     f"Permanently deleted {target['name']} ({target['email']}) — {len(meeting_ids)} meeting(s) removed")
 
     for path in audio_paths:
         try:
@@ -304,6 +310,29 @@ async def hard_delete_user(user_id: str, current_user=Depends(get_current_user))
             logger.error(f"Failed to delete document from storage during hard-delete of user {user_id}: path={path} error={e}")
 
     return {"message": "User permanently deleted", "meetings_deleted": len(meeting_ids)}
+
+
+@router.get("/activity-log")
+async def get_activity_log(current_user=Depends(get_current_user)):
+    """Org-wide staff lifecycle activity (Deactivate/Hard Delete/invite revocations).
+    Admin only. Distinct from the per-meeting Audit Trail tab — these events aren't
+    tied to a single meeting, so they're stored with meeting_id=NULL and surfaced
+    on their own 'Activity Log' tab in Organisation Settings instead."""
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        rows = await conn.fetch(
+            """SELECT id, action, user_name, detail, timestamp FROM audit_logs
+               WHERE org_id=$1 AND meeting_id IS NULL
+               ORDER BY timestamp DESC LIMIT 200""",
+            org_id,
+        )
+    return [
+        {"id": r["id"], "action": r["action"], "actor_name": r["user_name"],
+         "detail": r["detail"], "timestamp": str(r["timestamp"] or "")}
+        for r in rows
+    ]
 
 
 

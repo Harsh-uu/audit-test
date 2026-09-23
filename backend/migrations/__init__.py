@@ -40,6 +40,7 @@ from . import (
     m029_eula_sept_update,
     m030_ai_provider_tracking,
     m031_ai_provider_initial_scan,
+    m032_audit_logs_nullable_meeting,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ MIGRATIONS = [
     m029_eula_sept_update,
     m030_ai_provider_tracking,
     m031_ai_provider_initial_scan,
+    m032_audit_logs_nullable_meeting,
 ]
 
 
