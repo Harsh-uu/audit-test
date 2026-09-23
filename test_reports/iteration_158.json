@@ -1,0 +1,38 @@
+{
+  "summary": "Shared EditUserModal mini-project — tested backend (5/5 pytest passing) + frontend E2E via Playwright on both People & Usage and Structure tabs of /organisation. Confirmed all field-parity fixes (Team dropdown now on Structure-tab modal, MFA toggle now on People-tab modal for admin/manager, MFA hidden for attendee) work correctly, save+persistence+re-open round-trips correctly, password validation still gates <10 chars, org/structure remains healthy. Found ONE bug: cross-tab cache sync is only half-wired — invalidateCache is called but PeopleHub does not reload when a save happens on the embedded Structure tab.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Cross-tab cache sync (Structure-tab save → People-tab stale)",
+        "issue": "When Edit User is saved from the Structure tab (embedded OrgStructure), the shared EditUserModal calls invalidateCache('/admin/users','/org/structure','/admin/people-stats') and OrgStructure's onUserSaved runs refreshData() — but PeopleHub's people state (from /admin/people-stats) is NOT re-fetched. Switching back to the People & Usage tab still shows the stale team name for the edited user (e.g. Demo User moved ONE→TWO on Structure tab still shows 'ONE' in People tab table) until the user clicks the manual Refresh button. Symmetric direction (People-tab save → Structure) works because OrgStructure re-mounts on tab switch (conditional render) whereas PeopleHub's people state is at the parent level and only load()'s on mount / manual refresh. Explicitly one of the acceptance criteria in the review request.",
+        "affected_selectors": ["people-tab-people", "people-row-*", "edit-user-modal"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_shared_edit_user.py",
+    "/app/test_reports/pytest/shared_edit_user.xml"
+  ],
+  "action_items": [
+    "Fix cross-tab sync: in PeopleHub.js, expose a way to trigger `load()` after a save that happens inside the embedded <OrgStructure/>. Cleanest fix: pass an `onUserChanged` prop into <OrgStructure embedded onUserChanged={load} /> and have OrgStructure call it inside its `onUserSaved` (in addition to refreshData). Alternative: subscribe PeopleHub to a lightweight window event dispatched by EditUserModal on save (e.g. `window.dispatchEvent(new Event('users-updated'))`) so any listener refreshes. Third option: switch PeopleHub's data fetch to react-query with automatic revalidation on cache invalidation."
+  ],
+  "critical_code_review_comments": [
+    "EditUserModal.js: `cachedGet('/org/structure')` is fired inside a useEffect with empty deps — if the modal mounts before the org/structure network request completes, the Team dropdown momentarily shows only the placeholder option. Not a functional bug (dropdown fills in ~200ms), but consider skeleton state or default value binding via useMemo.",
+    "EditUserModal.js line 71: PATCH `/org/users/{userId}/assign-team` runs conditionally when selectedTeam changes, but if the PUT/reset-password succeeds and this PATCH fails, cache is not invalidated (the invalidateCache line is after the try body's happy path but before the catch). Consider putting invalidateCache in a `finally` block or after each individual call so partial success still refreshes caches.",
+    "EditUserModal.js: `person.team_id` — PeopleHub rows key on `user_id`, and /admin/people-stats returns `team_id` (verified). Structure-tab rows key on `id`. Both handled correctly, but a small comment on the modal noting the two shape sources would help future readers.",
+    "OrgStructure.js openEditUser: uses `allUsers.find(au => au.id === u.id) || u` — falls back to the trimmed structure object if the user isn't in allUsers (e.g. race on initial load). The trimmed object lacks `mfa_enabled` → MFA toggle would default to false silently. Low risk, but log/refresh if not found."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_shared_edit_user.py (new)"
+  ],
+  "success_rate": { "backend": "100% (5/5)", "frontend": "87% (7/8 test cases; cross-tab sync failed)" },
+  "test_credentials": "admin@supervision.com / Admin123!X (used, working end-to-end)",
+  "seed_data_creation": "None — used existing Demo Manager (465c5101…) and Demo User (831bdaef…) test users; all mutations restored to original state at end of run.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The shared modal itself is field-complete and behaves correctly on both tabs. The only outstanding bug is a data-refresh gap between PeopleHub and its embedded <OrgStructure>: saves inside Structure tab do not trigger PeopleHub's /admin/people-stats re-fetch. Once fixed, re-run the People-tab team column verification: on Structure tab move Demo User ONE→TWO, switch to People tab, assert row text contains 'TWO'. Also re-verify the /admin/people-stats mfa_enabled field and the pytest suite at /app/backend/tests/test_shared_edit_user.py (all 5 currently passing). Note that `people-menu-{id}` in the People tab is NOT a dropdown — it directly opens the edit modal (that's expected/correct, no dropdown UX regression). Regression check on drag-and-drop, Add Setting/Team, Invites, Settings sub-tab was NOT re-executed in this run (out of scope for the token budget) — safe to defer to next iteration given no touchpoints in the diff.",
+  "rca of the issue": "Cross-tab sync gap RCA: PeopleHub.js keeps `people` in local state, populated by `load()` (calls cachedGet /admin/people-stats) in a useEffect on mount. The Structure sub-tab is rendered via `<OrgStructure embedded />` inside PeopleHub's conditional render, so it mounts/unmounts on tab switch, but PeopleHub itself does not remount. When the shared EditUserModal saves from within OrgStructure, it invalidates the /admin/people-stats cache and OrgStructure's onUserSaved re-fetches /admin/users + /org/structure — but nothing tells the parent PeopleHub to re-run load(). Consequently, on switching back to the People tab, PeopleTab re-renders with the pre-edit `people` array and shows stale team names. Reproduction: (1) login admin, (2) Structure tab → edit Demo User → change Team ONE→TWO → Save, (3) click People & Usage tab, (4) assert Demo User's Team column reads 'TWO' — actually reads 'ONE'. Mitigation: propagate a callback prop (`onUserChanged`) from PeopleHub down to embedded OrgStructure, invoke inside its onUserSaved."
+}

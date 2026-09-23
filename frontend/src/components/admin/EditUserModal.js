@@ -70,12 +70,16 @@ export function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, cu
       if (selectedTeam !== (person.team_id || "")) {
         await axios.patch(`${API}/org/users/${userId}/assign-team`, { team_id: selectedTeam || null }, getAuthConfig());
       }
-      invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
       onSaved();
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to save");
+    } finally {
+      // Always invalidate — even a partial failure (e.g. PUT succeeded but the
+      // team PATCH failed) may have changed persisted state, so stale caches
+      // must not survive regardless of which step threw.
+      invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   return (

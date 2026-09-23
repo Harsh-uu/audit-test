@@ -122,7 +122,7 @@ const selectCls = `${inputCls} bg-white`;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function OrgStructure({ embedded = false }) {
+export default function OrgStructure({ embedded = false, onUserChanged }) {
   const { getAuthConfig, API, user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === "admin";
   const canManage = ["admin", "manager"].includes(currentUser?.role);
@@ -306,6 +306,11 @@ export default function OrgStructure({ embedded = false }) {
     await refreshData();
     flash("User updated");
     setEditingUser(null);
+    // Structure tab is embedded inside PeopleHub, which keeps its own
+    // /admin/people-stats-backed state (People & Usage tab) — that parent
+    // state doesn't refetch on its own just because we refreshed here, so
+    // notify it explicitly to avoid showing stale team/role data.
+    onUserChanged?.();
   };
 
   const inviteUser = async () => {

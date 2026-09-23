@@ -30,7 +30,7 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 ## Prioritized Backlog
 
 ### P0 / P1
-None open.
+- Organisation UX overhaul — user reviewing proposal, deciding which of the 5 items to tackle next (drill-down nav / whole-tree search / manager-scope-grouped dropdowns / users.setting_id denormalization fix / destructive-delete hardening for Settings)
 
 ### P2
 - Storage Reconciliation Job, Rejection Trend Alerts, Live Connection Dashboard (unchanged from prior sessions)
@@ -45,7 +45,11 @@ None open.
 - Team Themes chart tracking "Impact on Practice" answers over time (user-suggested spark, not yet built)
 - 3+ speaker (team meeting) UI verification of attendee-slot colour cycling was not exercised live (no ready fixture) — logic verified by code review only
 
+### This session (2026-09-23, cont'd) — Organisation UX deep-dive + Mini-Project 1
+- Delivered a detailed UX/data-model proposal for `OrgStructure.js`/`PeopleHub.js` (drill-down nav, whole-tree search, manager-scope-grouped dropdowns, `users.setting_id` denormalization risk, destructive-delete hardening) — **proposal only, not yet built**, awaiting user prioritisation of items 1-5 before further work.
+- **Mini-Project 1 (approved & shipped): consolidated the two duplicated "Edit User" modals.** `OrgStructure.js`'s inline modal (had MFA toggle, no Team field) and `PeopleHub.js`'s separate `EditUserModal` (had Team field, no MFA toggle) merged into one shared `frontend/src/components/admin/EditUserModal.js`, used by both. Added `mfa_enabled` to `GET /admin/people-stats` response (1-line additive, was missing — root cause of the field-parity gap). `OrgStructure.js`'s `openEditUser` now sources the full user record from its already-loaded `allUsers` (from `/admin/users`) instead of the trimmed structure-tree object. `EditUserModal`'s save always invalidates all 3 relevant caches (`/admin/users`, `/org/structure`, `/admin/people-stats`) in a `finally` block (even on partial failure). Testing agent found 1 bug (iteration_158.json): cross-tab cache sync gap — saving from the embedded Structure tab didn't refresh PeopleHub's parent-level `/admin/people-stats` state. Fixed via a new `onUserChanged` prop threaded from `PeopleHub` → `<OrgStructure embedded onUserChanged={handleRefresh} />` → called inside `OrgStructure`'s `onUserSaved`. Re-verified via live screenshot: Structure-tab team reassignment now shows correctly on People tab without manual refresh, no page reload needed. Test data (Demo User's team) restored to original state after verification.
+
 ## Testing Status
-- Test reports: `/app/test_reports/iteration_149.json` through `iteration_155.json`
+- Test reports: `/app/test_reports/iteration_149.json` through `iteration_158.json`
 - Known regressions: None
 - Credentials: `/app/memory/test_credentials.md` (manager@supervision.com password was reset this session via Supabase Auth)

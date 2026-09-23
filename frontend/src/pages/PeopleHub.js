@@ -451,7 +451,7 @@ export default function PeopleHub() {
           )}
           {tab === "structure" && (
             <div className="overflow-y-auto flex-1">
-              <OrgStructure embedded />
+              <OrgStructure embedded onUserChanged={handleRefresh} />
             </div>
           )}
           {tab === "invites" && (
