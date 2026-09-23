@@ -1,0 +1,22 @@
+{
+  "summary": "Verified new mandatory 'Impact on Practice' (section_id='practice_impact') section in AI prep agenda. 8/8 backend pytest cases pass — 3 context-rich LLM generations, 1 blank-slate generation, 1 regression (all 6 standard + aob + bonus + practice_impact present), 1 fallback-injection test (monkeypatched LLM to omit practice_impact — safety net injects it), and 2 full HTTP pipeline tests (login → POST /generate → poll GET /prep). Frontend rendering verified on preview URL: distinct teal-styled card appears between 'Any Other Business' and the amber bonus card, with '1/1 included' toggle, editable/deletable questions, and 'Add question' button. Ordering confirmed correct. All 8 section labels visible. No regressions to standard sections.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_practice_impact_prep.py",
+    "/app/test_reports/pytest/practice_impact.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "utils/ai.py has grown to 2394 lines — consider splitting prep-question generation, analysis, and coverage-check functions into separate modules for maintainability (soft warning; not blocking).",
+    "The fallback-injected question in generate_prep_questions() doesn't set 'included': True explicitly, but the validate loop right below (line 2299-2306) does via q.setdefault('included', True) — verified working; keep as-is."
+  ],
+  "updated_files": ["/app/backend/tests/test_practice_impact_prep.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all section labels + teal card + ordering + editable controls verified)"},
+  "test_credentials": "admin@supervision.com / Admin123!X",
+  "seed_data_creation": "None; used existing fixture meeting a8527134-cb7c-42d3-8d82-a4cffc523f55 with 5 pre-loaded TEST_ docs.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_practice_impact_prep.py can be reused for regression. Requires REACT_APP_BACKEND_URL exported in env and pytest -o addopts='' to disable xdist parallelism (which pytest.ini adds and confuses monkeypatched module state). The direct-invocation tests need /app/backend/.env loaded (dotenv is loaded inside the test file, so no shell env needed for OPENAI_API_KEY).",
+  "rca of the issue": "N/A — this was a feature verification, not a bug hunt. Feature confirmed working end-to-end."
+}
