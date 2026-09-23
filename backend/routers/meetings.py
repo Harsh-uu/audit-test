@@ -561,86 +561,116 @@ async def get_meetings_page_data(
     return {"meetings": meetings, "month_summary": month_summary, "org_structure": org_structure}
 
 
-@router.get("/{meeting_id}")
-async def get_meeting(meeting_id: str, current_user=Depends(get_current_user)):
+async def _get_meeting_data(meeting_id: str, current_user: dict, conn) -> dict:
+    """Does every read for GET /{meeting_id} on a single already-open connection
+    (meeting row, access check, transcript, analysis, comments, attendee-email
+    enrichment) — see get_meeting()'s docstring for why this used to be 2
+    separate with_org()/with_admin() blocks (~10-12 round trips) and now isn't."""
     org_id = current_user.get("org_id", "")
     user_id = current_user.get("id", "")
 
-    async with database.with_org(org_id) as conn:
-        row = await conn.fetchrow(f"SELECT {_DETAIL_COLS} FROM meetings WHERE id = $1", meeting_id)
-        if not row:
-            raise HTTPException(status_code=404, detail="Meeting not found")
-        meeting = _parse_meeting_row(dict(row))
+    row = await conn.fetchrow(f"SELECT {_DETAIL_COLS} FROM meetings WHERE id = $1", meeting_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting = _parse_meeting_row(dict(row))
 
-        # Access check: attendees and shared_with reviewers can read their own meetings.
-        if current_user["role"] not in ["admin", "manager", "super_admin"]:
-            attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
-            shared_with = meeting["shared_with"]
-            is_shared_with_user = any(isinstance(s, dict) and s.get("user_id") == user_id for s in shared_with)
-            if user_id not in attendee_ids and not is_shared_with_user and user_id != meeting.get("created_by", ""):
+    # Access check: attendees and shared_with reviewers can read their own meetings.
+    if current_user["role"] not in ["admin", "manager", "super_admin"]:
+        attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
+        shared_with = meeting["shared_with"]
+        is_shared_with_user = any(isinstance(s, dict) and s.get("user_id") == user_id for s in shared_with)
+        if user_id not in attendee_ids and not is_shared_with_user and user_id != meeting.get("created_by", ""):
+            raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # SEC-002: scoped managers (team/setting level) may only read meetings
+    # where at least one participant is within their assigned scope.
+    elif current_user["role"] == "manager":
+        scope = get_manager_scope(current_user)
+        if scope["level"] != "org":
+            scoped_ids_list = await get_scoped_staff_ids(conn, org_id, scope)
+            scoped_str = {str(sid) for sid in (scoped_ids_list or [])} | {str(user_id)}
+            attendee_ids = {a.get("user_id", "") for a in meeting["attendees"]}
+            creator = str(meeting.get("created_by", ""))
+            if not (attendee_ids & scoped_str) and creator not in scoped_str:
                 raise HTTPException(status_code=404, detail="Meeting not found")
 
-        # SEC-002: scoped managers (team/setting level) may only read meetings
-        # where at least one participant is within their assigned scope.
-        elif current_user["role"] == "manager":
-            scope = get_manager_scope(current_user)
-            if scope["level"] != "org":
-                scoped_ids_list = await get_scoped_staff_ids(conn, org_id, scope)
-                scoped_str = {str(sid) for sid in (scoped_ids_list or [])} | {str(user_id)}
-                attendee_ids = {a.get("user_id", "") for a in meeting["attendees"]}
-                creator = str(meeting.get("created_by", ""))
-                if not (attendee_ids & scoped_str) and creator not in scoped_str:
-                    raise HTTPException(status_code=404, detail="Meeting not found")
+    # Attach transcript
+    if meeting.get("transcript_id"):
+        t_row = await conn.fetchrow(f"SELECT {_TRANSCRIPT_DETAIL_COLS} FROM transcripts WHERE id = $1", meeting["transcript_id"])
+        if t_row:
+            tr = dict(t_row)
+            tr["safety_warnings"] = _ensure_list(tr.get("safety_warnings"))
+            tr["speaker_colors"] = _ensure_dict(tr.get("speaker_colors"))
+            # speaker_text is the diarised view; raw text is ~50 KB and
+            # lazy-loaded on demand via GET /{id}/transcript-text.
+            if tr.get("speaker_text"):
+                tr.pop("text", None)
+            meeting["transcript"] = tr
 
-        # Attach transcript
-        if meeting.get("transcript_id"):
-            t_row = await conn.fetchrow(f"SELECT {_TRANSCRIPT_DETAIL_COLS} FROM transcripts WHERE id = $1", meeting["transcript_id"])
-            if t_row:
-                tr = dict(t_row)
-                tr["safety_warnings"] = _ensure_list(tr.get("safety_warnings"))
-                tr["speaker_colors"] = _ensure_dict(tr.get("speaker_colors"))
-                # speaker_text is the diarised view; raw text is ~50 KB and
-                # lazy-loaded on demand via GET /{id}/transcript-text.
-                if tr.get("speaker_text"):
-                    tr.pop("text", None)
-                meeting["transcript"] = tr
+    # Attach analysis
+    if meeting.get("analysis_id"):
+        a_row = await conn.fetchrow(f"SELECT {_ANALYSIS_DETAIL_COLS} FROM analyses WHERE id = $1", meeting["analysis_id"])
+        if a_row:
+            meeting["analysis"] = _parse_analysis_row(dict(a_row))
 
-        # Attach analysis
-        if meeting.get("analysis_id"):
-            a_row = await conn.fetchrow(f"SELECT {_ANALYSIS_DETAIL_COLS} FROM analyses WHERE id = $1", meeting["analysis_id"])
-            if a_row:
-                meeting["analysis"] = _parse_analysis_row(dict(a_row))
+    # Attach comments
+    c_rows = await conn.fetch(
+        "SELECT id, user_id, user_name, role, text, created_at FROM reviewer_comments WHERE meeting_id = $1 ORDER BY created_at ASC",
+        meeting_id,
+    )
+    meeting["comments"] = [dict(c) for c in c_rows]
 
-        # Attach comments
-        c_rows = await conn.fetch(
-            "SELECT id, user_id, user_name, role, text, created_at FROM reviewer_comments WHERE meeting_id = $1 ORDER BY created_at ASC",
-            meeting_id,
-        )
-        meeting["comments"] = [dict(c) for c in c_rows]
-
-    # Enrich attendee emails from live user accounts — single batch query (no N+1)
+    # Enrich attendee emails from live user accounts — single batch query (no
+    # N+1). Runs on the SAME org-scoped connection as everything above: every
+    # attendee/creator here is a member of this same org's meeting, and
+    # users_rls (m006) already scopes SELECT on `users` to app.current_org_id,
+    # so this never needed the separate RLS-bypass with_admin() pool it used
+    # to use — that was one extra ~5-6 round-trip block for no reason.
     if meeting.get("attendees"):
-        async with database.with_admin() as conn:
-            attendee_uids = [a.get("user_id") for a in meeting["attendees"] if a.get("user_id")]
-            created_by_id = meeting.get("created_by")
-            all_uids = list({uid for uid in attendee_uids + ([created_by_id] if created_by_id else [])})
+        attendee_uids = [a.get("user_id") for a in meeting["attendees"] if a.get("user_id")]
+        created_by_id = meeting.get("created_by")
+        all_uids = list({uid for uid in attendee_uids + ([created_by_id] if created_by_id else [])})
 
-            user_rows = await conn.fetch(
-                "SELECT id, email, name FROM users WHERE id = ANY($1::uuid[])", all_uids
-            ) if all_uids else []
-            user_map = {str(r["id"]): r for r in user_rows}
+        user_rows = await conn.fetch(
+            "SELECT id, email, name FROM users WHERE id = ANY($1::uuid[])", all_uids
+        ) if all_uids else []
+        user_map = {str(r["id"]): r for r in user_rows}
 
-            meeting["attendees"] = [
-                {**a, "email": user_map[a["user_id"]]["email"]}
-                if a.get("user_id") and a["user_id"] in user_map and user_map[a["user_id"]]["email"]
-                else a
-                for a in meeting["attendees"]
-            ]
+        meeting["attendees"] = [
+            {**a, "email": user_map[a["user_id"]]["email"]}
+            if a.get("user_id") and a["user_id"] in user_map and user_map[a["user_id"]]["email"]
+            else a
+            for a in meeting["attendees"]
+        ]
 
-            if created_by_id and created_by_id in user_map:
-                creator = user_map[created_by_id]
-                meeting["created_by_email"] = creator["email"]
-                meeting["created_by_name"] = meeting.get("created_by_name") or creator["name"]
+        if created_by_id and created_by_id in user_map:
+            creator = user_map[created_by_id]
+            meeting["created_by_email"] = creator["email"]
+            meeting["created_by_name"] = meeting.get("created_by_name") or creator["name"]
+
+    return meeting
+
+
+@router.get("/{meeting_id}")
+async def get_meeting(meeting_id: str, request: Request, current_user=Depends(get_current_user_conn)):
+    """PERF: was 2 separate with_org()/with_admin() blocks (~10-12 DB round
+    trips) — get_current_user_conn() already opened+authed a with_org()
+    connection for this exact org_id, so we reuse it here instead of the old
+    get_current_user() opening its own throwaway one, and the attendee-email
+    lookup runs on that same connection instead of a second with_admin()
+    block (see _get_meeting_data's comment on why with_admin() wasn't
+    actually needed for that query). This was the main source of the
+    multi-second delay before the meeting title/header render on
+    RecordingScreen and the report page — each round trip pays full network
+    latency, and this endpoint was paying for it twice over."""
+    org_id = current_user.get("org_id", "")
+    user_id = current_user.get("id", "")
+    reused_conn = request.state.db_conn if request.state.db_conn_org_id == org_id else None
+    if reused_conn is not None:
+        meeting = await _get_meeting_data(meeting_id, current_user, reused_conn)
+    else:
+        async with database.with_org(org_id) as conn:
+            meeting = await _get_meeting_data(meeting_id, current_user, conn)
 
     # Apply PII redactions
     from routers.review import _apply_redactions_to_text, _apply_redactions_deep, _has_privileged_access
