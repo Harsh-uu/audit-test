@@ -1135,26 +1135,34 @@ async def scan_pii_in_transcript(transcript_text: str, attendees: list = None, m
 
         total_chunks = len(chunks)
 
-        for chunk_idx, chunk_text in enumerate(chunks):
+        async def _scan_chunk(chunk_idx, chunk_text):
             chunk_label = f" (part {chunk_idx + 1} of {total_chunks})" if total_chunks > 1 else ""
             user_prompt = (
                 f"Scan this supervision transcript for third-party PII:{participant_note}\n\n"
                 f"<transcript{chunk_label}>\n{chunk_text}\n</transcript>"
             )
-
             try:
-                ai_flags = await _ai_chat_json("gpt-4o", PII_SCAN_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt)
-                if isinstance(ai_flags, list):
-                    for flag in ai_flags:
-                        original = flag.get("original", "").strip()
-                        if original and original not in seen_originals:
-                            seen_originals.add(original)
-                            flag["id"] = str(uuid.uuid4())[:8]
-                            flag["source"] = "ai"
-                            flags.append(flag)
+                return await _ai_chat_json("gpt-4o", PII_SCAN_SYSTEM_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt)
             except Exception as e:
                 logger.error(f"AI PII scan failed (chunk {chunk_idx + 1}/{total_chunks}): {e}")
-                # Continue to next chunk — regex results still returned
+                return None
+
+        # Run all chunks CONCURRENTLY, not sequentially — a long transcript needing
+        # 2+ chunks was taking roughly N× as long as it needed to, since each chunk's
+        # AI call (plus the retry-on-transient-failure in _ai_chat) was awaited one
+        # at a time. That extra latency on very long meetings was tipping the whole
+        # request over the gateway timeout, silently failing the scan (see
+        # PostRecordingFlow.js fix for how that failure was being masked as "0 found").
+        chunk_results = await asyncio.gather(*[_scan_chunk(i, c) for i, c in enumerate(chunks)])
+        for ai_flags in chunk_results:
+            if isinstance(ai_flags, list):
+                for flag in ai_flags:
+                    original = flag.get("original", "").strip()
+                    if original and original not in seen_originals:
+                        seen_originals.add(original)
+                        flag["id"] = str(uuid.uuid4())[:8]
+                        flag["source"] = "ai"
+                        flags.append(flag)
 
     return flags
 

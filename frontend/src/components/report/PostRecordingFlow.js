@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { CheckCircle2, Loader2, Shield, ChevronRight, AlertTriangle, Sparkles, Circle } from "lucide-react";
+import { CheckCircle2, Loader2, Shield, ChevronRight, AlertTriangle, Sparkles, Circle, RefreshCw } from "lucide-react";
 
 // ── Post-Recording Processing Flow ──────────────────────────────────────
 // A single cohesive "Inline Action Stream": Upload + Transcribe collapse
@@ -91,7 +91,12 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
   useEffect(() => {
     if (!step3Active || scanStartedRef.current) return;
     scanStartedRef.current = true;
+    runScan();
+  }, [step3Active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runScan = () => {
     setScanning(true);
+    setScanError("");
     axios.post(`${API}/review/${meetingId}/scan-pii`, {}, getAuthConfig())
       .then(({ data }) => {
         const found = data.flags || [];
@@ -101,9 +106,9 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
         setSelected(sel);
         setReplacements(reps);
       })
-      .catch(() => setScanError("Scan could not complete — you can still proceed."))
+      .catch(() => setScanError("Scan could not complete — please retry rather than skipping, so this transcript is actually checked for names before you continue."))
       .finally(() => setScanning(false));
-  }, [step3Active]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
 
   const activeCount = flags.filter(f => selected[f.id]).length;
 
@@ -205,13 +210,28 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
                     <p className="text-sm font-medium text-gray-700">Scanning transcript…</p>
                     <p className="text-xs text-gray-400">Checking for names, contact details and sensitive references</p>
                   </div>
+                ) : scanError ? (
+                  <div className="flex flex-col items-center gap-2.5 py-10 text-center px-6" data-testid="pii-scan-error-state">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                      <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900">Scan could not complete</p>
+                    <p className="text-xs text-gray-500 max-w-xs">{scanError}</p>
+                    <button
+                      onClick={runScan}
+                      className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-[#1E3A8A] border border-[#1E3A8A]/30 px-3 py-1.5 rounded-md hover:bg-[#1E3A8A]/5 transition-colors"
+                      data-testid="pii-scan-retry-btn"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Retry scan
+                    </button>
+                  </div>
                 ) : flags.length === 0 ? (
                   <div className="flex flex-col items-center gap-2.5 py-10 text-center px-6">
                     <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
                       <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                     </div>
                     <p className="text-sm font-semibold text-gray-900">No issues found</p>
-                    <p className="text-xs text-gray-400 max-w-xs">{scanError || "No obvious third-party references were detected in this transcript."}</p>
+                    <p className="text-xs text-gray-400 max-w-xs">No obvious third-party references were detected in this transcript.</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-100">
@@ -264,14 +284,6 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
                         </div>
                       );
                     })}
-                  </div>
-                )}
-
-                {scanError && !scanning && flags.length > 0 && (
-                  <div className="px-4 pb-3">
-                    <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 p-2 rounded border border-red-100">
-                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />{scanError}
-                    </div>
                   </div>
                 )}
 
