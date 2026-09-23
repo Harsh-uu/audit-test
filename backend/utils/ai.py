@@ -2215,19 +2215,39 @@ MANDATORY RULES — VIOLATION OF ANY RULE MAKES THE OUTPUT USELESS:
    - Label this section exactly: "We thought you might also want to ask this"
    - Generate exactly 1 question. It should be the most insightful, surprising, or revealing question on the page.
    - If you genuinely find nothing from context, still include the section with a thoughtful forward-looking question.
+
+10. PRACTICE IMPACT — MANDATORY, not optional, and NOT tied to any standard section (the organisation may rename, reorder, or customise the standard sections above via their own template — this section always exists regardless, exactly like the bonus insight above). After the standard sections and separate from "bonus", add exactly one further section with section_id "practice_impact" and label "Impact on Practice", containing exactly 1 question. This question asks what DIFFERENCE a specific piece of learning, training, guidance, feedback, or policy has made to the supervisee's actual day-to-day practice — not whether it happened, but its effect on how they now work. This is some of the strongest CQC/Care Certificate evidence available (learning demonstrably translating into changed practice) and must appear in every prep agenda generated.
+   - Ground it in the MOST SPECIFIC named input available from context — a completed training course, feedback given in a previous meeting, a named policy/procedure, a JD-required competency, or the focus topic. Name that thing explicitly in the question.
+   - Example: "What difference has the recent moving and handling refresher made to how you support Mrs Jones with transfers?"
+   - Example: "What difference has the feedback about handover notes from your last supervision made to your day-to-day handovers?"
+   - If nothing specific exists in context (blank slate), ask generically: "Thinking about the most useful piece of learning, guidance or feedback you've had recently — what difference has it made to how you work day to day?"
 {blank_slate_rule}
 
-SECTIONS TO POPULATE (standard sections only — bonus is always appended separately):
+SECTIONS TO POPULATE (standard sections only — practice_impact and bonus are each always appended separately, per the mandatory rules above):
 {sections_spec}
 
-Return ONLY valid JSON — no commentary, no markdown fences:
+Return ONLY valid JSON — no commentary, no markdown fences. This example shows the required shape, INCLUDING that "aob", "practice_impact" and "bonus" are three SEPARATE sections with three DIFFERENT section_ids — never merge or relabel them:
 {{
   "sections": [
     {{
-      "section_id": "<section_id>",
+      "section_id": "<standard section_id from the list above>",
       "label": "<section label>",
       "questions": [
         {{"id": "q1", "text": "<question text>", "generated": true}}
+      ]
+    }},
+    {{
+      "section_id": "aob",
+      "label": "Any Other Business",
+      "questions": [
+        {{"id": "aob_q1", "text": "<the AOB question — rule 6>", "generated": true}}
+      ]
+    }},
+    {{
+      "section_id": "practice_impact",
+      "label": "Impact on Practice",
+      "questions": [
+        {{"id": "impact_q1", "text": "<the mandatory practice-impact question — rule 10, NEVER section_id 'aob'>", "generated": true}}
       ]
     }},
     {{
@@ -2255,20 +2275,36 @@ Return ONLY valid JSON — no commentary, no markdown fences:
 FINAL CHECKS BEFORE GENERATING:
 {"- Re-read every document above. Name specific responsibilities, incidents and skills from them in your questions." if has_docs else "- Make questions specific to the focus topic and any context provided."}
 - The AOB question MUST be grounded in a real theme or concern from the context — identify it now before writing.
+- The practice_impact question (rule 10) is a SEPARATE section from AOB — identify the specific training/guidance/feedback/policy it should name before writing, and double check its section_id is "practice_impact", not "aob".
 - All questions must be open-ended and behavioural. Generate them now."""
 
     try:
         data = await _ai_chat_json("o4-mini", system_prompt, user_prompt, reasoning_effort="high", warm=True)
+        sections = data.get("sections", [])
+        # SAFETY NET: rule 10 (practice_impact) is mandatory CQC evidence and must
+        # never depend solely on the model correctly tagging it — if it's missing
+        # (e.g. the model folded it into "aob" instead of using its own section_id),
+        # inject a generic-but-always-true fallback question so it's never absent.
+        if not any(s.get("section_id") == "practice_impact" for s in sections):
+            sections.append({
+                "section_id": "practice_impact",
+                "label": "Impact on Practice",
+                "questions": [{
+                    "id": uuid.uuid4().hex[:8],
+                    "text": "Thinking about the most useful piece of learning, guidance or feedback you've had recently — what difference has it made to how you work day to day?",
+                    "generated": True,
+                }],
+            })
         # Validate / fill IDs
         seen_ids: set = set()
-        for section in data.get("sections", []):
+        for section in sections:
             for q in section.get("questions", []):
                 if not q.get("id") or q["id"] in seen_ids:
                     q["id"] = uuid.uuid4().hex[:8]
                 q.setdefault("generated", True)
                 q.setdefault("included", True)
                 seen_ids.add(q["id"])
-        return {"sections": data.get("sections", []), "gen_status": "done"}
+        return {"sections": sections, "gen_status": "done"}
     except (json.JSONDecodeError, KeyError) as exc:
         logger.error(f"Failed to parse prep questions response: {exc}\nResponse: {(getattr(exc, 'doc', '') or '')[:500]}")
         # Return empty sections so the UI can still add manual questions

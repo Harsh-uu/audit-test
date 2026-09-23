@@ -18,6 +18,7 @@ const SECTIONS = [
   { id: "learning_development", label: "Learning & Development",   color: "bg-purple-50 border-purple-200", dot: "bg-purple-400" },
   { id: "achievements",         label: "Achievements",             color: "bg-rose-50 border-rose-200",   dot: "bg-rose-400" },
   { id: "aob",                  label: "Any Other Business",       color: "bg-gray-50 border-gray-200",   dot: "bg-gray-400" },
+  { id: "practice_impact",      label: "Impact on Practice",       color: "bg-teal-50 border-teal-200",   dot: "bg-teal-400" },
   { id: "bonus",                label: "We thought you might also want to ask this", color: "bg-amber-50 border-amber-300", dot: "bg-amber-400" },
 ];
 

@@ -10,6 +10,8 @@ const SECTION_COLORS = {
   learning_development: "text-purple-600 bg-purple-50",
   achievements:         "text-rose-600 bg-rose-50",
   aob:                  "text-gray-600 bg-gray-50",
+  practice_impact:      "text-teal-600 bg-teal-50",
+  bonus:                "text-amber-700 bg-amber-50",
 };
 
 const COVERAGE_CONFIG = {
