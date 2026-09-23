@@ -41,6 +41,28 @@ def _assert_team_scope(scope: dict, team_setting_id: str, team_id: str) -> None:
         raise HTTPException(403, "Outside your management scope")
 
 
+async def _sync_user_team(conn, user_id: str, team_id: str | None) -> None:
+    """Single source of truth for keeping a team member's users.setting_id in
+    sync with users.team_id. setting_id is always DERIVED here from
+    teams.setting_id for the given team_id (NULL when team_id is NULL) —
+    never passed in as a separately-tracked value — so the two columns can
+    no longer drift apart (root cause of the "orphaned teams" / stale
+    setting_id symptom). Every write path in this file that changes a
+    regular member's team assignment must go through this helper.
+    NOTE: this is for team MEMBERSHIP only. A setting/team MANAGER's
+    authority scope (org_settings.manager_user_id / teams.supervisor_user_id)
+    is a separate concept, set directly elsewhere (create/update_setting) —
+    intentionally not touched here."""
+    setting_id = None
+    if team_id:
+        team = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", team_id)
+        setting_id = team["setting_id"] if team else None
+    await conn.execute(
+        "UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3",
+        team_id, setting_id, user_id,
+    )
+
+
 def _jdict(raw) -> dict:
     """Safely parse a JSONB column that asyncpg may return as a string."""
     if not raw:
@@ -398,7 +420,7 @@ async def create_team(setting_id: str, data: TeamCreate, current_user=Depends(ge
             team_id, org_id, setting_id, data.name.strip(), data.description or "", sup_id, now,
         )
         if sup_id:
-            await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", team_id, setting_id, sup_id)
+            await _sync_user_team(conn, sup_id, team_id)
     return {"id": team_id, "org_id": org_id, "setting_id": setting_id, "name": data.name.strip(), "description": data.description or ""}
 
 
@@ -416,11 +438,17 @@ async def update_team(team_id: str, data: TeamCreate, current_user=Depends(get_c
         _assert_team_scope(scope, dict(existing).get("setting_id"), team_id)
         old_sup = dict(existing).get("supervisor_user_id")
         if old_sup and old_sup != sup_id:
-            await conn.execute("UPDATE users SET team_id=NULL WHERE id=$1 AND team_id=$2", old_sup, team_id)
+            # BUGFIX: previously only cleared team_id, leaving setting_id stale
+            # (pointing at a team the old supervisor no longer belongs to) —
+            # this was one of the two real drift sources behind the "orphaned
+            # teams" symptom. Guard old_sup's own team_id to avoid clobbering
+            # them if they were reassigned elsewhere in the meantime.
+            row = await conn.fetchrow("SELECT team_id FROM users WHERE id=$1", old_sup)
+            if row and row["team_id"] == team_id:
+                await _sync_user_team(conn, old_sup, None)
         await conn.execute("UPDATE teams SET name=$1, description=$2, supervisor_user_id=$3 WHERE id=$4", data.name.strip(), data.description or "", sup_id, team_id)
         if sup_id:
-            setting_id = dict(existing).get("setting_id")
-            await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", team_id, setting_id, sup_id)
+            await _sync_user_team(conn, sup_id, team_id)
     return {"message": "Team updated"}
 
 
@@ -436,7 +464,10 @@ async def delete_team(team_id: str, current_user=Depends(get_current_user)):
             if not team_row:
                 raise HTTPException(404, "Team not found")
             _assert_team_scope(scope, team_row["setting_id"], team_id)
-        await conn.execute("UPDATE users SET team_id=NULL WHERE team_id=$1", team_id)
+        # BUGFIX: previously only cleared team_id, leaving members' setting_id
+        # stale (still pointing at this now-deleted team's setting) — the
+        # other real drift source behind the "orphaned teams" symptom.
+        await conn.execute("UPDATE users SET team_id=NULL, setting_id=NULL WHERE team_id=$1", team_id)
         result = await conn.execute("DELETE FROM teams WHERE id=$1", team_id)
     if result == "DELETE 0":
         raise HTTPException(404, "Team not found")
@@ -457,7 +488,7 @@ async def add_member(team_id: str, data: MemberAssign, current_user=Depends(get_
         user = await conn.fetchrow("SELECT id FROM users WHERE id=$1 AND org_id=$2", data.user_id, org_id)
         if not user:
             raise HTTPException(404, "User not found")
-        await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", team_id, team["setting_id"], data.user_id)
+        await _sync_user_team(conn, data.user_id, team_id)
     return {"message": "Member added"}
 
 
@@ -491,14 +522,14 @@ async def assign_user_to_team(user_id: str, data: TeamAssignRequest, current_use
             if not team:
                 raise HTTPException(404, "Team not found")
             _assert_team_scope(scope, team["setting_id"], data.team_id)
-            await conn.execute("UPDATE users SET team_id=$1, setting_id=$2 WHERE id=$3", data.team_id, team["setting_id"], user_id)
+            await _sync_user_team(conn, user_id, data.team_id)
         else:
             # Unassign: verify the user being unassigned is within this manager's scope
             if scope["level"] != "org":
                 target = await conn.fetchrow("SELECT setting_id FROM users WHERE id=$1", user_id)
                 if target and target["setting_id"] and target["setting_id"] != scope.get("setting_id"):
                     raise HTTPException(403, "Outside your management scope")
-            await conn.execute("UPDATE users SET team_id=NULL, setting_id=NULL WHERE id=$1", user_id)
+            await _sync_user_team(conn, user_id, None)
     return {"ok": True}
 
 
