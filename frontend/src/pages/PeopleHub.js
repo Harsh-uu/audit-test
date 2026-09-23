@@ -76,6 +76,7 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canM
         const inactive = !p.last_meeting_date || p.last_meeting_date < new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0, 10);
         if (!inactive || p.pending_invite) return false;
       }
+      if (statusFilter === "deactivated" && (p.pending_invite || p.is_active)) return false;
       if (statusFilter === "pending" && !p.pending_invite) return false;
       return true;
     });
@@ -193,6 +194,7 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canM
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive 30d+</option>
+            <option value="deactivated">Deactivated</option>
             <option value="pending">Pending invite</option>
           </select>
         </div>
@@ -229,8 +231,9 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canM
                         </div>
                         <div>
                           <div className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
-                            {p.name}
+                            {p.name || "Unnamed user"}
                             {p.pending_invite && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Invite pending</span>}
+                            {!p.pending_invite && !p.is_active && <span className="text-[10px] font-semibold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full" data-testid={`people-inactive-badge-${p.user_id}`}>Deactivated</span>}
                           </div>
                           <div className="text-xs text-gray-400">{p.email}</div>
                         </div>
@@ -376,6 +379,9 @@ export default function PeopleHub() {
   const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
   const [hardDeleteConfirmText, setHardDeleteConfirmText] = useState("");
   const [hardDeleting, setHardDeleting] = useState(false);
+  // Falls back to email when name is blank, so "type name to confirm" can
+  // never trivially pass with an empty input against an empty name.
+  const hardDeleteConfirmExpected = hardDeleteTarget ? ((hardDeleteTarget.name || "").trim() || hardDeleteTarget.email) : "";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -429,7 +435,7 @@ export default function PeopleHub() {
   }, [API]);
 
   const confirmHardDelete = async () => {
-    if (hardDeleteConfirmText.trim() !== hardDeleteTarget.name) return;
+    if (!hardDeleteConfirmExpected || hardDeleteConfirmText.trim() !== hardDeleteConfirmExpected) return;
     setHardDeleting(true);
     try {
       const res = await axios.delete(`${API}/admin/users/${hardDeleteTarget.user_id}/hard-delete`, getAuthConfig());
@@ -543,17 +549,17 @@ export default function PeopleHub() {
       {hardDeleteTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" data-testid="hard-delete-modal">
-            <h3 className="font-semibold text-gray-900 mb-4">Permanently Delete {hardDeleteTarget.name}</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Permanently Delete {hardDeleteTarget.name || hardDeleteTarget.email}</h3>
             <div className="space-y-3">
               <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold mb-1">This cannot be undone.</p>
-                  <p>Permanently removes {hardDeleteTarget.name}'s account, their supervision meetings (transcripts, audio, analysis, comments), uploaded documents and schedule. Make sure you've exported anything you need to keep before continuing.</p>
+                  <p>Permanently removes {hardDeleteTarget.name || hardDeleteTarget.email}'s account, their supervision meetings (transcripts, audio, analysis, comments), uploaded documents and schedule. Make sure you've exported anything you need to keep before continuing.</p>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Type "{hardDeleteTarget.name}" to confirm</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Type "{hardDeleteConfirmExpected}" to confirm</label>
                 <input
                   value={hardDeleteConfirmText}
                   onChange={e => setHardDeleteConfirmText(e.target.value)}
@@ -565,7 +571,7 @@ export default function PeopleHub() {
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={confirmHardDelete}
-                  disabled={hardDeleting || hardDeleteConfirmText.trim() !== hardDeleteTarget.name}
+                  disabled={hardDeleting || hardDeleteConfirmText.trim() !== hardDeleteConfirmExpected}
                   className="flex items-center gap-1.5 bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   data-testid="confirm-hard-delete-btn"
                 ><Trash2 className="w-3.5 h-3.5" />{hardDeleting ? "Deleting…" : "Permanently Delete"}</button>

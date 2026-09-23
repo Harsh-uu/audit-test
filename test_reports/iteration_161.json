@@ -1,0 +1,59 @@
+{
+  "summary": "Backend + frontend regression of Deactivate + Hard Delete flow (Jan 2026). Backend: 10/10 pytest cases pass (guards for hard-delete-while-active=400, deactivate-then-login=401 with deactivation message, deactivate-then-hard-delete succeeds, manager 403 for admin/hard-delete/out-of-scope, admin/manager 400 for self, reactivate-via-PUT + login restored). Frontend: PeopleHub People & Usage tab renders correctly; '...' menu (people-menu-{id}) shows Edit + Deactivate + Delete Permanently to admin; hard-delete modal (hard-delete-modal / hard-delete-confirm-input / confirm-hard-delete-btn) opens, confirm button correctly disabled until typed name === target.name (verified 'wrong'=disabled, 'Diane Fletcher'=enabled). One clear spec deviation: the required 'Deactivated' badge with data-testid people-inactive-badge-{id} is NOT implemented — nothing in PeopleHub.js checks p.is_active to render a badge, so a deactivated user is visually indistinguishable from an active user in the People & Usage table, breaking the 'find them again to hard-delete' UX loop.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "PeopleHub.js PeopleTab row",
+        "issue": "Missing 'Deactivated' badge with data-testid people-inactive-badge-{id}. Spec explicitly requires that after Deactivate, the user STILL appears in the People & Usage table with a visible 'Deactivated' badge so admin can find them to hard-delete. Current code renders no is_active-conditional badge — only pending_invite gets a badge. A deactivated user is visually indistinguishable from an active user (row still white, no marker), and there is no statusFilter option for 'Deactivated' either. Impact: users deactivated via the API remain in the list but the admin has no way to spot them → the Deactivate → export → hard-delete workflow the spec is built around is broken at the visual layer.",
+        "selector": "PeopleHub.js line ~223-284 tr rendering (add `{!p.is_active && !p.pending_invite && <span data-testid={`people-inactive-badge-${p.user_id}`} …>Deactivated</span>}` next to the existing 'Invite pending' badge, and consider a matching statusFilter option 'Deactivated')",
+        "priority": "HIGH"
+      },
+      {
+        "component": "PeopleHub.js hard-delete modal — empty-name confirmation",
+        "issue": "For a user whose name is empty/whitespace, the confirm-hard-delete-btn is ENABLED immediately with an empty input, because `hardDeleteConfirmText.trim() !== hardDeleteTarget.name` becomes '' !== '' = false. Reproduced on an existing user with a blank name (row rendered as '_'/'-') — modal title read 'Permanently Delete _' and Permanently Delete button was clickable with the input empty. Defensive fix: also require `hardDeleteTarget.name.trim().length > 0` (or fall back to comparing against email) before enabling the button.",
+        "selector": "PeopleHub.js line 568 disabled={} expression",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "PeopleHub People & Usage",
+        "issues": [
+          "Users with blank/empty name render as bare '-' — carried over from iter_160; still not fixed. Combined with the missing Deactivated badge, an empty-name deactivated user is essentially invisible in the table."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_deactivate_hard_delete.py",
+    "/app/test_reports/pytest/deactivate_hd.xml"
+  ],
+  "action_items": [
+    "FIX (HIGH): Render a 'Deactivated' badge with data-testid `people-inactive-badge-${p.user_id}` in PeopleHub.js PeopleTab when !p.is_active && !p.pending_invite — required by spec to keep the deactivate → hard-delete workflow discoverable. Also add a 'Deactivated' option to the statusFilter dropdown.",
+    "FIX (MEDIUM): Guard confirm-hard-delete-btn against empty-name targets so clicking Delete Permanently on a blank-named user doesn't immediately enable Permanently Delete with an empty input.",
+    "MINOR (carry-over from iter_160): fallback display 'Unnamed user' + always render email in the row when name is blank."
+  ],
+  "critical_code_review_comments": [
+    "routers/admin.py delete_user still has a mixed-behaviour pitfall: if the throwaway user is a pending invite (must_change_password=TRUE) the row is fully DELETEd; if they've completed setup it just flips is_active=FALSE. This is documented in the review request but not signposted anywhere in the UI — the admin has no way to tell 'this Deactivate click will fully revoke this invite' vs 'this Deactivate click will just disable the account, they'll stay in the list'. Consider two distinct UI menu items ('Revoke pending invite' for pending_invite==true, 'Deactivate' for the rest) instead of a single Deactivate that silently does one or the other.",
+    "routers/admin.py hard_delete_user: attendees @> $1::jsonb matching only 'role: attendee' means a meeting where the user was the sign-off manager on someone else's supervision (managed a different attendee) is preserved (documented). Good. But meetings where they were both attendee AND ALSO created (created_by) still leave the (frozen) sign_off_manager_name snapshot around on OTHER attendees' meetings — verify these frozen-snapshot fields are what you want post-GDPR-erasure; if the erasure is meant to be complete, need to null out the *_name snapshots too, not just the FK.",
+    "PeopleHub.js currently 583 lines — approaching split threshold; also OrgStructure.js was already flagged at 913 lines in iter_160 and remains unaddressed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_deactivate_hard_delete.py (new — 10 pytest cases covering the full deactivate + hard-delete surface, safe to keep as regression suite)"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10)",
+    "frontend": "80% — hard-delete modal + menu visibility rules verified working; Deactivated-badge requirement not implemented (blocking Deactivate→find-again→hard-delete UX)"
+  },
+  "test_credentials": "admin@supervision.com / Admin123!X (from /app/memory/test_credentials.md, admin has no MFA)",
+  "seed_data_creation": "Backend tests spin up throwaway attendee users via POST /api/admin/users (email prefix TEST_/testdeact_) and clean them up (deactivate → hard-delete) in the same test. No leftover rows verified after run. Login attempts table cleared before test run.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend suite is stable — rerun with `cd /app/backend && python -m pytest tests/test_deactivate_hard_delete.py -v -n 0` (takes ~90s, uses DATABASE_URL admin DSN so it bypasses RLS for setup). If admin login 401s, clear login_attempts first (`DELETE FROM login_attempts`). For the frontend badge fix retest: after E1 adds the badge, deactivate a real (must_change_password=FALSE) user via the UI, refresh People & Usage, and assert `page.locator('[data-testid=people-inactive-badge-<id>]')` is visible AND the user is still in the table.",
+  "rca_of_the_issue": "Missing people-inactive-badge: PeopleHub.js PeopleTab renders each row with only 'Invite pending' as a conditional badge. There is no branch on p.is_active === false, and the existing `inactive` variable is a *usage* signal (no meeting in 30d), not a *lifecycle* signal (deactivated). The spec calls out a distinct badge for the second concept and it simply was never wired. Fix is a ~3-line JSX addition next to the pending-invite badge plus a matching statusFilter option."
+}
