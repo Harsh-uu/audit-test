@@ -23,6 +23,7 @@ const AUDIT_EVENT_CONFIG = {
   signed_off:        { color: "bg-emerald-100 text-emerald-800 font-semibold", dot: "bg-emerald-600" },
   comment_added:     { color: "bg-gray-100 text-gray-700", dot: "bg-gray-400" },
   audio_deleted:     { color: "bg-red-50 text-red-600", dot: "bg-red-300" },
+  audio_downloaded:  { color: "bg-red-100 text-red-700 font-semibold", dot: "bg-red-500" },
   meeting_backdated: { color: "bg-red-100 text-red-700 font-semibold", dot: "bg-red-500" },
 };
 
