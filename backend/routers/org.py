@@ -99,6 +99,10 @@ class TeamAssignRequest(BaseModel):
     team_id: Optional[str] = None
 
 
+class BulkMoveRequest(BaseModel):
+    to_team_id: Optional[str] = None
+
+
 class InviteUserRequest(BaseModel):
     name: str
     email: EmailStr
@@ -539,6 +543,38 @@ async def assign_user_to_team(user_id: str, data: TeamAssignRequest, current_use
                     raise HTTPException(403, "Outside your management scope")
             await _sync_user_team(conn, user_id, None)
     return {"ok": True}
+
+
+@router.patch("/teams/{team_id}/bulk-move")
+async def bulk_move_team_members(team_id: str, data: BulkMoveRequest, current_user=Depends(get_current_user)):
+    """Move every current member of `team_id` to `to_team_id` (or unassign
+    all, if null) in one shot — the bulk counterpart of assign-team, so an
+    admin/manager doesn't have to move a whole team's staff one by one before
+    the now-empty team/setting can be deleted."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    if data.to_team_id == team_id:
+        raise HTTPException(400, "Destination team must be different from the source team")
+    org_id = current_user.get("org_id", "")
+    scope = get_manager_scope(current_user)
+    async with database.with_org(org_id) as conn:
+        from_team = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", team_id)
+        if not from_team:
+            raise HTTPException(404, "Team not found")
+        _assert_team_scope(scope, from_team["setting_id"], team_id)
+        to_setting_id = None
+        if data.to_team_id:
+            to_team = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", data.to_team_id)
+            if not to_team:
+                raise HTTPException(404, "Destination team not found")
+            _assert_team_scope(scope, to_team["setting_id"], data.to_team_id)
+            to_setting_id = to_team["setting_id"]
+        result = await conn.execute(
+            "UPDATE users SET team_id=$1, setting_id=$2 WHERE team_id=$3",
+            data.to_team_id, to_setting_id, team_id,
+        )
+    moved = int(result.split()[-1]) if result else 0
+    return {"moved": moved}
 
 
 @router.post("/invite-user")

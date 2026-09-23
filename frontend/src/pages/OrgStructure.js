@@ -257,8 +257,9 @@ function MemberRow({ m, teamId, teams, canManage, statsByUser, viewing, onView, 
 
 // ── Team card (header + member rows) ────────────────────────────────────────
 
-function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId, onSetViewingUserId, onMoveUser, onEditTeam, onDeleteTeam, onEditUser }) {
+function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId, onSetViewingUserId, onMoveUser, onMoveAllMembers, onEditTeam, onDeleteTeam, onEditUser }) {
   const memberCount = (t.members || []).length;
+  const moveAllTargets = teamsFlat.filter(x => x.id !== t.id);
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden mb-3 bg-white" data-testid={`team-${t.id}`}>
       <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 group">
@@ -267,6 +268,30 @@ function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId
         <span className="text-[11px] text-gray-400">Supervisor: {t.supervisor_name || "—"}</span>
         {canManage && (
           <div className="flex items-center gap-0.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+            {memberCount > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="p-1 text-gray-400 hover:text-[#1E3A8A]"
+                    title={`Move all ${memberCount} staff to another team`}
+                    data-testid={`move-all-btn-${t.id}`}
+                  ><ArrowRightLeft className="w-3 h-3" /></button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48 text-sm max-h-64 overflow-y-auto">
+                  <DropdownMenuItem onClick={() => onMoveAllMembers(t, null)} data-testid={`move-all-unassign-${t.id}`}>
+                    Unassign all ({memberCount})
+                  </DropdownMenuItem>
+                  {moveAllTargets.length === 0 && (
+                    <div className="px-2 py-1.5 text-xs text-gray-400">No other teams available</div>
+                  )}
+                  {moveAllTargets.map(x => (
+                    <DropdownMenuItem key={x.id} onClick={() => onMoveAllMembers(t, x.id)} data-testid={`move-all-to-${x.id}-${t.id}`}>
+                      {x.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <button onClick={onEditTeam} className="p-1 text-gray-400 hover:text-[#1E3A8A]" data-testid={`edit-team-${t.id}`}><Edit2 className="w-3 h-3" /></button>
             {isAdmin && (
               <button
@@ -484,6 +509,22 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
     } catch (err) {
       setStructure(prev => moveUserInStructure(prev, movedUser, toTeamId, fromTeamId));
       flash(err.response?.data?.detail || "Failed to move user", true);
+    }
+  };
+
+  // Bulk-move every member of a team in one go — so an admin doesn't have to
+  // relocate a whole team's staff one by one before it can be deleted.
+  const moveAllTeamMembers = async (fromTeam, toTeamId) => {
+    const memberCount = (fromTeam.members || []).length;
+    if (memberCount === 0) return;
+    const destLabel = toTeamId ? (teamsFlat.find(x => x.id === toTeamId)?.label || "the selected team") : "Unassigned";
+    if (!window.confirm(`Move all ${memberCount} staff from "${fromTeam.name}" to ${destLabel}?`)) return;
+    try {
+      const res = await axios.patch(`${API}/org/teams/${fromTeam.id}/bulk-move`, { to_team_id: toTeamId }, getAuthConfig());
+      await refreshData();
+      flash(`Moved ${res.data.moved} staff to ${destLabel}`);
+    } catch (err) {
+      flash(err.response?.data?.detail || "Failed to move staff", true);
     }
   };
 
@@ -833,6 +874,7 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                         viewingUserId={viewingUserId}
                         onSetViewingUserId={setViewingUserId}
                         onMoveUser={moveUser}
+                        onMoveAllMembers={moveAllTeamMembers}
                         onEditTeam={() => { setEditingTeam(t); setTeamForm({ name: t.name, description: t.description || "", supervisor_user_id: t.supervisor_user_id || "" }); }}
                         onDeleteTeam={() => deleteTeam(t)}
                         onEditUser={openEditUser}
