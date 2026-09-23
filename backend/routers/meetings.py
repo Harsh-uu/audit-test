@@ -8,7 +8,7 @@ from typing import Optional, List
 from deps import get_db, get_current_user, get_current_user_conn, get_manager_scope, get_scoped_staff_ids
 from routers.org import get_structure_lite_data
 import database
-from utils.supabase_storage import delete_audio
+from utils.supabase_storage import delete_audio, get_audio
 from utils.backdate_check import detect_backdate_mismatch
 
 logger = logging.getLogger(__name__)
@@ -651,6 +651,32 @@ async def _get_meeting_data(meeting_id: str, current_user: dict, conn) -> dict:
     return meeting
 
 
+@router.get("/downloadable-audio")
+async def list_downloadable_audio(current_user=Depends(get_current_user)):
+    """Meetings whose raw audio still exists — audio is auto-deleted 5 minutes
+    after sign-off (see delete_audio_after_grace in review.py), so this list is
+    naturally limited to meetings that aren't signed off yet. Admins see every
+    such meeting in the org; managers only see meetings where they are the
+    sign-off manager (Settings > Download Audio is not a general-access tool).
+    Must be declared before GET /{meeting_id} or it gets shadowed by it."""
+    if current_user["role"] not in ("admin", "manager", "super_admin"):
+        raise HTTPException(status_code=403, detail="Admin or manager only")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        rows = await conn.fetch(
+            "SELECT m.id, m.title, m.date, m.status, m.sign_off_manager_id, m.sign_off_manager_name "
+            "FROM meetings m JOIN audio_files a ON a.id = m.audio_file_id "
+            "WHERE m.org_id = $1 AND m.status != 'signed_off' AND a.is_deleted = FALSE "
+            "ORDER BY m.date DESC",
+            org_id,
+        )
+    meetings = [dict(r) for r in rows]
+    if current_user["role"] == "manager":
+        uid = str(current_user.get("id", ""))
+        meetings = [m for m in meetings if str(m.get("sign_off_manager_id") or "") == uid]
+    return meetings
+
+
 @router.get("/{meeting_id}")
 async def get_meeting(meeting_id: str, request: Request, current_user=Depends(get_current_user_conn)):
     """PERF: was 2 separate with_org()/with_admin() blocks (~10-12 DB round
@@ -811,3 +837,72 @@ async def get_transcript_text(meeting_id: str, current_user=Depends(get_current_
         text = _apply_redactions_to_text(text, redactions)
 
     return {"text": text}
+
+
+async def _audit(conn, meeting_id: str, org_id: str, action: str, user_id: str, user_name: str, detail: str = ""):
+    await conn.execute(
+        "INSERT INTO audit_logs (id, meeting_id, org_id, action, user_id, user_name, detail, timestamp) "
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        str(uuid.uuid4()), meeting_id, org_id, action, user_id, user_name, detail,
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def _can_download_audio(meeting: dict, current_user: dict) -> bool:
+    if current_user["role"] in ("admin", "super_admin"):
+        return True
+    return current_user["role"] == "manager" and str(meeting.get("sign_off_manager_id") or "") == str(current_user.get("id", ""))
+
+
+@router.get("/{meeting_id}/audio-download")
+async def download_audio(meeting_id: str, request: Request, consent: bool = False, current_user=Depends(get_current_user)):
+    """Streams the raw recording for one meeting. Requires explicit consent
+    (the frontend only calls this after the Data Protection Notice checkbox is
+    ticked) and logs every download to audit_logs with the requesting IP, so
+    there's an immutable record of who extracted raw special-category audio
+    and when — evidence for CQC/ICO audits."""
+    if not consent:
+        raise HTTPException(status_code=400, detail="Consent is required to download raw audio")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow(
+            "SELECT id, title, status, sign_off_manager_id, audio_file_id FROM meetings WHERE id=$1 AND org_id=$2",
+            meeting_id, org_id,
+        )
+        if not m_row:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        meeting = dict(m_row)
+        if not _can_download_audio(meeting, current_user):
+            raise HTTPException(status_code=403, detail="Only an admin or this meeting's sign-off manager can download its audio")
+        if meeting["status"] == "signed_off":
+            raise HTTPException(status_code=400, detail="Audio is no longer available — it is deleted shortly after a meeting is signed off")
+        if not meeting.get("audio_file_id"):
+            raise HTTPException(status_code=404, detail="No audio recording for this meeting")
+        audio_row = await conn.fetchrow(
+            "SELECT storage_path, content_type, original_filename FROM audio_files WHERE id=$1 AND is_deleted=FALSE",
+            meeting["audio_file_id"],
+        )
+        if not audio_row or not audio_row["storage_path"]:
+            raise HTTPException(status_code=404, detail="Audio recording not found")
+
+    data, fetched_content_type = await get_audio(audio_row["storage_path"])
+
+    xff = request.headers.get("X-Forwarded-For", "")
+    ip = (
+        request.headers.get("X-Real-IP")
+        or (xff.split(",")[-1].strip() if xff else None)
+        or (request.client.host if request.client else "unknown")
+    )
+    async with database.with_org(org_id) as conn:
+        await _audit(
+            conn, meeting_id, org_id, "audio_downloaded", current_user["id"], current_user.get("name", ""),
+            f"Raw audio downloaded for '{meeting['title']}' (IP: {ip})",
+        )
+
+    from fastapi.responses import Response
+    filename = audio_row["original_filename"] or f"audio_{meeting_id}.wav"
+    return Response(
+        content=data,
+        media_type=audio_row["content_type"] or fetched_content_type or "audio/wav",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

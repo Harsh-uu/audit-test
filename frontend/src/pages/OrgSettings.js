@@ -3,11 +3,12 @@ import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield } from "lucide-react";
+import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield, Mic } from "lucide-react";
 import { TemplateTab } from "@/components/admin/TemplateTab";
 import { ExportTab } from "@/components/admin/ExportTab";
 import { BrandingTab } from "@/components/admin/BrandingTab";
 import { TranscriptExportTab } from "@/components/admin/TranscriptExportTab";
+import { DownloadAudioTab } from "@/components/admin/DownloadAudioTab";
 import { toast } from "sonner";
 
 function FocusTopicsTab({ API, getAuthConfig }) {
@@ -507,6 +508,11 @@ export default function OrgSettings({ embedded = false }) {
               <Palette className="w-3.5 h-3.5" />Branding
             </TabBtn>
           )}
+          {canBrand && (
+            <TabBtn active={tab === "audio"} onClick={() => setTab("audio")}>
+              <Mic className="w-3.5 h-3.5" />Download Audio
+            </TabBtn>
+          )}
           <TabBtn active={tab === "focus"} onClick={() => setTab("focus")}>
             <Target className="w-3.5 h-3.5" />Focus Topics
           </TabBtn>
@@ -572,6 +578,8 @@ export default function OrgSettings({ embedded = false }) {
         )}
 
         {tab === "branding" && canBrand && <BrandingTab />}
+
+        {tab === "audio" && canBrand && <DownloadAudioTab />}
 
         {tab === "focus" && <FocusTopicsTab API={API} getAuthConfig={getAuthConfig} />}
 
