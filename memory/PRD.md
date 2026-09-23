@@ -1,3 +1,15 @@
+## Parked: Intermittent Meeting-Tile Click "Bounce Back" (Sep 2026) — COULD NOT REPRODUCE, parked by user
+User reported clicking a meeting tile sometimes renders the report then bounces back to the tiles
+list; second click always works. Ran ~13 automated repro attempts (click + poll URL/DOM every
+200ms + capture console/network) — never reproduced an actual bounce. Found one related but
+distinct anomaly once: a 401 on the first request after navigating forced a silent-refresh-and-
+retry round trip, making that one load ~3.5s instead of instant (interceptor logic in
+AuthContext.js lines 36-105 already handles this correctly, just adds latency) — did not confirm
+this is the same issue the user saw. User now cannot reproduce either, suspects a browser cache
+issue, asked to park it. No code changes made. If it recurs, get: does the URL bar itself change
+back to /meetings, or does content just flicker while URL stays put; every time vs intermittent;
+device/browser.
+
 ## Grafana Logging Fix: 78% Noise + Missing Env Label (Sep 2026) — FIXED, verified live
 User reported every log line in Grafana showed "no content". Root cause: `loki_logging.py`'s
 LokiHandler is attached to the ROOT logger, so httpx's own INFO-level "HTTP Request: POST .../loki
