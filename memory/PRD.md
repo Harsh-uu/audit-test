@@ -4,55 +4,46 @@
 React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. Managers record/upload supervision meeting audio; AI (Gemini primary, OpenAI fallback) transcribes, diarizes, and analyzes transcripts to surface CQC/Care Certificate compliance evidence, risks, achievements, learning needs, and actions. Strict RLS multi-tenant isolation. Includes EULA acceptance flow, Super Admin management/reporting, public resources, MFA authentication.
 
 ## Architecture
-- Frontend: React + Vite + PWA (`/app/frontend`)
-- Backend: FastAPI + AsyncPG + Postgres/Supabase (`/app/backend`)
+- Frontend: React + Vite + PWA (`/app/frontend`). IMPORTANT: `yarn start` = `vite build && vite preview` — a STATIC PRODUCTION BUILD, NOT a dev server. Frontend does NOT hot-reload; any frontend source change requires `sudo supervisorctl restart frontend` (a full rebuild) to take effect.
+- Backend: FastAPI + AsyncPG + Postgres/Supabase (`/app/backend`). Backend DOES hot-reload (uvicorn --reload via WatchFiles).
 - RLS via `app_default` role; `DATABASE_URL` (superuser/migrations) vs `APP_DATABASE_URL` (RLS-scoped app queries) — never mix these
-- AI: `emergentintegrations`-routed Gemini (Vertex AI, UK/EU residency) as primary, OpenAI as fallback, orchestrated in `/app/backend/utils/ai.py`
+- AI: `emergentintegrations`-routed Gemini (Vertex AI, europe-west2/London) as primary, OpenAI as fallback, orchestrated in `/app/backend/utils/ai.py`
 
 ## Key DB Schema
 - `eula_versions`, `meetings`, `analyses` (incl. `ai_provider`, `initial_ai_provider`), `teams`
+- `organisations.branding` (JSONB): `{primary_color, logo_path, speaker_colors: {manager, attendees: [4 hex]}}`
 
 ## What's Been Implemented (with dates)
 
-### Prior sessions
-- Meeting type dropdown: 14 fixed options + "Other"
-- EULA text swapped in-place without re-gating (m029)
-- DB perf: dynamic `statement_cache_size`; `get_current_user` refactored to yield-dependency for connection reuse
-- Meetings page consolidated into `GET /api/meetings/page-data` (was 3 calls) + `GET /api/org/structure-lite`
-- AI provider tracking: migrations m030/m031 (`ai_provider`, `initial_ai_provider`) + Super Admin AI Usage report (`GET /api/super-admin/ai-usage`) + frontend tab (`SuperAdminAIUsage.js`)
-- AI fallback: 1-retry before downgrading Gemini→OpenAI (transient blip protection)
-- Prompt fix: stopped penalizing staff with "communication pattern" risk when manager rushes session
-- Grafana/Loki: suppressed noisy httpx logs, labeled preview logs `env=preview`
-- Confidentiality/PII checker: fixed timeout on 80+ min transcripts (concurrent chunk processing instead of sequential) + UI retry-on-error state
+### Prior sessions (through 2026-09-22)
+- Meeting type dropdown, EULA in-place update, DB perf (statement_cache_size, get_current_user yield-dependency), meetings page consolidation, AI provider tracking + Super Admin AI Usage report, AI fallback retry, prompt fixes, Grafana/Loki logging, confidentiality/PII checker timeout fix.
 
-### This session (2026-09-23) — Gemini evidence-scan tuning (based on direct Google engineer feedback)
-- **Diagnostic**: Shared full evidence-scan system prompt + generation settings with user for their Google conversation. Found transcript hard-truncates at 80,000 chars (`transcript_text[:80000]` in `analyze_meeting`) — flagged as a cliff-edge worth raising with Google if transcripts exceed ~13-14k words.
-- **Generation-config split** in `/app/backend/utils/ai.py` — threaded a `warm: bool = False` param through `_openai_chat` → `_vertex_generate_sync` → `_gemini_chat` → `_ai_chat` → `_ai_chat_json`:
-  - **Precise (default, warm=False)**: `temperature=0.0`, `top_p=0.1`, `top_k=1` — used by `analyze_meeting`, `analyze_doc_for_evidence`, `analyze_custom_only`, `scan_pii_in_transcript`, `diarize_transcript`, `map_speaker_numbers_to_names`, `extract_document_criteria`, `check_prep_coverage` (all extraction/classification/mapping tasks — removes sampling drift causing evidence-count variance between first scan and rescan)
-  - **Warm (warm=True)**: `temperature=0.3`, top_p/top_k left at Gemini defaults — used ONLY by `generate_meeting_summary`, `generate_prep_questions`, `generate_risk_suggestions` (human-facing conversational/coaching text where natural phrasing variation is desirable)
-- **CRITICAL SCAN MANDATE**: added a 2-step reasoning instruction (exhaustive inventory pass → multi-standard assignment, one utterance can map to multiple standards) to `ANALYSIS_SYSTEM_PROMPT`, `DOC_EVIDENCE_SYSTEM_PROMPT`, and `analyze_custom_only`'s inline prompt — DRY'd into a shared `_CRITICAL_SCAN_MANDATE` template constant to avoid the 3 copies drifting apart.
-- Tested via `testing_agent`: 27/27 pass (21 static/mocked config-kwarg checks + 6 live E2E). Live `analyze_meeting` on a realistic transcript produced 47 cqc_mappings + 5 care_cert_mappings, served by `gemini-2.5-flash` in 55.1s. Warm-path calls (summary/prep-questions/risk-suggestions) confirmed still producing natural, well-formatted text. AI Usage report confirmed showing real (non-null) provider values. No regressions. Test file: `/app/backend/tests/test_iter152_warm_precise_config.py`.
-- Note: `gemini-2.5-flash` model itself was NOT changed to `gemini-3.1-flash-lite` in this session — user pivoted from the model-migration plan to this generation-config + prompt-mandate tuning approach instead, after independently consulting Google. The 3.1 migration remains parked, not abandoned — revisit only if user raises it again.
+### This session (2026-09-23)
+- **Gemini evidence-scan tuning** (Google engineer feedback): generation-config split in `utils/ai.py` — `temperature=0.0/top_p=0.1/top_k=1` (precise) for all extraction/classification/mapping calls (`analyze_meeting`, `analyze_doc_for_evidence`, `analyze_custom_only`, `scan_pii_in_transcript`, `diarize_transcript`, `map_speaker_numbers_to_names`, `extract_document_criteria`, `check_prep_coverage`); `temperature=0.3` (warm, unset top_p/top_k) kept ONLY for human-facing conversational calls (`generate_meeting_summary`, `generate_prep_questions`, `generate_risk_suggestions`). Added a "CRITICAL SCAN MANDATE" 2-step reasoning instruction to evidence-scan prompts (DRY'd into shared `_CRITICAL_SCAN_MANDATE` constant). Tested 27/27 (iteration_152.json). `gemini-3.1-flash-lite` migration NOT done — user pivoted to this approach instead; parked, not abandoned.
+- **`GET /api/meetings/{id}` perf fix**: was opening 2-3 separate DB connection/transaction blocks sequentially (get_current_user's own `with_org()` + route's own `with_org()` + a third `with_admin()` just for attendee email lookup) — each block costs ~5-6 round trips. Refactored to reuse `get_current_user_conn`'s connection (like `page-data` already did) and moved attendee-email enrichment onto that same connection (safe: `users_rls` migration m006 already scopes `users` SELECT to `app.current_org_id`, so the RLS-bypass `with_admin()` was never actually required for that query). Measured ~2.0-2.8s → ~0.85-1.0s. Root-caused the user's "title takes an age to load" complaint on RecordingScreen. Tested (iteration_153.json), cross-org isolation confirmed intact.
+- **"Impact on Practice" mandatory prep question** (`generate_prep_questions` in `ai.py`): new guaranteed section, decoupled from the 6 standard `PREP_SECTIONS` and from the "bonus" section, so it survives regardless of any org-level section/template customisation. Asks "What difference has [specific named training/guidance/feedback] made to your practice?" grounded in real context. Has a code-level fallback-injection safety net (if the LLM ever omits/mislabels it) since this is meant to be guaranteed CQC evidence, not opportunistic. Frontend: `MeetingPrep.js` SECTIONS + `PrepAgendaTab.js` SECTION_COLORS both updated (teal). Tested (iteration_154.json), verified via live screenshot after required frontend rebuild.
+- **Org-wide Speaker Colours (Branding settings)**: removed the per-meeting speaker colour picker from the Transcript tab's Speaker Manager panel (rename/swap kept). Added a "Speaker Colours" section to Settings > Branding: 1 Manager colour + 4 rotating Attendee-slot colours, applied ROLE-based (matches transcript speaker label against `meeting.attendees[].name` where `role` is manager/admin) instead of per-meeting/per-name, so colours are now identical across every meeting org-wide. Old per-meeting custom `speaker_colors` data is now ignored everywhere (not migrated/deleted, just no longer read). New: `utils/transcriptHelpers.js` `getRoleBasedSpeakerColors()` + `DEFAULT_ORG_SPEAKER_COLORS`; backend `organisations.branding.speaker_colors` (via `PUT/GET /api/org/branding`, exposed on `/auth/me`); Pydantic hex-format + exactly-4-length validation on `SpeakerColorsUpdate`. Tested 100% (iteration_155.json), plus 2 hardening fixes (hex regex, length=4) applied post-review and re-verified via curl.
+- Fixed stale `manager@supervision.com` credential (was on old bcrypt path despite `supabase_password_set=TRUE`) via `utils.supabase_auth.set_password()`, not `reset_test_pw.py`.
 
 ## Prioritized Backlog
 
-### P0
-- None open. Monitor real-world evidence-scan results on the next long transcript (80+ min) to confirm the precise+mandate combo actually closes the gap between first-scan and rescan evidence counts in production usage (not just the 1.7k-char test fixture).
-
-### P1
-- None open.
+### P0 / P1
+None open.
 
 ### P2
-- Storage Reconciliation Job: periodic sweep for orphaned files across upload buckets
-- Rejection Trend Alerts: notify admins when a standard's AI evidence rejection rate climbs
-- Live Connection Dashboard: super-admin view of real-time DB pool/connection health
-- Intermittent UI glitch on Meetings page (click tile → briefly renders → bounces to tile list → works on 2nd click) — BLOCKED, user parked it ("hold for now", suspected cache issue, not reproducible). Revisit only if user raises it again — check `useMeetingReport` hooks / routing in `MeetingReport.js`/`Meetings.js`.
-- 80,000-char transcript truncation cliff-edge in `analyze_meeting` (~13-14k words) — not currently causing issues but worth monitoring/raising with Google if very long meetings start hitting it.
+- Storage Reconciliation Job, Rejection Trend Alerts, Live Connection Dashboard (unchanged from prior sessions)
+- Intermittent UI glitch on Meetings page (tile click bounce) — BLOCKED/parked by user, not reproducible
+- 80,000-char transcript truncation cliff-edge in `analyze_meeting` — monitor, not yet an issue
+- Long-meeting (60+ min) real-world retest of the Gemini precise/warm + scan-mandate tuning to confirm it closes the first-scan-vs-rescan evidence gap in practice (only tested on shorter fixtures so far)
+- Apply the same connection-reuse perf fix from `get_meeting` to other multi-connection endpoints if any are found slow
+- Region migration (Iowa → London) — user is following up directly with support@emergent.sh; not something main agent can action
 
 ### P3
-- Course Completion Tracker: let logged-in users tick off Resources course modules as they finish them
+- Course Completion Tracker (unchanged)
+- Team Themes chart tracking "Impact on Practice" answers over time (user-suggested spark, not yet built)
+- 3+ speaker (team meeting) UI verification of attendee-slot colour cycling was not exercised live (no ready fixture) — logic verified by code review only
 
 ## Testing Status
-- Test reports: `/app/test_reports/iteration_149.json` through `iteration_152.json`
+- Test reports: `/app/test_reports/iteration_149.json` through `iteration_155.json`
 - Known regressions: None
-- Credentials: `/app/memory/test_credentials.md`
+- Credentials: `/app/memory/test_credentials.md` (manager@supervision.com password was reset this session via Supabase Auth)

@@ -1,0 +1,22 @@
+{
+  "summary": "Tested new org-wide Speaker Colours feature (Settings > Branding) replacing the removed per-meeting picker. Backend: 7/7 pytest tests pass — GET/PUT /api/org/branding round-trip speaker_colors correctly, /auth/me exposes org_branding.speaker_colors, attendee RBAC returns 403 on PUT and 200 on GET, primary_color regression fine. Frontend: Branding tab renders Speaker Colours section with 1 Manager + 4 Attendee swatch-pickers each showing all 10 palette colours; correct saved swatches highlighted on load; save + reload persists the new selection. Transcript SpeakerManagerPanel has 0 elements with data-testid starting 'color-swatch-' — picker fully removed; rename inputs, turn counts, Swap all still present. Transcript pills for meeting 510c85ef are coloured by role: Demo Manager (manager role) = #93C5FD blue, Jane Smith (attendee) = #FCA5A5 red — matches saved Branding config exactly. All core acceptance criteria pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_branding_speaker_colors.py",
+    "/app/test_reports/pytest/iter155_branding.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PUT /api/org/branding accepts SpeakerColorsUpdate without validating the attendees list length (component expects 4 but backend allows any List[str] length, including 0 or 20). Frontend guards with `attendees?.length === 4` fallback, but a mis-scripted API call could persist an unexpected size; consider enforcing len(attendees)==4 server-side.",
+    "SpeakerColorsUpdate fields are Optional[str]/Optional[List[str]] with no hex-format validation — any string is accepted (e.g. 'not-a-color'), which would still be sent back and used as CSS. Low risk (only admin/manager can write), but a regex constraint on manager/attendee hex values would harden this."
+  ],
+  "updated_files": ["/app/backend/tests/test_branding_speaker_colors.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100%"},
+  "test_credentials": "admin@supervision.com / Admin123!X (used); user@supervision.com / Staff123! (RBAC negative test)",
+  "seed_data_creation": "None — Test Company org already had speaker_colors saved (manager=#93C5FD, attendees=[#FCA5A5,#86EFAC,#FDE047,#D8B4FE]); tests temporarily rotate to a different palette and restore to this baseline.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_branding_speaker_colors.py is stable; keep restore-on-teardown behaviour if adding more mutations. 3+-speaker cycling case was not explicitly exercised in UI (no ready-made fixture meeting), but the getRoleBasedSpeakerColors() logic in transcriptHelpers.js was verified for the 2-speaker case and unit-style code-review confirms modulo cycling for >4 non-manager speakers.",
+  "rca of the issue": "N/A — feature works as specified."
+}

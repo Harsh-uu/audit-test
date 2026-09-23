@@ -4,9 +4,10 @@ import uuid
 import logging
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import Response as _Response
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime, timezone
 from typing import Optional, List
+import re
 from deps import get_db, get_current_user, get_manager_scope
 from utils.storage import put_object, get_object
 import database
@@ -83,9 +84,30 @@ class InviteUserRequest(BaseModel):
     password: str
 
 
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
 class SpeakerColorsUpdate(BaseModel):
     manager: Optional[str] = None
     attendees: Optional[List[str]] = None
+
+    @field_validator("manager")
+    @classmethod
+    def _validate_manager(cls, v):
+        if v is not None and not _HEX_COLOR_RE.match(v):
+            raise ValueError("manager colour must be a hex value like #93C5FD")
+        return v
+
+    @field_validator("attendees")
+    @classmethod
+    def _validate_attendees(cls, v):
+        if v is not None:
+            if len(v) != 4:
+                raise ValueError("attendees must contain exactly 4 colours")
+            for c in v:
+                if not _HEX_COLOR_RE.match(c):
+                    raise ValueError("each attendee colour must be a hex value like #FCA5A5")
+        return v
 
 
 class BrandingUpdate(BaseModel):
