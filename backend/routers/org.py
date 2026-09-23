@@ -243,7 +243,30 @@ async def get_structure(current_user=Depends(get_current_user)):
         else:
             unassigned = []
 
-    return {"settings": settings, "unassigned_users": unassigned}
+        # Org-level users — Admins (always) plus any manager with team_id IS
+        # NULL (org-wide via "Promote to Org-Wide Manager", or scoped to a
+        # whole Setting instead of one team). None of these ever show up in
+        # a team's member list, so without this the Structure tree would
+        # have no way to view/manage them at all. Only computed for org-level
+        # viewers, same restriction as unassigned_users above.
+        if scope["level"] == "org":
+            org_level_rows = await conn.fetch(
+                """SELECT id, name, email, role, setting_id FROM users
+                   WHERE org_id=$1 AND is_active=TRUE
+                     AND (role='admin' OR (role='manager' AND team_id IS NULL))
+                   ORDER BY (role != 'admin'), name ASC""",
+                org_id,
+            )
+            setting_name_by_id = {s["id"]: s["name"] for s in s_dicts}
+            org_level_users = [
+                {"id": r["id"], "name": r["name"], "email": r["email"], "role": r["role"],
+                 "setting_name": setting_name_by_id.get(r["setting_id"]) if r["setting_id"] else None}
+                for r in org_level_rows
+            ]
+        else:
+            org_level_users = []
+
+    return {"settings": settings, "unassigned_users": unassigned, "org_level_users": org_level_users}
 
 
 async def get_structure_lite_data(current_user: dict, reused_conn=None) -> dict:

@@ -117,6 +117,12 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - Verified live: badge renders correctly next to "Manager" role badge; unassigned list still empty for the seeded org.
 - Not built (future, if requested): the badge doesn't yet appear in the Structure tab, since setting-scoped managers (team_id null) don't currently render in any team's member list there — would need a dedicated "Organisation level" section in the tree (see backlog).
 
+### This session (2026-09-23, cont'd #5) — Organisation-level section in Structure tree (SHIPPED)
+- New "Organisation" row pinned at the top of the Structure tab's left master list (Crown icon, live count). Clicking it shows all org-level staff — Admins (always) and managers with no team of their own (org-wide via "Promote to Org-Wide Manager", or scoped to a whole Setting) — who previously had NO visible home anywhere in the Structure tree.
+- Backend: `GET /org/structure` now also returns `org_level_users` (id/name/email/role/setting_name).
+- Each row supports View/Edit/Deactivate as usual; "Move to…" (into a specific team, i.e. demoting them out of org-level) is available for managers but hidden for Admins, matching the existing backend rule that admins can never be assigned a team. Whole-tree staff search now also finds and jumps to these users.
+- Verified live via screenshot: Organisation row shows count 2 (Test Admin + Demo Manager), manager's menu has "Move to…", admin's does not.
+
 ## Testing Status
 - Test reports: `/app/test_reports/iteration_149.json` through `iteration_161.json`
 - Known regressions: None

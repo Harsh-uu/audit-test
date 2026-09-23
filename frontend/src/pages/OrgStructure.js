@@ -196,6 +196,7 @@ function ViewProfileCard({ member, stats }) {
 function MemberRow({ m, teamId, teams, canManage, isAdmin, statsByUser, viewing, onView, onCloseView, onMove, onEdit, onDeactivate }) {
   const stats = statsByUser[m.id];
   const moveTargets = teams.filter(t => t.id !== teamId);
+  const canMove = m.role !== "admin"; // admins always stay at the top Organisation level
   // Being an org-wide manager just means having NO team/setting of your own
   // (see get_manager_scope in deps.py) — clearing team_id (which cascades to
   // clearing setting_id too) already does this via the normal "unassign"
@@ -216,6 +217,11 @@ function MemberRow({ m, teamId, teams, canManage, isAdmin, statsByUser, viewing,
             <p className="text-xs font-medium text-gray-900 truncate">{m.name || "Unnamed user"}</p>
             <div className="flex items-center gap-1.5 min-w-0">
               <RoleBadge role={m.role} />
+              {m.role === "manager" && !teamId && m.setting_name && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 flex-shrink-0" title={`Oversees all of ${m.setting_name}`}>
+                  Setting Manager
+                </span>
+              )}
               {m.email && <span className="text-[10px] text-gray-400 truncate">{m.email}</span>}
             </div>
           </div>
@@ -236,26 +242,28 @@ function MemberRow({ m, teamId, teams, canManage, isAdmin, statsByUser, viewing,
                     <Crown className="w-3.5 h-3.5" /> Promote to Org-Wide Manager
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger data-testid={`member-move-${m.id}`}>
-                    <ArrowRightLeft className="w-3.5 h-3.5" /> Move to…
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
-                    {teamId && (
-                      <DropdownMenuItem onClick={() => onMove(null)} data-testid={`move-unassign-${m.id}`}>
-                        Unassign
-                      </DropdownMenuItem>
-                    )}
-                    {moveTargets.length === 0 && !teamId && (
-                      <div className="px-2 py-1.5 text-xs text-gray-400">No teams available</div>
-                    )}
-                    {moveTargets.map(t => (
-                      <DropdownMenuItem key={t.id} onClick={() => onMove(t.id)} data-testid={`move-to-${t.id}-${m.id}`}>
-                        {t.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                {canMove && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger data-testid={`member-move-${m.id}`}>
+                      <ArrowRightLeft className="w-3.5 h-3.5" /> Move to…
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                      {teamId && (
+                        <DropdownMenuItem onClick={() => onMove(null)} data-testid={`move-unassign-${m.id}`}>
+                          Unassign
+                        </DropdownMenuItem>
+                      )}
+                      {moveTargets.length === 0 && !teamId && (
+                        <div className="px-2 py-1.5 text-xs text-gray-400">No teams available</div>
+                      )}
+                      {moveTargets.map(t => (
+                        <DropdownMenuItem key={t.id} onClick={() => onMove(t.id)} data-testid={`move-to-${t.id}-${m.id}`}>
+                          {t.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
                 <DropdownMenuItem onClick={onEdit} data-testid={`member-edit-${m.id}`}>
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </DropdownMenuItem>
@@ -357,11 +365,12 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   const isAdmin = currentUser?.role === "admin";
   const canManage = ["admin", "manager"].includes(currentUser?.role);
 
-  const [structure, setStructure] = useState({ settings: [], unassigned_users: [] });
+  const [structure, setStructure] = useState({ settings: [], unassigned_users: [], org_level_users: [] });
   const [allUsers, setAllUsers] = useState([]);
   const [peopleStats, setPeopleStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSettingId, setSelectedSettingId] = useState(null);
+  const [viewingOrgLevel, setViewingOrgLevel] = useState(false);
 
   // Flash
   const [message, setMessage] = useState("");
@@ -492,6 +501,9 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
     structure.unassigned_users.forEach(u => {
       flat.push({ ...u, settingId: null, settingName: null, teamName: null });
     });
+    structure.org_level_users.forEach(u => {
+      flat.push({ ...u, settingId: null, settingName: null, teamName: null, orgLevel: true });
+    });
     return flat;
   }, [structure]);
 
@@ -507,10 +519,14 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   // Setting (or open the Unassigned modal) and pop their View card straight open.
   const jumpToStaff = (u) => {
     setStaffSearch("");
-    if (u.settingId) {
+    if (u.orgLevel) {
+      setViewingOrgLevel(true);
+    } else if (u.settingId) {
       setShowUnassignedModal(false);
+      setViewingOrgLevel(false);
       setSelectedSettingId(u.settingId);
     } else {
+      setViewingOrgLevel(false);
       setShowUnassignedModal(true);
     }
     setViewingUserId(u.id);
@@ -652,6 +668,22 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
     }
   };
 
+  // Move an Organisation-level manager (org-wide or setting-scoped, no team
+  // of their own) into a specific team — effectively "demoting" them out of
+  // org-level visibility. Full refetch rather than the optimistic patch
+  // `moveUser` does, since org_level_users is a separate bucket from
+  // unassigned_users and this action is rare enough not to need it.
+  const demoteToTeam = async (person, toTeamId) => {
+    try {
+      await axios.patch(`${API}/org/users/${person.id}/assign-team`, { team_id: toTeamId }, getAuthConfig());
+      await refreshData();
+      flash(`${person.name} moved`);
+      onUserChanged?.();
+    } catch (err) {
+      flash(err.response?.data?.detail || "Failed to move user", true);
+    }
+  };
+
   const openAddUserForSetting = () => {
     const teams = selectedSetting?.teams || [];
     if (teams.length === 0) return;
@@ -789,6 +821,17 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
 
             {/* ══ LEFT: Settings master list ══════════════════════════════ */}
             <div className="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm lg:sticky lg:top-4" data-testid="settings-master-list">
+              <div className="px-3 pt-3 pb-2 border-b border-gray-100">
+                <div
+                  onClick={() => setViewingOrgLevel(true)}
+                  className={`flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors ${viewingOrgLevel ? "bg-[#EFF6FF] text-[#1E3A8A]" : "hover:bg-gray-50 text-gray-700"}`}
+                  data-testid="org-level-row"
+                >
+                  <Crown className={`w-4 h-4 flex-shrink-0 ${viewingOrgLevel ? "text-[#1E3A8A]" : "text-gray-400"}`} />
+                  <span className="text-sm font-semibold">Organisation</span>
+                  <span className={`ml-auto text-xs ${viewingOrgLevel ? "text-[#1E3A8A]" : "text-gray-400"}`}>{structure.org_level_users.length}</span>
+                </div>
+              </div>
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Settings ({structure.settings.length})</span>
                 {canManage && (
@@ -849,7 +892,7 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                   return (
                     <div
                       key={s.id}
-                      onClick={() => setSelectedSettingId(s.id)}
+                      onClick={() => { setSelectedSettingId(s.id); setViewingOrgLevel(false); }}
                       className={`px-4 py-3 border-l-[3px] cursor-pointer transition-colors ${isSelected ? "border-[#1E3A8A] bg-[#EFF6FF]" : "border-transparent hover:bg-gray-50"}`}
                       data-testid={`setting-row-${s.id}`}
                     >
@@ -867,7 +910,42 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
 
             {/* ══ RIGHT: Detail pane ═══════════════════════════════════════ */}
             <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm p-5" data-testid="setting-detail-panel">
-              {!selectedSetting ? (
+              {viewingOrgLevel ? (
+                <>
+                  <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        <Crown className="w-4 h-4 text-[#1E3A8A]" /> Organisation
+                      </h2>
+                      <p className="text-xs text-gray-500 mt-0.5">{structure.org_level_users.length} staff member{structure.org_level_users.length !== 1 ? "s" : ""} at the top of the tree</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4">Admins, and managers who oversee a whole Setting or the entire organisation rather than a single team.</p>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden" data-testid="org-level-panel">
+                    <div className="p-2 space-y-0.5">
+                      {structure.org_level_users.length === 0 ? (
+                        <div className="flex items-center justify-center h-10 text-[11px] text-gray-300">No organisation-level staff</div>
+                      ) : structure.org_level_users.map(m => (
+                        <MemberRow
+                          key={m.id}
+                          m={m}
+                          teamId={null}
+                          teams={teamsFlat}
+                          canManage={canManage}
+                          isAdmin={isAdmin}
+                          statsByUser={statsByUser}
+                          viewing={viewingUserId === m.id}
+                          onView={() => setViewingUserId(m.id)}
+                          onCloseView={() => setViewingUserId(null)}
+                          onMove={(toTeamId) => demoteToTeam(m, toTeamId)}
+                          onEdit={() => openEditUser(m)}
+                          onDeactivate={() => deactivateUser(m)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : !selectedSetting ? (
                 <div className="text-center py-16 text-gray-400">
                   <Building2 className="w-10 h-10 mx-auto mb-3 opacity-20" />
                   <p className="text-sm font-medium">No setting selected</p>
