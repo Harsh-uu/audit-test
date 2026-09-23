@@ -13,7 +13,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import {
   Building2, Users, Plus, Edit2, Trash2, X, Check,
   MapPin, AlertCircle, CheckCircle, Pencil,
-  MoreVertical, UserPlus, Eye, ArrowRightLeft, Search,
+  MoreVertical, UserPlus, Eye, ArrowRightLeft, Search, Crown,
 } from "lucide-react";
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -193,9 +193,20 @@ function ViewProfileCard({ member, stats }) {
 
 // ── Member row (avatar + "…" View / Move to… / Edit menu) ──────────────────
 
-function MemberRow({ m, teamId, teams, canManage, statsByUser, viewing, onView, onCloseView, onMove, onEdit }) {
+function MemberRow({ m, teamId, teams, canManage, isAdmin, statsByUser, viewing, onView, onCloseView, onMove, onEdit }) {
   const stats = statsByUser[m.id];
   const moveTargets = teams.filter(t => t.id !== teamId);
+  // Being an org-wide manager just means having NO team/setting of your own
+  // (see get_manager_scope in deps.py) — clearing team_id (which cascades to
+  // clearing setting_id too) already does this via the normal "unassign"
+  // path; this is a clearly-labelled, admin-only shortcut to that exact
+  // outcome for the manager role specifically, with a confirm because it's
+  // granting org-wide visibility, not just moving someone between teams.
+  const handlePromote = () => {
+    if (window.confirm(`Promote ${m.name} to an org-wide manager? They'll be able to see and manage every Setting, Team and staff member across the organisation.`)) {
+      onMove(null);
+    }
+  };
   return (
     <Popover open={viewing} onOpenChange={(o) => { if (!o) onCloseView(); }}>
       <PopoverAnchor asChild>
@@ -216,10 +227,15 @@ function MemberRow({ m, teamId, teams, canManage, statsByUser, viewing, onView, 
                   data-testid={`member-menu-${m.id}`}
                 ><MoreVertical className="w-3.5 h-3.5" /></button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40 text-sm" onCloseAutoFocus={(e) => e.preventDefault()}>
+              <DropdownMenuContent align="end" className="w-48 text-sm" onCloseAutoFocus={(e) => e.preventDefault()}>
                 <DropdownMenuItem onClick={onView} data-testid={`member-view-${m.id}`}>
                   <Eye className="w-3.5 h-3.5" /> View
                 </DropdownMenuItem>
+                {isAdmin && teamId && m.role === "manager" && (
+                  <DropdownMenuItem onClick={handlePromote} data-testid={`member-promote-${m.id}`}>
+                    <Crown className="w-3.5 h-3.5" /> Promote to Org-Wide Manager
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger data-testid={`member-move-${m.id}`}>
                     <ArrowRightLeft className="w-3.5 h-3.5" /> Move to…
@@ -315,6 +331,7 @@ function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId
             teamId={t.id}
             teams={teamsFlat}
             canManage={canManage}
+            isAdmin={isAdmin}
             statsByUser={statsByUser}
             viewing={viewingUserId === m.id}
             onView={() => onSetViewingUserId(m.id)}
