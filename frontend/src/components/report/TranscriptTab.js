@@ -7,7 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   resolveExcerptQuery, escapeRegex, formatTranscript,
   parseSpeakerText, serializeTurns, getContrastColor,
-  getDefaultSpeakerColor,
+  getRoleBasedSpeakerColors,
 } from "@/utils/transcriptHelpers";
 import { HighlightedText, MultiHighlightText } from "./transcript/HighlightedText";
 import { SpeakerManagerPanel } from "./transcript/SpeakerManagerPanel";
@@ -17,7 +17,7 @@ import { SpeakerTurnRow } from "./transcript/SpeakerTurnRow";
 
 // ── Main component ───────────────────────────────────────────────────────────
 export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnonymise, canAnonymise, canEditSpeakers = true, onSpeakerTextGenerated, onDirtyChange, highlightExcerpt = "", highlightKey = 0, onFindReplace }) {
-  const { API, getAuthConfig } = useAuth();
+  const { API, getAuthConfig, user } = useAuth();
   const [viewMode, setViewMode] = useState("full");
 
   // ── Speaker editing state ─────────────────────────────────────────────────
@@ -337,29 +337,12 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
     setPendingEditNotes([]);
   }, [originalTurns]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [stagedColors, setStagedColors] = useState(meeting.transcript?.speaker_colors || {});
-
-  // Sync saved colors when meeting reloads (only when not dirty)
-  React.useEffect(() => {
-    if (isDirtyRef.current) return;
-    setStagedColors(meeting.transcript?.speaker_colors || {});
-  }, [meeting.transcript?.speaker_colors]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleColorChange = React.useCallback((speaker, color) => {
-    setStagedColors(prev => ({ ...prev, [speaker]: color }));
-    setDirty(true);
-  }, [setDirty]);
-
-  // Effective colour per speaker — explicit saved/staged colour if set, else a
-  // distinct default from the palette based on first-appearance order. Used
-  // for both the panel swatches and the turn rows so they always match.
-  const speakerColorMap = useMemo(() => {
-    const map = {};
-    uniqueSpeakers.forEach((s, i) => {
-      map[s] = stagedColors[s] || getDefaultSpeakerColor(i);
-    });
-    return map;
-  }, [uniqueSpeakers, stagedColors]);
+  // Effective colour per speaker — role-based (manager vs attendee), configured
+  // once org-wide in Settings > Branding. Used for both the panel and turn rows.
+  const speakerColorMap = useMemo(
+    () => getRoleBasedSpeakerColors(uniqueSpeakers, meeting, user?.org_branding?.speaker_colors),
+    [uniqueSpeakers, meeting, user?.org_branding?.speaker_colors]
+  );
 
   const handleRestoreBackup = async () => {
     const backupBy = meeting.transcript?.speaker_text_backup_by;
@@ -407,18 +390,10 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
         : localTurns;
       const newText = serializeTurns(finalTurns);
 
-      // Remap color keys to match any pending renames
-      const finalColors = {};
-      for (const [oldName, color] of Object.entries(stagedColors)) {
-        const newName = stagedOverrides[oldName] ?? oldName;
-        finalColors[newName] = color;
-      }
-
       const res = await axios.patch(
         `${API}/review/${meeting.id}/speaker-text`,
         {
           speaker_text: newText,
-          speaker_colors: Object.keys(finalColors).length ? finalColors : null,
           edit_note: pendingEditNotes.length ? pendingEditNotes.join("; ") : null,
         }
       );
@@ -428,7 +403,7 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
       setDirty(false);
       setPendingEditNotes([]);
       toast.success("Speaker labels saved");
-      if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText, res.data.edited_by_name, res.data.edited_at, res.data.speaker_colors);
+      if (onSpeakerTextGenerated) onSpeakerTextGenerated(newText, res.data.edited_by_name, res.data.edited_at);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to save speaker labels. Please try again.");
     } finally {
@@ -764,8 +739,6 @@ export const TranscriptTab = React.memo(function TranscriptTab({ meeting, onAnon
                 lastEditedAt={meeting.transcript?.speaker_text_edited_at}
                 backupBy={meeting.transcript?.speaker_text_backup_by}
                 backupAt={meeting.transcript?.speaker_text_backup_at}
-                stagedColors={speakerColorMap}
-                onColorChange={handleColorChange}
               />
             ) : (
               <div className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 border-b border-amber-100 text-xs text-amber-700">

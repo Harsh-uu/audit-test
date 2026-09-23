@@ -522,6 +522,7 @@ async def me(current_user=Depends(get_current_user)):
             user["org_branding"] = {
                 "has_logo": bool(b.get("logo_path")),
                 "primary_color": b.get("primary_color"),
+                "speaker_colors": b.get("speaker_colors") or {},
             }
             user["org_name"] = org["name"] or ""
             user["org_jurisdiction"] = org["jurisdiction"] or "england"

@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Loader2, ArrowLeftRight, ChevronUp, ChevronDown, RotateCcw } from "lucide-react";
-import { SPEAKER_PALETTE } from "@/utils/transcriptHelpers";
 
 // ── Speaker Manager Panel ────────────────────────────────────────────────────
-export function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, onRestoreBackup, saving, isDirty, lastEditedBy, lastEditedAt, backupBy, backupAt, stagedColors, onColorChange }) {
+export function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave, onDiscard, onReset, onRestoreBackup, saving, isDirty, lastEditedBy, lastEditedAt, backupBy, backupAt }) {
   const speakerCounts = useMemo(() => {
     const counts = {};
     for (const t of localTurns) counts[t.speaker] = (counts[t.speaker] || 0) + 1;
@@ -13,15 +12,6 @@ export function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave
   const uniqueSpeakers = Object.keys(speakerCounts);
   const canSwap = uniqueSpeakers.length === 2;
   const [collapsed, setCollapsed] = useState(false);
-  const [openColorPicker, setOpenColorPicker] = useState(null);
-
-  // Close palette on click outside
-  useEffect(() => {
-    if (!openColorPicker) return;
-    const handler = (e) => { if (!e.target.closest("[data-colorpicker]")) setOpenColorPicker(null); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [openColorPicker]);
 
   // Staging: temporary rename values before committing to localTurns
   const [staged, setStaged] = useState({});
@@ -74,36 +64,6 @@ export function SpeakerManagerPanel({ localTurns, onRenameAll, onSwapAll, onSave
               <div className="flex flex-col gap-2.5">
                 {uniqueSpeakers.map(speaker => (
                   <div key={speaker} className="flex items-center gap-2 flex-wrap">
-                    {/* Colour swatch + palette picker */}
-                    <div className="relative flex-shrink-0" data-colorpicker>
-                      <button
-                        type="button"
-                        onClick={() => setOpenColorPicker(openColorPicker === speaker ? null : speaker)}
-                        className="w-6 h-6 rounded-full border-2 border-white shadow ring-1 ring-gray-300 hover:ring-blue-400 transition-all flex-shrink-0"
-                        style={{ backgroundColor: stagedColors?.[speaker] || "#6B7280" }}
-                        title="Pick colour"
-                        data-testid={`color-swatch-${speaker.replace(/\s/g, "-")}`}
-                      />
-                      {openColorPicker === speaker && (
-                        <div className="absolute left-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-2.5 grid grid-cols-5 gap-1.5 w-max">
-                          {SPEAKER_PALETTE.map(c => (
-                            <button
-                              key={c}
-                              type="button"
-                              data-colorpicker
-                              onClick={() => { onColorChange(speaker, c); setOpenColorPicker(null); }}
-                              className="w-6 h-6 rounded-full transition-transform hover:scale-125 focus:outline-none"
-                              style={{
-                                backgroundColor: c,
-                                outline: stagedColors?.[speaker] === c ? `2px solid ${c}` : "none",
-                                outlineOffset: "2px",
-                              }}
-                              title={c}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
                     <input
                       className="text-xs font-semibold px-2.5 py-1.5 rounded border border-gray-200 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 focus:outline-none w-44 bg-white"
                       value={staged[speaker] ?? speaker}

@@ -105,6 +105,55 @@ export function getDefaultSpeakerColor(index) {
   return SPEAKER_PALETTE[index % SPEAKER_PALETTE.length];
 }
 
+// ── Org-level (Branding settings) speaker colours ───────────────────────────
+// Speaker colours used to be chosen per-meeting and keyed by the literal
+// diarised name (e.g. "Sarah"), which meant every meeting could end up with
+// a different palette. Colours are now assigned by ROLE — one fixed colour
+// for whichever attendee is the meeting's manager, and a small rotating set
+// for everyone else — configured once in Settings > Branding and applied
+// consistently to every meeting, org-wide.
+export const DEFAULT_ORG_SPEAKER_COLORS = {
+  manager: "#93C5FD",   // blue-300
+  attendees: ["#FCA5A5", "#86EFAC", "#FDE047", "#D8B4FE"], // red / green / yellow / purple
+};
+
+/** Maps each unique transcript speaker label to a role-based colour, using the
+ *  org's configured Branding colours (falling back to sensible defaults).
+ *  A speaker is treated as "the manager" if their diarised label matches the
+ *  name of a meeting attendee whose account role is manager/admin; everyone
+ *  else is assigned the next attendee-slot colour, cycling if there are more
+ *  speakers than configured slots. */
+export function getRoleBasedSpeakerColors(uniqueSpeakers, meeting, orgSpeakerColors) {
+  const managerColor = orgSpeakerColors?.manager || DEFAULT_ORG_SPEAKER_COLORS.manager;
+  const attendeeColors = Array.isArray(orgSpeakerColors?.attendees) && orgSpeakerColors.attendees.length
+    ? orgSpeakerColors.attendees
+    : DEFAULT_ORG_SPEAKER_COLORS.attendees;
+
+  const attendees = meeting?.attendees || [];
+  const isManagerSpeaker = (speaker) => {
+    const s = (speaker || "").trim().toLowerCase();
+    if (!s) return false;
+    return attendees.some(a => {
+      if (!["manager", "admin"].includes(a.role)) return false;
+      const n = (a.name || "").trim().toLowerCase();
+      if (!n) return false;
+      return n === s || n.startsWith(s) || s.startsWith(n) || n.split(" ")[0] === s;
+    });
+  };
+
+  const map = {};
+  let attendeeSlot = 0;
+  (uniqueSpeakers || []).forEach(speaker => {
+    if (isManagerSpeaker(speaker)) {
+      map[speaker] = managerColor;
+    } else {
+      map[speaker] = attendeeColors[attendeeSlot % attendeeColors.length];
+      attendeeSlot += 1;
+    }
+  });
+  return map;
+}
+
 /** Return dark or white text based on background luminance */
 export function getContrastColor(hex) {
   if (!hex || hex.length < 7) return "#fff";

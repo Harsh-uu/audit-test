@@ -3,6 +3,35 @@ import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import { Upload, Check, AlertCircle, Image, X } from "lucide-react";
+import { SPEAKER_PALETTE, DEFAULT_ORG_SPEAKER_COLORS } from "@/utils/transcriptHelpers";
+
+const ATTENDEE_SLOT_LABELS = ["Attendee 1", "Attendee 2", "Attendee 3", "Attendee 4"];
+
+function SwatchPicker({ label, value, onChange, testId }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-gray-600 w-24 flex-shrink-0">{label}</span>
+      <div className="flex items-center gap-1.5" data-testid={testId}>
+        {SPEAKER_PALETTE.map(c => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            className="w-6 h-6 rounded-full transition-transform hover:scale-125 focus:outline-none"
+            style={{
+              backgroundColor: c,
+              outline: value === c ? `2px solid ${c}` : "none",
+              outlineOffset: "2px",
+              boxShadow: value === c ? "0 0 0 1.5px white inset" : "none",
+            }}
+            title={c}
+            data-testid={`${testId}-swatch-${c}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function BrandingTab() {
   const { getAuthConfig, API, user, updateOrgBranding } = useAuth();
@@ -12,6 +41,10 @@ export function BrandingTab() {
   const [hasLogo, setHasLogo] = useState(current.has_logo || false);
   const [logoPreview, setLogoPreview] = useState(
     current.has_logo ? `${API}/org/branding/logo/${user?.org_id}?t=${Date.now()}` : ""
+  );
+  const [managerColor, setManagerColor] = useState(current.speaker_colors?.manager || DEFAULT_ORG_SPEAKER_COLORS.manager);
+  const [attendeeColors, setAttendeeColors] = useState(
+    current.speaker_colors?.attendees?.length === 4 ? current.speaker_colors.attendees : DEFAULT_ORG_SPEAKER_COLORS.attendees
   );
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -32,6 +65,8 @@ export function BrandingTab() {
           } else {
             setLogoPreview("");
           }
+          if (res.data.speaker_colors?.manager) setManagerColor(res.data.speaker_colors.manager);
+          if (res.data.speaker_colors?.attendees?.length === 4) setAttendeeColors(res.data.speaker_colors.attendees);
         }
       })
       .catch(() => {});
@@ -74,12 +109,17 @@ export function BrandingTab() {
     }
   };
 
+  const setAttendeeColor = (index, color) => {
+    setAttendeeColors(prev => prev.map((c, i) => i === index ? color : c));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError("");
     try {
-      await axios.put(`${API}/org/branding`, { primary_color: primaryColor }, getAuthConfig());
-      updateOrgBranding({ has_logo: hasLogo, primary_color: primaryColor });
+      const speaker_colors = { manager: managerColor, attendees: attendeeColors };
+      await axios.put(`${API}/org/branding`, { primary_color: primaryColor, speaker_colors }, getAuthConfig());
+      updateOrgBranding({ has_logo: hasLogo, primary_color: primaryColor, speaker_colors });
       invalidateCache("/org/branding");
       setMessage("Branding saved");
       setTimeout(() => setMessage(""), 3000);
@@ -178,6 +218,28 @@ export function BrandingTab() {
           >
             Reset
           </button>
+        </div>
+      </div>
+
+      {/* Speaker colours */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Speaker Colours</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Applied to every meeting transcript org-wide, by role — not chosen per meeting. The
+          manager colour is used for whoever is running the supervision; attendee colours rotate
+          for everyone else, so team meetings with several attendees still read clearly.
+        </p>
+        <div className="space-y-2.5" data-testid="speaker-colours-section">
+          <SwatchPicker label="Manager" value={managerColor} onChange={setManagerColor} testId="manager-color-picker" />
+          {ATTENDEE_SLOT_LABELS.map((label, i) => (
+            <SwatchPicker
+              key={label}
+              label={label}
+              value={attendeeColors[i]}
+              onChange={c => setAttendeeColor(i, c)}
+              testId={`attendee-color-picker-${i + 1}`}
+            />
+          ))}
         </div>
       </div>
 

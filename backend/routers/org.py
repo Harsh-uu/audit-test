@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import Response as _Response
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 from deps import get_db, get_current_user, get_manager_scope
 from utils.storage import put_object, get_object
 import database
@@ -83,9 +83,15 @@ class InviteUserRequest(BaseModel):
     password: str
 
 
+class SpeakerColorsUpdate(BaseModel):
+    manager: Optional[str] = None
+    attendees: Optional[List[str]] = None
+
+
 class BrandingUpdate(BaseModel):
     logo_url: Optional[str] = None
     primary_color: Optional[str] = None
+    speaker_colors: Optional[SpeakerColorsUpdate] = None
 
 
 @router.patch("/name")
@@ -517,13 +523,17 @@ async def invite_user_to_org(data: InviteUserRequest, current_user=Depends(get_c
 async def get_branding(current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id")
     if not org_id:
-        return {"has_logo": False, "primary_color": None}
+        return {"has_logo": False, "primary_color": None, "speaker_colors": {}}
     async with database.with_admin() as conn:
         org = await conn.fetchrow("SELECT branding FROM organisations WHERE id=$1", org_id)
     if not org:
-        return {"has_logo": False, "primary_color": None}
+        return {"has_logo": False, "primary_color": None, "speaker_colors": {}}
     b = _jdict(org["branding"])
-    return {"has_logo": bool(b.get("logo_path")), "primary_color": b.get("primary_color")}
+    return {
+        "has_logo": bool(b.get("logo_path")),
+        "primary_color": b.get("primary_color"),
+        "speaker_colors": b.get("speaker_colors") or {},
+    }
 
 
 @router.put("/branding")
@@ -540,6 +550,11 @@ async def update_branding(data: BrandingUpdate, current_user=Depends(get_current
             branding["primary_color"] = data.primary_color
         if data.logo_url == "":
             branding["logo_path"] = None
+        if data.speaker_colors is not None:
+            branding["speaker_colors"] = {
+                "manager": data.speaker_colors.manager,
+                "attendees": data.speaker_colors.attendees,
+            }
         await conn.execute(
             "UPDATE organisations SET branding=$1::jsonb, updated_at=$2 WHERE id=$3",
             branding, datetime.now(timezone.utc).isoformat(), org_id,
