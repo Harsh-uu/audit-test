@@ -397,7 +397,7 @@ async def delete_setting(setting_id: str, current_user=Depends(get_current_user)
         # Staff/teams must be moved to their new home first; only then does
         # this become "just deleting an empty container".
         team_count = await conn.fetchval("SELECT COUNT(*) FROM teams WHERE setting_id=$1", setting_id)
-        staff_count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE setting_id=$1", setting_id)
+        staff_count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE setting_id=$1 AND is_active=TRUE", setting_id)
         if team_count or staff_count:
             raise HTTPException(
                 400,
@@ -477,7 +477,7 @@ async def delete_team(team_id: str, current_user=Depends(get_current_user)):
         # Deletion is only allowed on a genuinely empty container — no admin
         # or manager can delete a team out from under its members; they must
         # be moved to their new team/setting first.
-        member_count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE team_id=$1", team_id)
+        member_count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE team_id=$1 AND is_active=TRUE", team_id)
         if member_count:
             raise HTTPException(400, f"Can't delete — this team still has {member_count} staff assigned. Move them to their new team first.")
         result = await conn.execute("DELETE FROM teams WHERE id=$1", team_id)

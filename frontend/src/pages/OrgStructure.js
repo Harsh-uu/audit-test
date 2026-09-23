@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
@@ -340,7 +340,6 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   const [peopleStats, setPeopleStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSettingId, setSelectedSettingId] = useState(null);
-  const isFirstLoad = useRef(true);
 
   // Flash
   const [message, setMessage] = useState("");
@@ -383,7 +382,6 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
       setStructure(structRes.data);
       setAllUsers(usersRes.data);
       setPeopleStats(statsRes.data);
-      isFirstLoad.current = false;
     } catch (err) {
       console.error("Org structure load failed", err.message);
       flash("Failed to load organisation structure", true);
@@ -504,8 +502,13 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
     setStructure(prev => moveUserInStructure(prev, movedUser, fromTeamId, toTeamId));
     try {
       await axios.patch(`${API}/org/users/${userId}/assign-team`, { team_id: toTeamId }, getAuthConfig());
-      invalidateCache("/admin/people-stats");
+      // Bust every org cache (not just people-stats) so a later tab switch
+      // or page revisit doesn't re-serve the pre-move /org/structure tree —
+      // the local state above is already correct, this just keeps the
+      // shared cache from going stale underneath it.
+      invalidateCache("/org/structure", "/admin/users", "/admin/people-stats");
       flash(`${movedUser.name} moved`);
+      onUserChanged?.();
     } catch (err) {
       setStructure(prev => moveUserInStructure(prev, movedUser, toTeamId, fromTeamId));
       flash(err.response?.data?.detail || "Failed to move user", true);
@@ -624,15 +627,29 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
     if (inviteForm.password.length < 10) return setInviteError("Password must be at least 10 characters");
     setSavingInvite(true);
     setInviteError("");
+    let createdUserId = null;
     try {
       const res = await axios.post(`${API}/org/invite-user`, {
         name: inviteForm.name, email: inviteForm.email, password: inviteForm.password, role: inviteForm.role,
       }, getAuthConfig());
-      await axios.patch(`${API}/org/users/${res.data.id}/assign-team`, { team_id: inviteForm.team_id }, getAuthConfig());
+      createdUserId = res.data.id;
+      await axios.patch(`${API}/org/users/${createdUserId}/assign-team`, { team_id: inviteForm.team_id }, getAuthConfig());
       await refreshData();
       flash("User added successfully");
       setShowInviteUser(false);
-    } catch (err) { setInviteError(err.response?.data?.detail || "Failed to add user"); }
+    } catch (err) {
+      if (createdUserId) {
+        // The account itself was created — only the team assignment failed.
+        // Refresh so it shows up (in Unassigned) instead of appearing to
+        // have vanished, and say so explicitly rather than "Failed to add
+        // user", which would wrongly suggest nothing happened and invite a
+        // retry that then fails on "email already registered".
+        await refreshData();
+        setInviteError(`Account created for ${inviteForm.name}, but couldn't assign the team (${err.response?.data?.detail || "error"}). They're now Unassigned — use the "Manage" link to assign a team.`);
+      } else {
+        setInviteError(err.response?.data?.detail || "Failed to add user");
+      }
+    }
     setSavingInvite(false);
   };
 
@@ -690,6 +707,14 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   const Wrapper = embedded ? React.Fragment : Layout;
   const selectedTeams = selectedSetting?.teams || [];
   const selectedStaffCount = selectedTeams.reduce((n, t) => n + (t.members?.length || 0), 0);
+  // Mirrors the backend's delete guard exactly: teams block it, AND so does
+  // a directly-assigned Setting manager (they hold `setting_id` with no
+  // team) — without this the delete button would look enabled but still
+  // 400 on click.
+  const settingDeleteBlockers = [];
+  if (selectedTeams.length > 0) settingDeleteBlockers.push(`${selectedTeams.length} team${selectedTeams.length !== 1 ? "s" : ""}`);
+  if (selectedSetting?.manager_user_id) settingDeleteBlockers.push("its assigned manager");
+  const settingDeleteBlocked = settingDeleteBlockers.length > 0;
 
   return (
     <Wrapper>
@@ -826,8 +851,8 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                         {isAdmin && (
                           <button
                             onClick={() => deleteSetting(selectedSetting)}
-                            disabled={selectedTeams.length > 0}
-                            title={selectedTeams.length > 0 ? `Move or delete all ${selectedTeams.length} team(s) out first` : "Delete empty setting"}
+                            disabled={settingDeleteBlocked}
+                            title={settingDeleteBlocked ? `Remove ${settingDeleteBlockers.join(" and ")} first` : "Delete empty setting"}
                             className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded disabled:opacity-30 disabled:hover:text-gray-400 disabled:cursor-not-allowed"
                             data-testid={`delete-setting-${selectedSetting.id}`}
                           ><Trash2 className="w-4 h-4" /></button>
