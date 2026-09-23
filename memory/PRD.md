@@ -111,6 +111,12 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - Verified via curl (unassigned list now `[]` for admin+demo-manager-only org, reactivate→login round-trip works) and live screenshots (Reactivate menu item, no Team field for admin, "8/8 staff assigned" with no unassigned banner).
 - **Not resolved this session**: intermittent "click People/Meetings tile → briefly navigates → bounces back to previous page → second click works" glitch. Reproduced live (~1-in-6 attempts) via automated clicking; one reproduced instance showed `401` on `/api/auth/me` and `/api/auth/refresh` in the browser console right at the bounce moment, pointing at the axios 401-retry interceptor in `AuthContext.js` racing with `ProtectedRoute`'s role check under high backend latency (measured 1-1.8s per simple GET in this environment during testing). Root cause NOT yet fixed — needs a dedicated follow-up session with more targeted request-tracing (this is the SAME class of issue as the previously-parked Meetings-page tile bounce, now confirmed to also affect the Dashboard's People tile, i.e. likely a systemic AuthContext/ProtectedRoute race rather than page-specific).
 
+### This session (2026-09-23, cont'd #4) — Setting Manager badge (SHIPPED)
+- New indigo "Setting Manager" pill badge next to the role badge in People & Usage, shown for any manager with `team_id IS NULL AND setting_id IS NOT NULL` (oversees a whole Setting, not just one team, not org-wide). Tooltip: "Oversees all of {setting name}".
+- Also corrected the Unassigned-users exclusion from the previous fix: now excludes **all** managers (`role NOT IN ('admin','manager')`), not just org-wide ones — a setting-scoped manager has a home too and was incorrectly still appearing in Unassigned before this correction.
+- Verified live: badge renders correctly next to "Manager" role badge; unassigned list still empty for the seeded org.
+- Not built (future, if requested): the badge doesn't yet appear in the Structure tab, since setting-scoped managers (team_id null) don't currently render in any team's member list there — would need a dedicated "Organisation level" section in the tree (see backlog).
+
 ## Testing Status
 - Test reports: `/app/test_reports/iteration_149.json` through `iteration_161.json`
 - Known regressions: None

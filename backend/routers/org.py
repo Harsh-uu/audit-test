@@ -226,17 +226,16 @@ async def get_structure(current_user=Depends(get_current_user)):
             settings.append(s)
 
         # Unassigned users — only relevant for org-level managers. Excludes
-        # admins (always org-level, never "unassigned") and org-wide managers
-        # (team_id AND setting_id both NULL is how "Promote to Org-Wide
-        # Manager" intentionally marks full-org visibility — that's a home,
-        # not an orphaned account). A manager with a setting but no specific
-        # team still has a home (their setting) and is likewise excluded.
+        # admins (always org-level, never "unassigned") and ALL managers —
+        # a manager with team_id IS NULL always has a home: either a whole
+        # setting (setting_id set) or the whole org ("Promote to Org-Wide
+        # Manager" clears both). Only non-manager staff with no team are
+        # genuinely orphaned.
         if scope["level"] == "org":
             unassigned_rows = await conn.fetch(
                 """SELECT id, name, email, role FROM users
                    WHERE org_id=$1 AND is_active=TRUE AND team_id IS NULL
-                     AND role != 'admin'
-                     AND NOT (role='manager' AND setting_id IS NULL)
+                     AND role NOT IN ('admin', 'manager')
                    ORDER BY name ASC""",
                 org_id,
             )

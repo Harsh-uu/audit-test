@@ -243,6 +243,15 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canM
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_STYLE[p.role] || "bg-gray-100 text-gray-600"}`}>
                         {ROLE_LABEL[p.role] || p.role}
                       </span>
+                      {p.role === "manager" && !p.team_id && p.setting_id && (
+                        <span
+                          className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700"
+                          data-testid={`setting-manager-badge-${p.user_id}`}
+                          title={`Oversees all of ${p.setting_name || "this setting"}`}
+                        >
+                          Setting Manager
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-500">{p.team_name || <span className="text-gray-300">—</span>}</td>
                     <td className="px-3 py-3 text-right">
