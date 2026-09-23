@@ -14,7 +14,7 @@ import {
 import {
   Users, Settings, Building2,
   RefreshCw, Search, AlertTriangle, Check,
-  Mail, MoreHorizontal, Pencil, UserX, Trash2, AlertCircle,
+  Mail, MoreHorizontal, Pencil, UserX, UserCheck, Trash2, AlertCircle,
 } from "lucide-react";
 
 // ── Avatar helper ────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ function Sparkbar({ data }) {
 }
 
 // ── People & Usage tab ───────────────────────────────────────────────────────
-function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canManage, onDeactivate, onHardDelete }) {
+function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canManage, onDeactivate, onReactivate, onHardDelete }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
@@ -268,11 +268,17 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canM
                             <Pencil className="w-3.5 h-3.5" /> Edit
                           </DropdownMenuItem>
                           {canManage && !p.pending_invite && (
-                            <DropdownMenuItem onClick={() => onDeactivate(p)} data-testid={`people-deactivate-${p.user_id}`}>
-                              <UserX className="w-3.5 h-3.5" /> Deactivate
-                            </DropdownMenuItem>
+                            p.is_active ? (
+                              <DropdownMenuItem onClick={() => onDeactivate(p)} data-testid={`people-deactivate-${p.user_id}`}>
+                                <UserX className="w-3.5 h-3.5" /> Deactivate
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => onReactivate(p)} data-testid={`people-reactivate-${p.user_id}`}>
+                                <UserCheck className="w-3.5 h-3.5" /> Reactivate
+                              </DropdownMenuItem>
+                            )
                           )}
-                          {isAdmin && (
+                          {isAdmin && !p.is_active && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => onHardDelete(p)} className="text-red-600 focus:text-red-600" data-testid={`people-delete-${p.user_id}`}>
@@ -434,6 +440,18 @@ export default function PeopleHub() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
 
+  const reactivateUser = useCallback(async (person) => {
+    try {
+      await axios.put(`${API}/admin/users/${person.user_id}`, { is_active: true }, getAuthConfig());
+      invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
+      toast.success(`${person.name} reactivated — they can log in again`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to reactivate user");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API]);
+
   const confirmHardDelete = async () => {
     if (!hardDeleteConfirmExpected || hardDeleteConfirmText.trim() !== hardDeleteConfirmExpected) return;
     setHardDeleting(true);
@@ -512,7 +530,7 @@ export default function PeopleHub() {
           {tab === "people" && (
             <PeopleTab
               people={people} loading={loading} onRefresh={handleRefresh} onRevoke={revokeInvite} onEdit={setEditingUser}
-              isAdmin={isAdmin} canManage={canManage} onDeactivate={deactivateUser} onHardDelete={setHardDeleteTarget}
+              isAdmin={isAdmin} canManage={canManage} onDeactivate={deactivateUser} onReactivate={reactivateUser} onHardDelete={setHardDeleteTarget}
             />
           )}
           {tab === "structure" && (

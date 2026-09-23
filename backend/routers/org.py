@@ -225,10 +225,19 @@ async def get_structure(current_user=Depends(get_current_user)):
             s["teams"] = teams_by_setting.get(s["id"], [])
             settings.append(s)
 
-        # Unassigned users — only relevant for org-level managers
+        # Unassigned users — only relevant for org-level managers. Excludes
+        # admins (always org-level, never "unassigned") and org-wide managers
+        # (team_id AND setting_id both NULL is how "Promote to Org-Wide
+        # Manager" intentionally marks full-org visibility — that's a home,
+        # not an orphaned account). A manager with a setting but no specific
+        # team still has a home (their setting) and is likewise excluded.
         if scope["level"] == "org":
             unassigned_rows = await conn.fetch(
-                "SELECT id, name, email, role FROM users WHERE org_id=$1 AND is_active=TRUE AND team_id IS NULL ORDER BY name ASC",
+                """SELECT id, name, email, role FROM users
+                   WHERE org_id=$1 AND is_active=TRUE AND team_id IS NULL
+                     AND role != 'admin'
+                     AND NOT (role='manager' AND setting_id IS NULL)
+                   ORDER BY name ASC""",
                 org_id,
             )
             unassigned = [dict(r) for r in unassigned_rows]
@@ -526,9 +535,11 @@ async def assign_user_to_team(user_id: str, data: TeamAssignRequest, current_use
     org_id = current_user.get("org_id", "")
     scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
-        user = await conn.fetchrow("SELECT id FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
+        user = await conn.fetchrow("SELECT id, role FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
         if not user:
             raise HTTPException(404, "User not found")
+        if user["role"] == "admin":
+            raise HTTPException(400, "Admins stay at the top Organisation level and can't be assigned to a team")
         if data.team_id:
             team = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", data.team_id)
             if not team:

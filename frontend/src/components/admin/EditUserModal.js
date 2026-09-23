@@ -67,7 +67,7 @@ export function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, cu
       if (showPwd && newPwd.trim()) {
         await axios.post(`${API}/admin/users/${userId}/reset-password`, { new_password: newPwd }, getAuthConfig());
       }
-      if (selectedTeam !== (person.team_id || "")) {
+      if (form.role !== "admin" && selectedTeam !== (person.team_id || "")) {
         await axios.patch(`${API}/org/users/${userId}/assign-team`, { team_id: selectedTeam || null }, getAuthConfig());
       }
       onSaved();
@@ -111,19 +111,21 @@ export function EditUserModal({ person, onClose, onSaved, API, getAuthConfig, cu
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Team</label>
-            <select value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)}
-              className={selectCls} data-testid="edit-user-team">
-              <option value="">— No team (unassigned)</option>
-              {teamOptions.map(t => (
-                <option key={t.id} value={t.id}>{t.label}</option>
-              ))}
-            </select>
-            {teamOptions.length === 0 && (
-              <p className="text-xs text-gray-400 mt-1">No teams created yet. Add teams in the Structure tab.</p>
-            )}
-          </div>
+          {form.role !== "admin" && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Team</label>
+              <select value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)}
+                className={selectCls} data-testid="edit-user-team">
+                <option value="">— No team (unassigned)</option>
+                {teamOptions.map(t => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+              {teamOptions.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1">No teams created yet. Add teams in the Structure tab.</p>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-2 pt-1">
             <input type="checkbox" id="edit-active" checked={form.is_active}
