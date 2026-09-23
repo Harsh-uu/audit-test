@@ -888,6 +888,11 @@ async def download_audio(meeting_id: str, request: Request, consent: bool = Fals
     data, fetched_content_type = await get_audio(audio_row["storage_path"])
 
     xff = request.headers.get("X-Forwarded-For", "")
+    # NOTE: intentionally the LAST XFF element, not the first — matches the
+    # same convention used for rate-limiting in auth.py. Only Cloudflare/our
+    # own ingress can append to this header from the app's perspective; any
+    # earlier value could be spoofed by the client itself, so the last hop
+    # our own infra appended is the only IP that can actually be trusted.
     ip = (
         request.headers.get("X-Real-IP")
         or (xff.split(",")[-1].strip() if xff else None)
@@ -900,7 +905,7 @@ async def download_audio(meeting_id: str, request: Request, consent: bool = Fals
         )
 
     from fastapi.responses import Response
-    filename = audio_row["original_filename"] or f"audio_{meeting_id}.wav"
+    filename = audio_row["original_filename"] or f"audio_{meeting_id}.webm"
     return Response(
         content=data,
         media_type=audio_row["content_type"] or fetched_content_type or "audio/wav",

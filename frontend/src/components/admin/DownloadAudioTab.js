@@ -98,10 +98,12 @@ export function DownloadAudioTab() {
         { ...getAuthConfig(), responseType: "blob" }
       );
       const url = URL.createObjectURL(res.data);
+      const disposition = res.headers["content-disposition"] || "";
+      const match = disposition.match(/filename="?([^"]+)"?/);
       const safeTitle = (meeting.title || "audio").replace(/[^a-z0-9 _-]/gi, "").trim().replace(/\s+/g, "_");
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${safeTitle || "audio"}.wav`;
+      a.download = match ? match[1] : `${safeTitle || "audio"}.webm`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success("Audio downloaded");
