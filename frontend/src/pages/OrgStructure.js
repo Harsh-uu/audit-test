@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
@@ -7,9 +6,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Layout from "@/components/Layout";
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import {
-  Building2, Users, ChevronRight, ChevronDown, Plus, Edit2, Trash2, X, Check,
-  MapPin, UserCog, Loader2, AlertCircle, CheckCircle, Pencil,
-  GripVertical, UserPlus, Search, UserCheck, Layers,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import {
+  Building2, Users, Plus, Edit2, Trash2, X, Check,
+  MapPin, AlertCircle, CheckCircle, Pencil,
+  MoreVertical, UserPlus, Eye, ArrowRightLeft,
 } from "lucide-react";
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -67,6 +71,16 @@ function moveUserInStructure(prev, movedUser, fromTeamId, toTeamId) {
   return { ...prev, settings: newSettings, unassigned_users: newUnassigned };
 }
 
+function daysSince(dateStr) {
+  if (!dateStr) return null;
+  const diff = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  if (diff < 7) return `${diff}d ago`;
+  if (diff < 30) return `${Math.round(diff / 7)}w ago`;
+  return `${Math.round(diff / 30)}mo ago`;
+}
+
 // ── Small UI atoms ─────────────────────────────────────────────────────────
 
 function avatarColor(name = "") {
@@ -94,10 +108,29 @@ function RoleBadge({ role }) {
   );
 }
 
-function Modal({ title, onClose, children }) {
+function Sparkbar({ data }) {
+  const safeData = Array.isArray(data) ? data : [];
+  const max = Math.max(...safeData, 1);
+  return (
+    <div className="flex items-end gap-0.5" style={{ height: 20 }}>
+      {safeData.map((v, i) => (
+        <div
+          key={i}
+          className="w-1.5 rounded-sm"
+          style={{
+            height: v === 0 ? 3 : Math.max(4, Math.round((v / max) * 20)),
+            background: v === 0 ? "#E5E7EB" : i === safeData.length - 1 ? "#1E3A8A" : "#93C5FD",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children, wide }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+      <div className={`bg-white rounded-xl shadow-2xl w-full p-6 ${wide ? "max-w-lg" : "max-w-md"}`}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose}><X className="w-4 h-4 text-gray-400" /></button>
@@ -120,6 +153,146 @@ function FormField({ label, children }) {
 const inputCls = "w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]";
 const selectCls = `${inputCls} bg-white`;
 
+// ── View profile popover content ────────────────────────────────────────────
+
+function ViewProfileCard({ member, stats }) {
+  const joined = stats?.created_at
+    ? new Date(stats.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : "—";
+  const teamLabel = stats?.team_name
+    ? (stats.setting_name ? `${stats.team_name}, ${stats.setting_name}` : stats.team_name)
+    : "Unassigned";
+  const lastActive = stats?.last_meeting_date ? daysSince(stats.last_meeting_date) : "No meetings yet";
+  return (
+    <div data-testid={`view-profile-${member.id}`}>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ background: avatarColor(member.name) }}>
+          {(member.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 truncate">{member.name}</p>
+          <p className="text-xs text-gray-400 truncate">{member.email}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-y-1.5 text-xs mb-3">
+        <span className="text-gray-400">Role</span><span className="text-gray-800 font-medium text-right">{ROLE_LABELS[member.role] || member.role}</span>
+        <span className="text-gray-400">Team</span><span className="text-gray-800 font-medium text-right">{teamLabel}</span>
+        <span className="text-gray-400">Joined</span><span className="text-gray-800 font-medium text-right">{joined}</span>
+        <span className="text-gray-400">Meetings</span><span className="text-gray-800 font-medium text-right">{stats?.meeting_count ?? "—"}</span>
+        <span className="text-gray-400">Last active</span><span className="text-emerald-600 font-medium text-right">{lastActive}</span>
+      </div>
+      {stats?.weekly_activity && (
+        <>
+          <p className="text-[10px] text-gray-400 mb-1">8-week activity</p>
+          <Sparkbar data={stats.weekly_activity} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Member row (avatar + "…" View / Move to… / Edit menu) ──────────────────
+
+function MemberRow({ m, teamId, teams, canManage, statsByUser, viewing, onView, onCloseView, onMove, onEdit }) {
+  const stats = statsByUser[m.id];
+  const moveTargets = teams.filter(t => t.id !== teamId);
+  return (
+    <Popover open={viewing} onOpenChange={(o) => { if (!o) onCloseView(); }}>
+      <PopoverAnchor asChild>
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-50 group/member" data-testid={`member-${m.id}`}>
+          <Avatar name={m.name} />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-gray-900 truncate">{m.name}</p>
+            <RoleBadge role={m.role} />
+          </div>
+          {canManage && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="p-1.5 rounded text-gray-400 hover:text-[#1E3A8A] hover:bg-gray-100 opacity-0 group-hover/member:opacity-100 focus:opacity-100 transition-opacity"
+                  data-testid={`member-menu-${m.id}`}
+                ><MoreVertical className="w-3.5 h-3.5" /></button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40 text-sm">
+                <DropdownMenuItem onClick={onView} data-testid={`member-view-${m.id}`}>
+                  <Eye className="w-3.5 h-3.5" /> View
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger data-testid={`member-move-${m.id}`}>
+                    <ArrowRightLeft className="w-3.5 h-3.5" /> Move to…
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                    {teamId && (
+                      <DropdownMenuItem onClick={() => onMove(null)} data-testid={`move-unassign-${m.id}`}>
+                        Unassign
+                      </DropdownMenuItem>
+                    )}
+                    {moveTargets.length === 0 && !teamId && (
+                      <div className="px-2 py-1.5 text-xs text-gray-400">No teams available</div>
+                    )}
+                    {moveTargets.map(t => (
+                      <DropdownMenuItem key={t.id} onClick={() => onMove(t.id)} data-testid={`move-to-${t.id}-${m.id}`}>
+                        {t.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuItem onClick={onEdit} data-testid={`member-edit-${m.id}`}>
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent side="right" align="start" className="w-72" data-testid={`member-view-popover-${m.id}`}>
+        <ViewProfileCard member={m} stats={stats} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ── Team card (header + member rows) ────────────────────────────────────────
+
+function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId, onSetViewingUserId, onMoveUser, onEditTeam, onDeleteTeam, onEditUser }) {
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden mb-3 bg-white" data-testid={`team-${t.id}`}>
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 group">
+        <Users className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        <span className="text-xs font-semibold text-gray-800">{t.name}</span>
+        <span className="text-[11px] text-gray-400">Supervisor: {t.supervisor_name || "—"}</span>
+        {canManage && (
+          <div className="flex items-center gap-0.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={onEditTeam} className="p-1 text-gray-400 hover:text-[#1E3A8A]" data-testid={`edit-team-${t.id}`}><Edit2 className="w-3 h-3" /></button>
+            {isAdmin && (
+              <button onClick={onDeleteTeam} className="p-1 text-gray-400 hover:text-red-500" data-testid={`delete-team-${t.id}`}><Trash2 className="w-3 h-3" /></button>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="p-2 space-y-0.5">
+        {(t.members || []).length === 0 ? (
+          <div className="flex items-center justify-center h-10 text-[11px] text-gray-300">No members yet</div>
+        ) : t.members.map(m => (
+          <MemberRow
+            key={m.id}
+            m={m}
+            teamId={t.id}
+            teams={teamsFlat}
+            canManage={canManage}
+            statsByUser={statsByUser}
+            viewing={viewingUserId === m.id}
+            onView={() => onSetViewingUserId(m.id)}
+            onCloseView={() => onSetViewingUserId(null)}
+            onMove={(toTeamId) => onMoveUser(m.id, t.id, toTeamId)}
+            onEdit={() => onEditUser(m)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function OrgStructure({ embedded = false, onUserChanged }) {
@@ -129,12 +302,10 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
 
   const [structure, setStructure] = useState({ settings: [], unassigned_users: [] });
   const [allUsers, setAllUsers] = useState([]);
+  const [peopleStats, setPeopleStats] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [expandedSettings, setExpandedSettings] = useState(new Set());
+  const [selectedSettingId, setSelectedSettingId] = useState(null);
   const isFirstLoad = useRef(true);
-
-  // Org name inline edit
-  // org name editing is now handled in Layout.js
 
   // Flash
   const [message, setMessage] = useState("");
@@ -144,8 +315,8 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   const [saving, setSaving] = useState(false);
   const [savingInvite, setSavingInvite] = useState(false);
 
-  // People pool search
-  const [searchQuery, setSearchQuery] = useState("");
+  // "View" popover — one open at a time
+  const [viewingUserId, setViewingUserId] = useState(null);
 
   // Modals
   const [showAddSetting, setShowAddSetting] = useState(false);
@@ -154,29 +325,26 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [showInviteUser, setShowInviteUser] = useState(false);
+  const [showUnassignedModal, setShowUnassignedModal] = useState(false);
 
   // Forms
   const [settingForm, setSettingForm] = useState({ name: "", description: "", manager_user_id: "" });
   const [teamForm, setTeamForm] = useState({ name: "", description: "", supervisor_user_id: "" });
-  const [inviteForm, setInviteForm] = useState({ name: "", email: "", password: "", role: "attendee" });
+  const [inviteForm, setInviteForm] = useState({ name: "", email: "", password: "", role: "attendee", team_id: "" });
   const [inviteError, setInviteError] = useState("");
-
-  // ── Org name edit ─────────────────────────────────────────────────────────
-  // (Handled globally in Layout.js)
 
   // ── Data fetching ────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
-      const [structRes, usersRes] = await Promise.all([
+      const [structRes, usersRes, statsRes] = await Promise.all([
         cachedGet(`${API}/org/structure`, getAuthConfig()),
         cachedGet(`${API}/admin/users`, getAuthConfig()),
+        cachedGet(`${API}/admin/people-stats`, getAuthConfig()),
       ]);
       setStructure(structRes.data);
       setAllUsers(usersRes.data);
-      if (isFirstLoad.current) {
-        setExpandedSettings(new Set(structRes.data.settings.map(s => s.id)));
-        isFirstLoad.current = false;
-      }
+      setPeopleStats(statsRes.data);
+      isFirstLoad.current = false;
     } catch (err) {
       console.error("Org structure load failed", err.message);
       flash("Failed to load organisation structure", true);
@@ -192,12 +360,25 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   // reopening "Edit" on that same row during that window prefilled the OLD
   // pre-save values, and clicking Save again silently reverted the change.
   const refreshData = useCallback(async () => {
-    invalidateCache("/org/structure", "/admin/users");
+    invalidateCache("/org/structure", "/admin/users", "/admin/people-stats");
     await fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchData]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Keep a valid selection: default to the first setting on load, and fall
+  // back to it whenever the currently-selected setting disappears (deleted).
+  useEffect(() => {
+    if (loading) return;
+    if (structure.settings.length === 0) {
+      if (selectedSettingId !== null) setSelectedSettingId(null);
+      return;
+    }
+    if (!structure.settings.some(s => s.id === selectedSettingId)) {
+      setSelectedSettingId(structure.settings[0].id);
+    }
+  }, [structure, loading, selectedSettingId]);
 
   const flash = (msg, isError = false) => {
     if (isError) setError(msg); else setMessage(msg);
@@ -205,27 +386,36 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   };
 
   const managerUsers = allUsers.filter(u => ["admin", "manager"].includes(u.role));
+  const statsByUser = useMemo(() => {
+    const map = {};
+    peopleStats.forEach(p => { map[p.user_id] = p; });
+    return map;
+  }, [peopleStats]);
 
-  // ── Drag and drop ─────────────────────────────────────────────────────────
-  const onDragEnd = async (result) => {
-    const { draggableId: userId, source, destination } = result;
-    if (!destination) return;
-    if (source.droppableId === destination.droppableId) return;
+  // All teams org-wide, flattened, for the "Move to…" submenu — prefixed
+  // with the setting name only when there's more than one setting to disambiguate.
+  const teamsFlat = useMemo(() => {
+    const multi = structure.settings.length > 1;
+    const flat = [];
+    structure.settings.forEach(s => (s.teams || []).forEach(t => {
+      flat.push({ id: t.id, label: multi ? `${s.name} — ${t.name}` : t.name });
+    }));
+    return flat;
+  }, [structure]);
 
-    const fromTeamId = source.droppableId === "unassigned" ? null : source.droppableId.replace("team-", "");
-    const toTeamId = destination.droppableId === "unassigned" ? null : destination.droppableId.replace("team-", "");
+  const selectedSetting = structure.settings.find(s => s.id === selectedSettingId) || null;
+
+  // ── Move user (used by the "Move to…" menu) ─────────────────────────────
+  const moveUser = async (userId, fromTeamId, toTeamId) => {
     if (fromTeamId === toTeamId) return;
-
     const movedUser = findUser(userId, structure);
     if (!movedUser) return;
-
-    // Optimistic update — immediate visual response
     setStructure(prev => moveUserInStructure(prev, movedUser, fromTeamId, toTeamId));
-
     try {
       await axios.patch(`${API}/org/users/${userId}/assign-team`, { team_id: toTeamId }, getAuthConfig());
+      invalidateCache("/admin/people-stats");
+      flash(`${movedUser.name} moved`);
     } catch (err) {
-      // Revert on failure
       setStructure(prev => moveUserInStructure(prev, movedUser, toTeamId, fromTeamId));
       flash(err.response?.data?.detail || "Failed to move user", true);
     }
@@ -246,8 +436,7 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
         await refreshData();
         flash("Setting created");
         setShowAddSetting(false);
-        // Auto-expand new setting
-        setExpandedSettings(prev => new Set([...prev, res.data?.id].filter(Boolean)));
+        if (res.data?.id) setSelectedSettingId(res.data.id);
       }
       setSettingForm({ name: "", description: "", manager_user_id: "" });
     } catch (err) { flash(err.response?.data?.detail || "Failed to save", true); }
@@ -313,28 +502,34 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
     onUserChanged?.();
   };
 
+  const openAddUserForSetting = () => {
+    const teams = selectedSetting?.teams || [];
+    if (teams.length === 0) return;
+    setInviteForm({ name: "", email: "", password: "", role: "attendee", team_id: teams[0].id });
+    setInviteError("");
+    setShowInviteUser(true);
+  };
+
   const inviteUser = async () => {
     if (!inviteForm.name.trim()) return setInviteError("Name is required");
     if (!inviteForm.email.trim()) return setInviteError("Email is required");
+    if (!inviteForm.team_id) return setInviteError("Team is required");
     if (inviteForm.password.length < 10) return setInviteError("Password must be at least 10 characters");
     setSavingInvite(true);
     setInviteError("");
     try {
-      await axios.post(`${API}/org/invite-user`, inviteForm, getAuthConfig());
+      const res = await axios.post(`${API}/org/invite-user`, {
+        name: inviteForm.name, email: inviteForm.email, password: inviteForm.password, role: inviteForm.role,
+      }, getAuthConfig());
+      await axios.patch(`${API}/org/users/${res.data.id}/assign-team`, { team_id: inviteForm.team_id }, getAuthConfig());
       await refreshData();
       flash("User added successfully");
       setShowInviteUser(false);
-      setInviteForm({ name: "", email: "", password: "", role: "attendee" });
     } catch (err) { setInviteError(err.response?.data?.detail || "Failed to add user"); }
     setSavingInvite(false);
   };
 
   // ── Derived values ─────────────────────────────────────────────────────────
-  const filteredUnassigned = structure.unassigned_users.filter(u =>
-    !searchQuery ||
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
   const totalUsers = allUsers.length;
   const assignedCount = totalUsers - structure.unassigned_users.length;
 
@@ -342,76 +537,41 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   if (loading) {
     const skeletonEl = (
       <div className="p-6 md:p-8">
-        {/* Page header skeleton */}
         <div className="flex items-center justify-between mb-6">
           <div className="space-y-2">
             <Skeleton className="h-7 w-52" />
             <Skeleton className="h-4 w-72" />
           </div>
-          <Skeleton className="h-9 w-32 rounded-lg" />
         </div>
-        {/* Two-panel skeleton */}
         <div className="flex flex-col lg:flex-row gap-5">
-          {/* Left: org tree */}
-          <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-              <Skeleton className="h-4 w-4 rounded" />
-              <Skeleton className="h-4 w-32" />
+          <div className="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <Skeleton className="h-4 w-24" />
             </div>
-            <div className="p-4 space-y-3">
-              {[...Array(3)].map((_, si) => (
-                <div key={si} className="border border-gray-200 rounded-xl overflow-hidden">
-                  {/* Setting header */}
-                  <div className="flex items-center gap-3 px-4 py-3 bg-gray-50">
-                    <Skeleton className="h-4 w-4 rounded flex-shrink-0" />
-                    <Skeleton className="h-4 w-4 rounded flex-shrink-0" />
-                    <div className="flex-1 space-y-1.5">
-                      <Skeleton className="h-4 w-40" />
-                      <Skeleton className="h-3 w-28" />
-                    </div>
-                  </div>
-                  {/* Team rows */}
-                  {si === 0 && (
-                    <div className="p-3 space-y-2 bg-white">
-                      {[...Array(2)].map((_, ti) => (
-                        <div key={ti} className="border border-gray-100 rounded-lg overflow-hidden">
-                          <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 border-b border-gray-100">
-                            <Skeleton className="h-3.5 w-3.5 rounded flex-shrink-0" />
-                            <div className="flex-1 space-y-1">
-                              <Skeleton className="h-3 w-28" />
-                              <Skeleton className="h-2.5 w-20" />
-                            </div>
-                          </div>
-                          <div className="flex gap-1.5 p-2">
-                            {[...Array(3)].map((_, mi) => (
-                              <Skeleton key={mi} className="h-6 w-6 rounded-full" />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+            <div className="p-3 space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="space-y-1.5 px-2">
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-3 w-24" />
                 </div>
               ))}
             </div>
           </div>
-          {/* Right: unassigned panel */}
-          <div className="w-full lg:w-72 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex-shrink-0">
-            <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-              <Skeleton className="h-4 w-4 rounded" />
-              <Skeleton className="h-4 w-32" />
-            </div>
-            <div className="p-4 space-y-2">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center gap-2 p-2">
-                  <Skeleton className="h-7 w-7 rounded-full flex-shrink-0" />
-                  <div className="flex-1 space-y-1">
-                    <Skeleton className="h-3 w-28" />
-                    <Skeleton className="h-2.5 w-16" />
-                  </div>
+          <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden p-4 space-y-3">
+            <Skeleton className="h-6 w-48" />
+            {[...Array(2)].map((_, ti) => (
+              <div key={ti} className="border border-gray-100 rounded-lg overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 border-b border-gray-100">
+                  <Skeleton className="h-3.5 w-3.5 rounded flex-shrink-0" />
+                  <Skeleton className="h-3 w-28" />
                 </div>
-              ))}
-            </div>
+                <div className="flex gap-1.5 p-2">
+                  {[...Array(3)].map((_, mi) => (
+                    <Skeleton key={mi} className="h-6 w-6 rounded-full" />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -421,447 +581,332 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const Wrapper = embedded ? React.Fragment : Layout;
+  const selectedTeams = selectedSetting?.teams || [];
+  const selectedStaffCount = selectedTeams.reduce((n, t) => n + (t.members?.length || 0), 0);
+
   return (
     <Wrapper>
       <div>
-
-        {/* ── Main content ── */}
         <div className="p-6 md:p-8 fade-in">
 
-        {/* Page header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900 font-display">Organisation Structure</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Drag staff between teams to reassign · {assignedCount}/{totalUsers} staff assigned
-            </p>
+          {/* Page header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 font-display">Organisation Structure</h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {structure.settings.length} setting{structure.settings.length !== 1 ? "s" : ""} · {assignedCount}/{totalUsers} staff assigned
+              </p>
+            </div>
           </div>
-          {canManage && (
-            <button
-              onClick={() => { setShowAddSetting(true); setSettingForm({ name: "", description: "", manager_user_id: "" }); }}
-              className="flex items-center gap-1.5 bg-[#1E3A8A] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#1E40AF] transition-colors"
-              data-testid="add-setting-btn"
-            >
-              <Plus className="w-4 h-4" /> Add Setting
-            </button>
+
+          {/* Flash messages */}
+          {message && (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg p-3 mb-4 text-sm" data-testid="org-success">
+              <CheckCircle className="w-4 h-4 flex-shrink-0" />{message}
+            </div>
           )}
-        </div>
+          {error && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm" data-testid="org-error">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+              <button onClick={() => setError("")} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
 
-        {/* Flash messages */}
-        {message && (
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg p-3 mb-4 text-sm" data-testid="org-success">
-            <CheckCircle className="w-4 h-4 flex-shrink-0" />{message}
-          </div>
-        )}
-        {error && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm" data-testid="org-error">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
-            <button onClick={() => setError("")} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
-          </div>
-        )}
-
-        {/* ── Two-panel DnD layout ── */}
-        <DragDropContext onDragEnd={onDragEnd}>
+          {/* ── Master–detail layout ── */}
           <div className="flex flex-col lg:flex-row gap-5" style={{ alignItems: "flex-start" }}>
 
-            {/* ══ LEFT: Org Tree ══════════════════════════════════════════ */}
-            <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" data-testid="org-tree">
-              <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-gray-400" />
-                <span className="text-sm font-semibold text-gray-700">Settings &amp; Teams</span>
-                <span className="text-xs text-gray-400">({structure.settings.length})</span>
+            {/* ══ LEFT: Settings master list ══════════════════════════════ */}
+            <div className="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden lg:sticky lg:top-4" data-testid="settings-master-list">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Settings ({structure.settings.length})</span>
+                {canManage && (
+                  <button
+                    onClick={() => { setShowAddSetting(true); setSettingForm({ name: "", description: "", manager_user_id: "" }); }}
+                    className="text-xs font-medium text-[#1E3A8A] hover:underline"
+                    data-testid="add-setting-btn"
+                  >+ Add</button>
+                )}
               </div>
-
-              <div className="p-4 space-y-3">
+              <div className="max-h-[70vh] overflow-y-auto">
                 {structure.settings.length === 0 && (
-                  <div className="text-center py-16 text-gray-400">
-                    <Building2 className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p className="text-sm font-medium">No settings yet</p>
-                    {canManage && <p className="text-xs mt-1">Use "Add Setting" to get started</p>}
+                  <div className="text-center py-12 px-4 text-gray-400">
+                    <Building2 className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                    <p className="text-xs font-medium">No settings yet</p>
+                    {canManage && <p className="text-[11px] mt-1">Use "+ Add" to get started</p>}
                   </div>
                 )}
-
                 {structure.settings.map(s => {
-                  const isExpanded = expandedSettings.has(s.id);
                   const teams = s.teams || [];
                   const staffCount = teams.reduce((n, t) => n + (t.members?.length || 0), 0);
-
+                  const isSelected = selectedSettingId === s.id;
                   return (
-                    <div key={s.id} className="border border-gray-200 rounded-xl overflow-hidden" data-testid={`setting-${s.id}`}>
-
-                      {/* Setting header */}
-                      <div
-                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer group transition-colors ${isExpanded ? "bg-[#EFF6FF]" : "bg-gray-50 hover:bg-gray-100"}`}
-                        onClick={() => setExpandedSettings(prev => {
-                          const next = new Set(prev);
-                          if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
-                          return next;
-                        })}
-                      >
-                        {isExpanded
-                          ? <ChevronDown className="w-4 h-4 text-[#1E3A8A] flex-shrink-0" />
-                          : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
-                        <MapPin className="w-4 h-4 text-[#1E3A8A] flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
-                          {s.manager_name && <p className="text-xs text-gray-400">Manager: {s.manager_name}</p>}
-                          <p className="text-xs text-gray-400">{teams.length} team{teams.length !== 1 ? "s" : ""} · {staffCount} staff</p>
-                        </div>
-                        {canManage && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                            <button
-                              onClick={() => { setEditingSetting(s); setSettingForm({ name: s.name, description: s.description || "", manager_user_id: s.manager_user_id || "" }); }}
-                              className="p-1.5 text-gray-400 hover:text-[#1E3A8A] hover:bg-white rounded"
-                              title="Edit setting"
-                              data-testid={`edit-setting-${s.id}`}
-                            ><Edit2 className="w-3.5 h-3.5" /></button>
-                            {isAdmin && (
-                              <button
-                                onClick={() => deleteSetting(s)}
-                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white rounded"
-                                data-testid={`delete-setting-${s.id}`}
-                              ><Trash2 className="w-3.5 h-3.5" /></button>
-                            )}
-                          </div>
-                        )}
+                    <div
+                      key={s.id}
+                      onClick={() => setSelectedSettingId(s.id)}
+                      className={`px-4 py-3 border-l-[3px] cursor-pointer transition-colors ${isSelected ? "border-[#1E3A8A] bg-[#EFF6FF]" : "border-transparent hover:bg-gray-50"}`}
+                      data-testid={`setting-row-${s.id}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <MapPin className={`w-4 h-4 flex-shrink-0 ${isSelected ? "text-[#1E3A8A]" : "text-gray-400"}`} />
+                        <span className={`text-sm truncate ${isSelected ? "font-semibold text-gray-900" : "font-medium text-gray-700"}`}>{s.name}</span>
                       </div>
-
-                      {/* Teams list */}
-                      {isExpanded && (
-                        <div className="p-3 space-y-2 bg-white">
-                          {teams.map(t => (
-                            <div key={t.id} className="border border-gray-100 rounded-lg overflow-hidden" data-testid={`team-${t.id}`}>
-
-                              {/* Team header */}
-                              <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 group border-b border-gray-100">
-                                <Users className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-semibold text-gray-800">{t.name}</p>
-                                  {t.supervisor_name && <p className="text-[11px] text-gray-400">Supervisor: {t.supervisor_name}</p>}
-                                </div>
-                                {canManage && (
-                                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      onClick={() => { setEditingTeam(t); setTeamForm({ name: t.name, description: t.description || "", supervisor_user_id: t.supervisor_user_id || "" }); }}
-                                      className="p-1 text-gray-400 hover:text-[#1E3A8A]"
-                                      data-testid={`edit-team-${t.id}`}
-                                    ><Edit2 className="w-3 h-3" /></button>
-                                    <button
-                                      onClick={() => deleteTeam(t)}
-                                      className="p-1 text-gray-400 hover:text-red-500"
-                                      data-testid={`delete-team-${t.id}`}
-                                    ><Trash2 className="w-3 h-3" /></button>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Droppable member list */}
-                              <Droppable droppableId={`team-${t.id}`}>
-                                {(provided, snapshot) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.droppableProps}
-                                    className={`min-h-[56px] px-2 py-1.5 transition-colors ${snapshot.isDraggingOver ? "bg-blue-50" : "bg-white"}`}
-                                  >
-                                    {(t.members || []).map((m, idx) => (
-                                      <Draggable key={m.id} draggableId={m.id} index={idx} isDragDisabled={!canManage}>
-                                        {(provided, snapshot) => (
-                                          <div
-                                            ref={provided.innerRef}
-                                            {...provided.draggableProps}
-                                            className={`flex items-center gap-2 px-2 py-1.5 rounded-md mb-1 group/member transition-all ${snapshot.isDragging ? "bg-white shadow-lg ring-1 ring-blue-200" : "hover:bg-gray-50"}`}
-                                            data-testid={`member-${m.id}`}
-                                          >
-                                            {canManage && (
-                                              <div {...provided.dragHandleProps} className="cursor-grab text-gray-300 hover:text-gray-500 flex-shrink-0 touch-none">
-                                                <GripVertical className="w-3.5 h-3.5" />
-                                              </div>
-                                            )}
-                                            <Avatar
-                                              name={m.name}
-                                              bg={m.id === t.supervisor_user_id ? "#1E3A8A" : undefined}
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                              <p className="text-xs font-medium text-gray-900 truncate">{m.name}</p>
-                                              <RoleBadge role={m.role} />
-                                            </div>
-                                            {canManage && (
-                                              <button
-                                                onClick={() => openEditUser(m)}
-                                                className="opacity-0 group-hover/member:opacity-100 p-1 text-gray-300 hover:text-[#1E3A8A] transition-opacity"
-                                                data-testid={`edit-member-${m.id}`}
-                                              ><Pencil className="w-3 h-3" /></button>
-                                            )}
-                                          </div>
-                                        )}
-                                      </Draggable>
-                                    ))}
-                                    {provided.placeholder}
-                                    {(t.members || []).length === 0 && !snapshot.isDraggingOver && (
-                                      <div className="flex items-center justify-center h-[40px] text-[11px] text-gray-300 border border-dashed border-gray-200 rounded-md">
-                                        Drop staff here to assign
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </Droppable>
-                            </div>
-                          ))}
-
-                          {/* Inline Add Team */}
-                          {canManage && (
-                            showAddTeamFor === s.id ? (
-                              <div className="border border-blue-200 rounded-lg p-3 bg-blue-50" data-testid="add-team-form">
-                                <p className="text-xs font-semibold text-[#1E3A8A] mb-2">New team in {s.name}</p>
-                                <div className="space-y-2">
-                                  <input
-                                    value={teamForm.name}
-                                    onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))}
-                                    placeholder="Team name *"
-                                    className={inputCls}
-                                    onKeyDown={e => { if (e.key === "Enter") saveTeam(s.id); if (e.key === "Escape") setShowAddTeamFor(null); }}
-                                    autoFocus
-                                    data-testid="new-team-name-input"
-                                  />
-                                  <select
-                                    value={teamForm.supervisor_user_id}
-                                    onChange={e => setTeamForm(f => ({ ...f, supervisor_user_id: e.target.value }))}
-                                    className={selectCls}
-                                  >
-                                    <option value="">Supervisor — optional</option>
-                                    {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                                  </select>
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => saveTeam(s.id)}
-                                      disabled={saving || !teamForm.name.trim()}
-                                      className="flex items-center gap-1 bg-[#1E3A8A] text-white text-xs px-3 py-1.5 rounded hover:bg-[#1E40AF] disabled:opacity-60"
-                                      data-testid="save-new-team-btn"
-                                    ><Check className="w-3 h-3" />{saving ? "Saving…" : "Save"}</button>
-                                    <button onClick={() => setShowAddTeamFor(null)} className="text-xs px-3 py-1.5 border border-gray-300 rounded hover:bg-white">Cancel</button>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => { setShowAddTeamFor(s.id); setTeamForm({ name: "", description: "", supervisor_user_id: "" }); }}
-                                className="w-full flex items-center justify-center gap-1.5 text-xs text-[#1E3A8A] font-medium py-2 border border-dashed border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
-                                data-testid={`add-team-btn-${s.id}`}
-                              ><Plus className="w-3.5 h-3.5" /> Add Team</button>
-                            )
-                          )}
-                        </div>
-                      )}
+                      <p className="text-xs text-gray-500 mt-1 ml-6">{teams.length} team{teams.length !== 1 ? "s" : ""} · {staffCount} staff</p>
+                      <p className="text-xs text-gray-400 ml-6">Manager: {s.manager_name || "—"}</p>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* ══ RIGHT: Unassigned People Pool ═══════════════════════════ */}
-            <div className="w-full lg:w-72 flex-shrink-0 lg:sticky lg:top-4">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" data-testid="people-pool">
-
-                {/* Panel header */}
-                <div className="px-4 py-3 border-b border-gray-100 bg-amber-50">
-                  <div className="flex items-center justify-between mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <UserCog className="w-4 h-4 text-amber-600" />
-                      <span className="text-sm font-semibold text-gray-800">Unassigned Staff</span>
-                      {structure.unassigned_users.length > 0 && (
-                        <span className="bg-amber-200 text-amber-800 text-xs font-bold px-1.5 py-0.5 rounded-full" data-testid="unassigned-count">
-                          {structure.unassigned_users.length}
-                        </span>
-                      )}
+            {/* ══ RIGHT: Detail pane ═══════════════════════════════════════ */}
+            <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm p-5" data-testid="setting-detail-panel">
+              {!selectedSetting ? (
+                <div className="text-center py-16 text-gray-400">
+                  <Building2 className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                  <p className="text-sm font-medium">No setting selected</p>
+                  {canManage && <p className="text-xs mt-1">Add a setting on the left to get started</p>}
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold text-gray-900 truncate">{selectedSetting.name}</h2>
+                      <p className="text-xs text-gray-500">{selectedTeams.length} team{selectedTeams.length !== 1 ? "s" : ""} · {selectedStaffCount} staff{selectedSetting.manager_name ? ` · Manager: ${selectedSetting.manager_name}` : ""}</p>
                     </div>
                     {canManage && (
-                      <button
-                        onClick={() => { setShowInviteUser(true); setInviteForm({ name: "", email: "", password: "", role: "attendee" }); setInviteError(""); }}
-                        className="flex items-center gap-1 text-xs text-[#1E3A8A] font-medium hover:underline"
-                        data-testid="add-user-btn"
-                      ><UserPlus className="w-3.5 h-3.5" /> Add User</button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => { setEditingSetting(selectedSetting); setSettingForm({ name: selectedSetting.name, description: selectedSetting.description || "", manager_user_id: selectedSetting.manager_user_id || "" }); }}
+                          className="p-1.5 text-gray-400 hover:text-[#1E3A8A] hover:bg-gray-50 rounded"
+                          title="Edit setting"
+                          data-testid={`edit-setting-${selectedSetting.id}`}
+                        ><Edit2 className="w-4 h-4" /></button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => deleteSetting(selectedSetting)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded"
+                            data-testid={`delete-setting-${selectedSetting.id}`}
+                          ><Trash2 className="w-4 h-4" /></button>
+                        )}
+                        <button
+                          onClick={openAddUserForSetting}
+                          disabled={selectedTeams.length === 0}
+                          title={selectedTeams.length === 0 ? "Add a team first" : undefined}
+                          className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg border border-[#1E3A8A] text-[#1E3A8A] hover:bg-[#EFF6FF] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                          data-testid="add-user-btn"
+                        ><UserPlus className="w-3.5 h-3.5" /> Add User</button>
+                        <button
+                          onClick={() => { setShowAddTeamFor(selectedSetting.id); setTeamForm({ name: "", description: "", supervisor_user_id: "" }); }}
+                          className="flex items-center gap-1.5 bg-[#1E3A8A] text-white text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-[#1E40AF] transition-colors"
+                          data-testid={`add-team-btn-${selectedSetting.id}`}
+                        ><Plus className="w-3.5 h-3.5" /> Add Team</button>
+                      </div>
                     )}
                   </div>
-                  {/* Search */}
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      placeholder="Search staff…"
-                      className="w-full pl-7 pr-3 py-1.5 border border-amber-200 rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-300"
-                      data-testid="search-staff-input"
-                    />
-                  </div>
-                </div>
 
-                {/* Droppable unassigned zone */}
-                <Droppable droppableId="unassigned">
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className={`p-3 min-h-[120px] transition-colors ${snapshot.isDraggingOver ? "bg-amber-50" : "bg-white"}`}
-                      data-testid="unassigned-drop-zone"
-                    >
-                      {filteredUnassigned.map((u, i) => (
-                        <Draggable key={u.id} draggableId={u.id} index={i} isDragDisabled={!canManage}>
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              className={`flex items-center gap-2 p-2 rounded-lg mb-1.5 border transition-all group/ucard ${snapshot.isDragging ? "bg-white shadow-lg ring-1 ring-amber-200 border-transparent" : "bg-gray-50 border-gray-100 hover:border-gray-200"}`}
-                              data-testid={`unassigned-user-${u.id}`}
-                            >
-                              {canManage && (
-                                <div {...provided.dragHandleProps} className="cursor-grab text-gray-300 hover:text-gray-500 flex-shrink-0 touch-none">
-                                  <GripVertical className="w-3.5 h-3.5" />
-                                </div>
-                              )}
-                              <Avatar name={u.name} />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-gray-900 truncate">{u.name}</p>
-                                <RoleBadge role={u.role} />
-                              </div>
-                              {canManage && (
-                                <button
-                                  onClick={() => openEditUser(u)}
-                                  className="opacity-0 group-hover/ucard:opacity-100 p-1 text-gray-300 hover:text-[#1E3A8A] transition-opacity"
-                                  data-testid={`edit-user-${u.id}`}
-                                ><Pencil className="w-3 h-3" /></button>
-                              )}
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-
-                      {filteredUnassigned.length === 0 && !snapshot.isDraggingOver && (
-                        <div className="flex flex-col items-center justify-center py-8 text-gray-300">
-                          <UserCheck className="w-8 h-8 mb-2 opacity-50" />
-                          <p className="text-xs text-center">
-                            {searchQuery ? "No matches" : "All staff assigned"}
-                          </p>
-                          {!searchQuery && (
-                            <p className="text-[10px] mt-1 text-gray-300 text-center">
-                              Drag a team member here to unassign
-                            </p>
-                          )}
-                        </div>
-                      )}
+                  {structure.unassigned_users.length > 0 && (
+                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 mb-4 text-xs" data-testid="unassigned-banner">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="font-medium">{structure.unassigned_users.length} unassigned staff org-wide</span>
+                      <button onClick={() => setShowUnassignedModal(true)} className="ml-auto underline font-medium" data-testid="manage-unassigned-btn">Manage</button>
                     </div>
                   )}
-                </Droppable>
 
-                {/* Stats footer */}
-                <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-[11px] text-gray-400">
-                  {assignedCount} of {totalUsers} staff assigned to a team
-                </div>
-              </div>
+                  {selectedTeams.length === 0 ? (
+                    <div className="text-center py-14 text-gray-400">
+                      <Users className="w-9 h-9 mx-auto mb-2 opacity-20" />
+                      <p className="text-sm font-medium">No teams yet</p>
+                      {canManage && <p className="text-xs mt-1">Use "Add Team" to get started</p>}
+                    </div>
+                  ) : (
+                    selectedTeams.map(t => (
+                      <TeamCard
+                        key={t.id}
+                        t={t}
+                        canManage={canManage}
+                        isAdmin={isAdmin}
+                        teamsFlat={teamsFlat}
+                        statsByUser={statsByUser}
+                        viewingUserId={viewingUserId}
+                        onSetViewingUserId={setViewingUserId}
+                        onMoveUser={moveUser}
+                        onEditTeam={() => { setEditingTeam(t); setTeamForm({ name: t.name, description: t.description || "", supervisor_user_id: t.supervisor_user_id || "" }); }}
+                        onDeleteTeam={() => deleteTeam(t)}
+                        onEditUser={openEditUser}
+                      />
+                    ))
+                  )}
+
+                  {/* Inline Add Team form */}
+                  {canManage && showAddTeamFor === selectedSetting.id && (
+                    <div className="border border-blue-200 rounded-lg p-3 bg-blue-50" data-testid="add-team-form">
+                      <p className="text-xs font-semibold text-[#1E3A8A] mb-2">New team in {selectedSetting.name}</p>
+                      <div className="space-y-2">
+                        <input
+                          value={teamForm.name}
+                          onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))}
+                          placeholder="Team name *"
+                          className={inputCls}
+                          onKeyDown={e => { if (e.key === "Enter") saveTeam(selectedSetting.id); if (e.key === "Escape") setShowAddTeamFor(null); }}
+                          autoFocus
+                          data-testid="new-team-name-input"
+                        />
+                        <select
+                          value={teamForm.supervisor_user_id}
+                          onChange={e => setTeamForm(f => ({ ...f, supervisor_user_id: e.target.value }))}
+                          className={selectCls}
+                        >
+                          <option value="">Supervisor — optional</option>
+                          {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveTeam(selectedSetting.id)}
+                            disabled={saving || !teamForm.name.trim()}
+                            className="flex items-center gap-1 bg-[#1E3A8A] text-white text-xs px-3 py-1.5 rounded hover:bg-[#1E40AF] disabled:opacity-60"
+                            data-testid="save-new-team-btn"
+                          ><Check className="w-3 h-3" />{saving ? "Saving…" : "Save"}</button>
+                          <button onClick={() => setShowAddTeamFor(null)} className="text-xs px-3 py-1.5 border border-gray-300 rounded hover:bg-white">Cancel</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
           </div>
-        </DragDropContext>
 
-        {/* ══ MODALS ══════════════════════════════════════════════════════ */}
+          {/* ══ MODALS ══════════════════════════════════════════════════════ */}
 
-        {/* Add / Edit Setting */}
-        {(showAddSetting || editingSetting) && (
-          <Modal
-            title={editingSetting ? `Edit — ${editingSetting.name}` : "New Setting"}
-            onClose={() => { setShowAddSetting(false); setEditingSetting(null); }}
-          >
-            <div className="space-y-3">
-              <FormField label="Name *">
-                <input value={settingForm.name} onChange={e => setSettingForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Sunflower House" className={inputCls} data-testid="setting-name-input" />
-              </FormField>
-              <FormField label="Description">
-                <input value={settingForm.description} onChange={e => setSettingForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" className={inputCls} />
-              </FormField>
-              <FormField label="Manager">
-                <select value={settingForm.manager_user_id} onChange={e => setSettingForm(f => ({ ...f, manager_user_id: e.target.value }))} className={selectCls}>
-                  <option value="">None</option>
-                  {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-                </select>
-              </FormField>
-              <div className="flex gap-2 pt-1">
-                <button onClick={saveSetting} disabled={saving} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-setting-btn">
-                  <Check className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save"}
-                </button>
-                <button onClick={() => { setShowAddSetting(false); setEditingSetting(null); }} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+          {/* Add / Edit Setting */}
+          {(showAddSetting || editingSetting) && (
+            <Modal
+              title={editingSetting ? `Edit — ${editingSetting.name}` : "New Setting"}
+              onClose={() => { setShowAddSetting(false); setEditingSetting(null); }}
+            >
+              <div className="space-y-3">
+                <FormField label="Name *">
+                  <input value={settingForm.name} onChange={e => setSettingForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Sunflower House" className={inputCls} data-testid="setting-name-input" />
+                </FormField>
+                <FormField label="Description">
+                  <input value={settingForm.description} onChange={e => setSettingForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" className={inputCls} />
+                </FormField>
+                <FormField label="Manager">
+                  <select value={settingForm.manager_user_id} onChange={e => setSettingForm(f => ({ ...f, manager_user_id: e.target.value }))} className={selectCls}>
+                    <option value="">None</option>
+                    {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+                  </select>
+                </FormField>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={saveSetting} disabled={saving} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-setting-btn">
+                    <Check className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save"}
+                  </button>
+                  <button onClick={() => { setShowAddSetting(false); setEditingSetting(null); }} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+                </div>
               </div>
-            </div>
-          </Modal>
-        )}
+            </Modal>
+          )}
 
-        {/* Edit Team */}
-        {editingTeam && (
-          <Modal title={`Edit Team — ${editingTeam.name}`} onClose={() => setEditingTeam(null)}>
-            <div className="space-y-3">
-              <FormField label="Name *">
-                <input value={teamForm.name} onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))} className={inputCls} data-testid="team-name-input" />
-              </FormField>
-              <FormField label="Supervisor">
-                <select value={teamForm.supervisor_user_id} onChange={e => setTeamForm(f => ({ ...f, supervisor_user_id: e.target.value }))} className={selectCls}>
-                  <option value="">None</option>
-                  {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </FormField>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => saveTeam(editingTeam.setting_id)} disabled={saving} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-team-btn">
-                  <Check className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save"}
-                </button>
-                <button onClick={() => setEditingTeam(null)} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+          {/* Edit Team */}
+          {editingTeam && (
+            <Modal title={`Edit Team — ${editingTeam.name}`} onClose={() => setEditingTeam(null)}>
+              <div className="space-y-3">
+                <FormField label="Name *">
+                  <input value={teamForm.name} onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))} className={inputCls} data-testid="team-name-input" />
+                </FormField>
+                <FormField label="Supervisor">
+                  <select value={teamForm.supervisor_user_id} onChange={e => setTeamForm(f => ({ ...f, supervisor_user_id: e.target.value }))} className={selectCls}>
+                    <option value="">None</option>
+                    {managerUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </FormField>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => saveTeam(editingTeam.setting_id)} disabled={saving} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-team-btn">
+                    <Check className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save"}
+                  </button>
+                  <button onClick={() => setEditingTeam(null)} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+                </div>
               </div>
-            </div>
-          </Modal>
-        )}
+            </Modal>
+          )}
 
-        {/* Add User */}
-        {showInviteUser && (
-          <Modal title="Add New User" onClose={() => setShowInviteUser(false)}>
-            <div className="space-y-3">
-              <FormField label="Full Name *">
-                <input value={inviteForm.name} onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Jane Smith" className={inputCls} data-testid="invite-name-input" />
-              </FormField>
-              <FormField label="Email Address *">
-                <input type="email" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@example.com" className={inputCls} data-testid="invite-email-input" />
-              </FormField>
-              <FormField label="Role">
-                <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))} className={selectCls} data-testid="invite-role-select">
-                  {ROLES.filter(r => !isAdmin ? r.value !== "admin" : true).map(r => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              </FormField>
-              <FormField label="Temporary Password *">
-                <input type="password" value={inviteForm.password} onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 10 characters" className={inputCls} data-testid="invite-password-input" />
-              </FormField>
-              {inviteError && <p className="text-xs text-red-600" data-testid="invite-error">{inviteError}</p>}
-              <div className="flex gap-2 pt-1">
-                <button onClick={inviteUser} disabled={savingInvite} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-invite-btn">
-                  <UserPlus className="w-3.5 h-3.5" />{savingInvite ? "Adding…" : "Add User"}
-                </button>
-                <button onClick={() => setShowInviteUser(false)} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+          {/* Add User — scoped to the selected Setting's teams, team is required */}
+          {showInviteUser && selectedSetting && (
+            <Modal title={`Add User — ${selectedSetting.name}`} onClose={() => setShowInviteUser(false)}>
+              <div className="space-y-3">
+                <FormField label="Full Name *">
+                  <input value={inviteForm.name} onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Jane Smith" className={inputCls} data-testid="invite-name-input" />
+                </FormField>
+                <FormField label="Email Address *">
+                  <input type="email" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@example.com" className={inputCls} data-testid="invite-email-input" />
+                </FormField>
+                <FormField label="Role">
+                  <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))} className={selectCls} data-testid="invite-role-select">
+                    {ROLES.filter(r => !isAdmin ? r.value !== "admin" : true).map(r => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                </FormField>
+                <FormField label={`Team * (within ${selectedSetting.name})`}>
+                  <select value={inviteForm.team_id} onChange={e => setInviteForm(f => ({ ...f, team_id: e.target.value }))} className={selectCls} data-testid="invite-team-select">
+                    {(selectedSetting.teams || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <p className="text-[11px] text-gray-400 mt-1">Required — every new user must belong to a team.</p>
+                </FormField>
+                <FormField label="Temporary Password *">
+                  <input type="password" value={inviteForm.password} onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 10 characters" className={inputCls} data-testid="invite-password-input" />
+                </FormField>
+                {inviteError && <p className="text-xs text-red-600" data-testid="invite-error">{inviteError}</p>}
+                <div className="flex gap-2 pt-1">
+                  <button onClick={inviteUser} disabled={savingInvite} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-invite-btn">
+                    <UserPlus className="w-3.5 h-3.5" />{savingInvite ? "Adding…" : "Add User"}
+                  </button>
+                  <button onClick={() => setShowInviteUser(false)} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+                </div>
               </div>
-            </div>
-          </Modal>
-        )}
+            </Modal>
+          )}
 
-        {/* Edit User */}
-        {editingUser && (
-          <EditUserModal
-            person={editingUser}
-            onClose={() => setEditingUser(null)}
-            onSaved={onUserSaved}
-            API={API}
-            getAuthConfig={getAuthConfig}
-            currentUserRole={currentUser?.role}
-          />
-        )}
+          {/* Manage unassigned staff (org-wide) */}
+          {showUnassignedModal && (
+            <Modal title={`Unassigned Staff (${structure.unassigned_users.length})`} onClose={() => setShowUnassignedModal(false)} wide>
+              <div className="space-y-0.5 max-h-96 overflow-y-auto" data-testid="unassigned-modal-list">
+                {structure.unassigned_users.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-6">All staff assigned</p>
+                ) : structure.unassigned_users.map(u => (
+                  <MemberRow
+                    key={u.id}
+                    m={u}
+                    teamId={null}
+                    teams={teamsFlat}
+                    canManage={canManage}
+                    statsByUser={statsByUser}
+                    viewing={viewingUserId === u.id}
+                    onView={() => setViewingUserId(u.id)}
+                    onCloseView={() => setViewingUserId(null)}
+                    onMove={(toTeamId) => moveUser(u.id, null, toTeamId)}
+                    onEdit={() => openEditUser(u)}
+                  />
+                ))}
+              </div>
+            </Modal>
+          )}
 
-      </div>{/* end main content */}
-      </div>{/* end outer wrapper */}
+          {/* Edit User */}
+          {editingUser && (
+            <EditUserModal
+              person={editingUser}
+              onClose={() => setEditingUser(null)}
+              onSaved={onUserSaved}
+              API={API}
+              getAuthConfig={getAuthConfig}
+              currentUserRole={currentUser?.role}
+            />
+          )}
+
+        </div>
+      </div>
     </Wrapper>
   );
 }
