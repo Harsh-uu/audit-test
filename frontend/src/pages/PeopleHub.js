@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
+import { toast } from "sonner";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
@@ -8,9 +9,12 @@ import OrgSettings  from "@/pages/OrgSettings";
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
   Users, Settings, Building2,
   RefreshCw, Search, AlertTriangle, Check,
-  Mail, MoreHorizontal,
+  Mail, MoreHorizontal, Pencil, UserX, Trash2, AlertCircle,
 } from "lucide-react";
 
 // ── Avatar helper ────────────────────────────────────────────────────────────
@@ -47,7 +51,7 @@ function Sparkbar({ data }) {
 }
 
 // ── People & Usage tab ───────────────────────────────────────────────────────
-function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit }) {
+function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canManage, onDeactivate, onHardDelete }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
@@ -248,14 +252,33 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit }) {
                       <span className="text-xs font-semibold" style={{ color: lastColor }}>{lastStr}</span>
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <button
-                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                        onClick={() => onEdit(p)}
-                        data-testid={`people-menu-${p.user_id}`}
-                        title="Edit user"
-                      >
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                            data-testid={`people-menu-${p.user_id}`}
+                            title="Actions"
+                          ><MoreHorizontal className="w-4 h-4" /></button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44 text-sm">
+                          <DropdownMenuItem onClick={() => onEdit(p)} data-testid={`people-edit-${p.user_id}`}>
+                            <Pencil className="w-3.5 h-3.5" /> Edit
+                          </DropdownMenuItem>
+                          {canManage && !p.pending_invite && (
+                            <DropdownMenuItem onClick={() => onDeactivate(p)} data-testid={`people-deactivate-${p.user_id}`}>
+                              <UserX className="w-3.5 h-3.5" /> Deactivate
+                            </DropdownMenuItem>
+                          )}
+                          {isAdmin && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => onHardDelete(p)} className="text-red-600 focus:text-red-600" data-testid={`people-delete-${p.user_id}`}>
+                                <Trash2 className="w-3.5 h-3.5" /> Delete Permanently
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 );
@@ -344,10 +367,15 @@ function InvitesTab({ people, onRevoke }) {
 // ── Main PeopleHub page ───────────────────────────────────────────────────────
 export default function PeopleHub() {
   const { getAuthConfig, API, user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
+  const canManage = ["admin", "manager"].includes(currentUser?.role);
   const [tab, setTab]         = useState("people");
   const [people, setPeople]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
+  const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
+  const [hardDeleteConfirmText, setHardDeleteConfirmText] = useState("");
+  const [hardDeleting, setHardDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -386,6 +414,35 @@ export default function PeopleHub() {
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
+
+  const deactivateUser = useCallback(async (person) => {
+    if (!window.confirm(`Deactivate ${person.name}? They won't be able to log in. Their records are kept — you can reactivate them later from Edit.`)) return;
+    try {
+      await axios.delete(`${API}/admin/users/${person.user_id}`, getAuthConfig());
+      invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
+      toast.success(`${person.name} deactivated`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to deactivate user");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API]);
+
+  const confirmHardDelete = async () => {
+    if (hardDeleteConfirmText.trim() !== hardDeleteTarget.name) return;
+    setHardDeleting(true);
+    try {
+      const res = await axios.delete(`${API}/admin/users/${hardDeleteTarget.user_id}/hard-delete`, getAuthConfig());
+      invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
+      toast.success(`${hardDeleteTarget.name} permanently deleted (${res.data.meetings_deleted} meeting(s) removed)`);
+      setHardDeleteTarget(null);
+      setHardDeleteConfirmText("");
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to delete user");
+    }
+    setHardDeleting(false);
+  };
 
   const pendingCount = people.filter(p => p.pending_invite).length;
 
@@ -447,7 +504,10 @@ export default function PeopleHub() {
         {/* Tab content */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {tab === "people" && (
-            <PeopleTab people={people} loading={loading} onRefresh={handleRefresh} onRevoke={revokeInvite} onEdit={setEditingUser} />
+            <PeopleTab
+              people={people} loading={loading} onRefresh={handleRefresh} onRevoke={revokeInvite} onEdit={setEditingUser}
+              isAdmin={isAdmin} canManage={canManage} onDeactivate={deactivateUser} onHardDelete={setHardDeleteTarget}
+            />
           )}
           {tab === "structure" && (
             <div className="overflow-y-auto flex-1">
@@ -477,6 +537,46 @@ export default function PeopleHub() {
           getAuthConfig={getAuthConfig}
           currentUserRole={currentUser?.role}
         />
+      )}
+
+      {/* Permanent delete — GDPR-style erasure, admin-only, type-name-to-confirm */}
+      {hardDeleteTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" data-testid="hard-delete-modal">
+            <h3 className="font-semibold text-gray-900 mb-4">Permanently Delete {hardDeleteTarget.name}</h3>
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-xs">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold mb-1">This cannot be undone.</p>
+                  <p>Permanently removes {hardDeleteTarget.name}'s account, their supervision meetings (transcripts, audio, analysis, comments), uploaded documents and schedule. Make sure you've exported anything you need to keep before continuing.</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Type "{hardDeleteTarget.name}" to confirm</label>
+                <input
+                  value={hardDeleteConfirmText}
+                  onChange={e => setHardDeleteConfirmText(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  data-testid="hard-delete-confirm-input"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={confirmHardDelete}
+                  disabled={hardDeleting || hardDeleteConfirmText.trim() !== hardDeleteTarget.name}
+                  className="flex items-center gap-1.5 bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  data-testid="confirm-hard-delete-btn"
+                ><Trash2 className="w-3.5 h-3.5" />{hardDeleting ? "Deleting…" : "Permanently Delete"}</button>
+                <button
+                  onClick={() => { setHardDeleteTarget(null); setHardDeleteConfirmText(""); }}
+                  className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50"
+                >Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );

@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Backgro
 from pydantic import BaseModel, EmailStr
 from fastapi.responses import Response as _Response
 from deps import get_db, get_current_user, get_manager_scope, get_scoped_staff_ids
-from utils.supabase_storage import put_document, get_document as _storage_get_document, delete_document as _storage_delete_document
+from utils.supabase_storage import put_document, get_document as _storage_get_document, delete_document as _storage_delete_document, delete_audio as _storage_delete_audio
 from utils.redaction import apply_redactions_deep as _apply_redactions_deep
 from utils.redaction import apply_redactions_to_text as _apply_redactions_to_text
 import database
@@ -200,14 +200,28 @@ async def update_user(user_id: str, data: UpdateUserRequest, current_user=Depend
 
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str, current_user=Depends(get_current_user)):
-    """Revoke a pending invite (must_change_password=true) or deactivate user. Admin only."""
-    if current_user["role"] != "admin":
-        raise HTTPException(403, "Admin only")
+    """Revoke a pending invite (must_change_password=true) or deactivate user.
+    Admin + manager (within their own team/setting scope, never admins)."""
+    if current_user["role"] not in ("admin", "manager"):
+        raise HTTPException(403, "Admin or manager only")
+    if user_id == current_user["id"]:
+        raise HTTPException(400, "You cannot deactivate your own account")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        u = await conn.fetchrow("SELECT id, must_change_password FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
+        u = await conn.fetchrow(
+            "SELECT id, role, team_id, setting_id, must_change_password FROM users WHERE id=$1 AND org_id=$2",
+            user_id, org_id,
+        )
         if not u:
             raise HTTPException(404, "User not found")
+        if current_user["role"] == "manager":
+            if u["role"] == "admin":
+                raise HTTPException(403, "Outside your management scope")
+            scope = get_manager_scope(current_user)
+            if scope["level"] == "team" and u["team_id"] != scope["team_id"]:
+                raise HTTPException(403, "Outside your management scope")
+            if scope["level"] == "setting" and u["setting_id"] != scope["setting_id"]:
+                raise HTTPException(403, "Outside your management scope")
         if u["must_change_password"]:
             # Pending invite — safe to delete entirely
             await conn.execute("DELETE FROM users WHERE id=$1", user_id)
@@ -215,6 +229,81 @@ async def delete_user(user_id: str, current_user=Depends(get_current_user)):
             # Active user — just deactivate
             await conn.execute("UPDATE users SET is_active=FALSE WHERE id=$1", user_id)
     return {"message": "User removed"}
+
+
+@router.delete("/users/{user_id}/hard-delete")
+async def hard_delete_user(user_id: str, current_user=Depends(get_current_user)):
+    """GDPR-style permanent erasure. Admin only, irreversible. Deletes the
+    account plus everything that's THEIRS: meetings where they were the
+    supervision subject (transcript/audio/analysis/comments/etc, mirroring
+    delete_meeting()'s cascade), their own uploaded documents, their schedule,
+    their invitation row, and the underlying storage files. Meetings where
+    they merely conducted/reviewed supervision for a DIFFERENT, still-active
+    person are deliberately left alone — those belong to that other person's
+    record, not this one; the existing ON DELETE SET NULL FKs on
+    created_by/sign_off_manager_id/manager_user_id/supervisor_user_id clear
+    just this user's reference on those (their frozen "_name" snapshot, if
+    any, is untouched).
+    Requires the account to already be deactivated (is_active=FALSE) — per the
+    org's process, admins deactivate first, export/download anything needed,
+    THEN hard-delete; you cannot skip straight from active to permanently gone."""
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    if user_id == current_user["id"]:
+        raise HTTPException(400, "You cannot delete your own account")
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        target = await conn.fetchrow("SELECT id, name, is_active FROM users WHERE id=$1 AND org_id=$2", user_id, org_id)
+        if not target:
+            raise HTTPException(404, "User not found")
+        if target["is_active"]:
+            raise HTTPException(400, "Deactivate this user first, then permanently delete them once you've exported anything you need to keep")
+
+        meeting_ids = [r["id"] for r in await conn.fetch(
+            "SELECT id FROM meetings WHERE attendees @> $1::jsonb",
+            json.dumps([{"user_id": user_id, "role": "attendee"}]),
+        )]
+        audio_paths = []
+        if meeting_ids:
+            audio_paths = [
+                r["storage_path"] for r in await conn.fetch(
+                    "SELECT storage_path FROM audio_files WHERE meeting_id = ANY($1::text[]) AND storage_path IS NOT NULL",
+                    meeting_ids,
+                )
+            ]
+            await conn.execute("DELETE FROM meetings WHERE id = ANY($1::text[])", meeting_ids)
+            # Redundant with FK ON DELETE CASCADE, kept as a defence-in-depth
+            # safety net matching delete_meeting()'s existing convention.
+            for table in ["transcripts", "analyses", "audio_files", "reviewer_comments", "review_edits",
+                          "audit_logs", "evidence_feedback", "jobs", "meeting_prep"]:
+                await conn.execute(f"DELETE FROM {table} WHERE meeting_id = ANY($1::text[])", meeting_ids)
+            # need_review_signals.meeting_id is native UUID (unlike the other
+            # tables' TEXT columns that merely hold UUID-shaped strings).
+            await conn.execute("DELETE FROM need_review_signals WHERE meeting_id = ANY($1::uuid[])", meeting_ids)
+
+        upload_paths = [
+            r["storage_path"] for r in await conn.fetch(
+                "SELECT storage_path FROM supervision_uploads WHERE (staff_id=$1 OR uploader_id=$1) AND storage_path IS NOT NULL",
+                user_id,
+            )
+        ]
+        await conn.execute("DELETE FROM supervision_uploads WHERE staff_id=$1 OR uploader_id=$1", user_id)
+        await conn.execute("DELETE FROM schedules WHERE staff_user_id=$1", user_id)
+        await conn.execute("DELETE FROM invitations WHERE user_id=$1", user_id)
+        await conn.execute("DELETE FROM users WHERE id=$1", user_id)
+
+    for path in audio_paths:
+        try:
+            await _storage_delete_audio(path)
+        except Exception as e:
+            logger.error(f"Failed to delete audio from storage during hard-delete of user {user_id}: path={path} error={e}")
+    for path in upload_paths:
+        try:
+            await _storage_delete_document(path)
+        except Exception as e:
+            logger.error(f"Failed to delete document from storage during hard-delete of user {user_id}: path={path} error={e}")
+
+    return {"message": "User permanently deleted", "meetings_deleted": len(meeting_ids)}
 
 
 

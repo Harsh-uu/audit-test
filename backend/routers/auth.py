@@ -280,7 +280,7 @@ async def login(data: LoginRequest, request: Request, response: Response):
     async with database.with_admin() as conn:
         user = await conn.fetchrow(
             "SELECT id, email, name, role, must_change_password, supabase_password_set, "
-            "password_hash, mfa_enabled, password_changed_at, org_id FROM users WHERE email = $1", email
+            "password_hash, mfa_enabled, password_changed_at, org_id, is_active FROM users WHERE email = $1", email
         )
 
     # Supabase Auth is the source of truth for password verification once a
@@ -354,6 +354,13 @@ async def login(data: LoginRequest, request: Request, response: Response):
     # ── Step 4: clear attempts on success ─────────────────────────────────────
     async with database.with_admin() as conn:
         await conn.execute("DELETE FROM login_attempts WHERE identifier = $1", identifier)
+
+    # Password verified correct — now block a deactivated account. Deliberately
+    # NOT folded into the "invalid credentials" failed-attempt path above: this
+    # is a distinct, known state (right password, disabled account), not a
+    # brute-force guess, so it shouldn't count toward the lockout counter.
+    if not user["is_active"]:
+        raise HTTPException(status_code=401, detail="This account has been deactivated. Contact your organisation admin.")
 
     user = dict(user)
     user_id = user["id"]

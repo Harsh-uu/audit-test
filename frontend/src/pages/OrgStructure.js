@@ -7,13 +7,13 @@ import Layout from "@/components/Layout";
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import {
   Building2, Users, Plus, Edit2, Trash2, X, Check,
   MapPin, AlertCircle, CheckCircle, Pencil,
-  MoreVertical, UserPlus, Eye, ArrowRightLeft, Search, Crown,
+  MoreVertical, UserPlus, Eye, ArrowRightLeft, Search, Crown, UserX,
 } from "lucide-react";
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -193,7 +193,7 @@ function ViewProfileCard({ member, stats }) {
 
 // ── Member row (avatar + "…" View / Move to… / Edit menu) ──────────────────
 
-function MemberRow({ m, teamId, teams, canManage, isAdmin, statsByUser, viewing, onView, onCloseView, onMove, onEdit }) {
+function MemberRow({ m, teamId, teams, canManage, isAdmin, statsByUser, viewing, onView, onCloseView, onMove, onEdit, onDeactivate }) {
   const stats = statsByUser[m.id];
   const moveTargets = teams.filter(t => t.id !== teamId);
   // Being an org-wide manager just means having NO team/setting of your own
@@ -259,6 +259,10 @@ function MemberRow({ m, teamId, teams, canManage, isAdmin, statsByUser, viewing,
                 <DropdownMenuItem onClick={onEdit} data-testid={`member-edit-${m.id}`}>
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onDeactivate} data-testid={`member-deactivate-${m.id}`}>
+                  <UserX className="w-3.5 h-3.5" /> Deactivate
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -273,7 +277,7 @@ function MemberRow({ m, teamId, teams, canManage, isAdmin, statsByUser, viewing,
 
 // ── Team card (header + member rows) ────────────────────────────────────────
 
-function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId, onSetViewingUserId, onMoveUser, onMoveAllMembers, onEditTeam, onDeleteTeam, onEditUser }) {
+function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId, onSetViewingUserId, onMoveUser, onMoveAllMembers, onEditTeam, onDeleteTeam, onEditUser, onDeactivateUser }) {
   const memberCount = (t.members || []).length;
   const moveAllTargets = teamsFlat.filter(x => x.id !== t.id);
   return (
@@ -338,6 +342,7 @@ function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId
             onCloseView={() => onSetViewingUserId(null)}
             onMove={(toTeamId) => onMoveUser(m.id, t.id, toTeamId)}
             onEdit={() => onEditUser(m)}
+            onDeactivate={() => onDeactivateUser(m)}
           />
         ))}
       </div>
@@ -627,6 +632,24 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
     // state doesn't refetch on its own just because we refreshed here, so
     // notify it explicitly to avoid showing stale team/role data.
     onUserChanged?.();
+  };
+
+  // Deactivate (admin + manager, within manager's own scope — enforced
+  // server-side) blocks login instantly but keeps all history. Hard delete
+  // is a separate, admin-only GDPR erasure step surfaced on the People &
+  // Usage tab instead (where deactivated accounts remain visible — this
+  // Structure tree only ever shows active members, so a deactivated user
+  // disappears from here immediately).
+  const deactivateUser = async (person) => {
+    if (!window.confirm(`Deactivate ${person.name}? They won't be able to log in. Their records are kept — you can reactivate them later from Edit.`)) return;
+    try {
+      await axios.delete(`${API}/admin/users/${person.id}`, getAuthConfig());
+      await refreshData();
+      flash(`${person.name} deactivated`);
+      onUserChanged?.();
+    } catch (err) {
+      flash(err.response?.data?.detail || "Failed to deactivate user", true);
+    }
   };
 
   const openAddUserForSetting = () => {
@@ -920,6 +943,7 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                         onEditTeam={() => { setEditingTeam(t); setTeamForm({ name: t.name, description: t.description || "", supervisor_user_id: t.supervisor_user_id || "" }); }}
                         onDeleteTeam={() => deleteTeam(t)}
                         onEditUser={openEditUser}
+                        onDeactivateUser={deactivateUser}
                       />
                     ))
                   )}
@@ -1080,12 +1104,14 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                     teamId={null}
                     teams={teamsFlat}
                     canManage={canManage}
+                    isAdmin={isAdmin}
                     statsByUser={statsByUser}
                     viewing={viewingUserId === u.id}
                     onView={() => setViewingUserId(u.id)}
                     onCloseView={() => setViewingUserId(null)}
                     onMove={(toTeamId) => moveUser(u.id, null, toTeamId)}
                     onEdit={() => openEditUser(u)}
+                    onDeactivate={() => deactivateUser(u)}
                   />
                 ))}
               </div>
