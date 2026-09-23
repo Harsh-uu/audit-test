@@ -1,0 +1,36 @@
+{
+  "summary": "Comprehensive regression pass (iter162) after the large Organisation/People session. Backend: 22/22 pytest cases pass (10 in test_deactivate_hard_delete.py from iter161 + 12 new in test_regression_iter162.py covering activity log, org-level list, admin-cannot-be-assigned-team, unassigned-list exclusions, deactivated-login-401). Frontend UI verified via Playwright with cookie-injected admin session: (a) People & Usage 'Deactivated' status-filter option present, (b) 'Deactivated' badge (people-inactive-badge-{id}) renders next to a deactivated user's name, (c) row menu correctly toggles Deactivate→Reactivate + shows Delete Permanently only when is_active=false — the OLD 'menu still says Deactivate' bug is confirmed gone, (d) clicking Reactivate restores is_active=true and clears the badge, (e) Organisation-level row (org-level-row) is pinned at top of Structure master list with live count (2), clicking shows org-level-panel with Test Admin + Demo Manager rows, (f) member-move-{admin_id} is correctly absent for admin rows, (g) Activity Log tab in /settings renders with 48 entries after test churn, showing 'Staff deactivated'/'Staff permanently deleted' with actor, target detail, and timestamp, (h) Edit User modal hides Team dropdown when role=admin (verified in source). Org left in clean 6-user state (all throwaway users hard-deleted, Diane reactivated). NOTE the 2 iter161 fixes (people-inactive-badge + hard-delete-confirm-guard against empty name) are both solid — badge verified live above; the empty-name guard exists in the JSX (`hardDeleteTarget.name.trim().length > 0` gating).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_regression_iter162.py",
+    "/app/backend/tests/test_deactivate_hard_delete.py",
+    "/app/test_reports/pytest/iter162_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "OrgStructure.js still ~1000+ lines and PeopleHub.js is 590+ lines — split threshold hit; consider extracting the hard-delete modal + MemberRow into their own files for testability and readability (carried over from iter160/161).",
+    "audit_logs.meeting_id nullability was correctly relaxed via m032 to support org-wide events (Deactivate / Hard Delete / invite-revoked) — good — but /admin/activity-log only surfaces meeting_id IS NULL rows. If a future dev adds a per-meeting audit action with the same 'action' vocabulary (e.g. Deactivate a shared reviewer FROM a meeting), it will silently vanish from this tab. Consider filtering by an explicit allow-list of action strings ('deactivate','hard_delete','invite_revoked') instead of `meeting_id IS NULL` alone so the tab stays semantically stable as more audit_log actions accumulate.",
+    "Dashboard-tile bounce-back bug is documented as unresolved. Not reproduced in this run (single click always navigated correctly to /organisation, /settings, and /meetings during 5+ nav operations) — either environmental or timing dependent; no additional signal to add."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_regression_iter162.py (new — 12 pytest cases; safe regression suite for future runs, no data left behind)"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 combined across test_deactivate_hard_delete.py + test_regression_iter162.py)",
+    "frontend": "100% — all spec'd data-testids present and behaving correctly (org-level-row, org-level-panel, people-inactive-badge-{id}, people-reactivate-{id}, people-delete-{id}, hard-delete-confirm-input, activity-log-tab, activity-log-list, activity-log-row-{id}, edit-user-team hidden for admin)"
+  },
+  "test_credentials": "admin@supervision.com / Admin123!X (admin, no MFA — verified this session). manager@supervision.com / Manager123! (manager, MFA mandatory — bypassed via DB override in test helper, see get_tokens.py).",
+  "seed_data_creation": "Backend tests created ~10 throwaway users named testreg_*/testdeact_*@example.com and hard-deleted every one in the same test (verified via /admin/users list). Frontend flow toggled Diane Fletcher deactivate→reactivate; verified is_active=TRUE at end. Org is at the required clean 6-user baseline (5 active + 1 pending invite Jane Smith).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Both test files are stable regression suites. Run with `cd /app/backend && python -m pytest tests/test_regression_iter162.py tests/test_deactivate_hard_delete.py -v -n 0` (serial mode required — parallel xdist runs hit login rate-limits since admin login is not idempotent + login_attempts throttles concurrent logins from same IP). Each takes ~90s. For UI, use tests/get_tokens.py admin@supervision.com 'Admin123!X' then inject supervision_access/supervision_refresh cookies — Playwright script pattern documented in this iteration's tool call trace.",
+  "rca_of_the_issue": "No issues found this iteration — all iter161 action items (missing Deactivated badge + weak empty-name guard) are confirmed fixed in code and behaviour. All new features (Activity Log, Reactivate toggle, org-level section, admin-can't-be-assigned-team, Setting Manager badge structure, unassigned-list exclusions) match spec on both backend and frontend."
+}

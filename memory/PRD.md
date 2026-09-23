@@ -123,7 +123,15 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - Each row supports View/Edit/Deactivate as usual; "Move to…" (into a specific team, i.e. demoting them out of org-level) is available for managers but hidden for Admins, matching the existing backend rule that admins can never be assigned a team. Whole-tree staff search now also finds and jumps to these users.
 - Verified live via screenshot: Organisation row shows count 2 (Test Admin + Demo Manager), manager's menu has "Move to…", admin's does not.
 
+### Final regression check (2026-09-23, iter162) — ALL CLEAR
+- Ran a full testing_agent regression pass covering every feature built this session (Deactivate/Reactivate/Hard Delete, Activity Log, admin-can't-be-assigned-team, Unassigned-list exclusions, Setting Manager badge, Organisation-level Structure section) plus a smoke-check of older Structure-tab features.
+- **Backend: 22/22 pytest cases pass** (10 from iter161 + 12 new in `test_regression_iter162.py`, kept as a standing regression suite).
+- **Frontend: 100%** — every relevant data-testid verified present and behaving correctly, including confirming the OLD "menu still says Deactivate" bug is genuinely gone.
+- Zero critical or minor bugs found. Org data confirmed left in the clean 6-user baseline.
+- Non-blocking code-review notes for later (not acted on, no current bug): (1) `OrgStructure.js`/`PeopleHub.js` have grown large — candidates for splitting into smaller files if touched again; (2) `/admin/activity-log` currently filters by `meeting_id IS NULL` rather than an explicit action allow-list — fine today, but worth hardening if a future per-meeting audit action ever reuses `meeting_id=NULL`.
+- Tile-bounce-back bug: not reproduced in this run (5+ nav operations, all succeeded first click) — still unresolved/intermittent, unchanged status.
+
 ## Testing Status
-- Test reports: `/app/test_reports/iteration_149.json` through `iteration_161.json`
+- Test reports: `/app/test_reports/iteration_149.json` through `iteration_162.json`
 - Known regressions: None
 - Credentials: `/app/memory/test_credentials.md` (admin@supervision.com Supabase password was re-set this session — see above)
