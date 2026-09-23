@@ -258,6 +258,7 @@ function MemberRow({ m, teamId, teams, canManage, statsByUser, viewing, onView, 
 // ── Team card (header + member rows) ────────────────────────────────────────
 
 function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId, onSetViewingUserId, onMoveUser, onEditTeam, onDeleteTeam, onEditUser }) {
+  const memberCount = (t.members || []).length;
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden mb-3 bg-white" data-testid={`team-${t.id}`}>
       <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 group">
@@ -268,7 +269,13 @@ function TeamCard({ t, canManage, isAdmin, teamsFlat, statsByUser, viewingUserId
           <div className="flex items-center gap-0.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
             <button onClick={onEditTeam} className="p-1 text-gray-400 hover:text-[#1E3A8A]" data-testid={`edit-team-${t.id}`}><Edit2 className="w-3 h-3" /></button>
             {isAdmin && (
-              <button onClick={onDeleteTeam} className="p-1 text-gray-400 hover:text-red-500" data-testid={`delete-team-${t.id}`}><Trash2 className="w-3 h-3" /></button>
+              <button
+                onClick={onDeleteTeam}
+                disabled={memberCount > 0}
+                title={memberCount > 0 ? `Move all ${memberCount} staff out first` : "Delete empty team"}
+                className="p-1 text-gray-400 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-400 disabled:cursor-not-allowed"
+                data-testid={`delete-team-${t.id}`}
+              ><Trash2 className="w-3 h-3" /></button>
             )}
           </div>
         )}
@@ -503,7 +510,7 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   };
 
   const deleteSetting = async (s) => {
-    if (!window.confirm(`Delete "${s.name}"? All teams will also be removed.`)) return;
+    if (!window.confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
     try {
       await axios.delete(`${API}/org/settings/${s.id}`, getAuthConfig());
       await refreshData();
@@ -533,7 +540,7 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   };
 
   const deleteTeam = async (t) => {
-    if (!window.confirm(`Delete team "${t.name}"? Members will be unassigned.`)) return;
+    if (!window.confirm(`Delete team "${t.name}"? This cannot be undone.`)) return;
     try {
       await axios.delete(`${API}/org/teams/${t.id}`, getAuthConfig());
       await refreshData();
@@ -778,7 +785,9 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                         {isAdmin && (
                           <button
                             onClick={() => deleteSetting(selectedSetting)}
-                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded"
+                            disabled={selectedTeams.length > 0}
+                            title={selectedTeams.length > 0 ? `Move or delete all ${selectedTeams.length} team(s) out first` : "Delete empty setting"}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded disabled:opacity-30 disabled:hover:text-gray-400 disabled:cursor-not-allowed"
                             data-testid={`delete-setting-${selectedSetting.id}`}
                           ><Trash2 className="w-4 h-4" /></button>
                         )}

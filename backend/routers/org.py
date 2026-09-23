@@ -385,14 +385,20 @@ async def delete_setting(setting_id: str, current_user=Depends(get_current_user)
         raise HTTPException(403, "Admin only")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
-        # PERF-003: single UPDATE detaches all of this branch's team members
-        # at once, instead of one UPDATE per team.
-        await conn.execute(
-            "UPDATE users SET team_id=NULL, setting_id=NULL WHERE team_id IN (SELECT id FROM teams WHERE setting_id=$1)",
-            setting_id,
-        )
-        await conn.execute("DELETE FROM teams WHERE setting_id=$1", setting_id)
-        await conn.execute("UPDATE users SET setting_id=NULL WHERE setting_id=$1", setting_id)
+        setting = await conn.fetchrow("SELECT id FROM org_settings WHERE id=$1", setting_id)
+        if not setting:
+            raise HTTPException(404, "Setting not found")
+        # Deletion is only allowed on a genuinely empty container — no admin
+        # or manager can delete a setting out from under its teams/staff.
+        # Staff/teams must be moved to their new home first; only then does
+        # this become "just deleting an empty container".
+        team_count = await conn.fetchval("SELECT COUNT(*) FROM teams WHERE setting_id=$1", setting_id)
+        staff_count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE setting_id=$1", setting_id)
+        if team_count or staff_count:
+            raise HTTPException(
+                400,
+                f"Can't delete — this setting still has {team_count} team(s) and {staff_count} staff assigned. Move them to their new home first.",
+            )
         result = await conn.execute("DELETE FROM org_settings WHERE id=$1", setting_id)
     if result == "DELETE 0":
         raise HTTPException(404, "Setting not found")
@@ -459,15 +465,17 @@ async def delete_team(team_id: str, current_user=Depends(get_current_user)):
     org_id = current_user.get("org_id", "")
     scope = get_manager_scope(current_user)
     async with database.with_org(org_id) as conn:
+        team_row = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", team_id)
+        if not team_row:
+            raise HTTPException(404, "Team not found")
         if scope["level"] != "org":
-            team_row = await conn.fetchrow("SELECT setting_id FROM teams WHERE id=$1", team_id)
-            if not team_row:
-                raise HTTPException(404, "Team not found")
             _assert_team_scope(scope, team_row["setting_id"], team_id)
-        # BUGFIX: previously only cleared team_id, leaving members' setting_id
-        # stale (still pointing at this now-deleted team's setting) — the
-        # other real drift source behind the "orphaned teams" symptom.
-        await conn.execute("UPDATE users SET team_id=NULL, setting_id=NULL WHERE team_id=$1", team_id)
+        # Deletion is only allowed on a genuinely empty container — no admin
+        # or manager can delete a team out from under its members; they must
+        # be moved to their new team/setting first.
+        member_count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE team_id=$1", team_id)
+        if member_count:
+            raise HTTPException(400, f"Can't delete — this team still has {member_count} staff assigned. Move them to their new team first.")
         result = await conn.execute("DELETE FROM teams WHERE id=$1", team_id)
     if result == "DELETE 0":
         raise HTTPException(404, "Team not found")
