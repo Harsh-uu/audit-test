@@ -1,3 +1,28 @@
+## Bug Fix: Confidentiality Checker Silently Failed on Long Meetings (Sep 2026) — FIXED, tested (iteration_151.json)
+Real production bug found by user: an 11,351-word (>1hr) meeting's automatic confidentiality/PII
+check reported ZERO flags despite the transcript being full of real resident/staff names. Two
+root causes found:
+- `utils/ai.py::scan_pii_in_transcript`: long transcripts split into ~40k-char chunks were scanned
+  SEQUENTIALLY (one `await` at a time), roughly doubling+ total latency for a 2-3 chunk transcript
+  and risking a gateway/timeout on genuinely long meetings. Fixed: all chunks now run CONCURRENTLY
+  via `asyncio.gather`. Verified: 78,104-char/2-chunk transcript via the real API endpoint completed
+  in 17.4s (vs an estimated ~34s+ sequential) and found 80/80 expected planted names.
+- `PostRecordingFlow.js`: ANY scan failure (timeout/network error) rendered the exact same green-
+  checkmark "No issues found" UI as a genuinely clean scan, with the real error buried as tiny grey
+  subtext and no retry option — a failed scan looked identical to a successful one. Fixed: added a
+  distinct amber "Scan could not complete" error state (`data-testid="pii-scan-error-state"`) with
+  a working "Retry scan" button (`runScan()` extracted from the auto-fire useEffect so it's reusable);
+  render order now checks `scanError` FIRST, before the "0 found" clean-state branch.
+- Tested via testing_agent (100% backend + frontend): real API call end-to-end, forced-failure via
+  Playwright route interception confirmed the new error state renders correctly (visually distinct,
+  never confused with the clean state) and Retry successfully re-fetches real results.
+- 2 trivial polish fixes applied post-test (not bugs, code-review suggestions): removed duplicate
+  "Scan could not complete" text between heading/description; added an early-return guard in
+  `runScan()` against rapid double-click firing two overlapping scans.
+- NOT yet verified against the ACTUAL real long meeting that surfaced this on production — that
+  meeting's confidentiality check was never completed/reviewed, so recommend the user re-trigger it
+  (or a fresh rescan) once this ships to production, to confirm it now finds the real names.
+
 ## Parked: Intermittent Meeting-Tile Click "Bounce Back" (Sep 2026) — COULD NOT REPRODUCE, parked by user
 User reported clicking a meeting tile sometimes renders the report then bounces back to the tiles
 list; second click always works. Ran ~13 automated repro attempts (click + poll URL/DOM every

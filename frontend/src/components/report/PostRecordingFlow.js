@@ -95,6 +95,7 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
   }, [step3Active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const runScan = () => {
+    if (scanning) return;
     setScanning(true);
     setScanError("");
     axios.post(`${API}/review/${meetingId}/scan-pii`, {}, getAuthConfig())
@@ -106,7 +107,7 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
         setSelected(sel);
         setReplacements(reps);
       })
-      .catch(() => setScanError("Scan could not complete — please retry rather than skipping, so this transcript is actually checked for names before you continue."))
+      .catch(() => setScanError("Please retry rather than skipping, so this transcript is actually checked for names before you continue."))
       .finally(() => setScanning(false));
   };
 
