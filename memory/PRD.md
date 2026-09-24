@@ -131,6 +131,13 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - Non-blocking code-review notes for later (not acted on, no current bug): (1) `OrgStructure.js`/`PeopleHub.js` have grown large — candidates for splitting into smaller files if touched again; (2) `/admin/activity-log` currently filters by `meeting_id IS NULL` rather than an explicit action allow-list — fine today, but worth hardening if a future per-meeting audit action ever reuses `meeting_id=NULL`.
 - Tile-bounce-back bug: not reproduced in this run (5+ nav operations, all succeeded first click) — still unresolved/intermittent, unchanged status.
 
+### This session (2026-09-24) — Global Super Admin AI Accuracy report (SHIPPED)
+- New "AI Accuracy" tab in Super Admin dashboard, alongside the existing "AI Usage" tab. New `GET /super-admin/ai-accuracy-report` endpoint (super_admin-only, 403 otherwise) aggregates the existing `evidence_feedback` table (the same source powering each org's own AI Accuracy tab in Team Insights) across ALL organisations.
+- Stats: total decisions, global acceptance rate, rejected/flagged counts, most-rejected standards, and a **By Organisation** breakdown table (total/accepted/rejected/flagged/acceptance rate per org) — the key value-add a per-org view can't show, letting Super Admin spot an org (or the whole fleet) with an unusually low acceptance rate. Filterable by org/action/date range; feedback log table links out to each meeting's report.
+- Preceded by a verification pass (user asked to "double check" tracking reliability first): confirmed every meeting with reviewed evidence has matching `evidence_feedback` rows (0 mismatches found via direct DB query, 224 rows across 5 meetings) — the insert is best-effort (try/except + log warning, not transactional) but no failures found in practice. Noted caveat: uploaded-document evidence (`doc_uploads.py`, a separate feature) does NOT write to `evidence_feedback`, so it's excluded from both the per-org and this new global report.
+- Also fixed: "Mapping Compliance Evidence" processing-screen time estimate updated from "~30-90 seconds" to "~2-3 minutes" (`PostRecordingFlow.js`) per user's real-world test results on the tuned evidence-scan prompt.
+- Tested via curl (super_admin access works, manager gets 403, stats/by_org math correct) and live screenshots (desktop clean, mobile has only the same pre-existing minor internal-table-scroll pattern already present on the AI Usage tab — confirmed no real page-level horizontal overflow via `body.scrollWidth` check).
+
 ## Testing Status
 - Test reports: `/app/test_reports/iteration_149.json` through `iteration_162.json`
 - Known regressions: None

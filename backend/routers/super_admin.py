@@ -700,3 +700,123 @@ async def ai_usage_report(
             "provider_changed_on_rescan_count": changed_row["cnt"] or 0,
         },
     }
+
+
+@router.get("/ai-accuracy-report")
+async def ai_accuracy_report(
+    org_id: Optional[str] = None,
+    action: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user=Depends(get_current_user),
+):
+    """Global, cross-org view over evidence_feedback (every manager
+    accept/reject/flag decision on AI-mapped evidence) — the same data that
+    powers each org's own "AI Accuracy" tab in Team Insights, but aggregated
+    across all organisations so Super Admin can spot an org (or the whole
+    fleet) with an unusually low acceptance rate."""
+    _require_super_admin(current_user)
+    conditions = ["1=1"]
+    params = []
+    if org_id:
+        params.append(org_id)
+        conditions.append(f"ef.org_id = ${len(params)}")
+    if action:
+        params.append(action)
+        conditions.append(f"ef.manager_action = ${len(params)}")
+    if from_date:
+        params.append(from_date)
+        conditions.append(f"ef.timestamp >= ${len(params)}")
+    if to_date:
+        params.append(to_date)
+        conditions.append(f"ef.timestamp <= ${len(params)}")
+    where_clause = " AND ".join(conditions)
+
+    async with database.with_admin() as conn:
+        items_rows = await conn.fetch(
+            f"""SELECT ef.id, ef.meeting_id, ef.org_id, ef.user_name, ef.evidence_type,
+                       ef.standard_ref, ef.standard_name, ef.ai_confidence, ef.manager_action,
+                       ef.timestamp, m.title AS meeting_title, o.name AS org_name
+                FROM evidence_feedback ef
+                LEFT JOIN meetings m ON m.id = ef.meeting_id
+                LEFT JOIN organisations o ON o.id = ef.org_id
+                WHERE {where_clause}
+                ORDER BY ef.timestamp DESC
+                LIMIT 200""",
+            *params,
+        )
+        action_rows = await conn.fetch(
+            f"""SELECT ef.manager_action, COUNT(*) AS cnt FROM evidence_feedback ef
+                WHERE {where_clause} GROUP BY ef.manager_action""",
+            *params,
+        )
+        top_rejected_rows = await conn.fetch(
+            f"""SELECT ef.standard_ref, ef.standard_name, COUNT(*) AS cnt FROM evidence_feedback ef
+                WHERE {where_clause} AND ef.manager_action = 'rejected'
+                GROUP BY ef.standard_ref, ef.standard_name
+                ORDER BY cnt DESC LIMIT 10""",
+            *params,
+        )
+        by_org_rows = await conn.fetch(
+            f"""SELECT ef.org_id, o.name AS org_name,
+                       COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE ef.manager_action = 'accepted') AS accepted,
+                       COUNT(*) FILTER (WHERE ef.manager_action = 'rejected') AS rejected,
+                       COUNT(*) FILTER (WHERE ef.manager_action = 'needs_followup') AS flagged
+                FROM evidence_feedback ef
+                LEFT JOIN organisations o ON o.id = ef.org_id
+                WHERE {where_clause}
+                GROUP BY ef.org_id, o.name
+                ORDER BY total DESC""",
+            *params,
+        )
+
+    by_action = {r["manager_action"] or "unknown": r["cnt"] for r in action_rows}
+    total = sum(by_action.values())
+    accepted = by_action.get("accepted", 0)
+    rejected = by_action.get("rejected", 0)
+    decided = accepted + rejected
+    acceptance_rate = round((accepted / decided) * 100, 1) if decided else None
+
+    by_org = []
+    for r in by_org_rows:
+        org_decided = (r["accepted"] or 0) + (r["rejected"] or 0)
+        by_org.append({
+            "org_id": r["org_id"],
+            "org_name": r["org_name"] or "Unknown org",
+            "total": r["total"],
+            "accepted": r["accepted"] or 0,
+            "rejected": r["rejected"] or 0,
+            "flagged": r["flagged"] or 0,
+            "acceptance_rate": round((r["accepted"] / org_decided) * 100, 1) if org_decided else None,
+        })
+
+    return {
+        "items": [
+            {
+                "id": r["id"],
+                "meeting_id": r["meeting_id"],
+                "meeting_title": r["meeting_title"],
+                "org_id": r["org_id"],
+                "org_name": r["org_name"],
+                "manager_name": r["user_name"],
+                "evidence_type": r["evidence_type"],
+                "standard_ref": r["standard_ref"],
+                "standard_name": r["standard_name"],
+                "ai_confidence": r["ai_confidence"],
+                "manager_action": r["manager_action"],
+                "timestamp": r["timestamp"],
+            }
+            for r in items_rows
+        ],
+        "stats": {
+            "total": total,
+            "by_action": by_action,
+            "acceptance_rate": acceptance_rate,
+            "top_rejected_standards": [
+                {"standard_ref": r["standard_ref"], "standard_name": r["standard_name"], "count": r["cnt"]}
+                for r in top_rejected_rows
+            ],
+        },
+        "by_org": by_org,
+    }
