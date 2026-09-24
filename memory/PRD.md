@@ -138,7 +138,15 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - Also fixed: "Mapping Compliance Evidence" processing-screen time estimate updated from "~30-90 seconds" to "~2-3 minutes" (`PostRecordingFlow.js`) per user's real-world test results on the tuned evidence-scan prompt.
 - Tested via curl (super_admin access works, manager gets 403, stats/by_org math correct) and live screenshots (desktop clean, mobile has only the same pre-existing minor internal-table-scroll pattern already present on the AI Usage tab — confirmed no real page-level horizontal overflow via `body.scrollWidth` check).
 
+### This session (2026-09-24, cont'd) — Document Evidence Tracking + Low-Accuracy Alerts (SHIPPED)
+- **Migration `m033_evidence_feedback_uploads.py`**: `evidence_feedback.meeting_id` DROP NOT NULL; added `upload_id UUID` (FK → `supervision_uploads(id)` ON DELETE CASCADE, indexed). A row now has EITHER `meeting_id` OR `upload_id` set, never both (enforced by API code paths only, not yet a DB CHECK constraint — see code-review note below).
+- **`doc_uploads.py`**: `update_upload_evidence` (single PUT) and `bulk_update_upload_evidence` (bulk-action) now insert into `evidence_feedback` (meeting_id=NULL, upload_id=X) mirroring `review.py`'s exact insert logic/action-derivation. New shared `_insert_upload_evidence_feedback()` helper + `_UPLOAD_TYPE_LABEL` map.
+- **`super_admin.py`**'s `GET /super-admin/ai-accuracy-report`: LEFT JOINs `supervision_uploads`; each item now has `source_type` (`meeting`/`document`), `source_label`, `upload_id`. `by_org` totals now include document-evidence decisions automatically (same underlying table).
+- **`SuperAdminAIAccuracy.js`**: feedback table's "Meeting" column renamed "Source" with a Meeting/Document tag + correct link (`/doc-uploads/{id}` vs `/meetings/{id}/report`). New **Low-Accuracy Alert** panel above the stat cards — auto-lists any org with ≥5 decided (accepted+rejected) decisions AND acceptance rate <90% (per user's explicit min-sample-size choice). Existing By-Organisation table's <60% red-highlight left unchanged (user's explicit choice — only the new panel uses 90%).
+- Tested: testing_agent, backend 9/9 pytest (new `tests/test_evidence_feedback_uploads.py` regression suite) + frontend 100% (iteration_163.json) — zero bugs. Confirmed no regression to meeting-based evidence_feedback inserts.
+- Not done (code-review nits, backlog): DB-level `CHECK ((meeting_id IS NOT NULL) <> (upload_id IS NOT NULL))` constraint; `review.py`/`doc_uploads.py` INSERT statements have diverged (candidate for a shared helper); ai-accuracy-report `items` query LIMIT 200 (fine for MVP, not paginated).
+
 ## Testing Status
-- Test reports: `/app/test_reports/iteration_149.json` through `iteration_162.json`
+- Test reports: `/app/test_reports/iteration_149.json` through `iteration_163.json`
 - Known regressions: None
 - Credentials: `/app/memory/test_credentials.md` (admin@supervision.com Supabase password was re-set this session — see above)

@@ -1,0 +1,35 @@
+{
+  "summary": "Iter163 — Regression + new-feature test of evidence_feedback tracking extended to uploaded-document evidence and the new Super Admin Low-Accuracy Alert panel. Backend: 9/9 pytest cases pass (doc-upload PUT single evidence writes evidence_feedback with upload_id set / meeting_id NULL; doc-upload bulk-action writes N rows matching changed_count; meeting evidence PUT still writes meeting_id-based rows with upload_id NULL — no regression from the m033 schema change; super-admin/ai-accuracy-report is 403 for admin role, 200 for super_admin, every item has source_type∈{meeting,document} + source_label + upload_id/meeting_id mutually exclusive, by_org totals include document decisions, org/action/date filters work). Frontend (after `sudo supervisorctl restart frontend` — the prod build was serving stale JS from the previous session): (a) 'Source' column header confirmed (was 'Meeting'), (b) each row shows a 'MEETING' or 'DOCUMENT' tag under the link, (c) meeting-row link → /meetings/{id}/report, document-row link → /doc-uploads/{id} (verified in source, meeting variant verified in DOM), (d) new Low-Accuracy Alert panel (data-testid `ai-accuracy-low-alerts`) is HIDDEN when no org qualifies (Test Company at 99.4% and no other orgs had ≥5 decisions), then verified APPEARS after seeding an 8-decided/25%-acceptance scenario in 'New test Scotland' — panel rendered '1 organisation below 90% acceptance' with row 'New test Scotland — 25% acceptance (2/8 decided)' and correct data-testid `ai-accuracy-low-alert-510e66b2-6f78-4bb5-aea0-bf19663f1c3a`, (e) existing By-Organisation red-highlight at <60% is unchanged (seeded 25% row rendered red; Test Company 99.4% row is not red for AR). All seeded rows cleaned up + upload mapping baseline restored to (21 pending, 2 accepted, 1 rejected) exactly as noted in the review request.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_evidence_feedback_uploads.py",
+    "/app/test_reports/pytest/iter163.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Data-integrity note (not user-facing but worth a defensive CHECK constraint): evidence_feedback now has both meeting_id and upload_id nullable and neither is NOT NULL — a bug could silently insert a row with BOTH NULL and the AI Accuracy report would render it as a broken 'Untitled meeting → /meetings/null/report' link (reproduced by direct SQL insert during test setup; not reachable via the API code paths — both review.py and doc_uploads.py always set one). Recommend adding `CHECK ((meeting_id IS NOT NULL) <> (upload_id IS NOT NULL))` in a follow-up migration to lock this invariant at the DB level.",
+    "super_admin.py ai_accuracy_report items query has LIMIT 200 hardcoded — fine for MVP visualization but the stats/by_org aggregates are un-limited so the log table can silently misrepresent the full population once an org crosses ~200 recent decisions. No functional bug today, just something to keep in mind before shipping to a >5-org customer base; consider adding paging or a total-count hint.",
+    "review.py's INSERT into evidence_feedback still lists 14 columns and does not list upload_id (relies on the column default NULL from m033). Works correctly (verified: meeting rows have upload_id IS NULL after my test) but the two files (review.py vs doc_uploads.py) now have divergent INSERT statements — a future refactor should extract a shared helper to keep the schema drift risk minimal."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_evidence_feedback_uploads.py (new — 9-test pytest suite, safe as regression suite; each test cleans up its own rows and restores the pre-test upload mapping status)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9)",
+    "frontend": "100% — Source column, Meeting/Document tag, link routing (meeting variant verified in DOM, document href logic verified in source), Low-Accuracy Alert appears when qualifying org exists AND is hidden otherwise, 60% by-org threshold unchanged"
+  },
+  "test_credentials": "admin@supervision.com / Admin123!X (no MFA); superadmin@1two.one / TestPass123! (MFA bypassed via DB override in tests/get_tokens.py)",
+  "seed_data_creation": "Temporarily inserted 8 evidence_feedback rows (6 rejected + 2 accepted, standard_ref='TEST_STD', user_name='AI Accuracy Test') against org 'New test Scotland' (510e66b2-6f78-4bb5-aea0-bf19663f1c3a) to trigger the Low-Accuracy Alert panel — DELETED after test. Also restored upload 6fd622d4-fafb-4faa-8655-cb21a61ba2fd cqc_mappings to (cqc_1=rejected, cqc_2/cqc_3=accepted, rest=pending) after an early-failing test run left it in (23 accepted, 1 rejected). Final DB state: only original 226 evidence_feedback rows for Test Company, no test residue.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run backend with `cd /app/backend && python -m pytest tests/test_evidence_feedback_uploads.py -v -n 0` (serial required; clear login_attempts first if 401). Depends on stable fixture upload 6fd622d4-fafb-4faa-8655-cb21a61ba2fd baseline (21 pending / 2 accepted / 1 rejected cqc mappings) — check before running: `SELECT jsonb_agg(elem->>'status') FROM supervision_uploads, jsonb_array_elements(cqc_mappings) elem WHERE id='6fd622d4-fafb-4faa-8655-cb21a61ba2fd'`. Frontend is a static Vite build — after any component edit main agent MUST run `sudo supervisorctl restart frontend` and wait ~40s for rebuild before UI retest. To reproduce Low-Accuracy Alert panel manually, seed ≥5 decided decisions on any org with <90% acceptance and delete when done (same pattern as this iter).",
+  "rca_of_the_issue": "No issues found — both feature (evidence_feedback for docs + Low-Accuracy Alert panel) and regression surface (meeting-based evidence_feedback still works, 60% by-org threshold unchanged) are fully working end-to-end. Three code-review nits documented but none are blockers."
+}
