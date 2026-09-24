@@ -2260,12 +2260,13 @@ def _generate_pdf(meeting: dict, analysis: dict, transcript_text: str, speaker_t
         cell_style = ParagraphStyle("Cell", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), leading=12)
         done_style = ParagraphStyle("Done", fontName="Helvetica", fontSize=9, textColor=MID_GRAY, leading=12)
         hdr_style = ParagraphStyle("Hdr", fontName="Helvetica-Bold", fontSize=9, textColor=colors.white, leading=12)
-        action_rows = [[Paragraph("#", hdr_style), Paragraph("Action", hdr_style), Paragraph("Assigned To", hdr_style), Paragraph("Due Date", hdr_style), Paragraph("Done", hdr_style)]]
+        action_rows = [[Paragraph("#", hdr_style), Paragraph("Action", hdr_style), Paragraph("Assigned To", hdr_style), Paragraph("Due Date / Trigger", hdr_style), Paragraph("Done", hdr_style)]]
         for i, a in enumerate(actions, 1):
             completed = a.get("completed", False)
             st = done_style if completed else cell_style
             mark = "\u2713" if completed else "\u2717"
-            action_rows.append([Paragraph(str(i), st), Paragraph(e(a.get("text", "")), st), Paragraph(e(a.get("assigned_to") or "\u2014"), st), Paragraph(e(a.get("due_date") or "\u2014"), st), Paragraph(mark, st)])
+            date_or_trigger = a.get("trigger") if a.get("action_type") == "standing_commitment" else a.get("due_date")
+            action_rows.append([Paragraph(str(i), st), Paragraph(e(a.get("text", "")), st), Paragraph(e(a.get("assigned_to") or "\u2014"), st), Paragraph(e(date_or_trigger or "\u2014"), st), Paragraph(mark, st)])
         at = Table(action_rows, colWidths=[8*mm, 88*mm, 36*mm, 22*mm, 16*mm])
         at.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("FONTSIZE", (0, 0), (-1, -1), 9),

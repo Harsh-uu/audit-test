@@ -245,7 +245,10 @@ def _sanitise_analysis(data: dict) -> dict:
 
     # The AI sometimes returns the literal string "null" (rather than a real
     # JSON null) for assigned_to/due_date when nothing was mentioned — normalise
-    # those to real None so the UI never shows a raw "Due: null".
+    # those to real None so the UI never shows a raw "Due: null". "not specified
+    # in session" is intentionally NOT in this set — that literal phrase is a
+    # deliberate task due-date value (see ACTIONS — TASK VS STANDING COMMITMENT
+    # rule) and must render as-is, not be blanked out.
     nullish = {"null", "none", "n/a", "na", "not specified", "not mentioned"}
     for key in ("actions", "learning_needs"):
         items = cleaned.get(key)
@@ -256,6 +259,8 @@ def _sanitise_analysis(data: dict) -> dict:
                         val = item.get(field)
                         if isinstance(val, str) and val.strip().lower() in nullish:
                             item[field] = None
+                    if key == "actions" and item.get("action_type") not in ("task", "standing_commitment"):
+                        item["action_type"] = "task"
 
     return cleaned
 
@@ -522,7 +527,8 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
     {"id": "ach_1", "description": "Brief description of a specific thing done well, demonstrated, or grown in (max 25 words)"}
   ],
   "actions": [
-    {"id": "unique_id", "text": "action description — a concrete task or follow-up to be completed before the next session (do NOT include identified learning needs here)", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
+    {"id": "unique_id", "text": "action description — a concrete task or follow-up to be completed before the next session (do NOT include identified learning needs here)", "action_type": "task", "assigned_to": "person name or null", "due_date": "date mentioned, or the exact literal string 'Not specified in session' if no timeframe was discussed for this task — never invent a date"},
+    {"id": "unique_id_2", "text": "standing commitment description — an ongoing posture, open invitation, or practice being adopted going forward (see ACTIONS — TASK VS STANDING COMMITMENT rule below)", "action_type": "standing_commitment", "assigned_to": "person name or null", "trigger": "plain-language description of what would next cause this commitment to be acted on"}
   ],
   "learning_needs": [
     {"id": "ln_1", "text": "specific knowledge or skill gap identified in this session that needs to be addressed through learning, training or development", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
@@ -638,6 +644,11 @@ Rules:
   Do NOT include: training already completed or confirmed as done, general tasks or follow-ups (those go in actions), risks or safeguarding concerns. Do NOT place learning needs in the actions array — they belong here only. Use "id" values like "ln_1", "ln_2". If nothing specific is identified, return an empty array [].
 - For ACTIONS: list only concrete tasks, follow-ups, or agreed next steps to be completed before the next session. Do NOT include identified learning needs here — those belong in learning_needs only.
 - For ACTIONS: any explicit or implied commitment by the manager or worker to formally RECORD, DOCUMENT, LOG, FILE, or ADD something discussed in the session to a record — e.g. "I'll add that feedback to his file", "Helen will record this on Megan's file", "I'll log the complaint", "I'll note this in her supervision record" — is itself a concrete action and MUST be captured, even though it may also be reflected in the summary. Do NOT treat "the manager will note this on file" as merely descriptive narrative just because it is low-key or administrative — it is an agreed next step someone has to actually go and do. This applies equally to positive feedback, complaints, incidents, or any other content being recorded. Assign it to whichever person said they would do the recording.
+- ACTIONS — TASK VS STANDING COMMITMENT: classify every action as either "task" or "standing_commitment" via the "action_type" field.
+  A TASK is something with a clear completion point — it gets done once and is finished. Give it an owner ("assigned_to") and, if a timeframe was discussed, a due date; if none was discussed, set "due_date" to the exact literal string "Not specified in session" — do not invent one.
+  A STANDING COMMITMENT is an ongoing posture, an open invitation, or something agreed to do consistently going forward or the next time a particular situation arises — rather than a one-off task. It has no completion point. Give it an owner ("assigned_to") and a "trigger", in plain language, describing what would cause this commitment to next be acted on, rather than a due date.
+  Do NOT omit a standing commitment from the actions array just because it has no date — a commitment without a deadline is still a commitment, and must be tracked as clearly as a dated task, distinguished only by its trigger rather than its due date.
+  Examples of standing commitments: an open invitation to raise something any time rather than waiting for the next session; a commitment to a particular kind of support the next time a specific situation recurs; a general practice being adopted going forward rather than a single action to complete.
 - If the transcript contains [MM:SS] timestamps, include the timestamp at the start of transcript_excerpt values (e.g. "[14:32] I always check the care plan before..."). This helps locate evidence within the session.
 - Include transcript excerpts as exact quotes from the provided text
 - CRITICAL — excerpt selection: always choose the MOST EVIDENTIAL passage for the mapped standard — the quote that most clearly demonstrates the behaviour, narration, or competency. Do NOT pick the first incidental mention or a greeting. A short opener like "[00:03] how are you feeling?" cannot establish workforce wellbeing — pick the passage where the substantive discussion actually occurs. If evidence is spread across the conversation, pick the single passage where the content is richest and most specific. When a mapping is `"witnessed_outcome": true`, the transcript_excerpt must be the OBSERVER's own words reporting the outcome, not the worker's account of the same event — the excerpt is what makes the corroboration checkable.

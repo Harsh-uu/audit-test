@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw, Copy,
-  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText, ArrowUp,
+  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText, ArrowUp, Repeat,
 } from "lucide-react";
 
 // Regenerate-summary button is hidden per user request (Aug 2026) — handler/UI kept
@@ -435,7 +435,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
 
   // ── Inline edit — Action Items ────────────────────────────────────────────
   const [editingActionIdx, setEditingActionIdx] = useState(null);
-  const [editActionDraft, setEditActionDraft] = useState({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
+  const [editActionDraft, setEditActionDraft] = useState({ text: "", assigned_to: "", assigned_to_user_id: "", action_type: "task", due_date: "", trigger: "" });
 
   const startEditAction = (idx, action) => {
     setEditingActionIdx(idx);
@@ -443,17 +443,22 @@ export const EvidenceTab = React.memo(function EvidenceTab({
       text: action.text || "",
       assigned_to: isBlankValue(action.assigned_to) ? "" : action.assigned_to,
       assigned_to_user_id: action.assigned_to_user_id || "",
+      action_type: action.action_type === "standing_commitment" ? "standing_commitment" : "task",
       due_date: isBlankValue(action.due_date) ? "" : action.due_date,
+      trigger: isBlankValue(action.trigger) ? "" : action.trigger,
     });
   };
 
   const saveEditAction = async () => {
     if (!editActionDraft.text.trim()) return;
+    const isStanding = editActionDraft.action_type === "standing_commitment";
     await editAction?.(editingActionIdx, {
       text: editActionDraft.text.trim(),
       assigned_to: editActionDraft.assigned_to.trim() || null,
       assigned_to_user_id: editActionDraft.assigned_to_user_id || null,
-      due_date: editActionDraft.due_date.trim() || null,
+      action_type: editActionDraft.action_type || "task",
+      due_date: isStanding ? null : (editActionDraft.due_date.trim() || null),
+      trigger: isStanding ? (editActionDraft.trigger.trim() || null) : null,
     });
     setEditingActionIdx(null);
   };
@@ -651,6 +656,24 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                     autoFocus
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEditAction(); } }}
                   />
+                  <div className="flex gap-1.5 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditActionDraft(d => ({ ...d, action_type: "task" }))}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${editActionDraft.action_type !== "standing_commitment" ? "bg-[#1E3A8A] text-white border-[#1E3A8A]" : "bg-white text-gray-500 border-gray-300"}`}
+                      data-testid={`edit-action-type-task-${i}`}
+                    >
+                      Task
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditActionDraft(d => ({ ...d, action_type: "standing_commitment" }))}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${editActionDraft.action_type === "standing_commitment" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-500 border-gray-300"}`}
+                      data-testid={`edit-action-type-standing-${i}`}
+                    >
+                      Standing
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     <select
                       value={editActionDraft.assigned_to_user_id}
@@ -667,7 +690,11 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                         <option key={a.user_id} value={a.user_id}>{a.name}</option>
                       ))}
                     </select>
-                    <input type="text" value={editActionDraft.due_date} onChange={e => setEditActionDraft(d => ({ ...d, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid={`edit-action-due-${i}`} />
+                    {editActionDraft.action_type === "standing_commitment" ? (
+                      <input type="text" value={editActionDraft.trigger} onChange={e => setEditActionDraft(d => ({ ...d, trigger: e.target.value }))} placeholder="Trigger — what brings this back into action" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" data-testid={`edit-action-trigger-${i}`} />
+                    ) : (
+                      <input type="text" value={editActionDraft.due_date} onChange={e => setEditActionDraft(d => ({ ...d, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid={`edit-action-due-${i}`} />
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <button onClick={saveEditAction} disabled={!editActionDraft.text.trim()} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-[#1E40AF] disabled:opacity-50 transition-colors" data-testid={`save-edit-action-${i}`}>
@@ -683,22 +710,39 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                   <button
                     onClick={() => toggleActionComplete(action.id || i, !action.completed)}
                     className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${action.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-emerald-400"}`}
-                    title={action.completed ? "Mark as outstanding" : "Mark as complete"}
+                    title={action.action_type === "standing_commitment" ? (action.completed ? "Reopen" : "Close") : (action.completed ? "Mark as outstanding" : "Mark as complete")}
                     data-testid={`complete-action-${i}`}
                   >
                     {action.completed && <Check className="w-3 h-3" />}
                   </button>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${action.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{action.text}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className={`text-sm ${action.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{action.text}</p>
+                      {action.action_type === "standing_commitment" && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700 flex-shrink-0" data-testid={`action-type-badge-${i}`}>
+                          <Repeat className="w-2.5 h-2.5" /> Standing
+                        </span>
+                      )}
+                    </div>
                     {action.is_rolled_over && !action.completed && (
                       <p className="text-xs text-amber-600 font-medium mt-0.5">Carried over from: {action.source_meeting_title}</p>
                     )}
-                    {(!isBlankValue(action.assigned_to) || !isBlankValue(action.due_date)) && (
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {!isBlankValue(action.assigned_to) && `Assigned: ${action.assigned_to}`}
-                        {!isBlankValue(action.assigned_to) && !isBlankValue(action.due_date) && " · "}
-                        {!isBlankValue(action.due_date) && `Due: ${action.due_date}`}
-                      </p>
+                    {action.action_type === "standing_commitment" ? (
+                      (!isBlankValue(action.assigned_to) || !isBlankValue(action.trigger)) && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {!isBlankValue(action.assigned_to) && `Assigned: ${action.assigned_to}`}
+                          {!isBlankValue(action.assigned_to) && !isBlankValue(action.trigger) && " · "}
+                          {!isBlankValue(action.trigger) && `Trigger: ${action.trigger}`}
+                        </p>
+                      )
+                    ) : (
+                      (!isBlankValue(action.assigned_to) || !isBlankValue(action.due_date)) && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {!isBlankValue(action.assigned_to) && `Assigned: ${action.assigned_to}`}
+                          {!isBlankValue(action.assigned_to) && !isBlankValue(action.due_date) && " · "}
+                          {!isBlankValue(action.due_date) && `Due: ${action.due_date}`}
+                        </p>
+                      )
                     )}
                   </div>
                   {canReview && !action.is_rolled_over && (
@@ -732,6 +776,24 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                 autoFocus
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addAction(); } }}
               />
+              <div className="flex gap-1.5 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setNewAction(a => ({ ...a, action_type: "task" }))}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${newAction.action_type !== "standing_commitment" ? "bg-[#1E3A8A] text-white border-[#1E3A8A]" : "bg-white text-gray-500 border-gray-300"}`}
+                  data-testid="new-action-type-task"
+                >
+                  Task
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewAction(a => ({ ...a, action_type: "standing_commitment" }))}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${newAction.action_type === "standing_commitment" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-500 border-gray-300"}`}
+                  data-testid="new-action-type-standing"
+                >
+                  Standing
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <select
                   value={newAction.assigned_to_user_id}
@@ -748,13 +810,17 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                     <option key={a.user_id} value={a.user_id}>{a.name}</option>
                   ))}
                 </select>
-                <input type="text" value={newAction.due_date} onChange={e => setNewAction(a => ({ ...a, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid="new-action-due" />
+                {newAction.action_type === "standing_commitment" ? (
+                  <input type="text" value={newAction.trigger} onChange={e => setNewAction(a => ({ ...a, trigger: e.target.value }))} placeholder="Trigger — what brings this back into action" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" data-testid="new-action-trigger" />
+                ) : (
+                  <input type="text" value={newAction.due_date} onChange={e => setNewAction(a => ({ ...a, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid="new-action-due" />
+                )}
               </div>
               <div className="flex gap-2">
                 <button onClick={addAction} disabled={!newAction.text.trim()} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-[#1E40AF] disabled:opacity-50 transition-colors" data-testid="save-new-action-btn">
                   <Plus className="w-3 h-3" /> Add Action
                 </button>
-                <button onClick={() => { setAddingAction(false); setNewAction({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" }); pendingRiskIdRef.current = null; }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-action-btn">
+                <button onClick={() => { setAddingAction(false); setNewAction({ text: "", assigned_to: "", assigned_to_user_id: "", action_type: "task", due_date: "", trigger: "" }); pendingRiskIdRef.current = null; }} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md text-xs hover:bg-gray-50 transition-colors" data-testid="cancel-add-action-btn">
                   Cancel
                 </button>
               </div>

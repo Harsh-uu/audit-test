@@ -26,7 +26,7 @@ export function useMeetingReport() {
   const [highlightKey, setHighlightKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [addingAction, setAddingAction] = useState(false);
-  const [newAction, setNewAction] = useState({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
+  const [newAction, setNewAction] = useState({ text: "", assigned_to: "", assigned_to_user_id: "", action_type: "task", due_date: "", trigger: "" });
   const [auditTrail, setAuditTrail] = useState(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
@@ -278,13 +278,20 @@ export function useMeetingReport() {
   const addAction = async () => {
     if (!newAction.text.trim()) return;
     const current = meeting?.analysis?.actions || [];
+    const isStanding = newAction.action_type === "standing_commitment";
     const updated = [
       ...current,
-      { id: `action_manual_${Date.now()}`, text: newAction.text.trim(), assigned_to: newAction.assigned_to.trim() || null, assigned_to_user_id: newAction.assigned_to_user_id || null, due_date: newAction.due_date.trim() || null },
+      {
+        id: `action_manual_${Date.now()}`, text: newAction.text.trim(),
+        assigned_to: newAction.assigned_to.trim() || null, assigned_to_user_id: newAction.assigned_to_user_id || null,
+        action_type: newAction.action_type || "task",
+        due_date: isStanding ? null : (newAction.due_date.trim() || null),
+        trigger: isStanding ? (newAction.trigger.trim() || null) : null,
+      },
     ];
     // Optimistic: show the new action immediately, persist in the background
     setMeeting(m => ({ ...m, analysis: { ...m.analysis, actions: updated } }));
-    setNewAction({ text: "", assigned_to: "", assigned_to_user_id: "", due_date: "" });
+    setNewAction({ text: "", assigned_to: "", assigned_to_user_id: "", action_type: "task", due_date: "", trigger: "" });
     setAddingAction(false);
     await saveActions(updated);
   };

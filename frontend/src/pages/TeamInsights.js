@@ -667,7 +667,8 @@ function PersonGroups({ items, type, onToggle }) {
                     const sev = type === "risks" ? (item.severity || "low").toLowerCase() : null;
                     const sc = sev ? (SEV_CFG[sev] || SEV_CFG.low) : null;
                     const isIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(item.due_date || "");
-                    const overdue = (type === "learning_needs" || type === "actions") && !done && isIsoDate && item.due_date < today;
+                    const isStanding = type === "actions" && item.action_type === "standing_commitment";
+                    const overdue = (type === "learning_needs" || type === "actions") && !done && !isStanding && isIsoDate && item.due_date < today;
                     const dotColor = done ? "#059669" : sc ? sc.bar : (_new ? "#FBBF24" : cfg.accent);
 
                     return (
@@ -707,6 +708,11 @@ function PersonGroups({ items, type, onToggle }) {
                                 {sev.charAt(0).toUpperCase() + sev.slice(1)}
                               </span>
                             )}
+                            {isStanding && (
+                              <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5">
+                                Standing
+                              </span>
+                            )}
                             {overdue && (
                               <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5">
                                 Overdue
@@ -729,12 +735,18 @@ function PersonGroups({ items, type, onToggle }) {
                                 <span className="text-xs text-gray-400">Assigned: {item.assigned_to}</span>
                               </>
                             )}
-                            {(type === "learning_needs" || type === "actions") && item.due_date && (
+                            {(type === "learning_needs" || type === "actions") && !isStanding && item.due_date && (
                               <>
                                 <span className="text-gray-200 text-xs">·</span>
                                 <span className={`text-xs ${overdue ? "text-red-500 font-medium" : "text-gray-400"}`}>
                                   Due: {item.due_date}
                                 </span>
+                              </>
+                            )}
+                            {isStanding && item.trigger && (
+                              <>
+                                <span className="text-gray-200 text-xs">·</span>
+                                <span className="text-xs text-gray-400">Trigger: {item.trigger}</span>
                               </>
                             )}
                             {type === "risks" && done && item.resolved_by && (
@@ -853,7 +865,7 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     if (type === "actions") {
       const outstanding = items.filter(i => !i.completed).length;
       const completed   = items.filter(i => i.completed).length;
-      const overdue     = items.filter(i => !i.completed && i.due_date && i.due_date < today).length;
+      const overdue     = items.filter(i => !i.completed && i.action_type !== "standing_commitment" && i.due_date && i.due_date < today).length;
       return [
         { value: items.length,  label: "Total actions",  accentColor: accent },
         { value: outstanding,   label: "Outstanding",    accentColor: null },
@@ -890,8 +902,8 @@ function RegisterView({ type, items = [], loading, onToggle }) {
     const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     let headers, rows;
     if (type === "actions") {
-      headers = ["Staff","Meeting","Date","Action","Due Date","Status"];
-      rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.due_date || "", i.completed ? "Completed" : (i.due_date && i.due_date < today ? "Overdue" : "Outstanding")]);
+      headers = ["Staff","Meeting","Date","Action","Type","Due Date / Trigger","Status"];
+      rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.action_type === "standing_commitment" ? "Standing" : "Task", i.action_type === "standing_commitment" ? (i.trigger || "") : (i.due_date || ""), i.completed ? "Completed" : (i.action_type !== "standing_commitment" && i.due_date && i.due_date < today ? "Overdue" : "Outstanding")]);
     } else if (type === "risks") {
       headers = ["Staff","Meeting","Date","Risk","Severity","Status"];
       rows = filtered.map(i => [i.staff_names, i.meeting_title, i.meeting_date, i.text, i.severity, i.is_resolved ? "Resolved" : "Open"]);
