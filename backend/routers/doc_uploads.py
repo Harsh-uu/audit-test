@@ -257,6 +257,7 @@ async def bulk_update_upload_evidence(
     org_id = current_user.get("org_id")
     confidence_set = _CONFIDENCE_ALIASES.get(data.confidence, {data.confidence})
 
+    changed_items = []
     async with database.with_org(org_id) as conn:
         row = await conn.fetchrow(
             "SELECT cqc_mappings, care_cert_mappings, custom_mappings FROM supervision_uploads WHERE id=$1 AND org_id=$2 FOR UPDATE",
@@ -274,6 +275,7 @@ async def bulk_update_upload_evidence(
             for i, m in enumerate(mappings):
                 if m.get("confidence") in confidence_set and (m.get("status") or "pending") == "pending":
                     mappings[i]["status"] = data.status
+                    changed_items.append((field, dict(mappings[i])))
                     changed = True
                     changed_count += 1
             if changed:
@@ -290,7 +292,69 @@ async def bulk_update_upload_evidence(
             values.append(upload_id)
             await conn.execute(f"UPDATE supervision_uploads SET {', '.join(set_parts)} WHERE id=${idx}", *values)
 
+    if changed_items:
+        # PERF-003 style: batch-insert all evidence_feedback rows in one executemany
+        now_ts = datetime.now(timezone.utc).isoformat()
+        feedback_rows = []
+        for field, item in changed_items:
+            ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
+            name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
+            feedback_rows.append((
+                str(uuid.uuid4()), upload_id, org_id,
+                current_user["id"], current_user.get("name", ""),
+                item.get("id", ""), _UPLOAD_TYPE_LABEL.get(field, field), ref, name,
+                item.get("confidence", ""), data.status,
+                item.get("evidence_summary", ""),
+                None,
+                item.get("transcript_excerpt", ""),
+                now_ts,
+            ))
+        try:
+            async with database.with_org(org_id) as fb_conn:
+                await fb_conn.executemany(
+                    """INSERT INTO evidence_feedback
+                       (id, meeting_id, upload_id, org_id, user_id, user_name, evidence_item_id,
+                        evidence_type, standard_ref, standard_name, ai_confidence,
+                        manager_action, evidence_summary, edited_summary,
+                        transcript_excerpt, timestamp)
+                       VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
+                    feedback_rows,
+                )
+        except Exception as _fb_err:
+            logger.warning(f"evidence_feedback insert skipped (upload bulk): {_fb_err}")
+
     return {"message": f"{changed_count} item{'s' if changed_count != 1 else ''} updated", "changed_count": changed_count}
+
+
+_UPLOAD_TYPE_LABEL = {"cqc_mappings": "cqc", "care_cert_mappings": "care_cert", "custom_mappings": "custom"}
+
+
+async def _insert_upload_evidence_feedback(org_id, upload_id, current_user, type_label, item, action, edited_summary=None):
+    """Mirrors review.py's evidence_feedback insert, but for document uploads
+    (meeting_id=NULL, upload_id set) so the AI Accuracy report can include
+    document-evidence decisions too."""
+    ref = item.get("regulation_ref") or item.get("standard_ref") or item.get("criterion_ref") or ""
+    name = item.get("regulation_name") or item.get("standard_name") or item.get("criterion_name") or ""
+    try:
+        async with database.with_org(org_id) as fb_conn:
+            await fb_conn.execute(
+                """INSERT INTO evidence_feedback
+                   (id, meeting_id, upload_id, org_id, user_id, user_name, evidence_item_id,
+                    evidence_type, standard_ref, standard_name, ai_confidence,
+                    manager_action, evidence_summary, edited_summary,
+                    transcript_excerpt, timestamp)
+                   VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)""",
+                str(uuid.uuid4()), upload_id, org_id,
+                current_user["id"], current_user.get("name", ""),
+                item.get("id", ""), type_label, ref, name,
+                item.get("confidence", ""), action,
+                item.get("evidence_summary", ""),
+                edited_summary,
+                item.get("transcript_excerpt", ""),
+                datetime.now(timezone.utc).isoformat(),
+            )
+    except Exception as _fb_err:
+        logger.warning(f"evidence_feedback insert skipped (upload): {_fb_err}")
 
 
 @router.put("/{upload_id}/evidence/{evidence_id}")
@@ -315,11 +379,14 @@ async def update_upload_evidence(
     upload = _upload_dict(row)
     updated_field = None
     updated_list = None
+    matched_item = None
+    old_status = None
 
     for field in _JSONB_FIELDS:
         mappings = list(upload.get(field) or [])
         for i, m in enumerate(mappings):
             if m.get("id") == evidence_id:
+                old_status = m.get("status")
                 if data.status is not None:
                     mappings[i]["status"] = data.status
                 if data.edited_evidence_summary is not None:
@@ -328,6 +395,7 @@ async def update_upload_evidence(
                     mappings[i]["notes"] = data.notes
                 updated_field = field
                 updated_list = mappings
+                matched_item = mappings[i]
                 break
         if updated_field:
             break
@@ -340,6 +408,12 @@ async def update_upload_evidence(
             f"UPDATE supervision_uploads SET {updated_field}=$1 WHERE id=$2",
             updated_list, upload_id,
         )
+
+    action = data.status if data.status and data.status != old_status else ("edited_summary" if data.edited_evidence_summary is not None else "viewed")
+    await _insert_upload_evidence_feedback(
+        org_id, upload_id, current_user, _UPLOAD_TYPE_LABEL.get(updated_field, updated_field),
+        matched_item, action, data.edited_evidence_summary,
+    )
     return {"message": "Evidence updated"}
 
 

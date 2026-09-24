@@ -734,11 +734,12 @@ async def ai_accuracy_report(
 
     async with database.with_admin() as conn:
         items_rows = await conn.fetch(
-            f"""SELECT ef.id, ef.meeting_id, ef.org_id, ef.user_name, ef.evidence_type,
+            f"""SELECT ef.id, ef.meeting_id, ef.upload_id, ef.org_id, ef.user_name, ef.evidence_type,
                        ef.standard_ref, ef.standard_name, ef.ai_confidence, ef.manager_action,
-                       ef.timestamp, m.title AS meeting_title, o.name AS org_name
+                       ef.timestamp, m.title AS meeting_title, su.label AS upload_label, o.name AS org_name
                 FROM evidence_feedback ef
                 LEFT JOIN meetings m ON m.id = ef.meeting_id
+                LEFT JOIN supervision_uploads su ON su.id = ef.upload_id
                 LEFT JOIN organisations o ON o.id = ef.org_id
                 WHERE {where_clause}
                 ORDER BY ef.timestamp DESC
@@ -796,6 +797,9 @@ async def ai_accuracy_report(
             {
                 "id": r["id"],
                 "meeting_id": r["meeting_id"],
+                "upload_id": r["upload_id"],
+                "source_type": "document" if r["upload_id"] else "meeting",
+                "source_label": (r["upload_label"] if r["upload_id"] else r["meeting_title"]) or ("Untitled document" if r["upload_id"] else "Untitled meeting"),
                 "meeting_title": r["meeting_title"],
                 "org_id": r["org_id"],
                 "org_name": r["org_name"],

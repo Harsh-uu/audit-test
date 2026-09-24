@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { Target, ThumbsUp, ThumbsDown, Flag, RefreshCw, Loader2, ExternalLink } from "lucide-react";
+import { Target, ThumbsUp, ThumbsDown, Flag, RefreshCw, Loader2, ExternalLink, AlertTriangle } from "lucide-react";
 
 const API = "/api";
+const LOW_ACCURACY_THRESHOLD = 90;
+const LOW_ACCURACY_MIN_DECISIONS = 5;
 
 function StatCard({ label, value, sub, warn, testId }) {
   return (
@@ -64,13 +66,45 @@ export default function SuperAdminAIAccuracy({ getAuthConfig, orgs }) {
   const rejected = stats.by_action?.rejected || 0;
   const flagged = stats.by_action?.needs_followup || 0;
 
+  const lowAccuracyOrgs = by_org.filter(o => {
+    const decided = (o.accepted || 0) + (o.rejected || 0);
+    return decided >= LOW_ACCURACY_MIN_DECISIONS && o.acceptance_rate != null && o.acceptance_rate < LOW_ACCURACY_THRESHOLD;
+  });
+
   return (
     <div data-testid="ai-accuracy-report">
       <p className="text-sm text-gray-500 mb-4 max-w-2xl">
-        Every accept/reject/flag decision a manager makes on AI-mapped evidence, across all organisations —
-        the same data behind each org's own AI Accuracy tab, aggregated globally so you can spot an
-        organisation (or the whole fleet) with an unusually low acceptance rate.
+        Every accept/reject/flag decision a manager makes on AI-mapped evidence — from meetings AND uploaded
+        documents — across all organisations. The same data behind each org's own AI Accuracy tab, aggregated
+        globally so you can spot an organisation (or the whole fleet) with an unusually low acceptance rate.
       </p>
+
+      {!loading && lowAccuracyOrgs.length > 0 && (
+        <div
+          className="mb-5 bg-red-50 border border-red-200 rounded-lg p-4"
+          data-testid="ai-accuracy-low-alerts"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-red-600" />
+            <p className="text-sm font-semibold text-red-700">
+              Low-Accuracy Alert: {lowAccuracyOrgs.length} organisation{lowAccuracyOrgs.length !== 1 ? "s" : ""} below {LOW_ACCURACY_THRESHOLD}% acceptance
+            </p>
+          </div>
+          <div className="space-y-1">
+            {lowAccuracyOrgs.map(o => (
+              <div
+                key={o.org_id || "unknown"}
+                className="flex items-center justify-between text-sm bg-white/60 rounded px-3 py-1.5"
+                data-testid={`ai-accuracy-low-alert-${o.org_id}`}
+              >
+                <span className="font-medium text-gray-800">{o.org_name}</span>
+                <span className="text-red-700 font-semibold">{o.acceptance_rate}% acceptance ({o.accepted}/{o.accepted + o.rejected} decided)</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-5 bg-white border border-gray-200 rounded-lg p-3">
@@ -202,7 +236,7 @@ export default function SuperAdminAIAccuracy({ getAuthConfig, orgs }) {
                 <table className="w-full text-sm min-w-[820px]" data-testid="ai-accuracy-table">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                     <tr>
-                      <th className="text-left px-4 py-2.5 font-medium">Meeting</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Source</th>
                       <th className="text-left px-4 py-2.5 font-medium">Organisation</th>
                       <th className="text-left px-4 py-2.5 font-medium">Standard</th>
                       <th className="text-left px-4 py-2.5 font-medium">Confidence</th>
@@ -216,13 +250,14 @@ export default function SuperAdminAIAccuracy({ getAuthConfig, orgs }) {
                       <tr key={item.id} data-testid={`ai-accuracy-row-${item.id}`}>
                         <td className="px-4 py-2.5">
                           <a
-                            href={`/meetings/${item.meeting_id}/report`}
+                            href={item.source_type === "document" ? `/doc-uploads/${item.upload_id}` : `/meetings/${item.meeting_id}/report`}
                             target="_blank" rel="noreferrer"
                             className="flex items-center gap-1 text-[#1E3A8A] hover:underline font-medium"
                             data-testid={`ai-accuracy-meeting-link-${item.id}`}
                           >
-                            {item.meeting_title || "Untitled meeting"} <ExternalLink className="w-3 h-3" />
+                            {item.source_label} <ExternalLink className="w-3 h-3" />
                           </a>
+                          <span className="text-[10px] text-gray-400 uppercase">{item.source_type === "document" ? "Document" : "Meeting"}</span>
                         </td>
                         <td className="px-4 py-2.5 text-gray-600">{item.org_name || "—"}</td>
                         <td className="px-4 py-2.5 text-gray-600 max-w-xs truncate" title={item.standard_name}>
