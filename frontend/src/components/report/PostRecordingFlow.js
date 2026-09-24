@@ -323,7 +323,7 @@ export function PostRecordingFlow({ meeting, meetingId, API, getAuthConfig, role
             icon={<Sparkles className="w-4 h-4" />}
             title="Mapping Compliance Evidence"
             subtitle="AI reviews the transcript and maps discussion points to regulatory standards"
-            right={step4Done ? "Complete" : step4Active ? "~30–90 seconds" : "Waiting"}
+            right={step4Done ? "Complete" : step4Active ? "~2–3 minutes" : "Waiting"}
           >
             <div className="rounded-lg shimmer-bg border border-blue-100 px-3.5 py-2.5 flex items-center gap-2">
               <Circle className="w-2 h-2 fill-[#1E3A8A] text-[#1E3A8A] animate-pulse flex-shrink-0" />
