@@ -162,6 +162,13 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - Spot-verified live via two direct `analyze_meeting()` calls (no testing_agent — pure prompt-text tuning, self-tested per Quick Testing Rules): a dense 10-topic synthetic transcript now produces 7 bullets (previously would have compressed to 6, losing detail); a short 2-topic transcript still produced 4 (the "don't pad" instruction is weaker in practice for very short sessions — noted as a minor follow-up, not the user's reported issue, which was specifically about LONG sessions feeling too short).
 - No DB/schema/UI change — pure prompt text, applies immediately to all new analyses and rescans.
 
+### This session (2026-09-24, cont'd #4) — "Show in transcript" for Actions/Achievements/Learning Needs (SHIPPED)
+- Added a small `AlignLeft` icon (mirrors the existing Evidence "Show in transcript" pattern) to each Action, Achievement, and Learning Need row on the meeting report's Overview tab — clicking it switches to the Transcript tab and highlights the exact source line(s), reusing the existing `onShowInTranscript`/`highlightExcerpt` mechanism already used by Evidence/Compliance.
+- **`utils/ai.py`**: added an optional `transcript_excerpt` field to `achievements`, `actions` (both task and standing_commitment), and `learning_needs` in the AI JSON schema (max ~40 words, same excerpt-quality rules — timestamp prefix, most-evidential passage — already applied generically to all `transcript_excerpt` fields). Backward compatible: icon only renders when the field is present (older meetings without it simply show no icon, no crash).
+- **`EvidenceTab.js`**: icon rendered unconditionally (available to all viewers, not gated by `canReview`/edit permission — matches how Evidence's own "Show in transcript" behaves) alongside the existing hover-reveal Edit/Delete icons for Actions and Learning Needs; Achievements (which previously had no hover actions at all) got a new hover-reveal icon.
+- **`MeetingReport.js`**: passes `onShowInTranscript` down into `EvidenceTab` (previously only wired to `ComplianceTab`).
+- Self-tested (curl to inject test data with real transcript excerpts + live screenshot): clicking the Achievement's icon correctly switched to Transcript tab and highlighted the exact matching line in yellow; Action/Learning Need rows correctly show the icon in the hover group. No testing_agent used — small, low-risk UI addition reusing an already-proven mechanism.
+
 ## Testing Status
 - Test reports: `/app/test_reports/iteration_149.json` through `iteration_164.json`
 - Known regressions: None

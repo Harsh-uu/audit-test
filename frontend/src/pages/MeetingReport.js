@@ -356,6 +356,7 @@ export default function MeetingReport() {
                     isLocked={isLocked}
                     onReopenRequest={handleReopenRequest}
                     onApproveReopen={handleApproveReopen}
+                    onShowInTranscript={onShowInTranscript}
                   />
                 )}
                 {/* TranscriptTab stays mounted to preserve unsaved speaker edits

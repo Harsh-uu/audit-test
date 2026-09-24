@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw, Copy,
-  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText, ArrowUp, Repeat,
+  ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText, ArrowUp, Repeat, AlignLeft,
 } from "lucide-react";
 
 // Regenerate-summary button is hidden per user request (Aug 2026) — handler/UI kept
@@ -252,7 +252,7 @@ function SummaryBody({ text }) {
 }
 
 // ── Achievements section ──────────────────────────────────────────────────────
-function AchievementsSection({ achievements }) {
+function AchievementsSection({ achievements, onShowInTranscript }) {
   const list = Array.isArray(achievements) ? achievements : [];
   if (!list.length) return null;
 
@@ -269,13 +269,23 @@ function AchievementsSection({ achievements }) {
         {list.map((ach, i) => (
           <li
             key={ach.id || i}
-            className="flex items-start gap-3 bg-white rounded-md px-3.5 py-3 border border-emerald-100"
+            className="flex items-start gap-3 bg-white rounded-md px-3.5 py-3 border border-emerald-100 group"
             data-testid={`achievement-${i}`}
           >
             <span className="mt-0.5 w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
               <Star className="w-2.5 h-2.5 text-emerald-600" fill="currentColor" />
             </span>
-            <p className="text-sm text-gray-800 leading-relaxed">{ach.text || ach.description}</p>
+            <p className="text-sm text-gray-800 leading-relaxed flex-1">{ach.text || ach.description}</p>
+            {ach.transcript_excerpt && onShowInTranscript && (
+              <button
+                onClick={() => onShowInTranscript(ach.transcript_excerpt)}
+                className="opacity-0 group-hover:opacity-100 transition-all p-1 text-gray-400 hover:text-emerald-700 rounded flex-shrink-0"
+                title="Show in transcript"
+                data-testid={`show-in-transcript-ach-${i}`}
+              >
+                <AlignLeft className="w-3.5 h-3.5" />
+              </button>
+            )}
           </li>
         ))}
       </ul>
@@ -307,6 +317,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
   isLocked = false,
   onReopenRequest,
   onApproveReopen,
+  onShowInTranscript,
 }) {
   const canEdit = canReview;
   const { getAuthConfig, API, user } = useAuth();
@@ -608,7 +619,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
       </div>
 
       {/* Achievements */}
-      <AchievementsSection achievements={analysis.achievements} />
+      <AchievementsSection achievements={analysis.achievements} onShowInTranscript={onShowInTranscript} />
 
       {/* Pauses */}
       {meeting.paused_periods?.length > 0 && (
@@ -745,16 +756,23 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                       )
                     )}
                   </div>
-                  {canReview && !action.is_rolled_over && (
-                    <div className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-0.5 flex-shrink-0">
-                      <button onClick={() => startEditAction(i, action)} className="p-1 text-gray-400 hover:text-[#1E3A8A] rounded" data-testid={`edit-action-btn-${i}`} title="Edit action">
-                        <Edit3 className="w-3.5 h-3.5" />
+                  <div className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-0.5 flex-shrink-0">
+                    {action.transcript_excerpt && onShowInTranscript && (
+                      <button onClick={() => onShowInTranscript(action.transcript_excerpt)} className="p-1 text-gray-400 hover:text-[#1E3A8A] rounded" data-testid={`show-in-transcript-action-${i}`} title="Show in transcript">
+                        <AlignLeft className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => removeAction(i)} className="p-1 text-gray-400 hover:text-red-500 rounded" data-testid={`remove-action-${i}`} title="Remove action">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                    )}
+                    {canReview && !action.is_rolled_over && (
+                      <>
+                        <button onClick={() => startEditAction(i, action)} className="p-1 text-gray-400 hover:text-[#1E3A8A] rounded" data-testid={`edit-action-btn-${i}`} title="Edit action">
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => removeAction(i)} className="p-1 text-gray-400 hover:text-red-500 rounded" data-testid={`remove-action-${i}`} title="Remove action">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               )
             ))}
@@ -909,16 +927,23 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                       </p>
                     )}
                   </div>
-                  {canEdit && !isLocked && (
-                    <div className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-0.5 flex-shrink-0">
-                      <button onClick={() => startEditLN(i, ln)} className="p-1 text-gray-400 hover:text-teal-700 rounded" data-testid={`edit-ln-btn-${i}`} title="Edit">
-                        <Edit3 className="w-3.5 h-3.5" />
+                  <div className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-0.5 flex-shrink-0">
+                    {ln.transcript_excerpt && onShowInTranscript && (
+                      <button onClick={() => onShowInTranscript(ln.transcript_excerpt)} className="p-1 text-gray-400 hover:text-teal-700 rounded" data-testid={`show-in-transcript-ln-${i}`} title="Show in transcript">
+                        <AlignLeft className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => removeLN(i)} className="p-1 text-gray-400 hover:text-red-500 rounded" data-testid={`remove-ln-${i}`} title="Remove">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                    )}
+                    {canEdit && !isLocked && (
+                      <>
+                        <button onClick={() => startEditLN(i, ln)} className="p-1 text-gray-400 hover:text-teal-700 rounded" data-testid={`edit-ln-btn-${i}`} title="Edit">
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => removeLN(i)} className="p-1 text-gray-400 hover:text-red-500 rounded" data-testid={`remove-ln-${i}`} title="Remove">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               )
             ))}

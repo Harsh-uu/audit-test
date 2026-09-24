@@ -524,14 +524,14 @@ Your output must be valid JSON only (no markdown, no extra text) in this exact s
 {
   "summary": "Two opening sentences that introduce the session using the ATTENDEES' ACTUAL NAMES given below (never a generic role placeholder), what type of meeting it was, and when.\\n\\n- One bullet per genuinely distinct finding or thread discussed (see SUMMARY BULLET COUNT rule below for how many)\\n- ...\\n\\nTwo closing sentences that frame the essential outcomes, any overall themes or next steps from the session.",
   "achievements": [
-    {"id": "ach_1", "description": "Brief description of a specific thing done well, demonstrated, or grown in (max 25 words)"}
+    {"id": "ach_1", "description": "Brief description of a specific thing done well, demonstrated, or grown in (max 25 words)", "transcript_excerpt": "exact short quote from the transcript that evidences this achievement (max 40 words)"}
   ],
   "actions": [
-    {"id": "unique_id", "text": "action description — a concrete task or follow-up to be completed before the next session (do NOT include identified learning needs here)", "action_type": "task", "assigned_to": "person name or null", "due_date": "date mentioned, or the exact literal string 'Not specified in session' if no timeframe was discussed for this task — never invent a date"},
-    {"id": "unique_id_2", "text": "standing commitment description — an ongoing posture, open invitation, or practice being adopted going forward (see ACTIONS — TASK VS STANDING COMMITMENT rule below)", "action_type": "standing_commitment", "assigned_to": "person name or null", "trigger": "plain-language description of what would next cause this commitment to be acted on"}
+    {"id": "unique_id", "text": "action description — a concrete task or follow-up to be completed before the next session (do NOT include identified learning needs here)", "action_type": "task", "assigned_to": "person name or null", "due_date": "date mentioned, or the exact literal string 'Not specified in session' if no timeframe was discussed for this task — never invent a date", "transcript_excerpt": "exact short quote from the transcript where this action was agreed (max 40 words)"},
+    {"id": "unique_id_2", "text": "standing commitment description — an ongoing posture, open invitation, or practice being adopted going forward (see ACTIONS — TASK VS STANDING COMMITMENT rule below)", "action_type": "standing_commitment", "assigned_to": "person name or null", "trigger": "plain-language description of what would next cause this commitment to be acted on", "transcript_excerpt": "exact short quote from the transcript where this commitment was agreed (max 40 words)"}
   ],
   "learning_needs": [
-    {"id": "ln_1", "text": "specific knowledge or skill gap identified in this session that needs to be addressed through learning, training or development", "assigned_to": "person name or null", "due_date": "date mentioned or null"}
+    {"id": "ln_1", "text": "specific knowledge or skill gap identified in this session that needs to be addressed through learning, training or development", "assigned_to": "person name or null", "due_date": "date mentioned or null", "transcript_excerpt": "exact short quote from the transcript where this learning need was identified (max 40 words)"}
   ],
   "risks": [
     {
