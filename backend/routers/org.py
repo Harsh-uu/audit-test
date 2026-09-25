@@ -750,3 +750,142 @@ async def get_org_logo(org_id: str):
     except Exception as e:
         logger.error(f"Logo serve failed: {e}")
         raise HTTPException(404, "Logo not available")
+
+
+# ── HR Webhook Integration (MVP) ─────────────────────────────────────────────
+# Pushes summary/achievements/actions/learning_needs to an org-configured URL
+# on meeting sign-off. Admin-only: this configures where org data is shared
+# externally, a bigger-than-usual privilege even by this app's admin-only bar.
+
+class WebhookConfigUpdate(BaseModel):
+    url: str
+    enabled: bool
+
+
+def _mask_secret(secret: str) -> str:
+    if not secret or len(secret) < 8:
+        return ""
+    return f"whsec_{'•' * 8}{secret[-4:]}"
+
+
+@router.get("/webhook")
+async def get_webhook_config(current_user=Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    org_id = current_user.get("org_id")
+    async with database.with_org(org_id) as conn:
+        cfg = await conn.fetchrow("SELECT url, secret, enabled, updated_at FROM webhook_configs WHERE org_id=$1", org_id)
+    if not cfg:
+        return {"url": "", "enabled": False, "secret_masked": "", "configured": False}
+    return {
+        "url": cfg["url"], "enabled": cfg["enabled"],
+        "secret_masked": _mask_secret(cfg["secret"]),
+        "configured": bool(cfg["url"]),
+        "updated_at": cfg["updated_at"],
+    }
+
+
+@router.put("/webhook")
+async def update_webhook_config(data: WebhookConfigUpdate, current_user=Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    if data.enabled and not data.url:
+        raise HTTPException(400, "A URL is required to enable the webhook")
+    if data.url and not (data.url.startswith("https://") or data.url.startswith("http://")):
+        raise HTTPException(400, "URL must start with http:// or https://")
+    org_id = current_user.get("org_id")
+    now = datetime.now(timezone.utc)
+    async with database.with_org(org_id) as conn:
+        existing = await conn.fetchrow("SELECT id, secret FROM webhook_configs WHERE org_id=$1", org_id)
+        if existing:
+            await conn.execute(
+                "UPDATE webhook_configs SET url=$1, enabled=$2, updated_at=$3 WHERE org_id=$4",
+                data.url, data.enabled, now, org_id,
+            )
+        else:
+            secret = f"whsec_{uuid.uuid4().hex}{uuid.uuid4().hex}"
+            await conn.execute(
+                """INSERT INTO webhook_configs (org_id, url, secret, enabled, created_by_id, created_by_name, updated_at)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7)""",
+                org_id, data.url, secret, data.enabled, current_user["id"], current_user.get("name", ""), now,
+            )
+    return {"message": "Webhook settings saved"}
+
+
+@router.post("/webhook/regenerate-secret")
+async def regenerate_webhook_secret(current_user=Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    org_id = current_user.get("org_id")
+    new_secret = f"whsec_{uuid.uuid4().hex}{uuid.uuid4().hex}"
+    async with database.with_org(org_id) as conn:
+        result = await conn.execute(
+            "UPDATE webhook_configs SET secret=$1, updated_at=$2 WHERE org_id=$3",
+            new_secret, datetime.now(timezone.utc), org_id,
+        )
+    if result == "UPDATE 0":
+        raise HTTPException(404, "No webhook configured yet — save a URL first")
+    return {"secret_masked": _mask_secret(new_secret)}
+
+
+@router.post("/webhook/test")
+async def test_webhook(current_user=Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    org_id = current_user.get("org_id")
+    async with database.with_org(org_id) as conn:
+        cfg = await conn.fetchrow("SELECT url, secret FROM webhook_configs WHERE org_id=$1", org_id)
+    if not cfg or not cfg["url"]:
+        raise HTTPException(400, "Save a webhook URL first")
+    from utils.webhooks import _send_and_log
+    test_payload = {
+        "event": "webhook.test", "meeting_id": None, "meeting_title": "Test ping",
+        "meeting_date": datetime.now(timezone.utc).date().isoformat(),
+        "signed_off_at": datetime.now(timezone.utc).isoformat(),
+        "staff": [{"name": "Test Staff Member", "email": "test@example.com"}],
+        "summary": "This is a test ping from 1two.one to verify your webhook endpoint is reachable.",
+        "achievements": ["Sample achievement"], "actions": [], "learning_needs": ["Sample learning need"],
+    }
+    await _send_and_log(org_id, None, cfg["url"], cfg["secret"], test_payload)
+    async with database.with_org(org_id) as conn:
+        latest = await conn.fetchrow(
+            "SELECT success, http_status, error_message FROM webhook_deliveries WHERE org_id=$1 ORDER BY attempted_at DESC LIMIT 1",
+            org_id,
+        )
+    return dict(latest) if latest else {"success": False, "error_message": "No response logged"}
+
+
+@router.get("/webhook/deliveries")
+async def list_webhook_deliveries(current_user=Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    org_id = current_user.get("org_id")
+    async with database.with_org(org_id) as conn:
+        rows = await conn.fetch(
+            """SELECT id, meeting_id, event, success, http_status, error_message, attempted_at
+               FROM webhook_deliveries WHERE org_id=$1 ORDER BY attempted_at DESC LIMIT 50""",
+            org_id,
+        )
+    return [
+        {
+            "id": r["id"], "meeting_id": r["meeting_id"], "event": r["event"],
+            "success": r["success"], "http_status": r["http_status"], "error_message": r["error_message"],
+            "attempted_at": r["attempted_at"],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/webhook/deliveries/{delivery_id}/resend")
+async def resend_webhook_delivery(delivery_id: str, current_user=Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    org_id = current_user.get("org_id")
+    from utils.webhooks import resend_delivery
+    await resend_delivery(delivery_id, org_id)
+    async with database.with_org(org_id) as conn:
+        latest = await conn.fetchrow(
+            "SELECT success, http_status, error_message FROM webhook_deliveries WHERE org_id=$1 ORDER BY attempted_at DESC LIMIT 1",
+            org_id,
+        )
+    return dict(latest) if latest else {"success": False, "error_message": "No response logged"}

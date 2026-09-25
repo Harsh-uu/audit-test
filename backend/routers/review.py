@@ -811,6 +811,8 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_u
         )
 
     _admin_stats_cache.pop(org_id, None)
+    from utils.webhooks import deliver_meeting_signed_off
+    background_tasks.add_task(deliver_meeting_signed_off, meeting_id, org_id)
     background_tasks.add_task(delete_audio_after_grace, meeting_id)
     return {"message": "Meeting signed off successfully", "signed_at": now, "unreviewed_attendees": unreviewed_names}
 

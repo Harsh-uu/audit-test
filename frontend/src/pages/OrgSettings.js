@@ -3,13 +3,14 @@ import axios from "axios";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield, Mic, History } from "lucide-react";
+import { FileText, Download, Palette, CheckCircle, AlertCircle, X, Target, Plus, Trash2, Star, Shield, Mic, History, Webhook } from "lucide-react";
 import { TemplateTab } from "@/components/admin/TemplateTab";
 import { ExportTab } from "@/components/admin/ExportTab";
 import { BrandingTab } from "@/components/admin/BrandingTab";
 import { TranscriptExportTab } from "@/components/admin/TranscriptExportTab";
 import { DownloadAudioTab } from "@/components/admin/DownloadAudioTab";
 import { ActivityLogTab } from "@/components/admin/ActivityLogTab";
+import { IntegrationsTab } from "@/components/admin/IntegrationsTab";
 import { toast } from "sonner";
 
 function FocusTopicsTab({ API, getAuthConfig }) {
@@ -316,7 +317,7 @@ function TabBtn({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+      className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex-shrink-0 whitespace-nowrap ${
         active ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"
       }`}
     >
@@ -495,7 +496,7 @@ export default function OrgSettings({ embedded = false }) {
           </div>
         )}
 
-        <div className="border-b border-gray-200 mb-6 flex">
+        <div className="border-b border-gray-200 mb-6 flex overflow-x-auto" style={{ scrollbarWidth: "none" }}>
           <TabBtn active={tab === "template"} onClick={() => setTab("template")}>
             <FileText className="w-3.5 h-3.5" />Supervision Template
           </TabBtn>
@@ -518,6 +519,11 @@ export default function OrgSettings({ embedded = false }) {
           {isAdmin && (
             <TabBtn active={tab === "activity"} onClick={() => setTab("activity")}>
               <History className="w-3.5 h-3.5" />Activity Log
+            </TabBtn>
+          )}
+          {isAdmin && (
+            <TabBtn active={tab === "integrations"} onClick={() => setTab("integrations")}>
+              <Webhook className="w-3.5 h-3.5" />Integrations
             </TabBtn>
           )}
           <TabBtn active={tab === "focus"} onClick={() => setTab("focus")}>
@@ -589,6 +595,8 @@ export default function OrgSettings({ embedded = false }) {
         {tab === "audio" && canBrand && <DownloadAudioTab />}
 
         {tab === "activity" && isAdmin && <ActivityLogTab />}
+
+        {tab === "integrations" && isAdmin && <IntegrationsTab />}
 
         {tab === "focus" && <FocusTopicsTab API={API} getAuthConfig={getAuthConfig} />}
 

@@ -43,6 +43,7 @@ from . import (
     m032_audit_logs_nullable_meeting,
     m033_evidence_feedback_uploads,
     m034_transcription_tracking,
+    m035_webhook_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,7 @@ MIGRATIONS = [
     m032_audit_logs_nullable_meeting,
     m033_evidence_feedback_uploads,
     m034_transcription_tracking,
+    m035_webhook_config,
 ]
 
 
