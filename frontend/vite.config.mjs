@@ -185,13 +185,7 @@ export default defineConfig(({ mode }) => {
         "clsx", "tailwind-merge", "class-variance-authority",
         "sonner", "next-themes",
         "react-hook-form",
-        "recharts",
         "react-day-picker", "date-fns", "date-fns/locale",
-        "cmdk",
-        "vaul",
-        "input-otp",
-        "embla-carousel-react",
-        "react-resizable-panels",
         "tailwindcss-animate",
         "@radix-ui/react-accordion",
         "@radix-ui/react-alert-dialog",
@@ -265,12 +259,6 @@ export default defineConfig(({ mode }) => {
             if (id.includes("@radix-ui/")) return "vendor-radix";
             // Data-fetching layer
             if (id.includes("@tanstack/") || id.includes("/axios/")) return "vendor-query";
-            // Charts — only loads on pages that render a chart
-            if (
-              id.includes("/recharts/") ||
-              id.includes("/d3-") ||
-              id.includes("d3/")
-            ) return "vendor-charts";
           },
         },
       },
