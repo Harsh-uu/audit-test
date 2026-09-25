@@ -1219,7 +1219,11 @@ async def generate_meeting_summary(transcript_text: str, manager_name: str = "",
         "ATTENDEES — use these actual names, never a generic role placeholder like \"the home manager\":\n"
         + "\n".join(attendee_lines) + "\n\n"
     ) if attendee_lines else ""
-    user_prompt = f"{attendee_context}Summarize this supervision meeting transcript:\n\n{transcript_text[:8000]}"
+    # Was capped at 8,000 chars — silently dropped everything after roughly the
+    # first 5-10 minutes of a meeting for longer sessions. o4-mini has a 200K-token
+    # context window and this prompt carries no other heavy context, so there's
+    # ample room to raise this to match the same cap used in the main analysis.
+    user_prompt = f"{attendee_context}Summarize this supervision meeting transcript:\n\n{transcript_text[:200000]}"
     result = await _ai_chat("o4-mini", SUMMARY_ONLY_PROMPT + _ofsted_sector_override(jurisdiction), user_prompt, reasoning_effort="medium", warm=True)
     return _apply_uk_language(result)
 
@@ -2066,7 +2070,10 @@ Map when a worker reflects on their own learning, describes seeking to improve t
             f"you can across all standards, then make sure you have given extra attention to the area mentioned here."
         ) if safe_focus else ""
 
-    truncated_marker = "[TRANSCRIPT TRUNCATED — analyse the above portion only]" if len(transcript_text) > 80000 else ""
+    # Was capped at 80,000 chars — silently dropped the tail end of longer meetings
+    # (o4-mini has a 200K-token context window, so this was far too conservative).
+    _TRANSCRIPT_CAP = 200000
+    truncated_marker = "[TRANSCRIPT TRUNCATED — analyse the above portion only]" if len(transcript_text) > _TRANSCRIPT_CAP else ""
     attendee_lines = []
     if manager_name:
         attendee_lines.append(f"- Manager: {manager_name}")
@@ -2082,7 +2089,7 @@ Map when a worker reflects on their own learning, describes seeking to improve t
     user_prompt = f"""Analyze this meeting transcript and map evidence to the relevant standards.
 
 {attendee_context}{meeting_type_line}<transcript>{pause_note}
-{transcript_text[:80000]}{truncated_marker}
+{transcript_text[:_TRANSCRIPT_CAP]}{truncated_marker}
 </transcript>
 
 {reg_label} TO MAP AGAINST:
