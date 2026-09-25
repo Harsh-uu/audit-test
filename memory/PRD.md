@@ -177,6 +177,11 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - **`SuperAdminTranscriptionUsage.js`**: new tab mirroring the existing AI Usage report's visual style (stat cards, filter bar, table with model badge/latency/status).
 - Tested: testing_agent backend 14/14 pytest + frontend 100%, live-verified end-to-end via a real retranscribe call (confirmed `universal-3-5-pro`/17906ms persisted and surfaced correctly in the report UI). One flagged gap (retranscribe failures not attributed) fixed post-testing and regression-verified.
 
+### This session (2026-09-25, cont'd) — Bundle-size code review verdict (READY, 1 nit fixed)
+- User asked for a code review to confirm the "large JS packages" issue (raised by the support team) is resolved after last session's `@hello-pangea/dnd` removal. `code_review_agent` verdict: **READY — no material issues**. Confirmed via `yarn build`: no chunk breaches Vite's 500KB warning threshold (largest is `vendor-react` ~247KB raw/81KB gz; `MeetingReport` ~144KB raw/36KB gz — expected size for that feature, already lazy-loaded/code-split). `@hello-pangea/dnd` fully gone from `package.json`/`yarn.lock`/`src/` — zero dangling `DragDropContext`/`Draggable`/`Droppable` references.
+- Found + fixed 1 LOW nit: `vite.config.mjs`'s `optimizeDeps.include` still listed `@hello-pangea/dnd` (harmless in prod — only affects a raw `vite dev` server, which this app doesn't use — but was a stale/misleading reference). Removed the line, re-ran `yarn build` (clean) + restarted frontend + smoke-screenshot confirmed app loads.
+- Flagged as optional (NOT actioned, no bundle-size impact — already tree-shaken): `recharts` and 5 shadcn scaffold-only deps (`embla-carousel-react`, `cmdk`, `vaul`, `react-resizable-panels`, `input-otp`) are unused in `src/` (no consumer of `carousel.jsx`/`command.jsx`/`drawer.jsx`/`resizable.jsx`/`input-otp.jsx`) — only affects install/CI time, not shipped JS. Also reconfirmed the largest source files by line count (`TeamInsights.js` 1725, `OrgStructure.js` 1215, `EvidenceTab.js` 1161, `MeetingPrep.js` 1015) are maintainability candidates only, not a perf/bundle risk (each is its own lazy-loaded route chunk already).
+
 ## Testing Status
 - Test reports: `/app/test_reports/iteration_149.json` through `iteration_165.json`
 - Known regressions: None

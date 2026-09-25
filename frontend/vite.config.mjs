@@ -184,7 +184,6 @@ export default defineConfig(({ mode }) => {
         "lucide-react",
         "clsx", "tailwind-merge", "class-variance-authority",
         "sonner", "next-themes",
-        "@hello-pangea/dnd",
         "react-hook-form",
         "recharts",
         "react-day-picker", "date-fns", "date-fns/locale",
