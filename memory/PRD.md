@@ -207,6 +207,11 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - Known test-data side-fix (unrelated, needed to test RBAC): `manager@supervision.com`'s `supabase_password_set` flag was stuck `TRUE` blocking login even after password reset — flipped to `FALSE` per the documented recurring trap in this file's Auth Notes. No code change, just a data fix on the shared test account.
 - Not built (explicitly out of scope per user's ask): retry/backoff logic, per-field toggle configurability (fixed 4-field set as requested), webhook payload versioning, non-signoff trigger events.
 
+### This session (2026-09-25, cont'd #5) — Due-date fields now use a real date picker (SHIPPED)
+- Bug report (with screenshot): editing an Action's due date showed a plain text input pre-filled with the literal AI string "Not specified in session" — user wanted the *read-only display* to keep showing that phrase (liked it), but the *edit* control needed to be an actual date picker so a real date can be set.
+- Fixed all 4 due-date free-text inputs in `EvidenceTab.js` (Add Action, Edit Action, Add Learning Need, Edit Learning Need) — swapped `<input type="text">` for the existing `UkDatePicker` component (`components/ui/uk-date-picker.jsx`, already used elsewhere for UK dd/mm/yyyy dates). Non-ISO values (AI free text like "Not specified in session", "Friday") simply don't parse, so the picker opens blank/placeholder — exactly the desired behaviour, no changes needed to `isBlankValue`/`NULLISH_STRINGS` or the read-only "Due: …" display line.
+- Self-tested via live screenshots: opened Add Action form, picked a date from the calendar (Mon-first, UK locale), saved — action correctly stored/displayed as `2026-09-30`; opened Edit Action on that same action, date picker correctly pre-filled `30/09/2026`, changed to `15/09/2026`, saved successfully. Test action removed from DB afterward.
+
 ## Testing Status
 - Test reports: `/app/test_reports/iteration_149.json` through `iteration_165.json`
 - Known regressions: None

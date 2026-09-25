@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { UkDatePicker } from "@/components/ui/uk-date-picker";
 import {
   Edit3, CheckCircle, Clock, Pause, AlertTriangle, Plus, Trash2, Check, Shield, RefreshCw, Copy,
   ChevronDown, ChevronUp, Loader2, Quote, Lightbulb, CheckSquare, Square, Zap, Lock, Unlock, Star, BookOpen, FileText, ArrowUp, Repeat, AlignLeft,
@@ -704,7 +705,13 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                     {editActionDraft.action_type === "standing_commitment" ? (
                       <input type="text" value={editActionDraft.trigger} onChange={e => setEditActionDraft(d => ({ ...d, trigger: e.target.value }))} placeholder="Trigger — what brings this back into action" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" data-testid={`edit-action-trigger-${i}`} />
                     ) : (
-                      <input type="text" value={editActionDraft.due_date} onChange={e => setEditActionDraft(d => ({ ...d, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid={`edit-action-due-${i}`} />
+                      <UkDatePicker
+                        value={editActionDraft.due_date}
+                        onChange={val => setEditActionDraft(d => ({ ...d, due_date: val }))}
+                        placeholder="Due date (optional)"
+                        className="w-full px-3 py-1.5 rounded-md text-sm justify-start"
+                        testId={`edit-action-due-${i}`}
+                      />
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -831,7 +838,13 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                 {newAction.action_type === "standing_commitment" ? (
                   <input type="text" value={newAction.trigger} onChange={e => setNewAction(a => ({ ...a, trigger: e.target.value }))} placeholder="Trigger — what brings this back into action" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" data-testid="new-action-trigger" />
                 ) : (
-                  <input type="text" value={newAction.due_date} onChange={e => setNewAction(a => ({ ...a, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] bg-white" data-testid="new-action-due" />
+                  <UkDatePicker
+                    value={newAction.due_date}
+                    onChange={val => setNewAction(a => ({ ...a, due_date: val }))}
+                    placeholder="Due date (optional)"
+                    className="w-full px-3 py-1.5 rounded-md text-sm justify-start"
+                    testId="new-action-due"
+                  />
                 )}
               </div>
               <div className="flex gap-2">
@@ -895,7 +908,13 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                         <option key={a.user_id} value={a.user_id}>{a.name}</option>
                       ))}
                     </select>
-                    <input type="text" value={editLNDraft.due_date} onChange={e => setEditLNDraft(d => ({ ...d, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid={`edit-ln-due-${i}`} />
+                    <UkDatePicker
+                      value={editLNDraft.due_date}
+                      onChange={val => setEditLNDraft(d => ({ ...d, due_date: val }))}
+                      placeholder="Due date (optional)"
+                      className="w-full px-3 py-1.5 rounded-md text-sm justify-start focus:ring-teal-500"
+                      testId={`edit-ln-due-${i}`}
+                    />
                   </div>
                   <div className="flex gap-2">
                     <button onClick={saveEditLN} disabled={!editLNDraft.text.trim()} className="flex items-center gap-1.5 bg-teal-700 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-teal-800 disabled:opacity-50 transition-colors" data-testid={`save-edit-ln-${i}`}>
@@ -981,7 +1000,13 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                     <option key={a.user_id} value={a.user_id}>{a.name}</option>
                   ))}
                 </select>
-                <input type="text" value={newLN.due_date} onChange={e => setNewLN(n => ({ ...n, due_date: e.target.value }))} placeholder="Due date (optional)" className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" data-testid="new-ln-due" />
+                <UkDatePicker
+                  value={newLN.due_date}
+                  onChange={val => setNewLN(n => ({ ...n, due_date: val }))}
+                  placeholder="Due date (optional)"
+                  className="w-full px-3 py-1.5 rounded-md text-sm justify-start focus:ring-teal-500"
+                  testId="new-ln-due"
+                />
               </div>
               <div className="flex gap-2 items-center">
                 <button onClick={addLN} disabled={!newLN.text.trim() || lnSaving} className="flex items-center gap-1.5 bg-teal-700 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-teal-800 disabled:opacity-50 transition-colors" data-testid="save-new-ln-btn">
