@@ -702,6 +702,102 @@ async def ai_usage_report(
     }
 
 
+@router.get("/transcription-usage-report")
+async def transcription_usage_report(
+    org_id: Optional[str] = None,
+    speech_model: Optional[str] = None,
+    failed_only: bool = False,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user=Depends(get_current_user),
+):
+    """Which AssemblyAI speech model actually served each meeting's
+    transcription, how long it took, and whether it failed — for Super Admin
+    to track the transcription pipeline's health separately from the
+    Gemini/OpenAI evidence-analysis step above. Covers meetings with a
+    completed transcript OR one that failed specifically at the
+    transcription stage (m034); older rows predate this tracking and are
+    excluded from both categories."""
+    _require_super_admin(current_user)
+    conditions = ["(t.id IS NOT NULL OR m.failed_stage = 'transcription')"]
+    params = []
+    if org_id:
+        params.append(org_id)
+        conditions.append(f"m.org_id = ${len(params)}")
+    if speech_model:
+        params.append(speech_model)
+        conditions.append(f"t.speech_model_used = ${len(params)}")
+    if failed_only:
+        conditions.append("m.failed_stage = 'transcription'")
+    if from_date:
+        params.append(from_date)
+        conditions.append(f"COALESCE(t.created_at, m.updated_at) >= ${len(params)}")
+    if to_date:
+        params.append(to_date)
+        conditions.append(f"COALESCE(t.created_at, m.updated_at) <= ${len(params)}")
+    where_clause = " AND ".join(conditions)
+
+    base_query = f"""FROM meetings m
+                LEFT JOIN transcripts t ON t.id = m.transcript_id
+                LEFT JOIN organisations o ON o.id = m.org_id
+                WHERE {where_clause}"""
+
+    async with database.with_admin() as conn:
+        items_rows = await conn.fetch(
+            f"""SELECT m.id AS meeting_id, m.title AS meeting_title, m.org_id, o.name AS org_name,
+                       m.audio_duration_seconds, m.transcript_has_warnings, m.failed_stage, m.processing_error,
+                       t.speech_model_used, t.latency_ms, COALESCE(t.created_at, m.updated_at) AS transcribed_at
+                {base_query}
+                ORDER BY COALESCE(t.created_at, m.updated_at) DESC
+                LIMIT 200""",
+            *params,
+        )
+        totals_row = await conn.fetchrow(
+            f"""SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE m.failed_stage = 'transcription') AS failed_count,
+                       AVG(t.latency_ms) AS avg_latency_ms,
+                       AVG(m.audio_duration_seconds) AS avg_audio_duration_seconds,
+                       COUNT(*) FILTER (WHERE m.transcript_has_warnings) AS warnings_count
+                {base_query}""",
+            *params,
+        )
+        model_rows = await conn.fetch(
+            f"""SELECT t.speech_model_used, COUNT(*) AS cnt {base_query} AND t.speech_model_used IS NOT NULL
+                GROUP BY t.speech_model_used""",
+            *params,
+        )
+
+    total = totals_row["total"] or 0
+    failed_count = totals_row["failed_count"] or 0
+    return {
+        "items": [
+            {
+                "meeting_id": r["meeting_id"],
+                "meeting_title": r["meeting_title"],
+                "org_id": r["org_id"],
+                "org_name": r["org_name"],
+                "audio_duration_seconds": float(r["audio_duration_seconds"]) if r["audio_duration_seconds"] is not None else None,
+                "transcript_has_warnings": r["transcript_has_warnings"],
+                "failed": r["failed_stage"] == "transcription",
+                "processing_error": r["processing_error"] if r["failed_stage"] == "transcription" else None,
+                "speech_model_used": r["speech_model_used"],
+                "latency_ms": r["latency_ms"],
+                "transcribed_at": r["transcribed_at"],
+            }
+            for r in items_rows
+        ],
+        "stats": {
+            "total": total,
+            "failed_count": failed_count,
+            "failure_rate_pct": round((failed_count / total) * 100, 1) if total else 0,
+            "avg_latency_ms": round(float(totals_row["avg_latency_ms"]), 0) if totals_row["avg_latency_ms"] is not None else None,
+            "avg_audio_duration_seconds": round(float(totals_row["avg_audio_duration_seconds"]), 0) if totals_row["avg_audio_duration_seconds"] is not None else None,
+            "warnings_count": totals_row["warnings_count"] or 0,
+            "by_speech_model": {r["speech_model_used"]: r["cnt"] for r in model_rows},
+        },
+    }
+
+
 @router.get("/ai-accuracy-report")
 async def ai_accuracy_report(
     org_id: Optional[str] = None,

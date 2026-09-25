@@ -42,6 +42,7 @@ from . import (
     m031_ai_provider_initial_scan,
     m032_audit_logs_nullable_meeting,
     m033_evidence_feedback_uploads,
+    m034_transcription_tracking,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,7 @@ MIGRATIONS = [
     m031_ai_provider_initial_scan,
     m032_audit_logs_nullable_meeting,
     m033_evidence_feedback_uploads,
+    m034_transcription_tracking,
 ]
 
 

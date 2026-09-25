@@ -4,9 +4,10 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
-import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Pencil, Clock, CreditCard, Download, ArrowUpDown, Cpu, Target } from "lucide-react";
+import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCircle, Loader2, Pencil, Clock, CreditCard, Download, ArrowUpDown, Cpu, Target, Mic } from "lucide-react";
 import SuperAdminAIUsage from "@/components/superadmin/SuperAdminAIUsage";
 import SuperAdminAIAccuracy from "@/components/superadmin/SuperAdminAIAccuracy";
+import SuperAdminTranscriptionUsage from "@/components/superadmin/SuperAdminTranscriptionUsage";
 
 const API = "/api";
 
@@ -276,12 +277,23 @@ export default function SuperAdminDashboard() {
         >
           <Target className="w-4 h-4" /> AI Accuracy
         </button>
+        <button
+          data-testid="tab-transcription-usage"
+          onClick={() => setActiveTab("transcription_usage")}
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === "transcription_usage" ? "border-[#1E3A8A] text-[#1E3A8A]" : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Mic className="w-4 h-4" /> Transcription Usage
+        </button>
       </div>
 
       {activeTab === "ai_usage" ? (
         <SuperAdminAIUsage getAuthConfig={getAuthConfig} orgs={orgs} />
       ) : activeTab === "ai_accuracy" ? (
         <SuperAdminAIAccuracy getAuthConfig={getAuthConfig} orgs={orgs} />
+      ) : activeTab === "transcription_usage" ? (
+        <SuperAdminTranscriptionUsage getAuthConfig={getAuthConfig} orgs={orgs} />
       ) : (
       <>
       {/* Global error */}

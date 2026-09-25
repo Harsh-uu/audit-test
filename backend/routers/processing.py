@@ -332,7 +332,7 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
 
     attendee_count = len(_jlist(meeting.get("attendees"))) or None
     try:
-        plain_text, numbered_speaker_text, _, _, _ = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
+        plain_text, numbered_speaker_text, _, _, _, speech_model_used, transcription_latency_ms = await transcribe_with_assemblyai(audio_data, speakers_expected=attendee_count)
     except Exception as e:
         logger.error(f"Retranscribe: AssemblyAI failed for {meeting_id}: {e}")
         async with database.with_org(org_id) as conn:
@@ -358,8 +358,8 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
     now = datetime.now(timezone.utc).isoformat()
     async with database.with_org(org_id) as conn:
         await conn.execute(
-            "UPDATE transcripts SET text=$1, speaker_text=$2, retranscribed_at=$3 WHERE id=$4",
-            plain_text, speaker_text, now, transcript_id,
+            "UPDATE transcripts SET text=$1, speaker_text=$2, retranscribed_at=$3, speech_model_used=$4, latency_ms=$5 WHERE id=$6",
+            plain_text, speaker_text, now, speech_model_used, transcription_latency_ms, transcript_id,
         )
         await conn.execute(
             "UPDATE meetings SET diarize_status='done', retranscribed_at=$1 WHERE id=$2",

@@ -198,11 +198,13 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         if assemblyai_key:
             try:
-                transcript_text, numbered_speaker_text, timestamped_plain, transcript_warnings, audio_duration_seconds = await transcribe_with_assemblyai(
+                transcript_text, numbered_speaker_text, timestamped_plain, transcript_warnings, audio_duration_seconds, speech_model_used, transcription_latency_ms = await transcribe_with_assemblyai(
                     audio_data, speakers_expected=attendee_count
                 )
             except Exception as aai_err:
                 logger.error(f"AssemblyAI transcription failed for meeting {meeting_id}: {aai_err}")
+                async with database.with_admin() as conn:
+                    await conn.execute("UPDATE meetings SET failed_stage='transcription' WHERE id=$1", meeting_id)
                 raise
         else:
             raise ValueError("ASSEMBLYAI_API_KEY not configured — transcription requires AssemblyAI")
@@ -214,10 +216,10 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
 
         async with database.with_admin() as conn:
             await conn.execute(
-                """INSERT INTO transcripts (id, meeting_id, org_id, text, safety_warnings, created_at)
-                   VALUES ($1,$2,$3,$4,$5::jsonb,$6)""",
+                """INSERT INTO transcripts (id, meeting_id, org_id, text, safety_warnings, created_at, speech_model_used, latency_ms)
+                   VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8)""",
                 transcript_id, meeting_id, meeting_org_id,
-                transcript_text, transcript_warnings, now,
+                transcript_text, transcript_warnings, now, speech_model_used, transcription_latency_ms,
             )
             await conn.execute(
                 """UPDATE meetings SET transcript_id=$1, status='analyzing', updated_at=$2,

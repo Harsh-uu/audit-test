@@ -881,16 +881,19 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
     hint_msg = f", speakers_expected={speakers_expected}" if speakers_expected else ""
     logger.info(f"Sending {len(audio_data) / 1024:.1f} KB to AssemblyAI (speaker_labels=True{hint_msg})")
 
+    _t0 = time.monotonic()
     transcript = await loop.run_in_executor(
         None,
         lambda: transcriber.transcribe(io.BytesIO(audio_data), config=config),
     )
+    latency_ms = int((time.monotonic() - _t0) * 1000)
 
     if transcript.status == aai.TranscriptStatus.error:
         raise ValueError(f"AssemblyAI transcription failed: {transcript.error}")
 
+    speech_model_used = (transcript.json_response or {}).get("speech_model_used")
     plain_text = _apply_uk_spelling(transcript.text or "")
-    logger.info(f"AssemblyAI transcription complete: {len(plain_text)} chars")
+    logger.info(f"AssemblyAI transcription complete: {len(plain_text)} chars, model={speech_model_used}, latency={latency_ms}ms")
 
     # --- Content safety & hallucination checks ---
     warnings = _check_transcript_safety(plain_text, transcript)
@@ -913,10 +916,10 @@ async def transcribe_with_assemblyai(audio_data: bytes, speakers_expected: int =
             ts_lines = [f"[{_ms_to_mmss(u.start)}] {ct}" for u, ct in cleaned_utterances]
             timestamped_plain = "\n".join(ts_lines)
             logger.info("AssemblyAI diarization usable — GPT-4o will map names only")
-            return plain_text, speaker_text, timestamped_plain, warnings, transcript.audio_duration
+            return plain_text, speaker_text, timestamped_plain, warnings, transcript.audio_duration, speech_model_used, latency_ms
 
     logger.info("AssemblyAI found only 1 speaker — GPT-4o will diarise from text")
-    return plain_text, None, plain_text, warnings, transcript.audio_duration
+    return plain_text, None, plain_text, warnings, transcript.audio_duration, speech_model_used, latency_ms
 
 
 
