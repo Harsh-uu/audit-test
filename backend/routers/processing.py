@@ -320,14 +320,14 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
     except Exception as e:
         logger.error(f"Retranscribe: could not load audio for {meeting_id}: {e}")
         async with database.with_org(org_id) as conn:
-            await conn.execute("UPDATE meetings SET diarize_status='failed' WHERE id=$1", meeting_id)
+            await conn.execute("UPDATE meetings SET diarize_status='failed', failed_stage='transcription', processing_error=$1 WHERE id=$2", str(e)[:500], meeting_id)
         return
 
     assemblyai_key = os.environ.get("ASSEMBLYAI_API_KEY")
     if not assemblyai_key:
         logger.error("Retranscribe: ASSEMBLYAI_API_KEY not set")
         async with database.with_org(org_id) as conn:
-            await conn.execute("UPDATE meetings SET diarize_status='failed' WHERE id=$1", meeting_id)
+            await conn.execute("UPDATE meetings SET diarize_status='failed', failed_stage='transcription', processing_error='ASSEMBLYAI_API_KEY not configured' WHERE id=$1", meeting_id)
         return
 
     attendee_count = len(_jlist(meeting.get("attendees"))) or None
@@ -336,7 +336,7 @@ async def _run_retranscribe_background(meeting_id: str, transcript_id: str, stor
     except Exception as e:
         logger.error(f"Retranscribe: AssemblyAI failed for {meeting_id}: {e}")
         async with database.with_org(org_id) as conn:
-            await conn.execute("UPDATE meetings SET diarize_status='failed' WHERE id=$1", meeting_id)
+            await conn.execute("UPDATE meetings SET diarize_status='failed', failed_stage='transcription', processing_error=$1 WHERE id=$2", str(e)[:500], meeting_id)
         return
 
     manager_name = meeting.get("sign_off_manager_name") or meeting.get("created_by_name") or "Manager"

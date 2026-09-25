@@ -169,7 +169,15 @@ React + FastAPI + PostgreSQL (Supabase) app for UK adult social care providers. 
 - **`MeetingReport.js`**: passes `onShowInTranscript` down into `EvidenceTab` (previously only wired to `ComplianceTab`).
 - Self-tested (curl to inject test data with real transcript excerpts + live screenshot): clicking the Achievement's icon correctly switched to Transcript tab and highlighted the exact matching line in yellow; Action/Learning Need rows correctly show the icon in the hover group. No testing_agent used — small, low-risk UI addition reusing an already-proven mechanism.
 
+### This session (2026-09-25) — Super Admin Transcription Usage Report (SHIPPED)
+- New Super Admin tab tracking the AssemblyAI transcription step specifically (separate from the existing "AI Usage" report, which tracks the Gemini/OpenAI evidence-analysis step).
+- **Migration `m034_transcription_tracking.py`**: `transcripts.speech_model_used` (which AssemblyAI speech model actually served the request — `universal-3-5-pro` vs fallback `universal-2`), `transcripts.latency_ms`, `meetings.failed_stage` (nullable — set to `'transcription'` when the AssemblyAI step itself fails, distinct from a downstream analysis failure).
+- **`utils/ai.py`**: `transcribe_with_assemblyai()` now times itself and extracts `speech_model_used` from `transcript.json_response['speech_model_used']`; both callers (`transcription_pipeline.py` first-scan, `processing.py` retranscribe) updated for the new 7-tuple return and persist the new fields; both AssemblyAI failure paths (first-scan AND retranscribe) now set `failed_stage='transcription'` + `processing_error` for correct report attribution.
+- **`GET /super-admin/transcription-usage-report`**: items + stats (total, failure rate, avg latency, avg audio length, warnings count, by-speech-model breakdown), filterable by org/speech_model/failed_only/date range.
+- **`SuperAdminTranscriptionUsage.js`**: new tab mirroring the existing AI Usage report's visual style (stat cards, filter bar, table with model badge/latency/status).
+- Tested: testing_agent backend 14/14 pytest + frontend 100%, live-verified end-to-end via a real retranscribe call (confirmed `universal-3-5-pro`/17906ms persisted and surfaced correctly in the report UI). One flagged gap (retranscribe failures not attributed) fixed post-testing and regression-verified.
+
 ## Testing Status
-- Test reports: `/app/test_reports/iteration_149.json` through `iteration_164.json`
+- Test reports: `/app/test_reports/iteration_149.json` through `iteration_165.json`
 - Known regressions: None
 - Credentials: `/app/memory/test_credentials.md` (admin@supervision.com Supabase password was re-set this session — see above)
