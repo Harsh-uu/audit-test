@@ -1014,7 +1014,7 @@ def _ti_build_simple_matrix(staff: list, stds: list, ev_map: dict) -> dict:
                 cells[ref] = {**cell, "status": "evidenced" if cell["likely"] > 0 else "needs_review"}
             else:
                 cells[ref] = {"status": "gap", "total": 0, "likely": 0, "review": 0, "last_date": ""}
-        rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
+        rows.append({"staff_id": s["id"], "staff_name": s["name"], "staff_role": s["role"], "cells": cells})
     return {"standards": stds, "rows": rows}
 
 
@@ -1050,7 +1050,7 @@ def _ti_build_cc_matrix(staff: list, stds: list, ev_map: dict, cc_sub_outcomes: 
                 "latest_excerpt": ev.get("latest_excerpt", ""),
                 "source_meeting_id": ev.get("source_meeting_id", ""),
             }
-        rows.append({"staff_id": s["id"], "staff_name": s["name"], "cells": cells})
+        rows.append({"staff_id": s["id"], "staff_name": s["name"], "staff_role": s["role"], "cells": cells})
     return {"standards": stds, "rows": rows}
 
 

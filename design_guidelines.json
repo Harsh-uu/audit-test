@@ -1,277 +1,210 @@
 {
-  "project_name": "Care Provider Supervision & Compliance Dashboard Blueprint",
-  "version": "2.0.0",
-  "created_at": "2026-07",
-  "brand_identity": {
-    "primary_color": "#1E3A8A",
-    "primary_hover": "#1E40AF",
-    "primary_light": "#EFF6FF",
-    "primary_border": "#BFDBFE",
-    "archetype": "ORGANIC & PERFORMANCE PRECISION (Swiss Tech + Care Trust)",
-    "emotional_tone": "Authoritative, reassuring, friction-free, clinical clarity with warmth",
-    "design_philosophy": "Instant Perceived Speed via Zero-Data Tile Navigation, Tactile Bento Geometry, and Zero Visual Clutter"
+  "project_metadata": {
+    "project_name": "Supervision2 / 1two.one - Team Themes & Care Compliance Modernization",
+    "app_type": "Dashboard (Internal Reporting & Analytics Dashboard for UK Adult Social Care Providers)",
+    "context": "UK Adult Social Care (CQC / Care Certificate compliance, supervision audio transcription & AI evidence extraction)",
+    "core_objective": "Modernize the 'Team Themes' reporting experience from old-fashioned Excel/spreadsheet tables to high-impact, actionable, accessible, and intuitive visual directions without changing existing data models or functionality.",
+    "key_stakeholders": "Care Home Managers, Clinical Supervision Leads, CQC Compliance Officers"
+  },
+  "design_archetypes_and_themes": {
+    "archetype": "Modern Healthcare & Clinical Precision combined with Swiss Functional Clarity",
+    "vibe": "Trustworthy, clean, empathetic, high-density data, zero clutter, accessible",
+    "theme_modes": {
+      "light": {
+        "background": "#F8FAFC",
+        "surface": "#FFFFFF",
+        "surface_subtle": "#F1F5F9",
+        "border": "#E2E8F0",
+        "text_primary": "#0F172A",
+        "text_secondary": "#475569",
+        "text_muted": "#64748B"
+      },
+      "dark": {
+        "background": "#0B0F17",
+        "surface": "#111827",
+        "surface_subtle": "#1F2937",
+        "border": "#374151",
+        "text_primary": "#F9FAFB",
+        "text_secondary": "#D1D5DB",
+        "text_muted": "#9CA3AF"
+      }
+    },
+    "color_palette": {
+      "primary_teal": {
+        "main": "#0F766E",
+        "light": "#14B8A6",
+        "bg_subtle": "rgba(20, 184, 166, 0.1)"
+      },
+      "compliance_status": {
+        "evidenced": {
+          "hex": "#059669",
+          "label": "Evidenced / Full Coverage",
+          "bg": "#ECFDF5",
+          "text": "#047857"
+        },
+        "partial": {
+          "hex": "#D97706",
+          "label": "Partial Evidence",
+          "bg": "#FFFBEB",
+          "text": "#B45309"
+        },
+        "needs_review": {
+          "hex": "#7C3AED",
+          "label": "AI Suggested / Needs Review",
+          "bg": "#F5F3FF",
+          "text": "#6D28D9"
+        },
+        "gap": {
+          "hex": "#E11D48",
+          "label": "Evidence Gap / Action Required",
+          "bg": "#FFF1F2",
+          "text": "#BE123C"
+        }
+      }
+    }
+  },
+  "visual_concept_directions": [
+    {
+      "id": "direction-1",
+      "title": "Interactive Heatmap & Slide-Over Audit Inspector",
+      "theme": "Clinical Precision & Interactive Scannability",
+      "target_feeling": "High-tech compliance matrix with instant clarity and zero spreadsheet clutter",
+      "evidence_matrix_redesign": {
+        "layout_approach": "Color-coded Heatmap with variable opacity status pills, sticky multi-tier standard category headers, and side-by-side summary bar",
+        "cell_visualization": "Instead of raw checkmarks or monochrome icons, cells feature rounded soft status capsules with hover tooltips showing exact evidence snippet preview. Clicking a cell slides open a right-side Audit Drawer showing supervision transcript timestamps, audio playback snippet, and CQC evidence clause details.",
+        "header_solution": "Replace vertical rotated text headers with clean 45-degree angled standard headers or horizontal category group chips (e.g. 'CQC Standard 1: Person-Centred Care') with expandable columns and searchable standard tags.",
+        "summary_row": "Floating bottom summary bar with dynamic coverage gauges, showing real-time 'Overall Team Readiness %' and one-click 'Highlight Gaps Only' toggle."
+      },
+      "ai_accuracy_redesign": {
+        "layout_approach": "Confidence Meter Cards & Verification Stream",
+        "table_transformation": "Transform standard static table into an interactive decision stream. Upper section features 4 metric gauge widgets (Overall AI Confidence %, High Confidence %, Needs Review Count, Override Rate) and a 'Missed Standards Alert Radar'.",
+        "row_treatment": "Rows are styled as modern list items with AI Confidence Progress Bars (Green >=90%, Amber 70-89%, Violet <70%), inline snippet audio player, and quick 1-click 'Approve / Reject AI Suggestion' action buttons."
+      }
+    },
+    {
+      "id": "direction-2",
+      "title": "Staff-Centric Care Cards & Radial Standard Rings",
+      "theme": "Person-First Care Narrative & Radial Metrics",
+      "target_feeling": "Focuses on human supervision outcomes and staff mastery rather than cold grid numbers",
+      "evidence_matrix_redesign": {
+        "layout_approach": "Dual-View Toggle: Grid View vs Staff Roster Card Grid",
+        "cell_visualization": "Each staff member is represented as a high-density profile card featuring a radial SVG progress ring (e.g., '84% CQC Evidenced'), pill badges for top achievements, and a mini horizontal matrix barcode for compliance standards.",
+        "split_view_mode": "Selecting a staff member turns the page into a 35% roster list / 65% deep evidence breakdown showing timeline of supervisions, evidence quotes, and target learning needs.",
+        "header_solution": "Filters by Care Role (e.g., Senior Carer, Night Nurse, Support Worker) and Standard Category with quick search bar."
+      },
+      "ai_accuracy_redesign": {
+        "layout_approach": "AI Audit Inbox & Split Inspector",
+        "table_transformation": "Presents AI decisions as an interactive audit queue (Inbox style). Left column displays list of pending decisions sorted by confidence score; right column displays full supervision context with AI highlighted transcript text and manager approval form."
+      }
+    },
+    {
+      "id": "direction-3",
+      "title": "Modular Swiss Bento Grid & Command Matrix",
+      "theme": "High-Density Executive Command Suite",
+      "target_feeling": "Ultra-efficient dashboard designed for quick scanning across large care teams",
+      "evidence_matrix_redesign": {
+        "layout_approach": "Bento Grid Dashboard with Compact Micro-Matrix",
+        "cell_visualization": "Dense 40px grid matrix with toggleable view modes: Symbol View (Icon indicators), Numerical Coverage %, or Micro-Sparklines showing coverage progression over the last 3 supervision cycles.",
+        "sticky_ribbon": "Sticky top command toolbar with org-scoping dropdowns, date picker, preset filter chips ('Gaps Only', 'High Risk', 'Recently Updated'), and bulk CSV/PDF export actions."
+      },
+      "ai_accuracy_redesign": {
+        "layout_approach": "Matrix & Distribution Chart",
+        "table_transformation": "Combines a dynamic decision matrix with a interactive histogram chart showing AI Confidence distribution, top missed standards breakdown, and batch decision toolbar."
+      }
+    }
+  ],
+  "tab_by_tab_redesign_strategy": {
+    "tab_1_evidence_matrix": {
+      "priority": "HIGH (Most Excel-like)",
+      "improvements": [
+        "Replace raw HTML <table> with responsive virtualized custom grid",
+        "Add sticky first column (Staff Name & Role Avatar) with subtle horizontal hover highlight across entire row",
+        "Replace rotated text with clean truncated headers + interactive standard detail popovers",
+        "Add cell filtering (Show All, Evidenced Only, Gaps Only, AI Suggested Only)",
+        "Integrated Right Slide-Over Drawer for viewing supervision evidence quotes & audio timestamps"
+      ]
+    },
+    "tab_2_ai_accuracy": {
+      "priority": "HIGH (Most Excel-like)",
+      "improvements": [
+        "Transform raw table into an AI Decision Audit Feed with visual confidence badges",
+        "Top KPI Row: Overall Accuracy %, Confidence Distribution, Manager Override Rate, Missed Standard Radar",
+        "Inline transcript preview drawer with audio clip player for instant verification",
+        "Batch action toolbar (Bulk Approve AI Suggestions)"
+      ]
+    },
+    "tab_3_standards_coverage": {
+      "priority": "MEDIUM",
+      "improvements": [
+        "Upgrade horizontal progress bars with target markers (e.g. 80% CQC Target line)",
+        "Add trend micro-sparklines (+5% vs last month)",
+        "Category grouping (CQC Fundamental Standards, Care Certificate, Organisational Care Policies)"
+      ]
+    },
+    "tab_4_achievements": {
+      "priority": "LOWER",
+      "improvements": [
+        "Card view with staff avatar badges, praise icons, and supervision quote highlights",
+        "Filterable by standard, staff role, and date range"
+      ]
+    },
+    "tab_5_learning_needs": {
+      "priority": "LOWER",
+      "improvements": [
+        "Skill gap matrix with urgency flags (Immediate Action Required vs Ongoing Development)",
+        "Direct link to training module assignment"
+      ]
+    },
+    "tab_6_attention_risks": {
+      "priority": "MEDIUM",
+      "improvements": [
+        "Risk severity color coding (Critical - Red, Warning - Amber, Advisory - Blue)",
+        "Timeline feed view with resolution status toggle"
+      ]
+    },
+    "tab_7_actions": {
+      "priority": "LOWER",
+      "improvements": [
+        "Kanban/List toggle for Supervision Action Items (To Do, In Progress, Completed)",
+        "DueDate indicators and assignee avatars"
+      ]
+    }
   },
   "typography": {
-    "headings": {
-      "family": "Montserrat, sans-serif",
-      "h1": "text-3xl sm:text-4xl font-bold tracking-tight text-gray-900",
-      "h2": "text-xl sm:text-2xl font-semibold tracking-tight text-gray-900",
-      "h3": "text-lg font-semibold text-gray-900",
-      "h4": "text-base font-medium text-gray-800"
-    },
-    "body": {
-      "family": "Montserrat, -apple-system, BlinkMacSystemFont, sans-serif",
-      "regular": "text-sm text-gray-600 leading-relaxed",
-      "small": "text-xs text-gray-500 leading-normal",
-      "label": "text-xs font-semibold uppercase tracking-wider text-gray-400"
-    },
-    "forbidden_fonts": [
-      "Inter for main headings",
-      "Space Grotesk"
+    "font_family_heading": "Plus Jakarta Sans, sans-serif",
+    "font_family_body": "Inter, sans-serif",
+    "font_family_mono": "JetBrains Mono, monospace (for tabular data, percentages, cell counts)",
+    "scale": {
+      "h1": "text-3xl font-bold tracking-tight",
+      "h2": "text-2xl font-semibold tracking-tight",
+      "h3": "text-lg font-medium",
+      "body": "text-sm text-slate-700 dark:text-slate-300",
+      "caption": "text-xs text-slate-500"
+    }
+  },
+  "export_and_filtering_ux": {
+    "filter_bar": "Sticky filter bar with Organization scope, Team selector, Date Range picker, and Quick Search",
+    "export_modal": "Export CSV / PDF dropdown with option to export filtered view or full raw dataset, including evidence quote appendix",
+    "contextual_actions": "Appears when user selects rows/cells to perform bulk operations (e.g. Export Selected, Flag for Review)"
+  },
+  "data_testid_strategy": {
+    "pattern": "kebab-case, role-based",
+    "examples": [
+      "data-testid=\"team-themes-nav-tab-evidence-matrix\"",
+      "data-testid=\"team-themes-nav-tab-ai-accuracy\"",
+      "data-testid=\"evidence-matrix-grid\"",
+      "data-testid=\"evidence-matrix-cell-{staffId}-{standardId}\"",
+      "data-testid=\"evidence-matrix-filter-gap-only-button\"",
+      "data-testid=\"ai-accuracy-decision-row-{id}\"",
+      "data-testid=\"ai-accuracy-approve-button-{id}\"",
+      "data-testid=\"export-csv-button\""
     ]
-  },
-  "colors": {
-    "background": {
-      "app": "#F8F9FA",
-      "card": "#FFFFFF",
-      "card_hover": "#FAFBFD",
-      "sidebar": "#FFFFFF",
-      "org_bar": "#1E3A8A"
-    },
-    "text": {
-      "primary": "#111827",
-      "secondary": "#4B5563",
-      "muted": "#9CA3AF",
-      "accent": "#1E3A8A",
-      "on_primary": "#FFFFFF"
-    },
-    "status_badges": {
-      "draft": "bg-slate-100 text-slate-700 border-slate-200",
-      "recording": "bg-red-100 text-red-700 border-red-200",
-      "in_review": "bg-amber-100 text-amber-700 border-amber-200",
-      "reviewed": "bg-sky-100 text-sky-700 border-sky-200",
-      "signed_off": "bg-emerald-100 text-emerald-800 border-emerald-200",
-      "overdue": "bg-red-50 text-red-700 border-red-200"
-    },
-    "tile_accents": {
-      "meetings": { "border": "hover:border-blue-500", "bg": "group-hover:bg-blue-50/50", "badge": "bg-blue-100 text-blue-800" },
-      "matrix": { "border": "hover:border-indigo-500", "bg": "group-hover:bg-indigo-50/50", "badge": "bg-indigo-100 text-indigo-800" },
-      "people": { "border": "hover:border-emerald-500", "bg": "group-hover:bg-emerald-50/50", "badge": "bg-emerald-100 text-emerald-800" },
-      "evidence": { "border": "hover:border-purple-500", "bg": "group-hover:bg-purple-50/50", "badge": "bg-purple-100 text-purple-800" },
-      "resources": { "border": "hover:border-amber-500", "bg": "group-hover:bg-amber-50/50", "badge": "bg-amber-100 text-amber-800" },
-      "settings": { "border": "hover:border-slate-500", "bg": "group-hover:bg-slate-50/50", "badge": "bg-slate-100 text-slate-800" }
-    }
-  },
-  "visual_enhancers": {
-    "borders": "1px solid #E5E7EB",
-    "hover_border": "1px solid #1E3A8A",
-    "shadows": {
-      "card_default": "0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03)",
-      "card_hover": "0 10px 25px -5px rgba(30, 58, 138, 0.1), 0 8px 10px -6px rgba(30, 58, 138, 0.05)",
-      "dropdown": "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)"
-    },
-    "glassmorphic_header": "backdrop-blur-md bg-white/90 border-b border-gray-200",
-    "micro_interactions": "transition-all duration-200 ease-out hover:-translate-y-1 active:translate-y-0"
-  },
-  "grids_and_layouts": {
-    "dashboard_landing": {
-      "container": "max-w-7xl mx-auto p-6 md:p-10 space-y-8",
-      "hero_banner": "bg-gradient-to-r from-[#1E3A8A] to-[#1E40AF] rounded-2xl p-6 md:p-8 text-white shadow-md relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6",
-      "grid_mode": "MODE A: TETRIS / BENTO TILE GRID",
-      "grid_classes": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8",
-      "instant_load_guarantee": "Zero loading spinners or skeletons; all tiles render synchronously with hardcoded routes and instant click response."
-    },
-    "simplified_meetings_page": {
-      "route": "/meetings",
-      "container": "max-w-7xl mx-auto p-6 md:p-8 space-y-6",
-      "header_flex": "flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5",
-      "filter_bar": "bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3"
-    },
-    "resources_page": {
-      "route": "/resources",
-      "container": "max-w-7xl mx-auto p-6 md:p-8 space-y-8",
-      "hero_header": "bg-gradient-to-br from-amber-500/10 via-blue-900/5 to-transparent p-6 md:p-8 rounded-2xl border border-amber-200/60"
-    }
-  },
-  "tile_specifications": [
-    {
-      "key": "meetings",
-      "title": "Meetings",
-      "route": "/meetings",
-      "icon": "Calendar",
-      "badge": "Shortcut",
-      "badge_color": "bg-blue-100 text-blue-800",
-      "description": "Start new supervisions, record sessions, and review draft or signed-off meeting reports.",
-      "quick_action": "Start New Meeting (+)",
-      "target_role": "all",
-      "data_testid": "tile-meetings"
-    },
-    {
-      "key": "matrix",
-      "title": "Matrix",
-      "route": "/supervision-matrix",
-      "icon": "LayoutGrid",
-      "badge": "Compliance Grid",
-      "badge_color": "bg-indigo-100 text-indigo-800",
-      "description": "View organisation-wide supervision status grid across care settings and staff members.",
-      "target_role": "admin_manager_only",
-      "data_testid": "tile-matrix"
-    },
-    {
-      "key": "people",
-      "title": "People",
-      "route": "/organisation",
-      "icon": "Users",
-      "badge": "Org Hub",
-      "badge_color": "bg-emerald-100 text-emerald-800",
-      "description": "Manage care settings, staff roles, line management structures, and team rosters.",
-      "target_role": "admin_manager_only",
-      "data_testid": "tile-people"
-    },
-    {
-      "key": "evidence",
-      "title": "Evidence",
-      "route": "/admin/team",
-      "icon": "BarChart2",
-      "badge": "Team Themes",
-      "badge_color": "bg-purple-100 text-purple-800",
-      "description": "Analyse AI evidence trends, CQC standard coverage, and common supervision themes.",
-      "target_role": "admin_manager_only",
-      "data_testid": "tile-evidence"
-    },
-    {
-      "key": "resources",
-      "title": "Resources",
-      "route": "/resources",
-      "icon": "BookOpen",
-      "badge": "Coming Soon",
-      "badge_color": "bg-amber-100 text-amber-800",
-      "description": "Access supervision guides, downloadable CQC policy templates, and upcoming training courses.",
-      "target_role": "all",
-      "data_testid": "tile-resources"
-    },
-    {
-      "key": "settings",
-      "title": "Settings",
-      "route": "/settings",
-      "icon": "Settings",
-      "badge": "Org Config",
-      "badge_color": "bg-slate-100 text-slate-800",
-      "description": "Configure brand colors, organisation details, security options, and system preferences.",
-      "target_role": "admin_manager_only",
-      "data_testid": "tile-settings"
-    }
-  ],
-  "rbac_rules": {
-    "admin_and_manager": {
-      "visible_tiles": ["meetings", "matrix", "people", "evidence", "resources", "settings"],
-      "tile_count": 6
-    },
-    "attendee_and_staff": {
-      "visible_tiles": ["meetings", "resources", "portfolio"],
-      "tile_count": 3,
-      "note": "Non-management roles only see tiles relevant to their own supervision history and learning resources. Additional tile 'My Portfolio' (/portfolio) replaces restricted admin tiles."
-    }
-  },
-  "meetings_page_simplification_spec": {
-    "status": "APPROVED DESIGN MOCKUP",
-    "route": "/meetings",
-    "retained_elements": [
-      "Full meetings list with status badges (Draft, In Review, Signed Off, etc.)",
-      "Primary 'New Meeting' button",
-      "Real-time search bar (by title, attendee name, location)",
-      "Status filter quick-chips ('All', 'Draft', 'In Review', 'Reviewed', 'Signed Off')",
-      "Date range picker & sort toggle",
-      "Organisation structure filter dropdown (Setting / Team)"
-    ],
-    "removed_elements": [
-      "Due This Month matrix carousel (Schedule due-cards widget)",
-      "Overdue actions warning banner (relocated)",
-      "Top 3 summary stat cards (Total / In Review / Signed Off - optional header summary metrics available in filter bar if required)"
-    ],
-    "benefit_rationale": "Removes data-fetch dependencies from the landing page. Renders instantaneously, prevents visual clutter on mobile/desktop, and turns the Meetings page into a focused execution stream."
-  },
-  "explicit_recommendations": {
-    "due_this_month_and_overdue_banner_relocation": {
-      "recommended_home": "Schedules Page (/admin/schedules) & Supervision Matrix Page (/supervision-matrix)",
-      "rationale": "The 'Due This Month' widget and Overdue Actions banner are schedule-centric management controls, not meeting-execution tools. Placing them prominently at the top of /admin/schedules and /supervision-matrix aligns perfectly with workflow context (when managers are planning shifts & auditing compliance), while leaving /meetings 100% lean for recording and reading reports.",
-      "user_invite_ack": "User explicitly asked 'happy for you to suggest better ideas if you have them'. Relocating schedule-due widgets to the dedicated Schedules page keeps the landing tile hub lightning fast and meeting list clean."
-    }
-  },
-  "supervision_matrix_enhancement": {
-    "header_addition": "Top-Right 'Schedules' Hyperlink",
-    "route": "/admin/schedules",
-    "design": "Clean button-style link: 'View Schedules' with Calendar icon and ChevronRight icon, positioned in top-right of Supervision Matrix header.",
-    "data_testid": "matrix-schedules-link"
-  },
-  "resources_page_concept": {
-    "route": "/resources",
-    "page_title": "Supervision & Care Resources",
-    "subtitle": "Essential downloads, compliance frameworks, and supervision training courses.",
-    "sections": [
-      {
-        "id": "downloads",
-        "title": "Useful Downloads & Templates",
-        "badge": "Instant PDF / DocX",
-        "items": [
-          { "name": "1-to-1 Supervision Framework Guide (CQC Compliant)", "type": "PDF", "size": "1.2 MB", "icon": "FileText" },
-          { "name": "Supervision Preparation Checklist for Managers", "type": "DOCX", "size": "450 KB", "icon": "FileText" },
-          { "name": "Reflective Practice Template for Care Staff", "type": "PDF", "size": "890 KB", "icon": "FileText" }
-        ]
-      },
-      {
-        "id": "courses",
-        "title": "Supervision Masterclass & CPD Courses",
-        "badge": "Coming Q3 2026",
-        "items": [
-          { "title": "Effective Care Supervision in Practice", "duration": "4 Modules • 2 hrs", "level": "Manager CPD", "status": "Coming Soon" },
-          { "title": "Navigating Difficult Supervision Conversations", "duration": "3 Modules • 1.5 hrs", "level": "Advanced", "status": "Coming Soon" }
-        ]
-      },
-      {
-        "id": "support_cta",
-        "title": "Need a Specific Policy Template?",
-        "description": "Our care compliance team can create custom supervision resources for your organisation.",
-        "action_text": "Request Resource",
-        "action_testid": "request-resource-btn"
-      }
-    ]
-  },
-  "motion_and_interactions": {
-    "tile_hover": "transform transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg border border-gray-200 hover:border-[#1E3A8A]",
-    "button_active": "active:scale-95 transition-transform",
-    "prefers_reduced_motion": "motion-reduce:transform-none motion-reduce:transition-none"
-  },
-  "accessibility": {
-    "wcag_level": "AA Compliant",
-    "min_contrast": "4.5:1 for standard text, 3:1 for large display elements",
-    "keyboard_nav": "All tiles and buttons tabbable with visible outline-none focus:ring-2 focus:ring-[#1E3A8A]",
-    "screen_readers": "aria-label attributes on icon buttons, role='region' for tile grid",
-    "data_testids": "Mandatory on all interactive elements using kebab-case"
-  },
-  "image_urls": {
-    "hero_illustration": "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1200&q=80",
-    "resources_banner": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80"
-  },
-  "component_path_mapping": {
-    "Dashboard": "/app/frontend/src/pages/Dashboard.js (Redesigned 6-Tile Landing Hub)",
-    "Meetings": "/app/frontend/src/pages/Meetings.js or updated /app/frontend/src/pages/Dashboard.js simplified tab",
-    "Resources": "/app/frontend/src/pages/Resources.js (New Page)",
-    "SupervisionMatrix": "/app/frontend/src/pages/SupervisionMatrix.js (Header hyperlink added)",
-    "Layout": "/app/frontend/src/components/Layout.js (Sidebar intact)"
   },
   "instructions_to_main_agent": [
-    "1. Replace existing Dashboard.js content with the 6-tile Bento shortcut hub layered inside <Layout>.",
-    "2. Move current meetings list code from Dashboard.js into a dedicated simplified Meetings component at route /meetings (updating App.js lazy route).",
-    "3. Add role-based filtering (user.role) so admin/manager see all 6 tiles while attendee/staff see only Meetings, Resources, and My Portfolio.",
-    "4. Create the new Resources page at /resources with instant-loading downloads and supervision course coming-soon cards.",
-    "5. Update SupervisionMatrix.js header to include top-right link to /admin/schedules.",
-    "6. Ensure all interactive tiles and buttons retain data-testid attributes for E2E tests."
-  ],
-  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
-    "testing_attributes": "All interactive elements MUST include data-testid attribute in kebab-case.",
-    "transitions": "DO NOT use transition: all. Use specific properties (e.g. transition-transform, transition-colors).",
-    "centering": "DO NOT add text-align: center to the root App container.",
-    "theme_color": "Maintain brand color #1E3A8A as primary accent, with dark navy org bar."
-  }
+    "DO NOT write code implementations yet as this is a DESIGN EXPLORATION ONLY request.",
+    "Present the 3 visual directions clearly to the user so they can select their preferred UI pattern.",
+    "Ensure all existing data points (staff x standard mapping, AI confidence, decision status, CQC standards) remain intact.",
+    "Maintain full accessibility standards (WCAG 2.2 AA contrast, keyboard navigation, clear ARIA roles).",
+    "Ensure header never uses fully transparent background over content."
+  ]
 }

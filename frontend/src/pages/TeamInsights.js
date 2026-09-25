@@ -20,55 +20,19 @@ const CELL_CFG = {
   gap:          { bg: "bg-gray-50",     border: "border-gray-100",    label: "Gap — no evidence" },
 };
 
-function MatrixCell({ cell }) {
-  const status = cell?.status || "gap";
-
-  if (status === "evidenced") {
-    return (
-      <div
-        title={cell?.total_sub ? `All ${cell.total_sub} outcomes evidenced` : "All outcomes evidenced"}
-        className="w-10 h-10 flex items-center justify-center rounded border bg-emerald-100 border-emerald-300 transition-opacity hover:opacity-80 cursor-default"
-      >
-        <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      </div>
-    );
-  }
-
-  if (status === "partial") {
-    const covered = cell?.covered_sub ?? 0;
-    const total = cell?.total_sub ?? 0;
-    return (
-      <div
-        title={`${covered}/${total} outcomes evidenced (${cell?.pct ?? 0}%)`}
-        className="w-10 h-10 flex items-center justify-center rounded border bg-amber-50 border-amber-200 transition-opacity hover:opacity-80 cursor-default"
-      >
-        <span className="text-[9px] font-bold text-amber-600 leading-none">{covered}/{total}</span>
-      </div>
-    );
-  }
-
-  if (status === "needs_review") {
-    return (
-      <div
-        title={`${cell?.review || 0} item(s) need review`}
-        className="w-10 h-10 flex items-center justify-center rounded border bg-amber-50 border-amber-200 transition-opacity hover:opacity-80 cursor-default"
-      >
-        <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-      </div>
-    );
-  }
-
-  // gap
-  return (
-    <div
-      title="No evidence"
-      className="w-10 h-10 flex items-center justify-center rounded border bg-gray-50 border-gray-100 cursor-default"
-    >
-      <span className="w-2 h-2 rounded-full bg-gray-200" />
-    </div>
-  );
+// ── Avatar helpers (local to Matrix cards) ───────────────────────────────────
+function miAvatarColor(name) {
+  const safe = name || "";
+  const palette = ["#0F766E", "#7C3AED", "#059669", "#D97706", "#DC2626", "#0891B2", "#1E3A8A"];
+  let h = 0;
+  for (const c of safe) h = (h * 31 + c.charCodeAt(0)) % palette.length;
+  return palette[h];
+}
+function miInitials(name) {
+  return (name || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
+function roleLabel(role) {
+  return role === "manager" ? "Manager" : role === "attendee" ? "Care Staff" : (role || "Staff");
 }
 
 // ── Shorten a standard ref for the column header ─────────────────────────────
@@ -82,9 +46,139 @@ function shortRef(ref) {
     .trim();
 }
 
+// ── Radial coverage ring ──────────────────────────────────────────────────────
+function RadialRing({ pct, size = 72, stroke = 7 }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (Math.min(100, Math.max(0, pct)) / 100) * c;
+  const color = pct >= 90 ? "#059669" : pct >= 50 ? "#D97706" : "#E11D48";
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F1F5F9" strokeWidth={stroke} />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
+          style={{ transition: "stroke-dashoffset 0.6s ease" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-sm font-bold" style={{ color }}>{pct}%</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Per-staff coverage helpers ────────────────────────────────────────────────
+function staffCoveragePct(row, standards, matrixTab) {
+  if (!standards.length) return 0;
+  if (matrixTab === "care_cert") {
+    const total = standards.reduce((sum, std) => sum + (row.cells[std.ref]?.pct ?? 0), 0);
+    return Math.round(total / standards.length);
+  }
+  const evidenced = standards.filter(std => row.cells[std.ref]?.status === "evidenced").length;
+  return Math.round((evidenced / standards.length) * 100);
+}
+
+function statusCounts(row, standards) {
+  const counts = { evidenced: 0, partial: 0, needs_review: 0, gap: 0 };
+  standards.forEach(std => {
+    const s = row.cells[std.ref]?.status || "gap";
+    counts[s] = (counts[s] || 0) + 1;
+  });
+  return counts;
+}
+
+const STATUS_DOT = {
+  evidenced: "bg-emerald-500",
+  partial: "bg-amber-400",
+  needs_review: "bg-amber-400",
+  gap: "bg-gray-200",
+};
+
+// ── Staff card (Grid view) ────────────────────────────────────────────────────
+function StaffCard({ row, standards, matrixTab, onCellClick }) {
+  const pct = staffCoveragePct(row, standards, matrixTab);
+  const counts = statusCounts(row, standards);
+  const clickable = matrixTab === "care_cert";
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow" data-testid={`staff-card-${row.staff_id}`}>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: miAvatarColor(row.staff_name) }}>
+          {miInitials(row.staff_name)}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 truncate">{row.staff_name}</p>
+          <p className="text-xs text-gray-400">{roleLabel(row.staff_role)}</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-center py-1" data-testid={`staff-card-ring-${row.staff_id}`}>
+        <RadialRing pct={pct} />
+      </div>
+      <p className="text-center text-[11px] text-gray-400 mt-1 mb-3">
+        {matrixTab === "care_cert" ? "Outcomes evidenced" : "Standards evidenced"}
+      </p>
+      {/* Mini compliance barcode */}
+      <div className="flex items-center gap-0.5 mb-3" data-testid={`staff-card-barcode-${row.staff_id}`}>
+        {standards.map(std => {
+          const cell = row.cells[std.ref];
+          const status = cell?.status || "gap";
+          return (
+            <div
+              key={std.ref}
+              title={`${std.ref}: ${CELL_CFG[status]?.label || status}`}
+              onClick={clickable ? () => onCellClick(row, std) : undefined}
+              className={`h-2 flex-1 rounded-full ${STATUS_DOT[status]} ${clickable ? "cursor-pointer hover:opacity-70" : ""}`}
+              data-testid={`staff-card-segment-${row.staff_id}-${std.ref.replace(/\s/g, "-")}`}
+            />
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {counts.evidenced > 0 && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{counts.evidenced} evidenced</span>
+        )}
+        {(counts.partial + counts.needs_review) > 0 && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{counts.partial + counts.needs_review} partial</span>
+        )}
+        {counts.gap > 0 && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">{counts.gap} gap</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Per-standard row (Focus view detail panel) ────────────────────────────────
+function FocusStandardRow({ std, cell, matrixTab, onCellClick, row }) {
+  const status = cell?.status || "gap";
+  const cfg = CELL_CFG[status] || CELL_CFG.gap;
+  const clickable = matrixTab === "care_cert";
+  const valueLabel = matrixTab === "care_cert" && status !== "gap"
+    ? `${cell?.covered_sub ?? 0}/${cell?.total_sub ?? 0}`
+    : cfg.label;
+  const valueColor = status === "evidenced" ? "#047857" : status === "gap" ? "#9CA3AF" : "#B45309";
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 py-2 px-3 rounded-lg border ${cfg.border} ${cfg.bg} ${clickable ? "cursor-pointer hover:opacity-80" : ""}`}
+      onClick={clickable ? () => onCellClick(row, std) : undefined}
+      data-testid={`focus-standard-${std.ref.replace(/\s/g, "-")}`}
+    >
+      <p className="text-xs font-semibold text-gray-800 truncate min-w-0">
+        <span className="mr-1.5">{shortRef(std.ref)}</span>{std.name}
+      </p>
+      <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: valueColor }}>
+        {valueLabel}
+      </span>
+    </div>
+  );
+}
+
 // ── Evidence Matrix ─────────────────────────────────────────────────────────
 function MatrixView({ matrix, ccStandards = [], onCellClick }) {
   const [matrixTab, setMatrixTab] = useState("cqc");
+  const [viewMode, setViewMode] = useState("grid"); // "grid" | "focus"
+  const [focusedStaffId, setFocusedStaffId] = useState(null);
 
   useEffect(() => {
     document.getElementById("insights-scroll-container")?.scrollTo(0, 0);
@@ -104,26 +198,61 @@ function MatrixView({ matrix, ccStandards = [], onCellClick }) {
     custom:    matrix.custom?.standards?.length ?? 0,
   };
 
+  useEffect(() => {
+    if (data.rows.length && !data.rows.some(r => r.staff_id === focusedStaffId)) {
+      setFocusedStaffId(data.rows[0].staff_id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.rows]);
+
+  const teamAvgPct = data.rows.length
+    ? Math.round(data.rows.reduce((sum, row) => sum + staffCoveragePct(row, data.standards, matrixTab), 0) / data.rows.length)
+    : 0;
+
+  const focusedRow = data.rows.find(r => r.staff_id === focusedStaffId) || data.rows[0];
+
   return (
     <div>
-      {/* Sub-tabs */}
-      <div className="flex items-center gap-1 mb-4">
-        {tabs.map(({ key, label, icon: Icon, color }) => (
+      {/* Sub-tabs + view toggle */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div className="flex items-center gap-1">
+          {tabs.map(({ key, label, icon: Icon, color }) => (
+            <button
+              key={key}
+              onClick={() => setMatrixTab(key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                matrixTab === key ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
+              }`}
+              data-testid={`matrix-tab-${key}`}
+            >
+              <Icon className={`w-3.5 h-3.5 ${matrixTab === key ? "text-white" : color}`} />
+              {label}
+              <span className={`text-xs rounded-full px-1.5 ${matrixTab === key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
+                {tabCounts[key]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1" data-testid="matrix-view-toggle">
           <button
-            key={key}
-            onClick={() => setMatrixTab(key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              matrixTab === key ? "bg-[#1E3A8A] text-white" : "text-gray-600 hover:bg-gray-100"
+            onClick={() => setViewMode("grid")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+              viewMode === "grid" ? "bg-white text-[#0F766E] shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}
-            data-testid={`matrix-tab-${key}`}
+            data-testid="matrix-view-toggle-grid"
           >
-            <Icon className={`w-3.5 h-3.5 ${matrixTab === key ? "text-white" : color}`} />
-            {label}
-            <span className={`text-xs rounded-full px-1.5 ${matrixTab === key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
-              {tabCounts[key]}
-            </span>
+            <Grid3x3 className="w-3.5 h-3.5" /> Grid
           </button>
-        ))}
+          <button
+            onClick={() => setViewMode("focus")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+              viewMode === "focus" ? "bg-white text-[#0F766E] shadow-sm" : "text-gray-500 hover:text-gray-700"
+            }`}
+            data-testid="matrix-view-toggle-focus"
+          >
+            <Users className="w-3.5 h-3.5" /> Focus
+          </button>
+        </div>
       </div>
 
       {data.standards.length === 0 ? (
@@ -133,106 +262,86 @@ function MatrixView({ matrix, ccStandards = [], onCellClick }) {
         </div>
       ) : (
         <>
-          {/* Scrollable matrix table */}
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="border-collapse" style={{ minWidth: "max-content" }}>
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  {/* Frozen staff column */}
-                  <th className="sticky left-0 z-10 bg-gray-50 border-r border-gray-200 px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide min-w-[160px]">
-                    Staff Member
-                  </th>
-                  {data.standards.map(std => (
-                    <th key={std.ref} className="px-2 py-2 text-center min-w-[44px]">
-                      <div
-                        title={`${std.ref} — ${std.name}`}
-                        style={{
-                          writingMode: "vertical-rl",
-                          transform: "rotate(180deg)",
-                          height: 76,
-                          lineHeight: "1.3",
-                          overflow: "hidden",
-                          whiteSpace: "nowrap",
-                        }}
-                        className="text-xs font-semibold text-gray-500 uppercase tracking-wide mx-auto"
-                      >
-                        {shortRef(std.ref)}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((row, ri) => (
-                  <tr key={row.staff_id} className={ri % 2 === 0 ? "bg-white" : "bg-gray-50/50"} data-testid={`matrix-row-${row.staff_id}`}>
-                    <td className={`sticky left-0 z-10 border-r border-gray-200 px-4 py-2 ${ri % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                      <p className="text-sm font-medium text-gray-800 whitespace-nowrap">{row.staff_name}</p>
-                    </td>
-                    {data.standards.map(std => (
-                      <td key={std.ref} className="px-2 py-2 text-center">
-                        {matrixTab === "care_cert" ? (
-                          <button
-                            className="hover:opacity-75 transition-opacity"
-                            onClick={() => onCellClick && onCellClick(row, std)}
-                            title={`${row.staff_name} — ${std.ref}: click to see outcomes`}
-                            data-testid={`cc-cell-${row.staff_id}-${std.ref.replace(/\s/g, '-')}`}
-                          >
-                            <MatrixCell cell={row.cells[std.ref]} />
-                          </button>
-                        ) : (
-                          <MatrixCell cell={row.cells[std.ref]} />
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-
-                {/* Coverage summary row */}
-                <tr className="border-t-2 border-gray-200 bg-gray-100">
-                  <td className="sticky left-0 z-10 bg-gray-100 border-r border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                    Team coverage
-                  </td>
-                  {data.standards.map(std => {
-                    const rows = data.rows;
-                    // For Care Cert: green only when 100% sub-outcomes covered
-                    const fullyEvidenced = rows.filter(r => r.cells[std.ref]?.status === "evidenced").length;
-                    const pct = rows.length ? Math.round((fullyEvidenced / rows.length) * 100) : 0;
-                    return (
-                      <td key={std.ref} className="px-2 py-2 text-center">
-                        <span
-                          className={`text-xs font-bold ${
-                            pct === 100 ? "text-emerald-600" : pct >= 50 ? "text-amber-500" : "text-red-400"
-                          }`}
-                          title={`${fullyEvidenced}/${rows.length} staff fully evidenced`}
-                        >
-                          {pct}%
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tbody>
-            </table>
+          {/* Team summary strip */}
+          <div className="flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-4 mb-5" data-testid="matrix-team-summary">
+            <RadialRing pct={teamAvgPct} size={56} stroke={6} />
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Team average coverage</p>
+              <p className="text-xs text-gray-400">{data.rows.length} staff · {data.standards.length} standards</p>
+            </div>
           </div>
 
-          {/* Legend */}
-          <div className="flex items-center gap-5 mt-3 px-1 flex-wrap">
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
-              <div className="w-7 h-7 rounded border bg-emerald-100 border-emerald-300 flex items-center justify-center">
-                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+          {viewMode === "grid" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="matrix-card-grid">
+              {data.rows.map(row => (
+                <StaffCard key={row.staff_id} row={row} standards={data.standards} matrixTab={matrixTab} onCellClick={onCellClick} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex gap-5" data-testid="matrix-focus-view">
+              {/* Left roster list */}
+              <div className="w-64 flex-shrink-0 bg-white border border-gray-200 rounded-xl overflow-hidden self-start">
+                {data.rows.map(row => {
+                  const pct = staffCoveragePct(row, data.standards, matrixTab);
+                  const active = row.staff_id === focusedRow?.staff_id;
+                  return (
+                    <button
+                      key={row.staff_id}
+                      onClick={() => setFocusedStaffId(row.staff_id)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 border-b border-gray-100 last:border-b-0 text-left transition-colors ${
+                        active ? "bg-teal-50 border-l-2 border-l-[#0F766E]" : "hover:bg-gray-50 border-l-2 border-l-transparent"
+                      }`}
+                      data-testid={`focus-roster-${row.staff_id}`}
+                    >
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ background: miAvatarColor(row.staff_name) }}>
+                        {miInitials(row.staff_name)}
+                      </div>
+                      <span className="text-sm text-gray-800 truncate flex-1">{row.staff_name}</span>
+                      <span className="text-xs font-bold flex-shrink-0" style={{ color: pct >= 90 ? "#059669" : pct >= 50 ? "#D97706" : "#E11D48" }}>{pct}%</span>
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Right detail panel */}
+              {focusedRow && (
+                <div className="flex-1 bg-white border border-gray-200 rounded-xl p-5" data-testid="matrix-focus-detail">
+                  <div className="flex items-center gap-4 mb-5">
+                    <RadialRing pct={staffCoveragePct(focusedRow, data.standards, matrixTab)} size={80} stroke={8} />
+                    <div>
+                      <p className="text-base font-semibold text-gray-900">{focusedRow.staff_name}</p>
+                      <p className="text-xs text-gray-400">{roleLabel(focusedRow.staff_role)}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" data-testid={`focus-standards-list-${focusedRow.staff_id}`}>
+                    {data.standards.map(std => (
+                      <FocusStandardRow
+                        key={std.ref}
+                        std={std}
+                        cell={focusedRow.cells[std.ref]}
+                        matrixTab={matrixTab}
+                        onCellClick={onCellClick}
+                        row={focusedRow}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Legend */}
+          <div className="flex items-center gap-5 mt-5 px-1 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="w-3 h-2 rounded-full bg-emerald-500 inline-block" />
               All outcomes evidenced
             </div>
             <div className="flex items-center gap-1.5 text-xs text-gray-500">
-              <div className="w-7 h-7 rounded border bg-amber-50 border-amber-200 flex items-center justify-center">
-                <span className="text-[8px] font-bold text-amber-600">3/8</span>
-              </div>
-              Partial (shows covered/total)
+              <span className="w-3 h-2 rounded-full bg-amber-400 inline-block" />
+              Partial / needs review
             </div>
             <div className="flex items-center gap-1.5 text-xs text-gray-500">
-              <div className="w-7 h-7 rounded border bg-gray-50 border-gray-100 flex items-center justify-center">
-                <span className="w-2 h-2 rounded-full bg-gray-200" />
-              </div>
+              <span className="w-3 h-2 rounded-full bg-gray-200 inline-block" />
               No evidence yet
             </div>
           </div>
@@ -1648,7 +1757,7 @@ export default function TeamInsights() {
                   </div>
                 </div>
               ) : (
-              /* ── Matrix skeleton (lighter shimmer) ── */
+              /* ── Matrix skeleton (card grid shimmer) ── */
               <div className="p-6 space-y-4" aria-busy="true" aria-label="Loading team insights">
                 {/* Filter bar shimmer */}
                 <div className="flex items-center gap-3 mb-2">
@@ -1656,25 +1765,26 @@ export default function TeamInsights() {
                   <Skeleton className="h-8 w-32 rounded-md bg-gray-100" />
                   <Skeleton className="h-8 w-28 rounded-md bg-gray-100" />
                 </div>
-                {/* Table header */}
-                <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
-                  <Skeleton className="h-3 w-28 flex-shrink-0 bg-gray-100" />
-                  {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-3 w-16 flex-1 bg-gray-100" />
+                {/* Team summary shimmer */}
+                <div className="flex items-center gap-4 bg-white border border-gray-100 rounded-xl p-4">
+                  <Skeleton className="h-14 w-14 rounded-full bg-gray-100" />
+                  <Skeleton className="h-3 w-40 bg-gray-100" />
+                </div>
+                {/* Staff card grid shimmer */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-9 w-9 rounded-full bg-gray-100" />
+                        <Skeleton className="h-3 w-20 bg-gray-100" />
+                      </div>
+                      <div className="flex items-center justify-center py-1">
+                        <Skeleton className="h-16 w-16 rounded-full bg-gray-100" />
+                      </div>
+                      <Skeleton className="h-2 w-full rounded-full bg-gray-100" />
+                    </div>
                   ))}
                 </div>
-                {/* Staff rows */}
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-50">
-                    <div className="flex items-center gap-2 w-28 flex-shrink-0">
-                      <Skeleton className="h-7 w-7 rounded-full flex-shrink-0 bg-gray-100" />
-                      <Skeleton className="h-3 w-16 bg-gray-100" />
-                    </div>
-                    {[...Array(5)].map((_, j) => (
-                      <Skeleton key={j} className="h-7 flex-1 rounded-md bg-gray-100" />
-                    ))}
-                  </div>
-                ))}
               </div>
               )
             ) : !data ? (
