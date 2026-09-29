@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { ShieldCheck, Loader2 } from "lucide-react";
 
 const API = "/api";
-const PUBLIC_PATHS = ["/login", "/reset-password", "/accept-invite", "/set-password"];
+const PUBLIC_PATHS = ["/login", "/reset-password", "/accept-invite", "/set-password", "/checkout", "/checkout-cancelled", "/onboard"];
 
 // Blocking EULA acceptance prompt, mounted once at the app root (not inside
 // ProtectedRoute — that re-mounts per route). Fetches once per login; the

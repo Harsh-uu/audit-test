@@ -44,6 +44,7 @@ from . import (
     m033_evidence_feedback_uploads,
     m034_transcription_tracking,
     m035_webhook_config,
+    m036_stripe_signup,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ MIGRATIONS = [
     m033_evidence_feedback_uploads,
     m034_transcription_tracking,
     m035_webhook_config,
+    m036_stripe_signup,
 ]
 
 

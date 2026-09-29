@@ -1,10 +1,6 @@
 import uuid
-import re as _re
-import secrets
-import asyncio
 import os
 import logging
-import html
 import calendar
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
@@ -13,24 +9,20 @@ from typing import Optional
 from deps import get_db, get_current_user
 import database
 from utils.supabase_storage import delete_audio_batch
+from utils.org_provisioning import (
+    VALID_JURISDICTIONS, NI_SERVICE_TYPES, OFSTED_SERVICE_TYPES, VALID_SERVICE_TYPES,
+    slugify as _slugify, validate_jurisdiction_service_type,
+    create_org_core, invite_admin_core, send_invite_email,
+    build_invite_email as _build_invite_email,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _slugify(name: str) -> str:
-    return _re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
-
-
 def _require_super_admin(current_user):
     if current_user.get("role") != "super_admin":
         raise HTTPException(status_code=403, detail="Super admin only")
-
-
-VALID_JURISDICTIONS = ("england", "wales", "scotland", "northern_ireland", "ofsted")
-NI_SERVICE_TYPES = ("residential", "domiciliary")
-OFSTED_SERVICE_TYPES = ("early_years", "childrens_home", "school")
-VALID_SERVICE_TYPES = NI_SERVICE_TYPES + OFSTED_SERVICE_TYPES
 
 # Placeholder pricing tiers ahead of the real Stripe connection — manually set
 # per org for now (super admin picks a tier, included_hours_monthly auto-fills
@@ -266,28 +258,18 @@ async def update_org_billing(org_id: str, data: UpdateOrgBillingRequest, current
 @router.post("/orgs")
 async def create_org(data: CreateOrgRequest, current_user=Depends(get_current_user)):
     _require_super_admin(current_user)
-    slug = _slugify(data.name)
-    now = datetime.now(timezone.utc).isoformat()
-    org_id = str(uuid.uuid4())
+    try:
+        jurisdiction, service_type = validate_jurisdiction_service_type(data.jurisdiction, data.service_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     async with database.with_admin() as conn:
-        existing = await conn.fetchrow("SELECT id FROM organisations WHERE slug = $1", slug)
-        if existing:
-            raise HTTPException(status_code=400, detail="Organisation with this name already exists")
-        jurisdiction = data.jurisdiction if data.jurisdiction in VALID_JURISDICTIONS else "england"
-        service_type = data.service_type if data.service_type in VALID_SERVICE_TYPES else None
-        # NI orgs must declare service_type (residential/domiciliary) — checked against the
-        # correct family, not just VALID_SERVICE_TYPES, since that tuple now also contains
-        # Ofsted's service_type values and the two families must never cross-contaminate.
-        if jurisdiction == "northern_ireland" and service_type not in NI_SERVICE_TYPES:
-            raise HTTPException(status_code=400, detail="service_type ('residential' or 'domiciliary') is required for Northern Ireland organisations")
-        # Ofsted orgs must declare service_type (early_years/childrens_home/school)
-        if jurisdiction == "ofsted" and service_type not in OFSTED_SERVICE_TYPES:
-            raise HTTPException(status_code=400, detail="service_type ('early_years', 'childrens_home' or 'school') is required for Ofsted organisations")
-        await conn.execute(
-            "INSERT INTO organisations (id, name, slug, status, branding, jurisdiction, service_type, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-            org_id, data.name.strip(), slug, "active", "{}", jurisdiction, service_type, now,
-        )
-    return {"id": org_id, "name": data.name.strip(), "slug": slug, "status": "active", "jurisdiction": jurisdiction, "service_type": service_type, "created_at": now}
+        try:
+            org = await create_org_core(
+                conn, name=data.name, jurisdiction=jurisdiction, service_type=service_type, on_slug_conflict="raise",
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    return org
 
 
 @router.patch("/orgs/{org_id}")
@@ -490,46 +472,6 @@ async def delete_org_user(org_id: str, user_id: str, current_user=Depends(get_cu
     return {"message": f"User '{u['name']}' deleted"}
 
 
-def _build_invite_email(name: str, org_name: str, invite_link: str) -> str:
-    name = html.escape(name or "")
-    org_name = html.escape(org_name or "")
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<body style="margin:0;padding:0;background:#F1F5F9;font-family:'Segoe UI',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
-  <tr><td align="center">
-    <table width="520" cellpadding="0" cellspacing="0" style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,0.10);">
-      <tr><td style="background:#1E3A8A;padding:32px 40px;">
-        <p style="color:white;margin:0;font-size:24px;font-weight:700;">1two.one</p>
-        <p style="color:rgba(255,255,255,0.60);margin:6px 0 0;font-size:13px;">Care Supervision Platform</p>
-      </td></tr>
-      <tr><td style="padding:40px 40px 32px;">
-        <h2 style="color:#111827;font-size:20px;margin:0 0 20px;">You've been invited to join {org_name}</h2>
-        <p style="color:#4B5563;font-size:15px;line-height:1.7;margin:0 0 10px;">Hi {name},</p>
-        <p style="color:#4B5563;font-size:15px;line-height:1.7;margin:0 0 32px;">
-          Your account has been created on <strong>1two.one</strong> as an
-          <strong>Organisation Admin</strong> for <strong>{org_name}</strong>.
-          Click below to set your password (expires in 72 hours).
-        </p>
-        <table width="100%" cellpadding="0" cellspacing="0">
-          <tr><td align="center" style="padding-bottom:32px;">
-            <a href="{invite_link}" style="background:#1E3A8A;color:white;padding:14px 40px;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;display:inline-block;">
-              Accept Invitation &rarr;
-            </a>
-          </td></tr>
-        </table>
-        <p style="color:#9CA3AF;font-size:13px;text-align:center;margin:0;">If you weren't expecting this, safely ignore this email.</p>
-      </td></tr>
-      <tr><td style="padding:20px 40px;border-top:1px solid #F3F4F6;background:#F9FAFB;">
-        <p style="color:#9CA3AF;font-size:12px;margin:0;text-align:center;">&copy; 2025 1two.one</p>
-      </td></tr>
-    </table>
-  </td></tr>
-</table>
-</body>
-</html>"""
-
-
 class InviteAdminRequest(BaseModel):
     email: EmailStr
     name: str
@@ -538,63 +480,24 @@ class InviteAdminRequest(BaseModel):
 @router.post("/orgs/{org_id}/invite")
 async def invite_org_admin(org_id: str, data: InviteAdminRequest, current_user=Depends(get_current_user)):
     _require_super_admin(current_user)
-    now = datetime.now(timezone.utc).isoformat()
-    user_id = str(uuid.uuid4())
-    invite_id = str(uuid.uuid4())
-    token = secrets.token_urlsafe(32)
-    expires_at = (datetime.now(timezone.utc) + timedelta(hours=72)).isoformat()
-
     async with database.with_admin() as conn:
         org = await conn.fetchrow("SELECT name FROM organisations WHERE id = $1", org_id)
         if not org:
             raise HTTPException(status_code=404, detail="Organisation not found")
-        existing = await conn.fetchrow("SELECT id FROM users WHERE email = $1", data.email.lower())
-        if existing:
-            raise HTTPException(status_code=400, detail="An account with this email already exists")
-
-        from routers.auth import hash_password
-        from utils import supabase_auth
-        await conn.execute(
-            """INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)""",
-            user_id, data.email.lower(), await hash_password(secrets.token_urlsafe(32)),
-            data.name.strip(), "admin", org_id, False, now,
-        )
-        await conn.execute(
-            "INSERT INTO invitations (id, org_id, user_id, token, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
-            invite_id, org_id, user_id, token, expires_at, now,
-        )
-        # No password set yet — real password is set in accept-invite below.
         try:
-            await supabase_auth.create_user(user_id, data.email.lower())
-            await conn.execute("UPDATE users SET supabase_migrated=TRUE WHERE id=$1", user_id)
-        except Exception as exc:
-            logger.error("Supabase Auth provisioning failed for invited admin %s: %s", data.email, exc)
+            result = await invite_admin_core(conn, org_id=org_id, org_name=org["name"], email=data.email, name=data.name)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
-    frontend_url = os.environ.get("FRONTEND_URL", "")
-    invite_link = f"{frontend_url}/accept-invite?token={token}"
-
-    try:
-        import resend
-        resend.api_key = os.environ.get("RESEND_API_KEY", "")
-        html = _build_invite_email(data.name.strip(), org["name"], invite_link)
-        await asyncio.to_thread(resend.Emails.send, {
-            "from": os.environ.get("SENDER_EMAIL", "noreply@notify.1two.one"),
-            "to": [data.email.lower()],
-            "subject": f"You've been invited to join {org['name']} on 1two.one",
-            "html": html,
-        })
-        logger.info(f"Invite email sent to {data.email}")
-    except Exception as e:
-        logger.warning(f"Invite email failed (user still created): {e}")
+    email_sent = await send_invite_email(data.email, data.name.strip(), org["name"], result["invite_link"])
+    if not email_sent:
         return {
             "message": "User created but email failed to send — share the link below manually.",
-            "invite_link": invite_link,
-            "user_id": user_id,
+            "invite_link": result["invite_link"],
+            "user_id": result["user_id"],
             "email_failed": True,
         }
-
-    return {"message": f"Invitation sent to {data.email}", "user_id": user_id}
+    return {"message": f"Invitation sent to {data.email}", "user_id": result["user_id"]}
 
 
 @router.get("/ai-usage-report")

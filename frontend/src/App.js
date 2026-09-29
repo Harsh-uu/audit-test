@@ -14,6 +14,9 @@ import Login from "@/pages/Login";
 import ResetPassword from "@/pages/ResetPassword";
 import SetPassword from "@/pages/SetPassword";
 import AcceptInvite from "@/pages/AcceptInvite";
+import Checkout from "@/pages/Checkout";
+import Onboard from "@/pages/Onboard";
+import CheckoutCancelled from "@/pages/CheckoutCancelled";
 
 // All app pages — lazy-loaded per route (separate JS chunks)
 const Dashboard         = lazy(() => import("@/pages/Dashboard"));
@@ -79,6 +82,9 @@ function App() {
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/set-password" element={<SetPassword />} />
           <Route path="/resources" element={<Resources />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/checkout-cancelled" element={<CheckoutCancelled />} />
+          <Route path="/onboard" element={<Onboard />} />
           <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
           <Route path="/super-admin" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/super-admin/orgs/:orgId" element={<ProtectedRoute roles={["super_admin"]}><SuperAdminOrgDetail /></ProtectedRoute>} />

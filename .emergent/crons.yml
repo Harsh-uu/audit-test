@@ -1,0 +1,22 @@
+crons:
+  - name: founding-reminder
+    description: "Emails founding members 30 days before their price increases"
+    cron: "0 8 * * *"
+    endpoint: "{{BASE_URL}}/api/cron/founding-reminder"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
+  - name: provisioning-retry
+    description: "Retries org creation for signups that paid but failed to provision"
+    cron: "*/15 * * * *"
+    endpoint: "{{BASE_URL}}/api/cron/provisioning-retry"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
+  - name: abandoned-signup
+    description: "Alerts Super Admin about paid signups never onboarded after 48h"
+    cron: "30 8 * * *"
+    endpoint: "{{BASE_URL}}/api/cron/abandoned-signup"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

@@ -8,6 +8,7 @@ import { Building2, Users, FileText, Plus, X, ChevronRight, AlertCircle, CheckCi
 import SuperAdminAIUsage from "@/components/superadmin/SuperAdminAIUsage";
 import SuperAdminAIAccuracy from "@/components/superadmin/SuperAdminAIAccuracy";
 import SuperAdminTranscriptionUsage from "@/components/superadmin/SuperAdminTranscriptionUsage";
+import { JurisdictionFields } from "@/components/JurisdictionFields";
 
 const API = "/api";
 
@@ -506,65 +507,13 @@ export default function SuperAdminDashboard() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
                   />
                 </div>
-                <div>
-                  <label htmlFor="create-org-jurisdiction" className="block text-sm font-medium text-gray-700 mb-1">Jurisdiction</label>
-                  <select
-                    id="create-org-jurisdiction"
-                    name="jurisdiction"
-                    data-testid="org-jurisdiction-select"
-                    value={orgForm.jurisdiction}
-                    onChange={e => setOrgForm(f => ({ ...f, jurisdiction: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
-                  >
-                    <option value="england">England (CQC / Care Certificate)</option>
-                    <option value="wales">Wales (CIW / AWIF / SCW)</option>
-                    <option value="scotland">Scotland (Care Inspectorate)</option>
-                    <option value="northern_ireland">Northern Ireland (RQIA / NISCC)</option>
-                    <option value="ofsted">Ofsted (Schools / Early Years / Children's Homes)</option>
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Sets which regulatory framework is used for evidence mapping and compliance reporting.
-                  </p>
-                </div>
-                {orgForm.jurisdiction === "northern_ireland" && (
-                  <div>
-                    <label htmlFor="create-org-service-type" className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
-                    <select
-                      id="create-org-service-type"
-                      name="service_type"
-                      data-testid="org-service-type-select"
-                      value={orgForm.service_type}
-                      onChange={e => setOrgForm(f => ({ ...f, service_type: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
-                    >
-                      <option value="domiciliary">Domiciliary Care (RQIA Dom Standards 2021)</option>
-                      <option value="residential">Residential Care (RQIA Regulations 2005)</option>
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Determines whether RQIA domiciliary or residential regulations are applied. NISCC Code and Induction are shown for both.
-                    </p>
-                  </div>
-                )}
-                {orgForm.jurisdiction === "ofsted" && (
-                  <div>
-                    <label htmlFor="create-org-service-type" className="block text-sm font-medium text-gray-700 mb-1">Setting Type</label>
-                    <select
-                      id="create-org-service-type"
-                      name="service_type"
-                      data-testid="org-service-type-select"
-                      value={["early_years", "childrens_home", "school"].includes(orgForm.service_type) ? orgForm.service_type : "early_years"}
-                      onChange={e => setOrgForm(f => ({ ...f, service_type: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
-                    >
-                      <option value="early_years">Early Years (EYFS)</option>
-                      <option value="childrens_home">Children's Home (Quality Standards)</option>
-                      <option value="school">School (EIF)</option>
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Determines which Ofsted framework is used for evidence mapping and induction tracking.
-                    </p>
-                  </div>
-                )}
+                <JurisdictionFields
+                  idPrefix="org"
+                  jurisdiction={orgForm.jurisdiction}
+                  serviceType={orgForm.service_type}
+                  onJurisdictionChange={v => setOrgForm(f => ({ ...f, jurisdiction: v }))}
+                  onServiceTypeChange={v => setOrgForm(f => ({ ...f, service_type: v }))}
+                />
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
@@ -617,59 +566,13 @@ export default function SuperAdminDashboard() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A]"
                   />
                 </div>
-                <div>
-                  <label htmlFor="edit-org-jurisdiction" className="block text-sm font-medium text-gray-700 mb-1">Jurisdiction</label>
-                  <select
-                    id="edit-org-jurisdiction"
-                    name="jurisdiction"
-                    data-testid="edit-org-jurisdiction-select"
-                    value={editOrgForm.jurisdiction}
-                    onChange={e => setEditOrgForm(f => ({ ...f, jurisdiction: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
-                  >
-                    <option value="england">England (CQC / Care Certificate)</option>
-                    <option value="wales">Wales (CIW / AWIF / SCW)</option>
-                    <option value="scotland">Scotland (Care Inspectorate)</option>
-                    <option value="northern_ireland">Northern Ireland (RQIA / NISCC)</option>
-                    <option value="ofsted">Ofsted (Schools / Early Years / Children's Homes)</option>
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Changes which regulatory framework is used for all new evidence mappings in this org.
-                  </p>
-                </div>
-                {editOrgForm.jurisdiction === "northern_ireland" && (
-                  <div>
-                    <label htmlFor="edit-org-service-type" className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
-                    <select
-                      id="edit-org-service-type"
-                      name="service_type"
-                      data-testid="edit-org-service-type-select"
-                      value={editOrgForm.service_type}
-                      onChange={e => setEditOrgForm(f => ({ ...f, service_type: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
-                    >
-                      <option value="domiciliary">Domiciliary Care (RQIA Dom Standards 2021)</option>
-                      <option value="residential">Residential Care (RQIA Regulations 2005)</option>
-                    </select>
-                  </div>
-                )}
-                {editOrgForm.jurisdiction === "ofsted" && (
-                  <div>
-                    <label htmlFor="edit-org-service-type" className="block text-sm font-medium text-gray-700 mb-1">Setting Type</label>
-                    <select
-                      id="edit-org-service-type"
-                      name="service_type"
-                      data-testid="edit-org-service-type-select"
-                      value={["early_years", "childrens_home", "school"].includes(editOrgForm.service_type) ? editOrgForm.service_type : "early_years"}
-                      onChange={e => setEditOrgForm(f => ({ ...f, service_type: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30 focus:border-[#1E3A8A] bg-white"
-                    >
-                      <option value="early_years">Early Years (EYFS)</option>
-                      <option value="childrens_home">Children's Home (Quality Standards)</option>
-                      <option value="school">School (EIF)</option>
-                    </select>
-                  </div>
-                )}
+                <JurisdictionFields
+                  idPrefix="edit-org"
+                  jurisdiction={editOrgForm.jurisdiction}
+                  serviceType={editOrgForm.service_type}
+                  onJurisdictionChange={v => setEditOrgForm(f => ({ ...f, jurisdiction: v }))}
+                  onServiceTypeChange={v => setEditOrgForm(f => ({ ...f, service_type: v }))}
+                />
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
