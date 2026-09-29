@@ -1,0 +1,25 @@
+{
+  "summary": "Full independent regression pass on the new Stripe self-serve signup flow (backend + public frontend routes) and the refactored Super Admin org/invite manual flow. 21/21 pytest tests pass and every frontend flow requested (checkout unconfigured, unknown tier, onboard form + conditional jurisdiction fields, onboard already-used, onboard missing session_id, checkout-cancelled, Super Admin Create Org modal with shared JurisdictionFields) rendered and behaved exactly as specified. No regressions or bugs found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_stripe_signup_flow.py",
+    "/app/test_reports/pytest/stripe_signup_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "public_signup.py:complete_onboarding — the 202 provisioning-fallback path is only triggered by ValueError from create_org_core/invite_admin_core; any *other* exception (network/DB timeout) bubbles up as a 500 and the paying customer sees a raw error while Stripe already charged them. Consider broadening to `except Exception` and always logging to provisioning_failures so the retry cron picks it up.",
+    "public_signup.py:_upsert_pending_signup_from_session — founding-price Subscription Schedule creation is best-effort (bare except), which is correct, but failure is only logged. Consider surfacing to super admin via notify_super_admin() so an ops person can manually attach the schedule before month 12.",
+    "cron_jobs.py:_retry_one_provisioning_failure — successful path only sends invite email if `org and invite_result`; if the transaction commits and Resend fails, there is no retry. Low risk (send_invite_email swallows exceptions) but worth flagging.",
+    "org_provisioning.py:invite_admin_core — user row inserted with is_active=false; ensure invite-accept flow (routers/auth.py) sets is_active=true. Not tested here — outside scope.",
+    "General: WEBHOOK_CRON_SECRET rotation policy is not documented; add to memory/test_credentials.md."
+  ],
+  "updated_files": ["/app/backend/tests/test_stripe_signup_flow.py"],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "100% (7/7 flows)"},
+  "test_credentials": "superadmin@1two.one / TestPass123! (MFA required — code overridden via DB to 123456; login_attempts row for mfa_send:<id> cleared before login in the pytest fixture to avoid 429).",
+  "seed_data_creation": "Created 11 pending_signups + 6 TEST_ orgs + associated users/invitations during testing via _upsert_pending_signup_from_session() helper. ALL cleaned up at end (verified: DELETE 11 orgs, DELETE 16 pending_signups, DELETE 1 orphan user).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_stripe_signup_flow.py — run with `python -m pytest tests/test_stripe_signup_flow.py -o addopts=` (the repo pytest.ini adds xdist which breaks the shared _CREATED cleanup list, so -o addopts= disables it). Full suite takes ~130s (most of it is the super_admin MFA login + waiting for Supabase Auth calls during org/user creation). Stripe env vars are still empty placeholders — POST /api/public/checkout returns 503 by design; POST /api/stripe/webhook returns 503 by design. When real Stripe keys land, add a mock stripe SDK / stripe-mock container to actually exercise the checkout.session.completed webhook path end-to-end.",
+  "rca of the issue": "N/A — no bugs found."
+}

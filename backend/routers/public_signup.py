@@ -215,9 +215,11 @@ async def complete_onboarding(data: OnboardingCompleteRequest):
             invite_result = await invite_admin_core(
                 conn, org_id=org["id"], org_name=org["name"], email=data.email, name=data.name,
             )
-        except ValueError as e:
-            # Something failed AFTER Stripe already took payment — never tell
-            # the customer "your payment failed"; log for the retry cron.
+        except Exception as e:
+            # Something failed AFTER Stripe already took payment (validation
+            # error, DB hiccup, network blip — doesn't matter which) — never
+            # tell the customer "your payment failed"; log for the retry cron.
+            logger.error("Onboarding provisioning failed for session %s: %s", data.session_id, e)
             await conn.execute(
                 "INSERT INTO provisioning_failures (pending_signup_id, error, payload) VALUES ($1,$2,$3)",
                 signup["id"], str(e),
