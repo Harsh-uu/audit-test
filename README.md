@@ -75,7 +75,7 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 | Backend | FastAPI (Python 3.11), asyncpg |
 | Database | PostgreSQL via **Supabase** (with Row Level Security on all tables) |
 | Transcription | AssemblyAI (speaker diarisation) |
-| AI Analysis | OpenAI o4-mini (compliance mapping) / GPT-4o (speaker ID, diarisation) |
+| AI Analysis | Google Vertex AI — Gemini 2.5 Flash (primary, UK/EU data residency) with automatic OpenAI GPT-4o fallback — compliance mapping, PII scan, speaker ID, diarisation |
 | Email | Resend |
 | Storage | Supabase Storage (audio files, uploaded documents) |
 | Auth | JWT Bearer tokens (access + refresh), Email OTP 2FA |
@@ -107,7 +107,7 @@ Supervision2 (1two.one) records supervision meetings, generates transcripts and 
 │   │   ├── doc_uploads.py     # Supervision document import
 │   │   └── super_admin.py     # Super admin org/user management
 │   └── utils/
-│       ├── ai.py              # AssemblyAI + OpenAI integration, prompt injection guards
+│       ├── ai.py              # AssemblyAI + Vertex AI (Gemini, primary) + OpenAI GPT-4o (fallback), prompt injection guards
 │       ├── seed.py            # CQC + Care Certificate + SSSC + CIW standards seed data
 │       ├── anonymise.py       # Transcript anonymisation
 │       ├── redaction.py       # PII redaction helpers
@@ -173,8 +173,12 @@ SUPER_ADMIN_EMAIL=superadmin@yourdomain.com
 SUPER_ADMIN_PASSWORD=YourSuperAdminPassword1!
 
 # AI & Transcription
-EMERGENT_LLM_KEY=your-emergent-key        # OpenAI GPT-4o + o4-mini
+GCP_PROJECT_ID=your-gcp-project-id        # Vertex AI (Gemini 2.5 Flash) — primary AI provider
+GCP_LOCATION=europe-west2                 # Vertex AI region — UK/EU data residency
+GCP_SERVICE_ACCOUNT_JSON={...}            # Vertex AI service account credentials (JSON, single line)
+OPENAI_API_KEY=your-openai-key            # GPT-4o — automatic fallback if Gemini fails, also used for speaker ID/diarisation
 ASSEMBLYAI_API_KEY=your-assemblyai-key    # Transcription + diarisation
+EMERGENT_LLM_KEY=your-emergent-key        # Emergent-managed object storage (audio/document uploads) — NOT used for AI calls
 
 # Email
 RESEND_API_KEY=your-resend-key
@@ -201,7 +205,7 @@ REACT_APP_BACKEND_URL=https://yourdomain.com
 - Node.js 18+
 - Python 3.11+
 - Supabase project (PostgreSQL) — [supabase.com](https://supabase.com)
-- API keys for: AssemblyAI, OpenAI (or Emergent LLM Key), Resend
+- API keys for: AssemblyAI, Google Cloud (Vertex AI service account), OpenAI (fallback), Resend, Emergent LLM Key (object storage)
 
 ### Backend
 
@@ -229,7 +233,8 @@ yarn dev
 |---|---|---|
 | Supabase | PostgreSQL database + file storage | [supabase.com](https://supabase.com) |
 | AssemblyAI | Audio transcription + speaker diarisation | [assemblyai.com](https://www.assemblyai.com) |
-| OpenAI (GPT-4o / o4-mini) | Compliance mapping, PII scan, speaker ID | [platform.openai.com](https://platform.openai.com) |
+| Google Cloud Vertex AI | Gemini 2.5 Flash — primary AI provider (UK/EU data residency) | [console.cloud.google.com](https://console.cloud.google.com/vertex-ai) |
+| OpenAI (GPT-4o) | Automatic fallback if Gemini fails; also used for speaker ID, diarisation | [platform.openai.com](https://platform.openai.com) |
 | Resend | Email invites and report sharing | [resend.com](https://resend.com) |
 | Grafana Cloud | Log management (EU — GB South region) | [grafana.com](https://grafana.com/products/cloud/) |
 
