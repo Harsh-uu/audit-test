@@ -27,7 +27,6 @@ defusedxml==0.7.1
 deprecation==2.1.0
 distro==1.9.0
 dnspython==2.8.0
-ecdsa==0.19.2
 email-validator==2.3.0
 emergentintegrations==0.2.0
 execnet==2.1.2
@@ -117,7 +116,6 @@ pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0
 python-docx==1.2.0
 python-dotenv==1.2.2
-python-jose==3.5.0
 python-multipart==0.0.32
 pytokens==0.4.1
 PyYAML==6.0.3
