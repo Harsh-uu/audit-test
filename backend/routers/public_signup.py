@@ -291,12 +291,22 @@ async def stripe_webhook(request: Request):
         elif event_type == "customer.subscription.updated":
             subscription_id = obj.get("id")
             status = obj.get("status")
-            period_end = obj.get("current_period_end")
+            # Stripe moved `current_period_end`/`current_period_start` off the
+            # top-level Subscription object onto each subscription item (as
+            # part of flexible/multi-item billing) — the object's own
+            # top-level field is now always None. Fall back to the top-level
+            # field only for safety in case an older API-version event ever
+            # still carries it.
             price_id = None
+            period_end = None
             try:
-                price_id = obj["items"]["data"][0]["price"]["id"]
+                first_item = obj["items"]["data"][0]
+                price_id = first_item["price"]["id"]
+                period_end = first_item.get("current_period_end")
             except (KeyError, IndexError, TypeError):
                 pass
+            if period_end is None:
+                period_end = obj.get("current_period_end")
             tier, _is_founding = tier_from_price_id(price_id) if price_id else (None, False)
             updates = {"stripe_subscription_status": status}
             if period_end:
