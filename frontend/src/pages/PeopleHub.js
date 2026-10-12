@@ -7,13 +7,14 @@ import Layout from "@/components/Layout";
 import OrgStructure from "@/pages/OrgStructure";
 import OrgSettings  from "@/pages/OrgSettings";
 import { EditUserModal } from "@/components/admin/EditUserModal";
+import { AddUserModal } from "@/components/admin/AddUserModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Users, Settings, Building2,
-  RefreshCw, Search, AlertTriangle, Check,
+  RefreshCw, Search, AlertTriangle, Check, UserPlus,
   Mail, MoreHorizontal, Pencil, UserX, UserCheck, Trash2, AlertCircle,
 } from "lucide-react";
 
@@ -391,6 +392,7 @@ export default function PeopleHub() {
   const [people, setPeople]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
+  const [showAddUser, setShowAddUser] = useState(false);
   const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
   const [hardDeleteConfirmText, setHardDeleteConfirmText] = useState("");
   const [hardDeleting, setHardDeleting] = useState(false);
@@ -432,6 +434,12 @@ export default function PeopleHub() {
 
   const handleUserSaved = useCallback(() => {
     setEditingUser(null);
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
+
+  const handleUserAdded = useCallback(() => {
+    setShowAddUser(false);
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
@@ -500,6 +508,16 @@ export default function PeopleHub() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {canManage && (
+              <button
+                onClick={() => setShowAddUser(true)}
+                className="flex items-center gap-1.5 text-sm text-white bg-[#1E3A8A] hover:bg-[#1E40AF] px-3 py-1.5 rounded-md font-medium transition-colors"
+                data-testid="add-user-btn"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Add User
+              </button>
+            )}
             <button
               onClick={handleRefresh}
               disabled={loading}
@@ -559,6 +577,17 @@ export default function PeopleHub() {
           )}
         </div>
       </div>
+
+      {/* Add User Modal — quick-add from the People tab, team optional */}
+      {showAddUser && (
+        <AddUserModal
+          onClose={() => setShowAddUser(false)}
+          onAdded={handleUserAdded}
+          API={API}
+          getAuthConfig={getAuthConfig}
+          currentUserRole={currentUser?.role}
+        />
+      )}
 
       {/* Edit User Modal */}
       {editingUser && (
