@@ -76,15 +76,19 @@ async def check_rate_limit(
     """
     Raise HTTP 429 if `identifier` has exceeded `max_attempts`
     within the last `window_minutes` minutes. Counts EVERY call.
-    Automatically clears expired windows.
+    Automatically clears expired windows — including a count that never
+    crossed the threshold but has simply gone stale (no activity for
+    window_minutes), which previously persisted indefinitely and could
+    tip into a lock on the next attempt no matter how much time had
+    passed since the count was last incremented.
     """
     now = datetime.now(timezone.utc)
     row = await conn.fetchrow(
-        "SELECT count, locked_until FROM login_attempts WHERE identifier = $1",
+        "SELECT count, locked_until, updated_at FROM login_attempts WHERE identifier = $1",
         identifier,
     )
 
-    if row and row.get("locked_until"):
+    if row:
         locked_dt = _as_aware_dt(row["locked_until"])
         if locked_dt and locked_dt > now:
             mins_left = max(1, int((locked_dt - now).total_seconds() / 60))
@@ -92,8 +96,11 @@ async def check_rate_limit(
                 status_code=429,
                 detail=error_detail or f"Rate limit exceeded. Try again in {mins_left} minute(s).",
             )
-        else:
-            # Window expired — reset counter
+        # Either a prior lock has expired, or the count never crossed the
+        # threshold but the window has elapsed since the last call — reset
+        # either way, mirroring record_failed_attempt's staleness check below.
+        updated_dt = _as_aware_dt(row.get("updated_at"))
+        if (locked_dt and locked_dt <= now) or (updated_dt and (now - updated_dt) > timedelta(minutes=window_minutes)):
             await conn.execute("DELETE FROM login_attempts WHERE identifier = $1", identifier)
 
     locked_until_new = (now + timedelta(minutes=window_minutes)).isoformat()
