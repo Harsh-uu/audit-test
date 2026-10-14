@@ -41,6 +41,8 @@ const MEETING_TYPES = [
   "Disciplinary",
   "Grievance",
   "Safeguarding investigation",
+  "Performance review",
+  "Stay interview",
   "Learner Review",
   "Probation review",
   "Absence review",

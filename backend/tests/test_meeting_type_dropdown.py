@@ -19,7 +19,8 @@ ADMIN_PASSWORD = "Admin123!X"
 
 NEW_TYPES = [
     "Supervision", "Appraisal", "Competency assessment", "Disciplinary",
-    "Grievance", "Safeguarding investigation", "Learner Review", "Probation review",
+    "Grievance", "Safeguarding investigation", "Performance review", "Stay interview",
+    "Learner Review", "Probation review",
     "Absence review", "Exit interview", "Team meeting", "Incident review",
     "Audit review", "Quality assurance review",
 ]
