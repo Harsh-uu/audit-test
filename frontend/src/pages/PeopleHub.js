@@ -311,7 +311,7 @@ function PeopleTab({ people, loading, onRefresh, onRevoke, onEdit, isAdmin, canM
 }
 
 // ── Invites tab ───────────────────────────────────────────────────────────────
-function InvitesTab({ people, onRevoke }) {
+function InvitesTab({ people, onRevoke, onResend }) {
   const pending = people.filter(p => p.pending_invite);
   return (
     <div className="p-6">
@@ -339,8 +339,8 @@ function InvitesTab({ people, onRevoke }) {
             </thead>
             <tbody>
               {pending.map(p => {
-                const days = Math.floor((Date.now() - new Date(p.created_at)) / 86400000);
-                const expired = days > 7;
+                const hoursSince = (Date.now() - new Date(p.created_at)) / 3600000;
+                const expired = hoursSince > 72;
                 return (
                   <tr key={p.user_id} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="px-4 py-3">
@@ -362,7 +362,7 @@ function InvitesTab({ people, onRevoke }) {
                       <div className="flex gap-1.5 justify-end">
                         <button
                           className="text-xs font-medium border border-gray-200 bg-white rounded px-2.5 py-1 hover:bg-gray-50"
-                          onClick={() => alert(`Send ${p.name} their login link:\n${window.location.origin}/login\n\nEmail: ${p.email}`)}
+                          onClick={() => onResend(p)}
                           data-testid={`invites-resend-${p.user_id}`}
                         >Resend</button>
                         <button
@@ -431,6 +431,21 @@ export default function PeopleHub() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API]);
+
+  const resendInvite = useCallback(async (person) => {
+    try {
+      const res = await axios.post(`${API}/org/invite-user/${person.user_id}/resend`, {}, getAuthConfig());
+      if (res.data.email_failed) {
+        toast.error(`Email failed to send — share this link with ${person.name} manually: ${res.data.invite_link}`);
+      } else {
+        toast.success(res.data.message || `Invite re-sent to ${person.email}`);
+      }
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to resend invite");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API, load]);
 
   const handleUserSaved = useCallback(() => {
     setEditingUser(null);
@@ -567,7 +582,7 @@ export default function PeopleHub() {
           )}
           {tab === "invites" && (
             <div className="overflow-y-auto flex-1">
-              <InvitesTab people={people} onRevoke={revokeInvite} />
+              <InvitesTab people={people} onRevoke={revokeInvite} onResend={resendInvite} />
             </div>
           )}
           {tab === "settings" && (

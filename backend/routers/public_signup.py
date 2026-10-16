@@ -7,7 +7,7 @@ GET /api/public/checkout/verify (on /onboard) -> POST
 (separate router below, registered at the API root — not under /public).
 
 Deliberately reuses utils/org_provisioning.py's create_org_core/
-invite_admin_core so a self-serve org is structurally identical to a
+invite_user_core so a self-serve org is structurally identical to a
 manually-created one, and never touches/breaks the existing manual
 Super Admin flows in routers/super_admin.py.
 """
@@ -25,7 +25,7 @@ from utils.stripe_helpers import (
     tier_from_price_id, create_founding_price_schedule,
 )
 from utils.org_provisioning import (
-    create_org_core, invite_admin_core, send_invite_email,
+    create_org_core, invite_user_core, send_invite_email,
     validate_jurisdiction_service_type,
 )
 from utils.billing_emails import send_payment_failed_email, notify_super_admin
@@ -212,7 +212,7 @@ async def complete_onboarding(data: OnboardingCompleteRequest):
                 is_founding_member=bool(signup["is_founding"]), founding_price_lock_until=signup["founding_price_lock_until"],
                 on_slug_conflict="suffix",
             )
-            invite_result = await invite_admin_core(
+            invite_result = await invite_user_core(
                 conn, org_id=org["id"], org_name=org["name"], email=data.email, name=data.name,
             )
         except Exception as e:

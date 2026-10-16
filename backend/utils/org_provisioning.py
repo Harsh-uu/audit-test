@@ -90,9 +90,10 @@ async def create_org_core(
     }
 
 
-def build_invite_email(name: str, org_name: str, invite_link: str) -> str:
+def build_invite_email(name: str, org_name: str, invite_link: str, role_label: str = "Organisation Admin") -> str:
     name = html.escape(name or "")
     org_name = html.escape(org_name or "")
+    role_label = html.escape(role_label or "Organisation Admin")
     return f"""<!DOCTYPE html>
 <html lang="en">
 <body style="margin:0;padding:0;background:#F1F5F9;font-family:'Segoe UI',Arial,sans-serif;">
@@ -107,8 +108,8 @@ def build_invite_email(name: str, org_name: str, invite_link: str) -> str:
         <h2 style="color:#111827;font-size:20px;margin:0 0 20px;">You've been invited to join {org_name}</h2>
         <p style="color:#4B5563;font-size:15px;line-height:1.7;margin:0 0 10px;">Hi {name},</p>
         <p style="color:#4B5563;font-size:15px;line-height:1.7;margin:0 0 32px;">
-          Your account has been created on <strong>1two.one</strong> as an
-          <strong>Organisation Admin</strong> for <strong>{org_name}</strong>.
+          Your account has been created on <strong>1two.one</strong> as a
+          <strong>{role_label}</strong> for <strong>{org_name}</strong>.
           Click below to set your password (expires in 72 hours).
         </p>
         <table width="100%" cellpadding="0" cellspacing="0">
@@ -130,10 +131,17 @@ def build_invite_email(name: str, org_name: str, invite_link: str) -> str:
 </html>"""
 
 
-async def invite_admin_core(conn, *, org_id: str, org_name: str, email: str, name: str) -> dict:
-    """Create the disabled admin user + 72h invitation row. DB-only — caller
-    sends the actual email afterward via send_invite_email(), outside the
+async def invite_user_core(conn, *, org_id: str, org_name: str, email: str, name: str, role: str = "admin") -> dict:
+    """Create the disabled user + 72h invitation row. DB-only — caller sends
+    the actual email afterward via send_invite_email(), outside the
     transaction, same pattern the original manual "Invite Admin" flow used.
+    Used for org-admin invites (Super Admin / Stripe self-serve onboarding)
+    AND regular staff invites (org admins/managers inviting their own team —
+    see routers/org.py's /invite-user). must_change_password=TRUE mirrors the
+    is_active=FALSE "pending invite" signal used everywhere else in the app
+    (people-stats pending badge, revoke-vs-deactivate branching in
+    routers/admin.py's delete_user) — accept_invite() flips both back on
+    acceptance.
     Raises ValueError if the email is already registered."""
     now = datetime.now(timezone.utc).isoformat()
     user_id = str(uuid.uuid4())
@@ -148,10 +156,10 @@ async def invite_admin_core(conn, *, org_id: str, org_name: str, email: str, nam
     from routers.auth import hash_password
     from utils import supabase_auth
     await conn.execute(
-        """INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)""",
+        """INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, must_change_password, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)""",
         user_id, email.lower(), await hash_password(secrets.token_urlsafe(32)),
-        name.strip(), "admin", org_id, False, now,
+        name.strip(), role, org_id, False, True, now,
     )
     await conn.execute(
         "INSERT INTO invitations (id, org_id, user_id, token, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
@@ -161,19 +169,19 @@ async def invite_admin_core(conn, *, org_id: str, org_name: str, email: str, nam
         await supabase_auth.create_user(user_id, email.lower())
         await conn.execute("UPDATE users SET supabase_migrated=TRUE WHERE id=$1", user_id)
     except Exception as exc:
-        logger.error("Supabase Auth provisioning failed for invited admin %s: %s", email, exc)
+        logger.error("Supabase Auth provisioning failed for invited user %s: %s", email, exc)
 
     frontend_url = os.environ.get("FRONTEND_URL", "")
     invite_link = f"{frontend_url}/accept-invite?token={token}"
     return {"user_id": user_id, "invite_link": invite_link, "token": token}
 
 
-async def send_invite_email(email: str, name: str, org_name: str, invite_link: str) -> bool:
+async def send_invite_email(email: str, name: str, org_name: str, invite_link: str, role_label: str = "Organisation Admin") -> bool:
     """Best-effort Resend send — never raises. Returns whether it actually sent."""
     try:
         import resend
         resend.api_key = os.environ.get("RESEND_API_KEY", "")
-        html_body = build_invite_email(name, org_name, invite_link)
+        html_body = build_invite_email(name, org_name, invite_link, role_label)
         await asyncio.to_thread(resend.Emails.send, {
             "from": os.environ.get("SENDER_EMAIL", "noreply@notify.1two.one"),
             "to": [email.lower()],

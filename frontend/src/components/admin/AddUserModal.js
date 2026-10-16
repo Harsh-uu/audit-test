@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { cachedGet, invalidateCache } from "@/utils/apiCache";
-import { X, UserPlus, KeyRound, Eye, EyeOff, Dices } from "lucide-react";
+import { X, UserPlus, Mail } from "lucide-react";
 
 // ── Quick "Add User" modal ──────────────────────────────────────────────────
 // Lets an admin/manager add a single user straight from the People & Usage
@@ -10,6 +10,8 @@ import { X, UserPlus, KeyRound, Eye, EyeOff, Dices } from "lucide-react";
 // optional here (unlike OrgStructure's "Add User", which is scoped to a
 // Setting and requires one) — new users can simply land in "Unassigned" and
 // be sorted into a team later once the org has them set up.
+// No password is collected here — the new user gets an email with a 72h
+// link to set their own password (same accept-invite flow used for admins).
 
 const ROLES = [
   { value: "attendee", label: "Staff / Supervisee" },
@@ -21,19 +23,12 @@ const ROLES = [
 const inputCls = "w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]";
 const selectCls = `${inputCls} bg-white`;
 
-function generatePassword() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  const bytes = new Uint32Array(14);
-  window.crypto.getRandomValues(bytes);
-  return Array.from(bytes, b => chars[b % chars.length]).join("");
-}
-
 export function AddUserModal({ onClose, onAdded, API, getAuthConfig, currentUserRole }) {
-  const [form, setForm] = useState({ name: "", email: "", role: "attendee", team_id: "", password: generatePassword() });
+  const [form, setForm] = useState({ name: "", email: "", role: "attendee", team_id: "" });
   const [teamOptions, setTeamOptions] = useState([]); // [{ id, label }]
-  const [showPwd, setShowPwd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
 
   useEffect(() => {
     cachedGet(`${API}/org/structure`, getAuthConfig())
@@ -56,21 +51,28 @@ export function AddUserModal({ onClose, onAdded, API, getAuthConfig, currentUser
   const save = async () => {
     if (!form.name.trim()) return setError("Name is required");
     if (!form.email.trim()) return setError("Email is required");
-    if (form.password.length < 10) return setError("Password must be at least 10 characters");
     setSaving(true);
     setError("");
+    setInviteLink("");
     let createdUserId = null;
     try {
       const res = await axios.post(`${API}/org/invite-user`, {
-        name: form.name, email: form.email, password: form.password, role: form.role,
+        name: form.name, email: form.email, role: form.role,
       }, getAuthConfig());
       createdUserId = res.data.id;
       if (form.role !== "admin" && form.team_id) {
         await axios.patch(`${API}/org/users/${createdUserId}/assign-team`, { team_id: form.team_id }, getAuthConfig());
       }
       invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
-      toast.success(`${form.name} added${form.team_id ? "" : " — unassigned, add to a team any time"}`);
-      onAdded();
+      if (res.data.email_failed) {
+        setInviteLink(res.data.invite_link);
+        setError(`${form.name} was added, but the invite email couldn't be sent — share this link with them manually:`);
+        onAdded();
+      } else {
+        toast.success(`Invite sent to ${form.email} — they'll set their own password`);
+        onAdded();
+        onClose();
+      }
     } catch (err) {
       if (createdUserId) {
         // Account itself was created — only the team assignment failed. Still
@@ -79,6 +81,7 @@ export function AddUserModal({ onClose, onAdded, API, getAuthConfig, currentUser
         invalidateCache("/admin/users", "/org/structure", "/admin/people-stats");
         toast.success(`${form.name} added, but couldn't assign a team (${err.response?.data?.detail || "error"}). They're Unassigned — assign one from Structure.`);
         onAdded();
+        onClose();
       } else {
         setError(err.response?.data?.detail || "Failed to add user");
       }
@@ -134,40 +137,30 @@ export function AddUserModal({ onClose, onAdded, API, getAuthConfig, currentUser
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Temporary password *</label>
-            <div className="flex gap-1.5">
-              <div className="relative flex-1">
-                <input type={showPwd ? "text" : "password"} value={form.password}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  className={`${inputCls} pr-8`} data-testid="add-user-password" />
-                <button type="button" onClick={() => setShowPwd(p => !p)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  data-testid="add-user-toggle-password-visibility">
-                  {showPwd ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-              <button type="button" onClick={() => setForm(f => ({ ...f, password: generatePassword() }))}
-                title="Generate a new password"
-                className="flex items-center gap-1 px-2.5 border border-gray-300 rounded-md text-xs text-gray-600 hover:bg-gray-50"
-                data-testid="add-user-regenerate-password">
-                <Dices className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1">
-              <KeyRound className="w-3 h-3" /> Pre-filled with a strong password — share it with {form.name || "the new user"} however you'd like, or write your own.
-            </p>
-          </div>
+          <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+            <Mail className="w-3 h-3 flex-shrink-0" /> They'll get an email with a link to set their own password (expires in 72 hours).
+          </p>
 
-          {error && <p className="text-xs text-red-600" data-testid="add-user-error">{error}</p>}
+          {error && (
+            <div className={`text-xs rounded-md p-2.5 space-y-1.5 ${inviteLink ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-red-600"}`} data-testid="add-user-error">
+              <p>{error}</p>
+              {inviteLink && (
+                <div className="flex items-center gap-1.5">
+                  <input readOnly value={inviteLink} className="flex-1 text-[11px] bg-white border border-amber-200 rounded px-2 py-1 text-gray-600" data-testid="add-user-fallback-link" />
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(inviteLink); toast.success("Link copied"); }}
+                    className="text-[11px] font-medium border border-amber-300 bg-white rounded px-2 py-1 hover:bg-amber-100">Copy</button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2 pt-1">
             <button onClick={save} disabled={saving}
               className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60"
               data-testid="add-user-submit-btn">
-              <UserPlus className="w-3.5 h-3.5" />{saving ? "Adding…" : "Add User"}
+              <UserPlus className="w-3.5 h-3.5" />{saving ? "Sending…" : "Send Invite"}
             </button>
-            <button onClick={onClose} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+            <button onClick={onClose} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">{inviteLink ? "Close" : "Cancel"}</button>
           </div>
         </div>
       </div>

@@ -12,7 +12,7 @@ from utils.supabase_storage import delete_audio_batch
 from utils.org_provisioning import (
     VALID_JURISDICTIONS, NI_SERVICE_TYPES, OFSTED_SERVICE_TYPES, VALID_SERVICE_TYPES,
     slugify as _slugify, validate_jurisdiction_service_type,
-    create_org_core, invite_admin_core, send_invite_email,
+    create_org_core, invite_user_core, send_invite_email,
     build_invite_email as _build_invite_email,
 )
 
@@ -485,7 +485,7 @@ async def invite_org_admin(org_id: str, data: InviteAdminRequest, current_user=D
         if not org:
             raise HTTPException(status_code=404, detail="Organisation not found")
         try:
-            result = await invite_admin_core(conn, org_id=org_id, org_name=org["name"], email=data.email, name=data.name)
+            result = await invite_user_core(conn, org_id=org_id, org_name=org["name"], email=data.email, name=data.name)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 

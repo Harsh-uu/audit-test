@@ -399,8 +399,9 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   // Forms
   const [settingForm, setSettingForm] = useState({ name: "", description: "", manager_user_id: "" });
   const [teamForm, setTeamForm] = useState({ name: "", description: "", supervisor_user_id: "" });
-  const [inviteForm, setInviteForm] = useState({ name: "", email: "", password: "", role: "attendee", team_id: "" });
+  const [inviteForm, setInviteForm] = useState({ name: "", email: "", role: "attendee", team_id: "" });
   const [inviteError, setInviteError] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
 
   // ── Data fetching ────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -687,8 +688,9 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
   const openAddUserForSetting = () => {
     const teams = selectedSetting?.teams || [];
     if (teams.length === 0) return;
-    setInviteForm({ name: "", email: "", password: "", role: "attendee", team_id: teams[0].id });
+    setInviteForm({ name: "", email: "", role: "attendee", team_id: teams[0].id });
     setInviteError("");
+    setInviteLink("");
     setShowInviteUser(true);
   };
 
@@ -696,19 +698,24 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
     if (!inviteForm.name.trim()) return setInviteError("Name is required");
     if (!inviteForm.email.trim()) return setInviteError("Email is required");
     if (!inviteForm.team_id) return setInviteError("Team is required");
-    if (inviteForm.password.length < 10) return setInviteError("Password must be at least 10 characters");
     setSavingInvite(true);
     setInviteError("");
+    setInviteLink("");
     let createdUserId = null;
     try {
       const res = await axios.post(`${API}/org/invite-user`, {
-        name: inviteForm.name, email: inviteForm.email, password: inviteForm.password, role: inviteForm.role,
+        name: inviteForm.name, email: inviteForm.email, role: inviteForm.role,
       }, getAuthConfig());
       createdUserId = res.data.id;
       await axios.patch(`${API}/org/users/${createdUserId}/assign-team`, { team_id: inviteForm.team_id }, getAuthConfig());
       await refreshData();
-      flash("User added successfully");
-      setShowInviteUser(false);
+      if (res.data.email_failed) {
+        setInviteLink(res.data.invite_link);
+        setInviteError(`${inviteForm.name} was added, but the invite email couldn't be sent — share this link with them manually:`);
+      } else {
+        flash(`Invite sent to ${inviteForm.email} — they'll set their own password`);
+        setShowInviteUser(false);
+      }
     } catch (err) {
       if (createdUserId) {
         // The account itself was created — only the team assignment failed.
@@ -1155,15 +1162,24 @@ export default function OrgStructure({ embedded = false, onUserChanged }) {
                   </select>
                   <p className="text-[11px] text-gray-400 mt-1">Required — every new user must belong to a team.</p>
                 </FormField>
-                <FormField label="Temporary Password *">
-                  <input type="password" value={inviteForm.password} onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 10 characters" className={inputCls} data-testid="invite-password-input" />
-                </FormField>
-                {inviteError && <p className="text-xs text-red-600" data-testid="invite-error">{inviteError}</p>}
+                <p className="text-[11px] text-gray-400 -mt-1.5">They'll receive an email with a link to set their own password (expires in 72 hours).</p>
+                {inviteError && (
+                  <div className={`text-xs rounded-md p-2.5 space-y-1.5 ${inviteLink ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-red-600"}`} data-testid="invite-error">
+                    <p>{inviteError}</p>
+                    {inviteLink && (
+                      <div className="flex items-center gap-1.5">
+                        <input readOnly value={inviteLink} className="flex-1 text-[11px] bg-white border border-amber-200 rounded px-2 py-1 text-gray-600" data-testid="invite-fallback-link" />
+                        <button type="button" onClick={() => { navigator.clipboard.writeText(inviteLink); flash("Link copied"); }}
+                          className="text-[11px] font-medium border border-amber-300 bg-white rounded px-2 py-1 hover:bg-amber-100">Copy</button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex gap-2 pt-1">
                   <button onClick={inviteUser} disabled={savingInvite} className="flex items-center gap-1.5 bg-[#1E3A8A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#1E40AF] disabled:opacity-60" data-testid="save-invite-btn">
-                    <UserPlus className="w-3.5 h-3.5" />{savingInvite ? "Adding…" : "Add User"}
+                    <UserPlus className="w-3.5 h-3.5" />{savingInvite ? "Sending…" : "Send Invite"}
                   </button>
-                  <button onClick={() => setShowInviteUser(false)} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+                  <button onClick={() => setShowInviteUser(false)} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md text-sm hover:bg-gray-50">{inviteLink ? "Close" : "Cancel"}</button>
                 </div>
               </div>
             </Modal>

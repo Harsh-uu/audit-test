@@ -1,11 +1,13 @@
 import asyncio
 import json
 import uuid
+import secrets
 import logging
+import os
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import Response as _Response
 from pydantic import BaseModel, EmailStr, field_validator
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 import re
 from deps import get_db, get_current_user, get_manager_scope
@@ -107,7 +109,14 @@ class InviteUserRequest(BaseModel):
     name: str
     email: EmailStr
     role: str
-    password: str
+
+
+ROLE_LABELS = {
+    "admin": "Admin",
+    "manager": "Manager",
+    "shared_reviewer": "Shared Reviewer",
+    "attendee": "Staff / Supervisee",
+}
 
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
@@ -614,16 +623,13 @@ async def bulk_move_team_members(team_id: str, data: BulkMoveRequest, current_us
 async def invite_user_to_org(data: InviteUserRequest, current_user=Depends(get_current_user)):
     if current_user["role"] not in ["admin", "manager"]:
         raise HTTPException(403, "Insufficient permissions")
-    from routers.auth import hash_password
     from utils.rate_limit import check_rate_limit
-    from utils import supabase_auth
+    from utils.org_provisioning import invite_user_core, send_invite_email
     allowed_roles = ["attendee", "manager", "shared_reviewer"]
     if current_user["role"] == "admin":
         allowed_roles.append("admin")
     role = data.role if data.role in allowed_roles else "attendee"
-    user_id = str(uuid.uuid4())
     org_id = current_user.get("org_id", "")
-    now = datetime.now(timezone.utc).isoformat()
     async with database.with_admin() as conn:
         # Rate limit: 20 invites per org / 60 min
         await check_rate_limit(
@@ -633,20 +639,63 @@ async def invite_user_to_org(data: InviteUserRequest, current_user=Depends(get_c
             window_minutes=60,
             error_detail="Invite limit reached. A maximum of 20 invites can be sent per hour.",
         )
-        existing = await conn.fetchrow("SELECT id FROM users WHERE email=$1", data.email.lower())
-        if existing:
-            raise HTTPException(400, "Email already registered")
-        await conn.execute(
-            "INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, must_change_password, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-            user_id, data.email.lower(), await hash_password(data.password), data.name, role, org_id, True, True, now,
-        )
+        org = await conn.fetchrow("SELECT name FROM organisations WHERE id=$1", org_id)
         try:
-            await supabase_auth.create_user(user_id, data.email.lower())
-            await supabase_auth.set_password(user_id, data.password)
-            await conn.execute("UPDATE users SET supabase_migrated=TRUE, supabase_password_set=TRUE WHERE id=$1", user_id)
-        except Exception as exc:
-            logger.error("Supabase Auth provisioning failed for invited user %s: %s", data.email, exc)
-    return {"id": user_id, "name": data.name, "email": data.email.lower(), "role": role}
+            result = await invite_user_core(conn, org_id=org_id, org_name=org["name"], email=data.email, name=data.name, role=role)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    email_sent = await send_invite_email(data.email, data.name.strip(), org["name"], result["invite_link"], role_label=ROLE_LABELS.get(role, "Staff"))
+    if not email_sent:
+        return {
+            "id": result["user_id"], "name": data.name, "email": data.email.lower(), "role": role,
+            "message": "User created but the invite email failed to send — share the link below manually.",
+            "invite_link": result["invite_link"], "email_failed": True,
+        }
+    return {"id": result["user_id"], "name": data.name, "email": data.email.lower(), "role": role, "message": f"Invite sent to {data.email}"}
+
+
+@router.post("/invite-user/{user_id}/resend")
+async def resend_invite(user_id: str, current_user=Depends(get_current_user)):
+    """Regenerates a fresh 72h invite token/link and re-sends the email.
+    Only valid for a still-pending (must_change_password=TRUE) user."""
+    if current_user["role"] not in ["admin", "manager"]:
+        raise HTTPException(403, "Insufficient permissions")
+    from utils.rate_limit import check_rate_limit
+    from utils.org_provisioning import send_invite_email
+    org_id = current_user.get("org_id", "")
+    async with database.with_admin() as conn:
+        await check_rate_limit(
+            conn,
+            identifier=f"invite:{org_id}",
+            max_attempts=20,
+            window_minutes=60,
+            error_detail="Invite limit reached. A maximum of 20 invites can be sent per hour.",
+        )
+        user = await conn.fetchrow(
+            "SELECT id, name, email, role, must_change_password FROM users WHERE id=$1 AND org_id=$2", user_id, org_id,
+        )
+        if not user:
+            raise HTTPException(404, "User not found")
+        if not user["must_change_password"]:
+            raise HTTPException(400, "This invite has already been accepted")
+        org = await conn.fetchrow("SELECT name FROM organisations WHERE id=$1", org_id)
+        now = datetime.now(timezone.utc).isoformat()
+        token = secrets.token_urlsafe(32)
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=72)).isoformat()
+        # Invalidate any still-open previous invite, then issue a fresh one
+        await conn.execute("UPDATE invitations SET used_at=$1 WHERE user_id=$2 AND used_at IS NULL", now, user_id)
+        await conn.execute(
+            "INSERT INTO invitations (id, org_id, user_id, token, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
+            str(uuid.uuid4()), org_id, user_id, token, expires_at, now,
+        )
+
+    frontend_url = os.environ.get("FRONTEND_URL", "")
+    invite_link = f"{frontend_url}/accept-invite?token={token}"
+    email_sent = await send_invite_email(user["email"], user["name"], org["name"], invite_link, role_label=ROLE_LABELS.get(user["role"], "Staff"))
+    if not email_sent:
+        return {"message": "Invite regenerated but the email failed to send — share the link below manually.", "invite_link": invite_link, "email_failed": True}
+    return {"message": f"Invite re-sent to {user['email']}"}
 
 
 @router.get("/branding")

@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 
 import database
 from utils.stripe_helpers import TIER_CONFIG
-from utils.org_provisioning import create_org_core, invite_admin_core, send_invite_email, validate_jurisdiction_service_type
+from utils.org_provisioning import create_org_core, invite_user_core, send_invite_email, validate_jurisdiction_service_type
 from utils.billing_emails import send_founding_reminder_email, notify_super_admin
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ async def _retry_one_provisioning_failure(pf: dict):
                 stripe_subscription_status="active", is_founding_member=bool(signup["is_founding"]),
                 founding_price_lock_until=signup["founding_price_lock_until"], on_slug_conflict="suffix",
             )
-            invite_result = await invite_admin_core(
+            invite_result = await invite_user_core(
                 conn, org_id=org["id"], org_name=org["name"], email=payload.get("email", ""), name=payload.get("name", ""),
             )
             await conn.execute(

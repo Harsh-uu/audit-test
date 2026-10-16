@@ -224,6 +224,7 @@ async def delete_user(user_id: str, current_user=Depends(get_current_user)):
                 raise HTTPException(403, "Outside your management scope")
         if u["must_change_password"]:
             # Pending invite — safe to delete entirely
+            await conn.execute("DELETE FROM invitations WHERE user_id=$1", user_id)
             await conn.execute("DELETE FROM users WHERE id=$1", user_id)
             await _audit(conn, None, org_id, "invite_revoked", current_user["id"], current_user.get("name", ""),
                          f"Revoked pending invite for {u['name']} ({u['email']})")
