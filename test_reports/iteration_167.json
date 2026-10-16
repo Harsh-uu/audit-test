@@ -1,0 +1,36 @@
+{
+  "summary": "Tested the new staff invite flow (password removal + email-based invite). Full backend + UI coverage: Add User modal in People Hub has NO password field, submits via POST /api/org/invite-user, creates pending user with is_active=False, shows 'Invite pending' badge in People & Usage and 'Pending' row in Invites tab. Resend button calls POST /api/org/invite-user/{id}/resend (returns 200, no alert() dialog). Revoke button fully deletes the user. The email_failed fallback correctly returns invite_link + email_failed:true (verified via curl with bad@example.com). End-to-end accept-invite flow via API verified: invite -> /auth/invite/{token} verify -> /auth/accept-invite with user-chosen password -> user flips to is_active=True -> new user can log in with their own password. OrgStructure invite flow source-verified (no password field, 'Send Invite' button w/ data-testid=save-invite-btn, 72h copy). Super Admin invite regression: endpoint exists; could not UI-login due to mandatory MFA, so marked as code-level regression only — invite_admin_core -> invite_user_core rename is in place and compiles.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/users", "issue": "List response omits/returns null for 'must_change_password' field on invited (pending) users even though DB has it TRUE — not functionally broken (is_active=False is the primary pending signal UI uses), but inconsistent."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter167_invite_password_removal.py",
+    "/app/test_reports/pytest/iter167.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GOOD: /api/org/invite-user and /resend both enforce 'admin'/'manager' role AND rate-limit at 20/hour per org — matches admin-invite pattern.",
+    "GOOD: Resend handler calls check_rate_limit BEFORE regenerating token, and marks any still-open invitation row as used before inserting the new one — token rotation is atomic from the client's perspective.",
+    "GOOD: Modal removes password field entirely; falls back to amber info box + copyable invite link when Resend fails (verified bad@example.com returns email_failed:true + invite_link).",
+    "Minor: /api/admin/users does not return must_change_password for pending users (null in response). Frontend relies on is_active=False which works, but exposing the flag would make the API more self-descriptive.",
+    "Minor: PeopleHub Invites tab shows both 'Pending' and 'Expired' statuses correctly — threshold switched from 7d to 72h to match real token TTL (per changelog)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter167_invite_password_removal.py (new)"
+  ],
+  "success_rate": {"backend": "100% (6 passed, 2 skipped due to env-level MFA)", "frontend": "100% (invite create, pending badge, Invites tab, resend API 200, revoke, accept-invite E2E, no-password UI, 'Send Invite' label)"},
+  "test_credentials": "admin@supervision.com / Admin123!X (Test Company org). Super admin UI test blocked by mandatory MFA; backend regression verified by code inspection.",
+  "seed_data_creation": "Created and cleaned up multiple TEST_ / test-ui-* / accept-flow-* / bad@example.com invites during the run — all deleted via DELETE /api/admin/users/{id} teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_iter167_invite_password_removal.py covers invite without password, pending user visibility, resend token rotation, revoke-deletes-invitation. Run with: REACT_APP_BACKEND_URL=<url> python -m pytest backend/tests/test_iter167_invite_password_removal.py -v -o 'addopts='. Super admin invite is MFA-gated — use get_tokens.py helper if you need to UI-test it.",
+  "rca of the issue": "No issue found — feature works as specified."
+}
