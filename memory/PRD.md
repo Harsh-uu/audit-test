@@ -363,3 +363,10 @@ User reported via production screenshots (https://1two.one/portfolio/...) that D
 
 
 
+
+### Supervision Matrix card ordering fix (SHIPPED 2026-10-17)
+
+User flagged the Supervision Matrix page's tiles were sorted by staff name, which doesn't convey priority — asked for red/amber/green grouping (Overdue → Due Soon → Not due in 7 days) ordered by urgency.
+- `pages/SupervisionMatrix.js`: each status bucket (`overdueList`/`dueSoonList`/`onTrackList`) is now sorted by `days_until_due` ascending (most overdue first within Overdue; soonest-due first within Due Soon/On Track); the "All" filter view concatenates the three buckets in that order instead of using the API's raw (name-ordered) list.
+- Verified against real schedule data via API: Overdue bucket correctly orders most-overdue (-40 days) → least-overdue (-14 days), followed by On Track sorted soonest-first. Frontend rebuilt + restarted (static Vite build, not hot-reload).
+

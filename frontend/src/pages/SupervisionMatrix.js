@@ -113,17 +113,22 @@ export default function SupervisionMatrix() {
 
   useEffect(() => { fetchSchedules(); }, [fetchSchedules]);
 
-  // Counts
-  const overdueList  = schedules.filter(s => s.is_overdue);
-  const dueSoonList  = schedules.filter(s => !s.is_overdue && s.days_until_due <= 10);
-  const onTrackList  = schedules.filter(s => !s.is_overdue && s.days_until_due > 10);
+  // Counts — always sorted most-urgent-first within each bucket (soonest/
+  // most-overdue due date first), and the "all" view concatenates buckets
+  // in red → amber → green order so it reads as one urgency-ordered list
+  // instead of whatever order the API happened to return (previously by
+  // staff name, which doesn't convey priority at a glance).
+  const byUrgency = (a, b) => a.days_until_due - b.days_until_due;
+  const overdueList  = schedules.filter(s => s.is_overdue).sort(byUrgency);
+  const dueSoonList  = schedules.filter(s => !s.is_overdue && s.days_until_due <= 10).sort(byUrgency);
+  const onTrackList  = schedules.filter(s => !s.is_overdue && s.days_until_due > 10).sort(byUrgency);
 
   const counts = { overdue: overdueList.length, due_soon: dueSoonList.length, on_track: onTrackList.length };
 
   const filtered = filter === "overdue"  ? overdueList
                  : filter === "due_soon" ? dueSoonList
                  : filter === "on_track" ? onTrackList
-                 : schedules;
+                 : [...overdueList, ...dueSoonList, ...onTrackList];
 
   if (loading) {
     return (
