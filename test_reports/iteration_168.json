@@ -1,0 +1,30 @@
+{
+  "summary": "End-to-end UI + API test of new Portfolio Registers feature (Actions / Learning Needs / Achievements tabs in StaffPortfolio.js). All critical requirements verified: tab order, default tab, outstanding/completed split, overdue/standing badges, self-toggle (optimistic UI + backend persistence after reload), achievements read-only (no toggle), expand row + view-meeting link, manager-exclusion filter for own-conducted meetings. Test fixture cleaned up afterward.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PersonalRegisterTimeline.js line 28: `next.has(key) ? next.delete(key) : next.add(key)` is an unused-expression ternary — functionally fine but ESLint-smelly, consider `if/else`.",
+    "StaffPortfolio.js revert logic in handleToggleRegisterItem captures `item.completed_at` in a closure then re-maps on failure — minor; a re-fetch on failure would be simpler."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "Maria mariaf@1two.one / TestPass123!X ; Priya priyas@1two.one / TestPass123!X ; Admin admin@supervision.com / Admin123!X",
+  "seed_data_creation": "No new seed data. Pre-existing fixture (meeting a44459c9-a1d9-4a50-a6ee-6b4178590c7d + analysis fb883df1-55e8-46ad-afab-ab07b17b6e2f) was consumed and DELETED post-test as requested.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Portfolio Registers feature works end-to-end. Both Maria and Priya had must_change_password flipped to FALSE in Postgres so UI tests weren't blocked by the /set-password interstitial. The EULA modal re-appears per session; use 'I Agree' (not 'Remind me later') for persistent dismissal. Test fixture meeting+analysis deleted; recreate before re-running.",
+  "verification_evidence": {
+    "tab_order": "actions, learning_needs, achievements, cqc, care_cert, custom — matches spec",
+    "default_tab": "evidence-tab-actions is default-selected (bg-gray-100 active class)",
+    "actions_outstanding": "2 items: 'Complete food hygiene refresher' with red Overdue badge + 'Due: 2026-10-01'; 'Continue weekly wellbeing check-ins' with indigo Standing badge + 'Trigger: Ongoing'",
+    "actions_completed": "1 item: 'Submit DBS renewal paperwork' strikethrough + 'Completed 14 Oct 2026'",
+    "learning_needs": "1 outstanding ('Needs training on safeguarding escalation process', Due: 2026-10-25); completed empty-state message rendered",
+    "achievements": "2 timeline items, NO toggle buttons (achievements-toggle-* query returned [])",
+    "self_toggle": "Maria (assignee, not admin) clicked actions-toggle-outstanding-...-act_overdue — item moved to Completed instantly. Page reload confirmed persistence (backend PATCH /api/admin/team-insights/actions/{meeting_id}/{action_id} with {completed:true}). Toggled back to restore.",
+    "expand_view_meeting": "Clicking row expands and reveals data-testid='actions-view-meeting-...' link",
+    "manager_exclusion": "Priya's own portfolio shows 'No supervision records yet' empty state — the meeting she signed-off is correctly excluded. API /api/portfolio/{priya_id}/registers returns {achievements:[], actions:[], learning_needs:[]}.",
+    "cqc_regression": "CQC tab for Maria shows 'No CQC evidence recorded yet' (meeting is 'reviewed' not 'signed_off' — correct behaviour, unchanged)."
+  }
+}
