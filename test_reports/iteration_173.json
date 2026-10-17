@@ -1,0 +1,26 @@
+{
+  "summary": "Verified the sign_off_manager_id backfill fix end-to-end. Backend pytest suite (6 tests) passes 100%: (1) DB has zero signed_off/shared meetings with NULL sign_off_manager_id (migrations m037+m038 applied), (2) Demo Manager's /api/portfolio/{id} returns 0 meetings in Supervision History (no leak of meetings he conducted), (3) /api/portfolio/{id}/registers items are DB-cross-checked — none come from meetings signed off by Demo Manager himself, (4) POST /api/review/{id}/signoff on a meeting with NULL sign_off_manager_id + 2 manager attendees correctly backfills sign_off_manager_id = signer's id via COALESCE, (5) POST /api/review/{id}/signoff as admin on a meeting with sign_off_manager_id already set to another manager does NOT overwrite it (COALESCE preserves original). Frontend smoke test: logged in as Demo Manager, navigated to My Portfolio — Supervision History panel shows only Imported Documents (no leaked meetings), API returns meetings=[] as expected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_portfolio_signoff_fix.py",
+    "/app/test_reports/pytest/iter173.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "sign_off() UPDATE uses COALESCE on both sign_off_manager_id and sign_off_manager_name — correct, never overwrites an already-assigned supervisor so admin override sign-off still credits the originally-assigned manager in Team Insights.",
+    "m037 regex-guards the UUID extraction from JSONB (sign_off_record->>'signed_by') before casting ::uuid — safe against malformed data.",
+    "m038 uses the same 'exactly one manager/admin attendee' rule as create_meeting() — rows with 0 or 2+ managers are deliberately left NULL (matches by-design ambiguity, not a bug).",
+    "Portfolio exclusion filter in portfolio.py:126 and :333 reads sign_off_manager_id IS NULL OR != caller_id — unchanged (correct); the bug was purely field population, now fixed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_portfolio_signoff_fix.py (new regression test file)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (manual smoke)"},
+  "test_credentials": "manager@supervision.com / Manager123! (reset via utils.supabase_auth.set_password this session — supabase_password_set=TRUE trap documented in test_credentials.md). admin@supervision.com / Admin123!X.",
+  "seed_data_creation": "Two synthetic meetings created and immediately cleaned up inside each pytest test (TEST_signoff_backfill and TEST_signoff_no_overwrite). No persistent seed data left behind.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix verified. The /api/portfolio/{id} endpoint returns 0 meetings for Demo Manager (id 465c5101-bbc8-4f26-adaa-c906d3324dd5) — he has 3 conducted meetings all now correctly tagged with his id in sign_off_manager_id so they're excluded. Pre-existing by-design 'ambiguous until resolved' behavior for in_review meetings with 2+ manager attendees is unaffected and NOT a regression (confirmed by main agent).",
+  "rca of the issue": "RCA already resolved by main agent before testing. Original bug: POST /review/{id}/signoff never wrote sign_off_manager_id; it was only auto-set at meeting creation when exactly one manager/admin attendee existed, otherwise left NULL for manual selection (via PUT /{id}/manager which often never ran). Portfolio exclusion filter treats NULL as 'not excluded', so a manager's own conducted meetings leaked into their own My Portfolio. Mitigation applied in review.py sign_off() (COALESCE backfill — never overwrites) + m037/m038 one-time repair migrations. Verified: 0 remaining NULL sign_off_manager_id rows on signed_off/shared meetings in preview DB."
+}
