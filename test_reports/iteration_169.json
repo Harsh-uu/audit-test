@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only visual/UX verification of the new checkbox-style toggle on My Portfolio Actions/Learning Needs rows (replacing the previous round icon-badge). All items in the review request verified end-to-end via browser automation as Maria Fernandez on /portfolio/bf94bf10-b796-476e-a5b5-d598e42d72c4. Test fixture state restored at the end.",
+  "verified_items": [
+    "Checkbox is a 20x20 SQUARE (classes: 'w-5 h-5 rounded border-2'), NOT a round badge. 'rounded-full' is not present on the toggle element.",
+    "Outstanding action (act_overdue) renders as empty/outlined (border-gray-300, hover:border-emerald-400) with no checkmark; completed action (act_done) renders as filled solid green (bg-emerald-500 border-emerald-500 text-white) with a white Check icon inside.",
+    "Clicking the empty checkbox on the overdue action flips it to filled green optimistically and the row moves from the OUTSTANDING section (becomes 'Nothing outstanding — you’re all caught up.') to the COMPLETED section (count becomes 2).",
+    "Persisted after a full page reload (PATCH /api/admin/team-insights/actions/{meeting_id}/{action_id} wrote through).",
+    "Clicking it again toggles back to outstanding (count 1/1 split restored, checkbox empties out).",
+    "Clicking the row BODY (data-testid=actions-item-*, not the checkbox) expands the row and reveals the 'View in meeting report' link (data-testid=actions-view-meeting-*).",
+    "Clicking the CHECKBOX itself does NOT expand the row (view-meeting link remains absent) — the two click zones are correctly independent, matching EvidenceTab behaviour.",
+    "Learning Needs tab: identical square checkbox style with the same data-testid pattern (learning_needs-toggle-...), toggle works and persists.",
+    "Achievements tab: NO checkbox toggle rendered (0 elements matching achievements-toggle-*), only the small round emerald icon badge (read-only), as spec'd. achievements-list testid present.",
+    "Regression: stats/number-count header bar (Supervision Sessions / CQC Regulations / etc) is NOT present on My Portfolio — still removed.",
+    "Regression: CQC, Care Cert and Organisational tabs still click and render without errors."
+  ],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Cleanup requested by main agent: delete the fixture rows (meeting_id=47c75b00-ee51-4ed8-8a23-48d4431a9d20, analysis_id=b651bf4a-c921-4fed-8970-d5feafa439a5) now that visual verification is complete — I intentionally did NOT delete them because this testing agent has no DB access and because removing them would break any further main-agent re-verification; please run the cleanup from the backend side."
+  ],
+  "critical_code_review_comments": [
+    "PersonalRegisterTimeline.js is clean (~170 lines, single responsibility, no DRY violations). Correctly matches EvidenceTab.js checkbox pattern (w-5 h-5 rounded border-2, bg-emerald-500 when done).",
+    "Minor nit (not a bug): the ChevronRight on the far right of each row (lines 108-111) uses its own onClick={toggleExpand} but has no stopPropagation and no data-testid; it currently works because the row body also toggles the same key, but if you ever change the row body click handler, the chevron will silently keep working/stop working out-of-sync. Low priority."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only task)", "frontend": "100%"},
+  "test_credentials": "Maria Fernandez: mariaf@1two.one / TestPass123!X (used); test_credentials.md not re-read as creds supplied in request.",
+  "seed_data_creation": "None created. Used the pre-existing fixture (meeting 47c75b00..., analysis b651bf4a...) exactly as provided. Fixture toggle state was restored to its original (act_done completed, act_overdue outstanding, ln_test1 outstanding, ach_test1 read-only) at the end of the run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Headless login via plain page.fill() can intermittently leave the React form state unpopulated (the controlled input appears visually filled in the DOM value attribute but React's internal state is empty, so submit silently no-ops and the user stays on /login). Workaround that worked reliably here: await page.focus(selector) + page.keyboard.type(value, delay=20) for BOTH email and password fields, then click login-submit-btn. Also, after each toggle test, remember to RESTORE the fixture state before moving on, otherwise subsequent reruns start from a wrong baseline (I had to run an extra pass to re-untick ln_test1 that an earlier run left ticked).",
+  "rca of the issue": "n/a — no bugs found. The checkbox-style rewrite in PersonalRegisterTimeline.js correctly mirrors components/report/EvidenceTab.js: 20x20 square, 2px border, grey→emerald hover when empty, solid emerald with white Check when done; achievements use a separate read-only round icon badge branch (isReadOnly). Click-target separation is achieved by putting the <button> for the checkbox outside the <div onClick={toggleExpand}> row body (they are siblings, not nested), so neither triggers the other."
+}
