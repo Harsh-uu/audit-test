@@ -1477,6 +1477,7 @@ def _reg_extract_registers(rows: list, staff_id_to_name: dict, staff_id_set: set
                 "id": action.get("id", ""),
                 "text": action.get("text", ""),
                 "completed": action.get("completed", False),
+                "completed_at": action.get("completed_at"),
                 "action_type": action.get("action_type") or "task",
                 "assigned_to": action.get("assigned_to") or "",
                 "due_date": action.get("due_date") or "",
@@ -1518,6 +1519,7 @@ def _reg_extract_registers(rows: list, staff_id_to_name: dict, staff_id_set: set
                 "id": ln.get("id", ""),
                 "text": text,
                 "completed": ln.get("completed", False),
+                "completed_at": ln.get("completed_at"),
                 "due_date": ln.get("due_date") or "",
                 "assigned_to": ln.get("assigned_to") or "",
                 "staff_names": staff_names,
@@ -1605,9 +1607,9 @@ async def get_registers(
 
 @router.patch("/team-insights/actions/{meeting_id}/{action_id}")
 async def toggle_register_action(meeting_id: str, action_id: str, data: dict, current_user=Depends(get_current_user)):
-    """Toggle action.completed from the Team Insights register (bypasses meeting-status lock)."""
-    if current_user["role"] not in ["admin", "manager"]:
-        raise HTTPException(403, "Insufficient permissions")
+    """Toggle action.completed from the Team Insights register (bypasses meeting-status
+    lock), or from My Portfolio by the staff member it's actually assigned to — either
+    way the audit entry below is attributed to whoever genuinely made the request."""
     org_id = current_user.get("org_id", "")
     completed = data.get("completed")
     if completed is None:
@@ -1623,18 +1625,18 @@ async def toggle_register_action(meeting_id: str, action_id: str, data: dict, cu
         if not a_row:
             raise HTTPException(404, "Analysis not found")
         actions = _jlist(a_row["actions"])
-        updated = False
-        for i, a in enumerate(actions):
-            if isinstance(a, dict) and a.get("id") == action_id:
-                actions[i]["completed"] = completed
-                updated = True
-                break
-        if not updated:
+        target_idx = next((i for i, a in enumerate(actions) if isinstance(a, dict) and a.get("id") == action_id), None)
+        if target_idx is None:
             raise HTTPException(404, "Action not found")
+        if current_user["role"] not in ("admin", "manager") and actions[target_idx].get("assigned_to_user_id") != current_user["id"]:
+            raise HTTPException(403, "You can only tick off actions assigned to you")
+        now = datetime.now(timezone.utc).isoformat()
+        actions[target_idx]["completed"] = completed
+        actions[target_idx]["completed_at"] = now if completed else None
         await conn.execute(
             "UPDATE analyses SET actions=$1::jsonb WHERE id=$2", actions, a_row["id"]
         )
-        action_text = next((a.get("text","") for a in actions if a.get("id") == action_id), action_id)
+        action_text = actions[target_idx].get("text", action_id)
         status_label = "completed" if completed else "re-opened"
         try:
             await _audit(conn, meeting_id, org_id, "action_status_changed",
@@ -1647,9 +1649,8 @@ async def toggle_register_action(meeting_id: str, action_id: str, data: dict, cu
 
 @router.patch("/team-insights/learning_needs/{meeting_id}/{ln_id}")
 async def toggle_register_ln(meeting_id: str, ln_id: str, data: dict, current_user=Depends(get_current_user)):
-    """Toggle learning_need.completed from the Team Insights register."""
-    if current_user["role"] not in ["admin", "manager"]:
-        raise HTTPException(403, "Insufficient permissions")
+    """Toggle learning_need.completed from the Team Insights register, or from My
+    Portfolio by the staff member it's assigned to."""
     org_id = current_user.get("org_id", "")
     completed = data.get("completed")
     if completed is None:
@@ -1667,18 +1668,18 @@ async def toggle_register_ln(meeting_id: str, ln_id: str, data: dict, current_us
         if not a_row:
             raise HTTPException(404, "Analysis not found")
         lns = _jlist(a_row["learning_needs"])
-        updated = False
-        for i, ln in enumerate(lns):
-            if isinstance(ln, dict) and ln.get("id") == ln_id:
-                lns[i]["completed"] = completed
-                updated = True
-                break
-        if not updated:
+        target_idx = next((i for i, ln in enumerate(lns) if isinstance(ln, dict) and ln.get("id") == ln_id), None)
+        if target_idx is None:
             raise HTTPException(404, "Learning need not found")
+        if current_user["role"] not in ("admin", "manager") and lns[target_idx].get("assigned_to_user_id") != current_user["id"]:
+            raise HTTPException(403, "You can only tick off learning needs assigned to you")
+        now = datetime.now(timezone.utc).isoformat()
+        lns[target_idx]["completed"] = completed
+        lns[target_idx]["completed_at"] = now if completed else None
         await conn.execute(
             "UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2", lns, a_row["id"]
         )
-        ln_text = next((ln.get("text","") for ln in lns if ln.get("id") == ln_id), ln_id)
+        ln_text = lns[target_idx].get("text", ln_id)
         status_label = "completed" if completed else "re-opened"
         await _audit(conn, meeting_id, org_id, "learning_need_status_changed",
                      current_user["id"], current_user["name"],

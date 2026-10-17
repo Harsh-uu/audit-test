@@ -7,8 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Layout from "@/components/Layout";
 import {
   ArrowLeft, Shield, Award, FileText, Download, Loader2,
-  CheckCircle, Clock, ChevronRight, ChevronDown, TrendingUp, User, Check, FileUp, ExternalLink
+  CheckCircle, Clock, ChevronRight, ChevronDown, TrendingUp, User, Check, FileUp, ExternalLink,
+  ClipboardList, BookOpen,
 } from "lucide-react";
+import { PersonalRegisterTimeline } from "@/components/portfolio/PersonalRegisterTimeline";
 
 const CONF_CONFIG = {
   likely_evidence: { label: "Likely", dot: "bg-emerald-500", bar: "bg-emerald-500" },
@@ -268,22 +270,21 @@ export default function StaffPortfolio() {
   const navigate = useNavigate();
   const [portfolio, setPortfolio] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [evidenceTab, setEvidenceTab] = useState("cqc");
+  const [evidenceTab, setEvidenceTab] = useState("actions");
   const [exporting, setExporting] = useState(false);
   const [ccStandards, setCcStandards] = useState([]);
   const [docUploads, setDocUploads] = useState([]);
+  const [registers, setRegisters] = useState({ achievements: [], actions: [], learning_needs: [] });
 
   const effectiveUserId = userId || me?.id;
   const canViewUploads = me?.role === "admin" || me?.role === "manager";
+  const canToggleRegisters = me?.id === effectiveUserId || me?.role === "admin" || me?.role === "manager";
 
   const fetchPortfolio = useCallback(async () => {
     if (!effectiveUserId) return;
     try {
       const { data } = await axios.get(`${API}/portfolio/${effectiveUserId}`, getAuthConfig());
       setPortfolio(data);
-      // Auto-select first tab with data
-      if (!data.cqc_summary?.length && data.care_cert_summary?.length) setEvidenceTab("care_cert");
-      else if (!data.cqc_summary?.length && !data.care_cert_summary?.length && data.custom_summary?.length) setEvidenceTab("custom");
     } catch (err) {
       console.error("Portfolio load failed", err.message);
     } finally {
@@ -292,7 +293,41 @@ export default function StaffPortfolio() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveUserId, API]);
 
-  useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
+  const fetchRegisters = useCallback(async () => {
+    if (!effectiveUserId) return;
+    try {
+      const { data } = await axios.get(`${API}/portfolio/${effectiveUserId}/registers`, getAuthConfig());
+      setRegisters(data);
+    } catch (err) {
+      console.error("Registers load failed", err.message);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveUserId, API]);
+
+  useEffect(() => { fetchPortfolio(); fetchRegisters(); }, [fetchPortfolio, fetchRegisters]);
+
+  const handleToggleRegisterItem = async (type, item, completed) => {
+    // Optimistic update — toggling is instant and rarely fails
+    setRegisters(prev => ({
+      ...prev,
+      [type]: prev[type].map(i => i.id === item.id && i.meeting_id === item.meeting_id
+        ? { ...i, completed, completed_at: completed ? new Date().toISOString() : null }
+        : i),
+    }));
+    try {
+      const path = type === "actions" ? "actions" : "learning_needs";
+      await axios.patch(`${API}/admin/team-insights/${path}/${item.meeting_id}/${item.id}`, { completed }, getAuthConfig());
+    } catch (err) {
+      // Revert on failure
+      setRegisters(prev => ({
+        ...prev,
+        [type]: prev[type].map(i => i.id === item.id && i.meeting_id === item.meeting_id
+          ? { ...i, completed: !completed, completed_at: item.completed_at }
+          : i),
+      }));
+      alert(err.response?.data?.detail || "Failed to update — please try again");
+    }
+  };
 
   useEffect(() => {
     document.getElementById("evidence-scroll-container")?.scrollTo(0, 0);
@@ -402,11 +437,19 @@ export default function StaffPortfolio() {
                       + (custom_summary?.length ? custom_summary.reduce((s, x) => s + x.evidence_count, 0) : 0);
 
   const evidenceItems = { cqc: cqc_summary, care_cert: care_cert_summary, custom: custom_summary };
+  const outstandingActions = registers.actions.filter(a => !a.completed).length;
+  const outstandingLns = registers.learning_needs.filter(l => !l.completed).length;
   const tabCfg = [
+    { key: "actions", label: "Actions", count: outstandingActions, icon: ClipboardList, color: "text-amber-600" },
+    { key: "learning_needs", label: "Learning Needs", count: outstandingLns, icon: BookOpen, color: "text-teal-600" },
+    { key: "achievements", label: "Achievements", count: registers.achievements.length, icon: Award, color: "text-emerald-600" },
     { key: "cqc", label: "CQC", count: cqc_summary?.length, icon: Shield, color: "text-purple-600" },
     { key: "care_cert", label: "Care Cert", count: care_cert_summary?.length, icon: Award, color: "text-blue-600" },
     { key: "custom", label: "Organisational", count: custom_summary?.length, icon: FileText, color: "text-teal-600" },
   ];
+  const isRegisterTab = ["actions", "learning_needs", "achievements"].includes(evidenceTab);
+  const hasAnyContent = stats.total_meetings > 0
+    || registers.actions.length > 0 || registers.learning_needs.length > 0 || registers.achievements.length > 0;
 
   return (
     <Layout>
@@ -494,18 +537,18 @@ export default function StaffPortfolio() {
 
           {/* Left: Evidence Standards (or empty state) */}
           <div className="lg:col-span-7 border-r border-gray-200 flex flex-col overflow-hidden">
-            {stats.total_meetings === 0 ? (
+            {!hasAnyContent ? (
               <div className="flex-1 flex items-center justify-center text-center py-24 text-gray-400">
                 <div>
                   <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="font-medium text-gray-500">No signed-off supervision records yet</p>
-                  <p className="text-sm mt-1">Evidence will appear here once meetings are signed off</p>
+                  <p className="font-medium text-gray-500">No supervision records yet</p>
+                  <p className="text-sm mt-1">Actions, achievements and evidence will appear here once meetings are reviewed</p>
                 </div>
               </div>
             ) : (
               <>
             {/* Tab row */}
-            <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-1">
+            <div className="border-b border-gray-200 px-6 py-3 flex items-center gap-1 flex-wrap">
               {tabCfg.map(({ key, label, count, icon: Icon, color }) => (
                 <button
                   key={key}
@@ -529,7 +572,14 @@ export default function StaffPortfolio() {
               </div>
 
               <div id="evidence-scroll-container" className="flex-1 overflow-y-auto p-5">
-                {evidenceItems[evidenceTab]?.length === 0 ? (
+                {isRegisterTab ? (
+                  <PersonalRegisterTimeline
+                    type={evidenceTab}
+                    items={registers[evidenceTab]}
+                    canToggle={canToggleRegisters}
+                    onToggle={(item, completed) => handleToggleRegisterItem(evidenceTab, item, completed)}
+                  />
+                ) : evidenceItems[evidenceTab]?.length === 0 ? (
                   <div className="text-center py-12 text-gray-400">
                     <p className="text-sm">No {tabCfg.find(t => t.key === evidenceTab)?.label} evidence recorded yet</p>
                   </div>

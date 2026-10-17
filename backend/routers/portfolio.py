@@ -291,13 +291,10 @@ async def _build_portfolio_data(user_id: str, org_id: str):
     }
 
 
-@router.get("/{user_id}")
-async def get_portfolio(user_id: str, current_user=Depends(get_current_user)):
+async def _check_portfolio_access(current_user: dict, user_id: str, org_id: str):
+    """Raises 403 if current_user may not view user_id's portfolio/registers."""
     if current_user["role"] not in ["admin", "manager"] and current_user["id"] != user_id:
         raise HTTPException(status_code=403, detail="You can only view your own portfolio")
-    org_id = current_user.get("org_id", "")
-
-    # Scoped managers may only view portfolios of staff within their scope
     if current_user["role"] == "manager" and current_user["id"] != user_id:
         scope = get_manager_scope(current_user)
         if scope["level"] != "org":
@@ -306,7 +303,125 @@ async def get_portfolio(user_id: str, current_user=Depends(get_current_user)):
             if user_id not in scoped_ids:
                 raise HTTPException(status_code=403, detail="You can only view portfolios of staff in your scope")
 
+
+async def _build_portfolio_registers(user_id: str, org_id: str) -> dict:
+    """Aggregate Achievements/Actions/Learning Needs for ONE person, across all
+    their OWN supervision meetings (as supervisee). Deliberately mirrors
+    _build_portfolio_data's meeting-selection filter (sign_off_manager_id
+    exclusion) so a manager's portfolio only ever shows items from supervision
+    THEY received, never from meetings they conducted for their own staff —
+    those stay in Team Insights' Registers. Unlike _build_portfolio_data this
+    is NOT restricted to signed_off/shared meetings: action/learning-need
+    rollover (utils/transcription_pipeline.py) already carries an item forward
+    from ANY analysed meeting regardless of status, so a supervisee needs to
+    be able to see & clear items before final sign-off too, not just after."""
+    async with database.with_admin() as conn:
+        user_row = await conn.fetchrow("SELECT id, org_id FROM users WHERE id = $1", user_id)
+    if not user_row:
+        return None
+    target_org_id = user_row["org_id"]
+    if target_org_id and target_org_id != org_id:
+        return None
+    effective_org_id = target_org_id or org_id
+
+    async with database.with_org(effective_org_id) as conn:
+        meetings_rows = await conn.fetch(
+            """SELECT id, title, date, analysis_id
+               FROM meetings
+               WHERE org_id = $1
+                 AND analysis_id IS NOT NULL
+                 AND (sign_off_manager_id IS NULL OR sign_off_manager_id != $2::uuid)
+                 AND EXISTS (
+                     SELECT 1 FROM jsonb_array_elements(
+                         CASE
+                             WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'  THEN COALESCE(attendees,'[]'::jsonb)
+                             WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'string' THEN (attendees #>> '{}')::jsonb
+                             ELSE '[]'::jsonb
+                         END
+                     ) elem
+                     WHERE elem->>'user_id' = $2::text
+                 )
+               ORDER BY date DESC
+               LIMIT 500""",
+            effective_org_id, user_id,
+        )
+    meetings_list = [dict(r) for r in meetings_rows]
+    analysis_ids = [m["analysis_id"] for m in meetings_list if m.get("analysis_id")]
+    analyses_map = {}
+    if analysis_ids:
+        async with database.with_org(effective_org_id) as conn:
+            analysis_rows = await conn.fetch(
+                "SELECT id, achievements, actions, learning_needs FROM analyses WHERE id = ANY($1::uuid[])",
+                analysis_ids,
+            )
+        analyses_map = {r["id"]: dict(r) for r in analysis_rows}
+
+    achievements_out, actions_out, lns_out = [], [], []
+    for mtg in meetings_list:
+        aid = mtg.get("analysis_id")
+        ana = analyses_map.get(aid)
+        if not ana:
+            continue
+        mdate, mid, mtitle = mtg.get("date", ""), mtg["id"], mtg.get("title", "")
+
+        for ach in _safe_jsonb(ana.get("achievements")):
+            if not isinstance(ach, dict):
+                continue
+            text = ach.get("text") or ach.get("description") or ""
+            if not text:
+                continue
+            achievements_out.append({
+                "id": ach.get("id", ""), "text": text,
+                "meeting_id": mid, "meeting_title": mtitle, "meeting_date": mdate,
+            })
+
+        for a in _safe_jsonb(ana.get("actions")):
+            if not isinstance(a, dict) or a.get("assigned_to_user_id") != user_id:
+                continue
+            actions_out.append({
+                "id": a.get("id", ""), "text": a.get("text", ""),
+                "completed": a.get("completed", False), "completed_at": a.get("completed_at"),
+                "action_type": a.get("action_type") or "task",
+                "due_date": a.get("due_date") or "", "trigger": a.get("trigger") or "",
+                "is_rolled_over": a.get("is_rolled_over", False),
+                "meeting_id": mid, "meeting_title": mtitle, "meeting_date": mdate,
+            })
+
+        for ln in _safe_jsonb(ana.get("learning_needs")):
+            if not isinstance(ln, dict) or ln.get("assigned_to_user_id") != user_id:
+                continue
+            text = ln.get("text", "")
+            if not text:
+                continue
+            lns_out.append({
+                "id": ln.get("id", ""), "text": text,
+                "completed": ln.get("completed", False), "completed_at": ln.get("completed_at"),
+                "due_date": ln.get("due_date") or "", "is_rolled_over": ln.get("is_rolled_over", False),
+                "meeting_id": mid, "meeting_title": mtitle, "meeting_date": mdate,
+            })
+
+    achievements_out.sort(key=lambda x: x.get("meeting_date") or "", reverse=True)
+    actions_out.sort(key=lambda x: x.get("meeting_date") or "", reverse=True)
+    lns_out.sort(key=lambda x: x.get("meeting_date") or "", reverse=True)
+
+    return {"achievements": achievements_out, "actions": actions_out, "learning_needs": lns_out}
+
+
+@router.get("/{user_id}")
+async def get_portfolio(user_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    await _check_portfolio_access(current_user, user_id, org_id)
     data = await _build_portfolio_data(user_id, org_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return data
+
+
+@router.get("/{user_id}/registers")
+async def get_portfolio_registers(user_id: str, current_user=Depends(get_current_user)):
+    org_id = current_user.get("org_id", "")
+    await _check_portfolio_access(current_user, user_id, org_id)
+    data = await _build_portfolio_registers(user_id, org_id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
     return data
@@ -314,18 +429,8 @@ async def get_portfolio(user_id: str, current_user=Depends(get_current_user)):
 
 @router.get("/{user_id}/export-pdf")
 async def export_portfolio_pdf(user_id: str, current_user=Depends(get_current_user)):
-    if current_user["role"] not in ["admin", "manager"] and current_user["id"] != user_id:
-        raise HTTPException(status_code=403, detail="You can only export your own portfolio")
     org_id = current_user.get("org_id", "")
-
-    # Scoped managers may only export portfolios of staff within their scope
-    if current_user["role"] == "manager" and current_user["id"] != user_id:
-        scope = get_manager_scope(current_user)
-        if scope["level"] != "org":
-            async with database.with_org(org_id) as conn:
-                scoped_ids = await get_scoped_staff_ids(conn, org_id, scope) or []
-            if user_id not in scoped_ids:
-                raise HTTPException(status_code=403, detail="You can only export portfolios of staff in your scope")
+    await _check_portfolio_access(current_user, user_id, org_id)
     data = await _build_portfolio_data(user_id, org_id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")

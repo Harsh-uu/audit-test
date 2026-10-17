@@ -172,6 +172,97 @@ async def _get_rolled_actions(conn, attendees: list, current_meeting_id: str, ma
     return rolled
 
 
+async def _get_rolled_learning_needs(conn, attendees: list, current_meeting_id: str, manager_id: str = None) -> list:
+    """Same carry-forward behaviour as _get_rolled_actions(), applied to
+    learning_needs instead of actions — an unresolved learning need raised in
+    a previous supervision should keep showing up (and stay clearable) until
+    it's actually marked complete, same as an action."""
+    supervisee_ids = [
+        a.get("user_id") for a in attendees
+        if a.get("user_id") and a.get("role") not in ("manager", "admin") and a.get("user_id") != manager_id
+    ]
+    if not supervisee_ids:
+        return []
+
+    new_attendee_names_lower = {a.get("name", "").lower() for a in attendees if a.get("name")}
+    new_supervisee_ids = set(supervisee_ids)
+    rolled = []
+    seen_sources = set()
+
+    prev_rows = await conn.fetch(
+        """SELECT id, attendees, analysis_id, title, sign_off_manager_id
+           FROM meetings
+           WHERE analysis_id IS NOT NULL
+             AND id != $1
+             AND EXISTS (
+                 SELECT 1 FROM jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(COALESCE(attendees,'[]'::jsonb)) = 'array'
+                          THEN COALESCE(attendees,'[]'::jsonb) ELSE '[]'::jsonb END
+                 ) elem
+                 WHERE elem->>'user_id' = ANY($2::text[])
+             )
+           LIMIT 50""",
+        current_meeting_id, supervisee_ids,
+    )
+
+    matching_prevs = []
+    supervisee_ids_set = set(supervisee_ids)
+    for prev in prev_rows:
+        prev = dict(prev)
+        source_manager_id = prev.get("sign_off_manager_id")
+        source_supervisee_ids = {
+            a.get("user_id")
+            for a in _jlist(prev.get("attendees"))
+            if a.get("user_id") and a.get("role") not in ("manager", "admin") and a.get("user_id") != source_manager_id
+        }
+        if not source_supervisee_ids.intersection(supervisee_ids_set):
+            continue
+        matching_prevs.append(prev)
+
+    analysis_ids = [p["analysis_id"] for p in matching_prevs if p.get("analysis_id")]
+    lns_by_analysis_id = {}
+    if analysis_ids:
+        a_rows = await conn.fetch(
+            "SELECT id, learning_needs FROM analyses WHERE id = ANY($1::uuid[])",
+            analysis_ids,
+        )
+        lns_by_analysis_id = {r["id"]: r["learning_needs"] for r in a_rows}
+
+    for prev in matching_prevs:
+        analysis_lns = lns_by_analysis_id.get(prev.get("analysis_id"))
+        if analysis_lns is None:
+            continue
+
+        for ln in _jlist(analysis_lns):
+            if ln.get("completed") or ln.get("is_rolled_over"):
+                continue
+            key = (prev["id"], ln.get("id", ""))
+            if key in seen_sources:
+                continue
+
+            assigned_uid = ln.get("assigned_to_user_id")
+            if assigned_uid:
+                if assigned_uid not in new_supervisee_ids:
+                    continue
+            else:
+                assigned = (ln.get("assigned_to") or "").strip().lower()
+                if assigned and new_attendee_names_lower and assigned not in new_attendee_names_lower:
+                    continue
+
+            seen_sources.add(key)
+            rolled.append({
+                **ln,
+                "id": f"rolled_ln_{prev['id'][:6]}_{ln.get('id', uuid.uuid4().hex[:6])}",
+                "is_rolled_over": True,
+                "completed": False,
+                "completed_at": None,
+                "source_meeting_id": prev["id"],
+                "source_meeting_title": prev.get("title", "Previous Meeting"),
+                "source_action_id": ln.get("id"),
+            })
+    return rolled
+
+
 async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
     """Background task: transcribe audio then run AI analysis."""
     try:
@@ -302,6 +393,9 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             rolled_actions = await _get_rolled_actions(
                 conn, attendees, meeting_id, manager_id=manager_id
             )
+            rolled_learning_needs = await _get_rolled_learning_needs(
+                conn, attendees, meeting_id, manager_id=manager_id
+            )
 
         meeting_type = (meeting.get("meeting_type") or "supervision").replace("_", " ").title()
         supervisee_names = [a.get("name") for a in attendees if a.get("name")]
@@ -403,8 +497,11 @@ async def run_transcription_and_analysis(meeting_id: str, audio_path: str):
             if not item.get("id"):
                 item["id"] = f"ln_{uuid.uuid4().hex[:12]}"
             item.setdefault("completed", False)
+            item.setdefault("completed_at", None)
+            item.setdefault("is_rolled_over", False)
             item["assigned_to_user_id"] = _match_attendee_user_id(item.get("assigned_to"), attendees)
         analysis_result["actions"] = rolled_actions + analysis_result.get("actions", [])
+        analysis_result["learning_needs"] = rolled_learning_needs + analysis_result.get("learning_needs", [])
 
         analysis_id = str(uuid.uuid4())
         async with database.with_admin() as conn:
