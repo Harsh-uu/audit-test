@@ -837,7 +837,7 @@ function PersonGroups({ items, type, onToggle }) {
                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span className="text-xs text-gray-400">{item.meeting_title}</span>
                             <span className="text-gray-200 text-xs">·</span>
-                            <span className="text-xs font-medium text-gray-500">{item.meeting_date}</span>
+                            <span className="text-xs font-medium text-gray-500">{formatUkDate(item.meeting_date)}</span>
                             {type === "learning_needs" && item.assigned_to && (
                               <>
                                 <span className="text-gray-200 text-xs">·</span>
@@ -848,7 +848,7 @@ function PersonGroups({ items, type, onToggle }) {
                               <>
                                 <span className="text-gray-200 text-xs">·</span>
                                 <span className={`text-xs ${overdue ? "text-red-500 font-medium" : "text-gray-400"}`}>
-                                  Due: {item.due_date}
+                                  Due: {formatUkDate(item.due_date)}
                                 </span>
                               </>
                             )}
@@ -1212,7 +1212,7 @@ function AiAccuracyView({ API, getAuthConfig }) {
     const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const headers = ["Date", "Meeting", "Reviewer", "Type", "Standard Ref", "Standard Name", "AI Confidence", "Manager Action"];
     const rows = feedback.map(f => [
-      (f.timestamp || "").slice(0, 10), f.meeting_title || "", f.user_name || "",
+      f.timestamp ? formatUkDate(f.timestamp) : "", f.meeting_title || "", f.user_name || "",
       EVIDENCE_TYPE_LABEL[f.evidence_type] || f.evidence_type, f.standard_ref, f.standard_name,
       CONFIDENCE_LABEL[f.ai_confidence] || f.ai_confidence, ACTION_LABEL[f.manager_action] || f.manager_action,
     ]);

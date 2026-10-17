@@ -1,6 +1,7 @@
 import React from "react";
 import { Download, Calendar, Users, Filter, Loader2, X } from "lucide-react";
 import { UkDatePicker } from "@/components/ui/uk-date-picker";
+import { formatDate } from "@/utils/dateFormat";
 
 export function ExportTab({
   users,
@@ -108,7 +109,7 @@ export function ExportTab({
                       className="w-3.5 h-3.5 accent-[#1E3A8A]"
                     />
                     <span className="flex-1 text-sm text-gray-800 truncate">{m.title}</span>
-                    <span className="text-xs text-gray-400 flex-shrink-0">{m.date ? m.date.slice(0, 10) : "—"}</span>
+                    <span className="text-xs text-gray-400 flex-shrink-0">{m.date ? formatDate(m.date) : "—"}</span>
                   </label>
                 ))
               )}

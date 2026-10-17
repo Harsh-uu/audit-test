@@ -11,6 +11,7 @@ import {
   ClipboardList, BookOpen,
 } from "lucide-react";
 import { PersonalRegisterTimeline } from "@/components/portfolio/PersonalRegisterTimeline";
+import { formatDate } from "@/utils/dateFormat";
 
 const CONF_CONFIG = {
   likely_evidence: { label: "Likely", dot: "bg-emerald-500", bar: "bg-emerald-500" },
@@ -45,7 +46,7 @@ function MeetingChips({ refs }) {
     <div className="flex flex-wrap gap-1 mt-1.5">
       {sorted.map((r, i) => (
         <span key={i} className="text-xs bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
-          {r.date ? new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+          {r.date ? formatDate(r.date) : "—"}
         </span>
       ))}
     </div>
@@ -222,7 +223,7 @@ function CareCertGroupedView({ items, ccStandards }) {
                         <div className="flex flex-wrap gap-1 mt-1">
                           {item.meeting_refs.slice(0, 4).map((r, i) => (
                             <span key={i} className="text-xs bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
-                              {r.date ? r.date.slice(0, 10) : "—"}
+                              {r.date ? formatDate(r.date) : "—"}
                             </span>
                           ))}
                         </div>
@@ -590,7 +591,7 @@ export default function StaffPortfolio() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">{m.title}</p>
                           <p className="text-xs text-gray-400 mt-0.5">
-                            {m.date ? new Date(m.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                            {m.date ? formatDate(m.date) : "—"}
                             {m.sign_off_manager_name && ` · ${m.sign_off_manager_name}`}
                           </p>
                           <div className="flex items-center gap-2 mt-1.5">

@@ -1,0 +1,59 @@
+{
+  "summary": "Frontend-only code audit of the date-formatting standardisation task (en-GB 'DD Mon YYYY' / 'DD Mon YYYY, HH:MM'). Verified every modified file against the task scope and did a repo-wide grep for toLocaleDateString / toLocaleString / `.slice(0, 10)` to catch any remaining raw-ISO renderers. Headless browser login did not succeed (documented env quirk per task notes) so verification is based on static code review of the actual rendered JSX. Most of the main agent's fixes are correct and complete, but there is ONE critical miss that reproduces the exact bug in the user's screenshot, plus a few lower-priority misses in sibling screens that fall under the task's 'general regression — no raw ISO anywhere' acceptance criterion.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "StaffPortfolio.js — CareCertGroupedView",
+        "issue": "CRITICAL MISS — reproduces user's exact screenshot bug. Line 225 inside CareCertGroupedView still renders meeting-date chips as `r.date.slice(0, 10)` (raw ISO like `2026-09-15`). The main agent fixed the MeetingChips component (line 48) which is used by the CQC and Custom tabs, but CareCertGroupedView is a DIFFERENT component with its own duplicate chip-rendering block, and it is the one that renders when the Care Cert tab is active — which is precisely the tab shown in the user's complaint screenshot. Fix: replace `{r.date ? r.date.slice(0, 10) : \"—\"}` with the same `new Date(r.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })` pattern used in MeetingChips.",
+        "selector": "frontend/src/pages/StaffPortfolio.js:225",
+        "priority": "HIGH"
+      },
+      {
+        "component": "ExportTab.js (Org Settings > Export All)",
+        "issue": "Meeting-picker list in the export selector renders `m.date.slice(0, 10)` → raw ISO shown next to each meeting title. Violates the task's 'no raw ISO anywhere' regression rule.",
+        "selector": "frontend/src/components/admin/ExportTab.js:111",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "TranscriptExportTab.js (Org Settings > Transcripts)",
+        "issue": "Same bug as ExportTab — `m.date?.slice(0, 10)` raw ISO on meeting picker chips.",
+        "selector": "frontend/src/components/admin/TranscriptExportTab.js:89",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "TeamInsights.js — PersonGroups timeline (Actions / Risks / Learning Needs registers)",
+        "issue": "Line 840 renders `{item.meeting_date}` directly (raw ISO `2026-09-15`); line 852 renders `Due: {item.due_date}` directly (raw ISO). These are visible on the Admin > Team Insights > Register tabs. formatUkDate exists in this very file but is not used for these two spots. Violates the task's 'no raw ISO anywhere' rule and is in direct contradiction with the PersonalRegisterTimeline fix (which did get `fmtDate` applied for the equivalent spots in the per-staff portfolio view).",
+        "selector": "frontend/src/pages/TeamInsights.js:840,852",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "TeamInsights.js — AI Accuracy CSV export",
+        "issue": "Line 1215 writes `(f.timestamp || '').slice(0, 10)` as the Date column in the exported CSV — this is raw ISO `YYYY-MM-DD`. CSV export was explicitly called out for SuperAdmin dashboard; same standard should apply here. Minor priority since CSVs are often ISO by convention, but inconsistent with the task's blanket rule.",
+        "selector": "frontend/src/pages/TeamInsights.js:1215",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "FIX (HIGH): StaffPortfolio.js:225 — replace raw `r.date.slice(0, 10)` with en-GB toLocaleDateString inside CareCertGroupedView. This is the exact bug in the user's screenshot and the main user complaint.",
+    "FIX (MEDIUM): ExportTab.js:111 and TranscriptExportTab.js:89 — replace `m.date.slice(0,10)` with the shared formatDate helper (or inline toLocaleDateString with en-GB).",
+    "FIX (MEDIUM): TeamInsights.js:840 and :852 — wrap `item.meeting_date` and `item.due_date` with formatUkDate (already defined on line 1150 of the same file).",
+    "CONSIDER (LOW): TeamInsights.js:1215 — AI Accuracy CSV date column either keep as ISO for machine readability OR convert to en-GB to match SuperAdmin dashboard CSV. Pick one convention.",
+    "CONSIDER: Centralise — frontend/src/utils/dateFormat.js was created but is not imported anywhere. Future-proof the site by replacing all the inline `toLocaleDateString('en-GB', { day, month: 'short', year })` repeats with `import { formatDate } from '@/utils/dateFormat'` to prevent exactly this class of miss recurring."
+  ],
+  "critical_code_review_comments": [
+    "Duplicate rendering logic is the root cause of the main miss — StaffPortfolio.js has date-chip JSX in two places (MeetingChips component AND inline inside CareCertGroupedView). Extracting a single DateChip component (or importing formatDate from utils/dateFormat.js) would have prevented the miss and will prevent future ones.",
+    "dateFormat.js utility was added but zero files import it — all callers reimplement the same options object inline. This DRY violation is why there are 15+ scattered toLocaleDateString calls across the codebase and why misses like line 225 are easy."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only task)", "frontend": "~85% — 8 of the task's 10 listed areas fixed correctly; 1 critical miss and 3-4 lower-severity misses" },
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes StaffPortfolio.js:225 (the Care Cert tab chip) and the ExportTab/TranscriptExportTab/TeamInsights raw-ISO spots, re-run a repo-wide grep: `grep -rn '\\.slice(0, *10)' frontend/src --include='*.js' | grep -v 'new Date().toISOString\\|Date.now'` — any match that is being rendered as display text (not stored as a value for an API call or <input type='date'>) is a bug. Also search for `.toLocaleDateString(` without `'en-GB'` and `.toLocaleString(` without `'en-GB'`. Browser-based verification couldn't be performed (login env quirk), so manual spot-check on the Care Cert tab after fix is advisable.",
+  "rca of the issue": "User reported raw ISO dates on My Portfolio > Care Cert tab. Main agent correctly identified MeetingChips as the chip renderer and fixed line 48. However, Care Cert tab uses CareCertGroupedView (lines 130-265) — a specialised grouped view that bypasses MeetingChips and has its own inline chip-rendering loop at lines 221-228. That inline block retained the old `r.date.slice(0, 10)` call. Reproduction: log in as admin, go to /portfolio, click Care Cert tab, expand any standard with evidenced sub-outcomes — the small gray date chips under each sub-outcome show '2026-09-15' instead of '15 Sept 2026'. Mitigation: one-line fix at line 225 using the exact same pattern as line 48; longer-term, consolidate to a single DateChip component or import formatDate from utils/dateFormat.js (which was added for this purpose but is currently unused)."
+}
