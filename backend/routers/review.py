@@ -803,11 +803,27 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_u
     sign_off_record = {"signed_by": current_user["id"], "signed_by_name": current_user["name"], "signed_at": now}
 
     async with database.with_org(org_id) as conn:
+        # sign_off_manager_id is sometimes still NULL at this point — meeting
+        # creation only auto-assigns it when exactly one manager/admin was
+        # among the attendees (see create_meeting's comment); with 0 or 2+
+        # it's left for manual selection via PUT /{id}/manager, which often
+        # never happens. Backfilling it here with COALESCE (never overwriting
+        # an already-assigned manager, so an admin's override sign-off still
+        # counts toward the originally-assigned manager's stats) is the
+        # authoritative fallback: whoever actually signs off IS the
+        # supervising manager for every downstream consumer of this field —
+        # Team Insights' per-manager registers, the Download Audio
+        # permission check, and critically My Portfolio's "meetings I
+        # conducted for my own staff" exclusion filter, which relied on this
+        # being non-NULL and otherwise leaked the signer's own conducted
+        # supervision into their own personal portfolio.
         await conn.execute(
             """UPDATE meetings SET status='signed_off', sign_off_record=$1::jsonb,
-               audio_deletion_status='grace_period', audio_grace_period_started_at=$2, updated_at=$2
-               WHERE id=$3""",
-            sign_off_record, now, meeting_id,
+               sign_off_manager_id=COALESCE(sign_off_manager_id, $2::uuid),
+               sign_off_manager_name=COALESCE(sign_off_manager_name, $3),
+               audio_deletion_status='grace_period', audio_grace_period_started_at=$4, updated_at=$4
+               WHERE id=$5""",
+            sign_off_record, current_user["id"], current_user["name"], now, meeting_id,
         )
 
     _admin_stats_cache.pop(org_id, None)

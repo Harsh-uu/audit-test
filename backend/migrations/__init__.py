@@ -45,6 +45,8 @@ from . import (
     m034_transcription_tracking,
     m035_webhook_config,
     m036_stripe_signup,
+    m037_backfill_sign_off_manager_id,
+    m038_backfill_sign_off_manager_id_from_attendees,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,6 +89,8 @@ MIGRATIONS = [
     m034_transcription_tracking,
     m035_webhook_config,
     m036_stripe_signup,
+    m037_backfill_sign_off_manager_id,
+    m038_backfill_sign_off_manager_id_from_attendees,
 ]
 
 
