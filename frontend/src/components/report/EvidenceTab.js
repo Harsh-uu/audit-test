@@ -27,6 +27,15 @@ function isBlankValue(v) {
   return v == null || (typeof v === "string" && (v.trim() === "" || NULLISH_STRINGS.has(v.trim().toLowerCase())));
 }
 
+// Due dates are stored as raw "YYYY-MM-DD" strings — always render them in
+// the site-standard UK format ("21 Sept 2026"), never raw.
+function fmtDueDate(d) {
+  if (isBlankValue(d)) return "";
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime())) return d;
+  return parsed.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 // ── Single risk card ──────────────────────────────────────────────────────────
 function RiskCard({ risk, meetingId, canEdit, canToggle, onToggleResolved, onCreateAction, linkedActionId, onViewAction }) {
   const { getAuthConfig, API } = useAuth();
@@ -758,7 +767,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                         <p className="text-xs text-gray-500 mt-0.5">
                           {!isBlankValue(action.assigned_to) && `Assigned: ${action.assigned_to}`}
                           {!isBlankValue(action.assigned_to) && !isBlankValue(action.due_date) && " · "}
-                          {!isBlankValue(action.due_date) && `Due: ${action.due_date}`}
+                          {!isBlankValue(action.due_date) && `Due: ${fmtDueDate(action.due_date)}`}
                         </p>
                       )
                     )}
@@ -942,7 +951,7 @@ export const EvidenceTab = React.memo(function EvidenceTab({
                       <p className="text-xs text-gray-500 mt-0.5">
                         {!isBlankValue(ln.assigned_to) && `Assigned: ${ln.assigned_to}`}
                         {!isBlankValue(ln.assigned_to) && !isBlankValue(ln.due_date) && " · "}
-                        {!isBlankValue(ln.due_date) && `Due: ${ln.due_date}`}
+                        {!isBlankValue(ln.due_date) && `Due: ${fmtDueDate(ln.due_date)}`}
                       </p>
                     )}
                   </div>

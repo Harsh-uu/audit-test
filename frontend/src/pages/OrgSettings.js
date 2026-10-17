@@ -68,7 +68,7 @@ function FocusTopicsTab({ API, getAuthConfig }) {
   const formatMonth = (ym) => {
     if (!ym) return null;
     const [y, m] = ym.split("-");
-    return new Date(+y, +m - 1).toLocaleString("default", { month: "long", year: "numeric" });
+    return new Date(+y, +m - 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
   };
 
   return (

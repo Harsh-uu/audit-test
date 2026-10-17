@@ -12,7 +12,7 @@ export function CommentsTab({ meeting, canAddComment, newComment, setNewComment,
           <div key={c.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-900">{c.user_name}</span>
-              <span className="text-xs text-gray-400">{new Date(c.created_at).toLocaleString("en-GB")}</span>
+              <span className="text-xs text-gray-400">{new Date(c.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
             </div>
             <p className="text-sm text-gray-700">{c.text}</p>
           </div>

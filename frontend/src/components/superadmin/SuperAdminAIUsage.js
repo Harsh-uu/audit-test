@@ -220,7 +220,7 @@ export default function SuperAdminAIUsage({ getAuthConfig, orgs }) {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-500 text-xs">
-                        {item.analyzed_at ? new Date(item.analyzed_at).toLocaleString("en-GB") : "—"}
+                        {item.analyzed_at ? new Date(item.analyzed_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-gray-500 max-w-xs">
                         {item.ai_fallback_used && item.ai_fallback_reason ? (

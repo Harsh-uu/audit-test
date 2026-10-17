@@ -89,7 +89,7 @@ export function PersonalRegisterTimeline({ type, items, canToggle, onToggle }) {
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
             {item.meeting_title} · {fmtDate(item.meeting_date)}
-            {!isReadOnly && !standing && item.due_date && ` · Due: ${item.due_date}`}
+            {!isReadOnly && !standing && item.due_date && ` · Due: ${fmtDate(item.due_date)}`}
             {standing && item.trigger && ` · Trigger: ${item.trigger}`}
             {done && item.completed_at && ` · Completed ${fmtDate(item.completed_at)}`}
           </p>

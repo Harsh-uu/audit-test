@@ -267,7 +267,7 @@ export default function SuperAdminAIAccuracy({ getAuthConfig, orgs }) {
                         <td className="px-4 py-2.5 text-gray-600">{item.manager_name || "—"}</td>
                         <td className="px-4 py-2.5"><ActionBadge action={item.manager_action} /></td>
                         <td className="px-4 py-2.5 text-gray-500 text-xs">
-                          {item.timestamp ? new Date(item.timestamp).toLocaleString("en-GB") : "—"}
+                          {item.timestamp ? new Date(item.timestamp).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
                         </td>
                       </tr>
                     ))}

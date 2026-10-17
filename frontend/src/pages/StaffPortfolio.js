@@ -45,7 +45,7 @@ function MeetingChips({ refs }) {
     <div className="flex flex-wrap gap-1 mt-1.5">
       {sorted.map((r, i) => (
         <span key={i} className="text-xs bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
-          {r.date ? r.date.slice(0, 10) : "—"}
+          {r.date ? new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
         </span>
       ))}
     </div>

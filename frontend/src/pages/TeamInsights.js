@@ -1147,10 +1147,10 @@ function RegisterView({ type, items = [], loading, onToggle }) {
 // manager makes on an AI-suggested mapping is captured there but had no
 // screen anywhere. Self-contained: fetches its own data, doesn't touch the
 // page's shared `data`/`registers` state or their load functions.
-const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function formatUkDate(ts) {
   const d = new Date(ts);
-  return `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 const EVIDENCE_TYPE_LABEL = { cqc: "CQC", care_cert: "Induction", custom: "Organisational" };
 const CONFIDENCE_LABEL = { likely_evidence: "Likely evidence", possible_evidence: "Possible evidence" };

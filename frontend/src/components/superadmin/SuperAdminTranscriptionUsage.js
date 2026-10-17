@@ -202,7 +202,7 @@ export default function SuperAdminTranscriptionUsage({ getAuthConfig, orgs }) {
                         {item.audio_duration_seconds != null ? `${Math.round(item.audio_duration_seconds / 60)}min` : "—"}
                       </td>
                       <td className="px-4 py-2.5 text-gray-500 text-xs">
-                        {item.transcribed_at ? new Date(item.transcribed_at).toLocaleString("en-GB") : "—"}
+                        {item.transcribed_at ? new Date(item.transcribed_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
                       </td>
                       <td className="px-4 py-2.5 text-xs max-w-xs">
                         {item.failed ? (

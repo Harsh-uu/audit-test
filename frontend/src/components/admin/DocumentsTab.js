@@ -30,7 +30,7 @@ function DocCard({ doc, onToggle, onDelete, onDownload }) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-gray-900 truncate">{doc.label || doc.filename}</p>
-            <p className="text-xs text-gray-400 truncate">{doc.filename} · {(doc.size_bytes / 1024).toFixed(1)} KB · {new Date(doc.created_at).toLocaleDateString("en-GB")}</p>
+            <p className="text-xs text-gray-400 truncate">{doc.filename} · {(doc.size_bytes / 1024).toFixed(1)} KB · {new Date(doc.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
             {doc.document_summary && <p className="text-xs text-gray-500 mt-1 italic">{doc.document_summary}</p>}
             <div className="flex items-center gap-2 mt-1.5">
               <ParseStatusBadge status={doc.parse_status} />

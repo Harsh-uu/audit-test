@@ -45,7 +45,7 @@ function AuditEvent({ event }) {
             <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${cfg.color}`}>{event.label}</span>
           </div>
           <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
-            {event.timestamp ? new Date(event.timestamp).toLocaleString("en-GB") : "—"}
+            {event.timestamp ? new Date(event.timestamp).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
           </span>
         </div>
         <p className="text-xs text-gray-500 mt-1">by <strong className="text-gray-700">{event.actor}</strong></p>

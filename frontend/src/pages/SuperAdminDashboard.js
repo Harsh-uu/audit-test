@@ -146,7 +146,7 @@ export default function SuperAdminDashboard() {
       o.cumulative_hours,
       o.hours_overage ? "YES" : "NO",
       STRIPE_STATUS_LABELS[o.stripe_subscription_status] || "—",
-      o.stripe_current_period_end ? new Date(o.stripe_current_period_end).toLocaleDateString("en-GB") : "—",
+      o.stripe_current_period_end ? new Date(o.stripe_current_period_end).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—",
       o.user_count,
       o.meeting_count,
     ]);
