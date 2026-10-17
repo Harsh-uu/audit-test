@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="6" failures="2" skipped="0" tests="20" time="57.357" timestamp="2026-10-17T14:39:45.481084+00:00" hostname="agent-env-93542dae-df0b-4464-99dc-51eb3c5932f3"><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_m040_in_schema_migrations_ledger" time="1.079" /><testcase classname="tests.test_portfolio_signoff_fix" name="test_no_null_sign_off_manager_id_on_signed_meetings" time="1.092" /><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_m040_backfills_non_signoff_status_with_single_manager" time="1.714"><failure message="asyncpg.exceptions.NotNullViolationError: null value in column &quot;meeting_id&quot; of relation &quot;analyses&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (afa5dc56-5116-4064-a0aa-a81af132a928, null, b00bf04f-a1b9-4673-8430-b4a08ba15d6c, , null, [], [], [], [], [], 2026-10-17 14:39:48.092596+00, null, null, null, null, [], [], [], null, f, null, null, null, f, null, null).">tests/test_iter175_portfolio_m040_and_self_complete.py:110: in test_m040_backfills_non_signoff_status_with_single_manager
+    await conn.execute(
+/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py:353: in execute
+    _, status, _ = await self._execute(
+/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py:1794: in _execute
+    result, _ = await self.__execute(
+/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py:1892: in __execute
+    result, stmt = await self._do_execute(
+/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py:1945: in _do_execute
+    result = await executor(stmt, None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncpg/protocol/protocol.pyx:207: in bind_execute
+    ???
+E   asyncpg.exceptions.NotNullViolationError: null value in column "meeting_id" of relation "analyses" violates not-null constraint
+E   DETAIL:  Failing row contains (afa5dc56-5116-4064-a0aa-a81af132a928, null, b00bf04f-a1b9-4673-8430-b4a08ba15d6c, , null, [], [], [], [], [], 2026-10-17 14:39:48.092596+00, null, null, null, null, [], [], [], null, f, null, null, null, f, null, null).</failure></testcase><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_m040_leaves_ambiguous_meeting_null" time="1.706"><failure message="asyncpg.exceptions.NotNullViolationError: null value in column &quot;meeting_id&quot; of relation &quot;analyses&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (cb9f20bf-9fc5-4a5b-917c-1aac4ea597d5, null, b00bf04f-a1b9-4673-8430-b4a08ba15d6c, , null, [], [], [], [], [], 2026-10-17 14:39:49.85316+00, null, null, null, null, [], [], [], null, f, null, null, null, f, null, null).">tests/test_iter175_portfolio_m040_and_self_complete.py:168: in test_m040_leaves_ambiguous_meeting_null
+    await conn.execute(
+/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py:353: in execute
+    _, status, _ = await self._execute(
+/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py:1794: in _execute
+    result, _ = await self.__execute(
+/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py:1892: in __execute
+    result, stmt = await self._do_execute(
+/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py:1945: in _do_execute
+    result = await executor(stmt, None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncpg/protocol/protocol.pyx:207: in bind_execute
+    ???
+E   asyncpg.exceptions.NotNullViolationError: null value in column "meeting_id" of relation "analyses" violates not-null constraint
+E   DETAIL:  Failing row contains (cb9f20bf-9fc5-4a5b-917c-1aac4ea597d5, null, b00bf04f-a1b9-4673-8430-b4a08ba15d6c, , null, [], [], [], [], [], 2026-10-17 14:39:49.85316+00, null, null, null, null, [], [], [], null, f, null, null, null, f, null, null).</failure></testcase><testcase classname="tests.test_portfolio_signoff_fix" name="test_demo_manager_portfolio_no_self_conducted_leak" time="22.742" /><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_assignee_can_self_complete_action" time="17.047"><error message="failed on setup with &quot;Failed: 'test_assignee_can_self_complete_action' requested an async fixture 'seeded_meeting_with_items', with no plugin or hook that handled it. This is an error, as pytest does not natively support it.&#10;See: https://docs.pytest.org/en/stable/deprecations.html#sync-test-depending-on-async-fixture&quot;">'test_assignee_can_self_complete_action' requested an async fixture 'seeded_meeting_with_items', with no plugin or hook that handled it. This is an error, as pytest does not natively support it.
+See: https://docs.pytest.org/en/stable/deprecations.html#sync-test-depending-on-async-fixture</error></testcase><testcase classname="tests.test_portfolio_signoff_fix" name="test_demo_manager_conducted_meetings_not_in_portfolio" time="1.119" /><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_non_assignee_blocked_from_action" time="2.616"><error message="failed on setup with &quot;AssertionError&quot;">/root/.venv/lib/python3.11/site-packages/pytest_asyncio/plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+E   AssertionError</error></testcase><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_manager_can_override_action" time="3.036"><error message="failed on setup with &quot;AssertionError&quot;">/root/.venv/lib/python3.11/site-packages/pytest_asyncio/plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+E   AssertionError</error></testcase><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_assignee_can_self_complete_learning_need" time="0.000"><error message="failed on setup with &quot;AssertionError&quot;">/root/.venv/lib/python3.11/site-packages/pytest_asyncio/plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+E   AssertionError</error></testcase><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_non_assignee_blocked_from_learning_need" time="0.000"><error message="failed on setup with &quot;AssertionError&quot;">/root/.venv/lib/python3.11/site-packages/pytest_asyncio/plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+E   AssertionError</error></testcase><testcase classname="tests.test_iter175_portfolio_m040_and_self_complete" name="test_manager_can_override_learning_need" time="0.002"><error message="failed on setup with &quot;AssertionError&quot;">/root/.venv/lib/python3.11/site-packages/pytest_asyncio/plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+E   AssertionError</error></testcase><testcase classname="tests.test_portfolio_signoff_fix" name="test_signoff_backfills_null_sign_off_manager_id" time="6.575" /><testcase classname="tests.test_portfolio_signoff_fix" name="test_signoff_does_not_overwrite_assigned_manager" time="3.943" /><testcase classname="tests.test_portfolio_signoff_fix" name="test_portfolio_registers_endpoint_for_manager" time="5.115" /><testcase classname="tests.test_portfolio_signoff_fix" name="test_admin_signoff_credits_single_manager_attendee_not_admin" time="4.326" /><testcase classname="tests.test_portfolio_signoff_fix" name="test_admin_signoff_ambiguous_managers_leaves_null" time="3.964" /><testcase classname="tests.test_portfolio_signoff_fix" name="test_manager_self_signoff_single_attendee_credits_self" time="3.958" /><testcase classname="tests.test_portfolio_signoff_fix" name="test_m039_registered_and_applied" time="1.096" /><testcase classname="tests.test_portfolio_signoff_fix" name="test_m039_corrects_admin_misattribution_but_leaves_legit_untouched" time="3.018" /></testsuite></testsuites>

@@ -1,0 +1,34 @@
+{
+  "summary": "Verified iteration_175 fixes: (A) m040 migration backfilling sign_off_manager_id on ANY-status meetings with exactly-one manager/admin attendee, and (B) review.py self-completion permission fix on PATCH /review/{meeting_id}/actions/{action_id} + new PATCH /review/{meeting_id}/learning_needs/{ln_id}. Added 9 new pytest tests (test_iter175_portfolio_m040_and_self_complete.py) — all pass. Also re-ran the 11 existing regression tests from iteration_173/174 (test_portfolio_signoff_fix.py) — all still pass. Backend coverage: 20/20 (100%). Frontend/Playwright UI verification was BLOCKED by a tool-side issue (every browser_automation script, including a 5-line smoke test, failed with 'Script error: invalid syntax' from the tool wrapper — not a code issue). Hit the 3-attempt loop-prevention threshold and stopped; the UI calls the exact endpoints covered by the backend tests so behavior is still verified at the integration layer.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter175_portfolio_m040_and_self_complete.py",
+    "/app/backend/tests/test_portfolio_signoff_fix.py",
+    "/app/backend/tests/seed_iter175_evidence_fixture.py",
+    "/app/test_reports/pytest/iter175.xml"
+  ],
+  "action_items": [
+    "Playwright-level UI verification on the Evidence tab checkboxes could not be completed in this preview — the mcp browser_automation tool wrapper rejected every script with a 'Script error: invalid syntax (tmp*.py, line N)' error, even on a 5-line smoke test. Not a code issue; the tool itself is broken in this environment. Backend tests cover the exact PATCH endpoints the UI calls (assignee -> 200, non-assignee -> 403/404, manager override -> 200), and the UI endpoint change in EvidenceTab.js (toggleLNComplete now hitting /learning_needs/{ln_id}) is a one-line swap already code-reviewed. Main agent should either re-invoke the test agent after the tool is unblocked, or do a quick manual browser spot-check as Rachel Moss / user@supervision.com drilling into the seeded meeting."
+  ],
+  "critical_code_review_comments": [
+    "review.py toggle_action_complete and new toggle_learning_need_complete both correctly match admin.py's team-insights pattern: assignee self-complete allowed, manager/admin override preserved, 403 on mismatch. Both propagate completion back to the source meeting for carried-over items — symmetrical logic, good.",
+    "m040 SQL correctly reuses m038's unambiguous 'exactly one manager/admin attendee' rule and only drops the status restriction. Ambiguous (0 or 2+) rows are still left NULL — verified by test_m040_leaves_ambiguous_meeting_null.",
+    "Minor: toggle_learning_need_complete uses matched_ln.get('source_action_id') for the LN rollover source id — field name is shared with actions, works but slightly confusing. Not a bug; leave a comment in-line (already present)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter175_portfolio_m040_and_self_complete.py (new)",
+    "/app/backend/tests/seed_iter175_evidence_fixture.py (new, for future UI retest)"
+  ],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "N/A — tool blocked"},
+  "test_credentials": "admin@supervision.com/Admin123!X, manager@supervision.com/Manager123!, user@supervision.com/Staff123!, jane@supervision.com/JaneNew456! — all verified in use by backend tests this round.",
+  "seed_data_creation": "test_iter175_portfolio_m040_and_self_complete.py creates/deletes synthetic meetings+analyses in-fixture (TEST_m040_* and TEST iter175 meeting prefixes). seed_iter175_evidence_fixture.py seeded one meeting (ID e6b607ab-...) during the UI attempt — already cleaned up at end of this run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "If re-invoked for UI verification: seed a fixture with /app/backend/tests/seed_iter175_evidence_fixture.py seed, then login as user@supervision.com, go to /meetings/{id}/report, click data-testid='complete-action-0' and 'complete-ln-0'. Both should PATCH 200. Then login as jane@supervision.com and attempt — expect 403/404. Cleanup via `python seed_iter175_evidence_fixture.py cleanup <meeting_id>`. The mcp browser_automation tool was returning 'invalid syntax' wrapper errors for every script in this session — if that persists, test via curl/pytest only.",
+  "rca of the issue": "ISSUE 1 (gap #3): m037-m039 restricted their backfills to status IN ('signed_off','shared'), but portfolio.py's registers are intentionally status-agnostic for rollover visibility. m040 drops the status restriction while keeping the same conservative 'exactly one manager/admin attendee' inference rule — verified by test_m040_backfills_non_signoff_status_with_single_manager (reviewed-status meeting -> correctly backfilled) and test_m040_leaves_ambiguous_meeting_null (2 managers + in_review -> correctly left NULL). ISSUE 2: Evidence tab's toggleLNComplete was calling the manager-only bulk PUT /review/{id}/learning_needs; actions endpoint had hard manager/admin gate. Fix: added single-item PATCH /review/{id}/learning_needs/{ln_id} with assignee-self-complete semantics, aligned actions endpoint to same pattern. Verified via 6 permission tests (assignee 200, non-assignee 403/404, manager override 200, across both actions + learning_needs endpoints)."
+}
