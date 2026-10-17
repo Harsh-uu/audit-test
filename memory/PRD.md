@@ -370,3 +370,11 @@ User flagged the Supervision Matrix page's tiles were sorted by staff name, whic
 - `pages/SupervisionMatrix.js`: each status bucket (`overdueList`/`dueSoonList`/`onTrackList`) is now sorted by `days_until_due` ascending (most overdue first within Overdue; soonest-due first within Due Soon/On Track); the "All" filter view concatenates the three buckets in that order instead of using the API's raw (name-ordered) list.
 - Verified against real schedule data via API: Overdue bucket correctly orders most-overdue (-40 days) → least-overdue (-14 days), followed by On Track sorted soonest-first. Frontend rebuilt + restarted (static Vite build, not hot-reload).
 
+### EULA update — August 2026 text, entity renamed to Supervision2 Ltd (SHIPPED 2026-10-17)
+
+User supplied the full final EULA/Terms of Service text to replace the live Sept-2026 version.
+- New migration `backend/migrations/m041_eula_august_2026_update.py` (wired into `migrations/__init__.py`'s `MIGRATIONS` list) — does NOT modify the historical `m029_eula_sept_update.py` migration file.
+- Changes applied: legal entity "Itwo.one Ltd" → "Supervision2 Ltd"; every in-body "Itwo.one" product reference → "1two.one"; new explicit "Platform domain: 1two.one" header line; Section 11.2 meeting taxonomy gained "Performance review" and "Stay interview". Sections 1-11 (incl. Section 9 Schedule 1 DPA, Section 10 Fees & Billing, Section 11 Onboarding) all retained unchanged in structure — nothing removed.
+- Per the same precedent set by `m027_eula_real_content.py`/`m029_eula_sept_update.py`, updated the active `eula_versions` row IN PLACE (`UPDATE ... WHERE is_active = TRUE`) rather than bumping the version — no existing user is re-gated/re-prompted; only brand-new accounts see this text on first login.
+- Verified via `GET /api/eula/current` (admin@supervision.com): new content live (Supervision2 Ltd, 1two.one domain line, Performance review/Stay interview present, zero "Itwo.one" occurrences, all of Sections 9/10/11 present), `needs_acceptance: false` confirming no re-gating occurred.
+

@@ -49,6 +49,7 @@ from . import (
     m038_backfill_sign_off_manager_id_from_attendees,
     m039_fix_sign_off_manager_admin_misattribution,
     m040_backfill_sign_off_manager_id_any_status,
+    m041_eula_august_2026_update,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,7 @@ MIGRATIONS = [
     m038_backfill_sign_off_manager_id_from_attendees,
     m039_fix_sign_off_manager_admin_misattribution,
     m040_backfill_sign_off_manager_id_any_status,
+    m041_eula_august_2026_update,
 ]
 
 
