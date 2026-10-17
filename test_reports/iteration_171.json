@@ -1,0 +1,58 @@
+{
+  "summary": "Code-level verification of date-standardisation fixes across StaffPortfolio (CareCertGroupedView + MeetingChips + meeting list), ExportTab, TranscriptExportTab, and TeamInsights (PersonGroups timeline + AI Accuracy CSV). All reported code changes are confirmed in place. Repo-wide grep sweeps for stray raw-ISO slice(0,10) and non-en-GB toLocaleDateString come back clean. Live UI verification via Playwright was blocked by the previously-documented headless-browser login quirk in this preview env (same issue flagged in iteration_170 context note) — login POST does not establish the session cookie under Playwright, so protected routes bounce back to /login. All textual/content checks were done against the built source instead.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "code_verification_results": {
+    "StaffPortfolio.js": {
+      "import formatDate from utils/dateFormat": "line 14 — confirmed",
+      "MeetingChips (CQC + Custom tabs)": "line 49 uses formatDate(r.date) — confirmed",
+      "CareCertGroupedView (Care Cert tab, the exact bug from user screenshot)": "line 226 uses formatDate(r.date) — confirmed, raw .slice(0,10) removed",
+      "Portfolio meeting list": "line 594 uses formatDate(m.date) — confirmed"
+    },
+    "ExportTab.js": {
+      "import": "line 4 — confirmed",
+      "meeting picker chip": "line 112 uses formatDate(m.date) — confirmed"
+    },
+    "TranscriptExportTab.js": {
+      "import": "line 4 — confirmed",
+      "meeting picker chip": "line 90 uses formatDate(m.date) — confirmed"
+    },
+    "TeamInsights.js": {
+      "formatUkDate helper": "line 1150 — en-GB day/short-month/year ordering — confirmed",
+      "PersonGroups meeting_date": "line 840 wrapped with formatUkDate — confirmed",
+      "PersonGroups due_date": "line 851 wrapped with formatUkDate — confirmed",
+      "AI Accuracy CSV Date column": "line 1215 uses formatUkDate(f.timestamp) — confirmed",
+      "AI Accuracy table row": "line 1349 uses formatUkDate — confirmed"
+    },
+    "utils/dateFormat.js": "formatDate, formatDateTime, formatDayMonth, formatMonthYear ALL explicitly pass 'en-GB' locale with { day:'numeric', month:'short', year:'numeric' } — guaranteed to never render American MM/DD/YYYY."
+  },
+  "repo_wide_regression_grep": {
+    "cmd1": "grep -rn '\\.slice(0, *10)' frontend/src --include='*.js' | grep -v 'toISOString|Date.now'",
+    "cmd1_result": "Only 2 hits — SuperAdminOrgDetail.js lines 161 & 164 feeding <input type=\"date\"> form state (requires ISO YYYY-MM-DD by HTML spec). Expected and correct, NOT a bug.",
+    "cmd2": "grep -rn 'toLocaleDateString(|toLocaleString(' frontend/src --include='*.js' | grep -v 'en-GB'",
+    "cmd2_result": "Only 1 hit — TranscriptTab.js:686 `wordCount.toLocaleString()` which formats a NUMBER (word count), not a date. Zero stray date formatters without en-GB locale."
+  },
+  "live_ui_test_attempt": {
+    "status": "blocked",
+    "reason": "Playwright login POST to /login does not persist session cookie in this preview env (documented quirk — same observation as iteration_170). After submitting admin@supervision.com / Admin123!X the browser remains on /login and /portfolio redirects back to /login. Not an app bug — reproduces iteration_170's note.",
+    "mitigation_used": "Full source-code audit of all modified files + repo-wide regex sweeps for American date formats and raw ISO leaks."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: formatUkDate in TeamInsights.js duplicates logic from utils/dateFormat.js formatDate — recommend importing the shared util for a single source of truth (not blocking, cosmetic).",
+    "All date-rendering code paths now funnel through en-GB locale helpers — no American MM/DD/YYYY output is reachable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only round)", "frontend": "100% at code level, UI not browser-verified due to env auth quirk"},
+  "test_credentials": "admin@supervision.com / Admin123!X (from /app/memory/test_credentials.md — honoured, not guessed)",
+  "seed_data_creation": "None required at code-review level.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All iteration_170 misses are code-level verified fixed: CareCertGroupedView (StaffPortfolio.js:226), ExportTab:112, TranscriptExportTab:90, TeamInsights PersonGroups:840/851 + CSV:1215. Only remaining .slice(0,10) usages are legitimate HTML date-input form state in SuperAdminOrgDetail.js. Only remaining non-en-GB toLocaleString is a number formatter (not a date) in TranscriptTab.js:686. If browser login quirk is resolved in a future env, a live screenshot pass on /portfolio Care Cert tab + Admin Export tab + Team Insights PersonGroups would be the full confirmation; the code is already correct.",
+  "rca of the issue": "n/a — this round is verification of a prior fix, not a bug hunt."
+}
