@@ -434,6 +434,8 @@ async def export_portfolio_pdf(user_id: str, current_user=Depends(get_current_us
     data = await _build_portfolio_data(user_id, org_id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
+    registers = await _build_portfolio_registers(user_id, org_id)
+    data["registers"] = registers or {"achievements": [], "actions": [], "learning_needs": []}
 
     pdf_bytes = await asyncio.to_thread(_generate_portfolio_pdf, data)
     safe_name = "".join(c for c in data["user"]["name"] if c.isalnum() or c in " _-").strip().replace(" ", "_")
@@ -467,7 +469,23 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     BLUE_BG = colors.HexColor("#EFF6FF")
     TEAL_BG = colors.HexColor("#F0FDF4")
 
-    title_s = ParagraphStyle("T", fontName="Helvetica-Bold", fontSize=18, textColor=NAVY, spaceAfter=2)
+    # Custom month abbreviations — Python's stdlib %b gives "Sep", but the
+    # rest of the site (frontend/src/utils/dateFormat.js, en-GB Intl) gives
+    # "Sept" for September. Match that exactly so the PDF never disagrees
+    # with the on-screen date format.
+    _MONTH_ABBR = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+                   7: "Jul", 8: "Aug", 9: "Sept", 10: "Oct", 11: "Nov", 12: "Dec"}
+
+    def fmt_date(value):
+        """Format an ISO date/datetime string as '15 Sept 2026' — never raw ISO."""
+        if not value:
+            return "—"
+        try:
+            dtv = _dt.strptime(str(value)[:10], "%Y-%m-%d")
+        except Exception:
+            return str(value)
+        return f"{dtv.day} {_MONTH_ABBR[dtv.month]} {dtv.year}"
+
     body_s = ParagraphStyle("B", fontName="Helvetica", fontSize=9, textColor=colors.HexColor("#374151"), spaceAfter=2, leading=12)
     small_s = ParagraphStyle("S", fontName="Helvetica", fontSize=8, textColor=MID_GRAY, spaceAfter=1, leading=11)
     italic_s = ParagraphStyle("I", fontName="Helvetica-Oblique", fontSize=8, textColor=MID_GRAY, leading=11, spaceAfter=2)
@@ -489,15 +507,35 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     story = []
     user = data["user"]
     stats = data["stats"]
+    registers = data.get("registers") or {"achievements": [], "actions": [], "learning_needs": []}
 
-    story.append(Paragraph("Supervision 2.0 — Staff Evidence Portfolio", small_s))
-    story.append(Paragraph(e(user["name"]), title_s))
-    story.append(HRFlowable(width="100%", thickness=2, color=NAVY, spaceAfter=4))
-
-    meta = [
-        ["Role", user["role"].title(), "Email", user["email"]],
-        ["Meetings", str(stats["total_meetings"]), "Last Supervision", str(stats.get("last_meeting_date") or "—")],
+    # ── Header band — name/role/email on a navy card instead of plain stacked
+    # text, so the report opens with a proper "cover" rather than a page of
+    # text starting mid-way down ──────────────────────────────────────────
+    header_rows = [
+        [Paragraph('<font color="#CBD5E1"><b>SUPERVISION 2.0  ·  STAFF EVIDENCE PORTFOLIO</b></font>',
+                    ParagraphStyle("Eyebrow", fontName="Helvetica-Bold", fontSize=8, leading=10))],
+        [Paragraph(f'<font color="white"><b>{e(user["name"])}</b></font>',
+                    ParagraphStyle("NameHdr", fontName="Helvetica-Bold", fontSize=20, leading=24))],
+        [Paragraph(f'<font color="#CBD5E1">{e(user["role"].title())}  ·  {e(user["email"])}</font>',
+                    ParagraphStyle("SubHdr", fontName="Helvetica", fontSize=9, leading=12))],
     ]
+    header_tbl = Table(header_rows, colWidths=[170*mm])
+    header_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), NAVY),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (0, 0), 10),
+        ("BOTTOMPADDING", (0, 0), (0, 0), 1),
+        ("TOPPADDING", (0, 1), (0, 1), 1),
+        ("BOTTOMPADDING", (0, 1), (0, 1), 2),
+        ("TOPPADDING", (0, 2), (0, 2), 1),
+        ("BOTTOMPADDING", (0, 2), (0, 2), 10),
+    ]))
+    story.append(header_tbl)
+    story.append(Spacer(1, 4*mm))
+
+    meta = [["Meetings", str(stats["total_meetings"]), "Last Supervision", fmt_date(stats.get("last_meeting_date"))]]
     mt = Table(meta, colWidths=[28*mm, 57*mm, 28*mm, 57*mm])
     mt.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
@@ -538,6 +576,123 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
     ]))
     story.append(st)
 
+    actions_open = sum(1 for a in registers["actions"] if not a.get("completed"))
+    lns_open = sum(1 for l in registers["learning_needs"] if not l.get("completed"))
+    ach_count = len(registers["achievements"])
+    total_register_items = len(registers["actions"]) + len(registers["learning_needs"]) + ach_count
+    stat_rows2 = [["Open Actions", "Open Learning Needs", "Achievements", "Register Items"]]
+    stat_rows2.append([str(actions_open), str(lns_open), str(ach_count), str(total_register_items)])
+    st2 = Table(stat_rows2, colWidths=[42*mm, 42*mm, 43*mm, 43*mm])
+    st2.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("TEXTCOLOR", (0, 0), (-1, 0), MID_GRAY),
+        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 1), (-1, 1), 16),
+        ("TEXTCOLOR", (0, 1), (0, 1), colors.HexColor("#D97706")),
+        ("TEXTCOLOR", (1, 1), (1, 1), TEAL),
+        ("TEXTCOLOR", (2, 1), (2, 1), EMERALD),
+        ("TEXTCOLOR", (3, 1), (3, 1), MID_GRAY),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+    ]))
+    story.append(Spacer(1, 1.5*mm))
+    story.append(st2)
+
+    # ── Actions / Learning Needs / Achievements — same order as the online
+    # My Portfolio tabs (Actions, Learning Needs, Achievements, then the
+    # compliance evidence below), so the PDF matches what the user sees
+    # on-screen instead of only ever containing CQC/Care Cert/Organisational.
+    STATUS_COLOR = {
+        "COMPLETE": "#059669", "OVERDUE": "#DC2626",
+        "STANDING": "#4F46E5", "OUTSTANDING": "#D97706", "ACHIEVEMENT": "#059669",
+    }
+    today_str = _dt.now().strftime("%Y-%m-%d")
+
+    def render_register_section(title, items, kind, hdr_bg, item_bg):
+        if not items:
+            return
+        story.append(Spacer(1, 4*mm))
+        story.append(section_hdr(title, bg=hdr_bg))
+        story.append(Spacer(1, 2*mm))
+
+        if kind == "achievements":
+            ordered = [(it, False, False) for it in items]
+        else:
+            def _is_overdue(it):
+                return (not it.get("completed") and it.get("action_type") != "standing_commitment"
+                        and it.get("due_date") and it["due_date"] < today_str)
+            outstanding = sorted((it for it in items if not it.get("completed")),
+                                  key=lambda it: (not _is_overdue(it)))
+            completed = sorted((it for it in items if it.get("completed")),
+                                key=lambda it: (it.get("completed_at") or it.get("meeting_date") or ""), reverse=True)
+            ordered = [(it, _is_overdue(it), False) for it in outstanding] + [(it, False, True) for it in completed]
+
+        for item, overdue, is_done in ordered:
+            if kind == "achievements":
+                status_label = "ACHIEVEMENT"
+            elif is_done:
+                status_label = "COMPLETE"
+            elif overdue:
+                status_label = "OVERDUE"
+            elif item.get("action_type") == "standing_commitment":
+                status_label = "STANDING"
+            else:
+                status_label = "OUTSTANDING"
+
+            rows = [[
+                Paragraph(e(item["text"]), body_s),
+                Paragraph(f'<font color="{STATUS_COLOR[status_label]}"><b>{status_label}</b></font>', small_s),
+            ]]
+            meta_bits = []
+            if kind != "achievements":
+                if item.get("action_type") == "standing_commitment" and item.get("trigger"):
+                    meta_bits.append(f"Trigger: {e(item['trigger'])}")
+                elif item.get("due_date"):
+                    meta_bits.append(f"Due: {fmt_date(item['due_date'])}")
+                if item.get("is_rolled_over") and not is_done:
+                    meta_bits.append("Rolled over")
+            if meta_bits:
+                rows.append([Paragraph("  |  ".join(meta_bits), small_s), ""])
+            rows.append([Paragraph(f"Meeting: {e(item.get('meeting_title',''))} — {fmt_date(item.get('meeting_date'))}", small_s), ""])
+            if is_done and item.get("completed_at"):
+                rows.append([Paragraph(f"Completed: {fmt_date(item['completed_at'])}", small_s), ""])
+
+            row_bg = item_bg
+            if kind != "achievements":
+                if is_done:
+                    row_bg = colors.HexColor("#F9FAFB")
+                elif overdue:
+                    row_bg = colors.HexColor("#FEF2F2")
+                elif item.get("is_rolled_over"):
+                    row_bg = colors.HexColor("#FFFBEB")
+
+            t = Table(rows, colWidths=[140*mm, 30*mm])
+            span_styles = [
+                ("BACKGROUND", (0, 0), (-1, -1), row_bg),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E5E7EB")),
+            ]
+            for i in range(1, len(rows)):
+                span_styles.append(("SPAN", (0, i), (1, i)))
+            t.setStyle(TableStyle(span_styles))
+            story.append(t)
+            story.append(Spacer(1, 1.5*mm))
+
+    render_register_section("Actions", registers["actions"], "actions",
+                             hdr_bg=colors.HexColor("#92400E"), item_bg=colors.HexColor("#FFFBEB"))
+    render_register_section("Learning Needs", registers["learning_needs"], "learning_needs",
+                             hdr_bg=colors.HexColor("#115E59"), item_bg=colors.HexColor("#F0FDFA"))
+    render_register_section("Achievements", registers["achievements"], "achievements",
+                             hdr_bg=colors.HexColor("#047857"), item_bg=colors.HexColor("#ECFDF5"))
+
+
     if data["cqc_summary"]:
         story.append(Spacer(1, 5*mm))
         story.append(section_hdr("CQC Regulatory Evidence", bg=colors.HexColor("#4C1D95")))
@@ -551,7 +706,8 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
             if kq:
                 rows.append([Paragraph(f'Key Questions: {e(kq)}', small_s), ""])
             rows.append([Paragraph(f'Likely: {s["likely_count"]}  |  Needs Review: {s["needs_review_count"]}', small_s), ""])
-            dates = ", ".join(sorted(set(r["date"][:10] for r in s.get("meeting_refs", []))))
+            _raw_dates = sorted(set(r["date"][:10] for r in s.get("meeting_refs", []) if r.get("date")))
+            dates = ", ".join(fmt_date(d) for d in _raw_dates)
             if dates:
                 rows.append([Paragraph(f'Meetings: {e(dates)}', small_s), ""])
             if s.get("latest_excerpt"):
@@ -583,7 +739,8 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
             if s.get("outcome_ref"):
                 rows.append([Paragraph(f'Outcome {e(s["outcome_ref"])}: {e(s.get("outcome_name", ""))}', small_s), ""])
             rows.append([Paragraph(f'Likely: {s["likely_count"]}  |  Needs Review: {s["needs_review_count"]}', small_s), ""])
-            dates = ", ".join(sorted(set(r["date"][:10] for r in s.get("meeting_refs", []))))
+            _raw_dates = sorted(set(r["date"][:10] for r in s.get("meeting_refs", []) if r.get("date")))
+            dates = ", ".join(fmt_date(d) for d in _raw_dates)
             if dates:
                 rows.append([Paragraph(f'Meetings: {e(dates)}', small_s), ""])
             if s.get("latest_excerpt"):
@@ -615,7 +772,8 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
             if s.get("document_name"):
                 rows.append([Paragraph(f'Document: {e(s["document_name"])}', small_s), ""])
             rows.append([Paragraph(f'Likely: {s["likely_count"]}  |  Needs Review: {s["needs_review_count"]}', small_s), ""])
-            dates = ", ".join(sorted(set(r["date"][:10] for r in s.get("meeting_refs", []))))
+            _raw_dates = sorted(set(r["date"][:10] for r in s.get("meeting_refs", []) if r.get("date")))
+            dates = ", ".join(fmt_date(d) for d in _raw_dates)
             if dates:
                 rows.append([Paragraph(f'Meetings: {e(dates)}', small_s), ""])
             if s.get("latest_excerpt"):
@@ -641,7 +799,7 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
         story.append(Spacer(1, 2*mm))
         hdr = [["Date", "Meeting Title", "CQC", "Care Cert", "Custom", "Manager"]]
         tbl_rows = hdr + [
-            [m["date"][:10] if m.get("date") else "—",
+            [fmt_date(m.get("date")),
              m.get("title", ""),
              str(m["cqc_count"]),
              str(m["care_cert_count"]),
@@ -649,7 +807,7 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
              m.get("sign_off_manager_name", "—")]
             for m in data["meetings"]
         ]
-        tbl = Table(tbl_rows, colWidths=[22*mm, 75*mm, 14*mm, 17*mm, 14*mm, 28*mm])
+        tbl = Table(tbl_rows, colWidths=[26*mm, 71*mm, 14*mm, 17*mm, 14*mm, 28*mm])
         tbl.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), NAVY),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -665,8 +823,10 @@ def _generate_portfolio_pdf(data: dict) -> bytes:
 
     story.append(Spacer(1, 8*mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GRAY))
+    _now = _dt.now()
+    _footer_date = f"{_now.day} {_MONTH_ABBR[_now.month]} {_now.year} {_now.strftime('%H:%M')}"
     story.append(Paragraph(
-        f"Generated by 1two.one on {_dt.now().strftime('%d %b %Y %H:%M')} UTC. Confidential.",
+        f"Generated by 1two.one on {_footer_date} UTC. Confidential.",
         small_s
     ))
 
