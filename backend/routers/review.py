@@ -853,8 +853,6 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_u
 
 @router.patch("/{meeting_id}/actions/{action_id}")
 async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, current_user=Depends(get_current_user)):
-    if current_user["role"] not in ["manager", "admin"]:
-        raise HTTPException(status_code=403, detail="Only managers can toggle action completion")
     org_id = current_user.get("org_id", "")
     async with database.with_org(org_id) as conn:
         m_row = await conn.fetchrow("SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
@@ -873,6 +871,11 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
     matched_action = None
     for a in actions:
         if a.get("id") == action_id:
+            # The person this action is assigned to can tick it off themselves
+            # (My Portfolio / drilling in from there); managers/admins can
+            # always override, same as the Team Insights register endpoint.
+            if current_user["role"] not in ("admin", "manager") and a.get("assigned_to_user_id") != current_user["id"]:
+                raise HTTPException(status_code=403, detail="You can only tick off actions assigned to you")
             a["completed"] = completed
             a["completed_at"] = now if completed else None
             updated = True
@@ -930,6 +933,95 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
                             )
             except Exception as e:
                 logger.warning(f"Could not propagate action completion to source meeting {source_meeting_id}: {e}")
+
+    return {"message": "Updated", "completed": completed}
+
+
+@router.patch("/{meeting_id}/learning_needs/{ln_id}")
+async def toggle_learning_need_complete(meeting_id: str, ln_id: str, data: dict, current_user=Depends(get_current_user)):
+    """Single-item completion toggle for one learning need — the staff member
+    it's assigned to can tick it off themselves (My Portfolio / drilling in
+    from there); managers/admins can always override. Deliberately separate
+    from PUT /{meeting_id}/learning_needs (which stays manager/admin-only,
+    since that bulk endpoint lets a manager edit/add/remove arbitrary items,
+    not just toggle completion on their own)."""
+    org_id = current_user.get("org_id", "")
+    async with database.with_org(org_id) as conn:
+        m_row = await conn.fetchrow("SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2", meeting_id, org_id)
+    if not m_row or not m_row["analysis_id"]:
+        raise HTTPException(status_code=404, detail="Meeting or analysis not found")
+
+    async with database.with_org(org_id) as conn:
+        a_row = await conn.fetchrow("SELECT id, learning_needs FROM analyses WHERE id=$1", m_row["analysis_id"])
+    if not a_row:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    completed = bool(data.get("completed", False))
+    now = datetime.now(timezone.utc).isoformat()
+    lns = _ensure_list(a_row["learning_needs"])
+    updated = False
+    matched_ln = None
+    for ln in lns:
+        if ln.get("id") == ln_id:
+            if current_user["role"] not in ("admin", "manager") and ln.get("assigned_to_user_id") != current_user["id"]:
+                raise HTTPException(status_code=403, detail="You can only tick off learning needs assigned to you")
+            ln["completed"] = completed
+            ln["completed_at"] = now if completed else None
+            updated = True
+            matched_ln = ln
+            break
+    if not updated:
+        raise HTTPException(status_code=404, detail="Learning need not found")
+
+    async with database.with_org(org_id) as conn:
+        await conn.execute("UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2", lns, a_row["id"])
+        ln_label = (matched_ln.get("text") or "")[:80]
+        status = "Completed" if completed else "Re-opened"
+        rolled_note = " (carried-over learning need)" if matched_ln.get("is_rolled_over") else ""
+        detail_str = f"{status}: \"{ln_label}\"{rolled_note}"
+        try:
+            await _log_edit(conn, meeting_id, org_id, "learning_need_completion",
+                            current_user["id"], current_user.get("name", ""),
+                            detail_str)
+        except Exception as _e:
+            logger.error(f"[AUDIT] _log_edit failed for learning_need_completion meeting={meeting_id}: {_e}")
+        try:
+            await _audit(conn, meeting_id, org_id, "learning_need_status_changed",
+                         current_user["id"], current_user.get("name", ""),
+                         detail_str)
+        except Exception as _e:
+            logger.error(f"[AUDIT] _audit failed for learning_need_status_changed meeting={meeting_id}: {_e}")
+
+    # Propagate completion back to the original meeting so the need stops rolling forward
+    if completed and matched_ln and matched_ln.get("is_rolled_over"):
+        source_meeting_id = matched_ln.get("source_meeting_id")
+        source_ln_id = matched_ln.get("source_action_id")  # field name shared with actions' rollover tagging
+        if source_meeting_id and source_ln_id:
+            try:
+                async with database.with_org(org_id) as conn:
+                    src_row = await conn.fetchrow(
+                        "SELECT analysis_id FROM meetings WHERE id=$1 AND org_id=$2",
+                        source_meeting_id, org_id,
+                    )
+                if src_row and src_row["analysis_id"]:
+                    async with database.with_org(org_id) as conn:
+                        src_analysis = await conn.fetchrow(
+                            "SELECT id, learning_needs FROM analyses WHERE id=$1", src_row["analysis_id"]
+                        )
+                    if src_analysis:
+                        src_lns = _ensure_list(src_analysis["learning_needs"])
+                        for sl in src_lns:
+                            if sl.get("id") == source_ln_id:
+                                sl["completed"] = True
+                                sl["completed_at"] = now
+                                break
+                        async with database.with_org(org_id) as conn:
+                            await conn.execute(
+                                "UPDATE analyses SET learning_needs=$1::jsonb WHERE id=$2",
+                                src_lns, src_analysis["id"],
+                            )
+            except Exception as e:
+                logger.warning(f"Could not propagate learning need completion to source meeting {source_meeting_id}: {e}")
 
     return {"message": "Updated", "completed": completed}
 

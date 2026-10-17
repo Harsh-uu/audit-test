@@ -382,12 +382,13 @@ export const EvidenceTab = React.memo(function EvidenceTab({
 
   const toggleLNComplete = async (idx, completed) => {
     const prev = learningNeeds;
-    const updated = learningNeeds.map((ln, i) => i === idx ? { ...ln, completed } : ln);
+    const ln = learningNeeds[idx];
+    const updated = learningNeeds.map((l, i) => i === idx ? { ...l, completed } : l);
     // Optimistic: flip the checkbox immediately, sync to the server in the background
     setLearningNeeds(updated);
     onAnalysisChange?.({ ...analysis, learning_needs: updated });
     try {
-      await axios.put(`${API}/review/${meeting.id}/learning_needs`, { learning_needs: updated }, getAuthConfig());
+      await axios.patch(`${API}/review/${meeting.id}/learning_needs/${ln.id}`, { completed }, getAuthConfig());
     } catch (err) {
       // Roll back on failure
       setLearningNeeds(prev);
