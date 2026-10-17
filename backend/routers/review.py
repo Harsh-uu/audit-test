@@ -890,12 +890,9 @@ async def toggle_action_complete(meeting_id: str, action_id: str, data: dict, cu
         status = "Completed" if completed else "Re-opened"
         rolled_note = " (carried-over action)" if matched_action.get("is_rolled_over") else ""
         detail_str = f"{status}: \"{action_label}\"{rolled_note}"
-        try:
-            await _log_edit(conn, meeting_id, org_id, "action_completion",
-                            current_user["id"], current_user.get("name", ""),
-                            detail_str)
-        except Exception as _e:
-            logger.error(f"[AUDIT] _log_edit failed for action_completion meeting={meeting_id}: {_e}")
+        # Only _audit here (not _log_edit too) — both feed the same merged
+        # Audit Trail tab with the same label/detail, which showed up as two
+        # visually-identical duplicate entries for a single toggle.
         try:
             await _audit(conn, meeting_id, org_id, "action_status_changed",
                          current_user["id"], current_user.get("name", ""),
@@ -979,12 +976,9 @@ async def toggle_learning_need_complete(meeting_id: str, ln_id: str, data: dict,
         status = "Completed" if completed else "Re-opened"
         rolled_note = " (carried-over learning need)" if matched_ln.get("is_rolled_over") else ""
         detail_str = f"{status}: \"{ln_label}\"{rolled_note}"
-        try:
-            await _log_edit(conn, meeting_id, org_id, "learning_need_completion",
-                            current_user["id"], current_user.get("name", ""),
-                            detail_str)
-        except Exception as _e:
-            logger.error(f"[AUDIT] _log_edit failed for learning_need_completion meeting={meeting_id}: {_e}")
+        # Only _audit here (not _log_edit too) — see matching note in
+        # toggle_action_complete above; both would otherwise show up as two
+        # visually-identical duplicate entries in the Audit Trail tab.
         try:
             await _audit(conn, meeting_id, org_id, "learning_need_status_changed",
                          current_user["id"], current_user.get("name", ""),
