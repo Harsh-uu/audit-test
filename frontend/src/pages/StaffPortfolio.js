@@ -432,9 +432,6 @@ export default function StaffPortfolio() {
 
   const { user, stats, cqc_summary, care_cert_summary, custom_summary, meetings } = portfolio;
   const initials = user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-  const totalEvidence = (cqc_summary?.length ? cqc_summary.reduce((s, x) => s + x.evidence_count, 0) : 0)
-                      + (care_cert_summary?.length ? care_cert_summary.reduce((s, x) => s + x.evidence_count, 0) : 0)
-                      + (custom_summary?.length ? custom_summary.reduce((s, x) => s + x.evidence_count, 0) : 0);
 
   const evidenceItems = { cqc: cqc_summary, care_cert: care_cert_summary, custom: custom_summary };
   const outstandingActions = registers.actions.filter(a => !a.completed).length;
@@ -504,32 +501,6 @@ export default function StaffPortfolio() {
             )}
             {exporting ? "Generating…" : "Export Portfolio PDF"}
           </button>
-        </div>
-
-        {/* Stats bar */}
-        <div className="bg-white border-b border-gray-100 px-6 py-3">
-          <div className="flex items-center gap-6">
-            {[
-              { label: "Supervision Sessions", value: stats.total_meetings, color: "text-[#1E3A8A]" },
-              { label: "CQC Regulations", value: stats.cqc_count, color: "text-purple-600" },
-              { label: "Care Cert Standards", value: stats.care_cert_count, color: "text-blue-600" },
-              { label: "Organisational Criteria", value: stats.custom_count, color: "text-teal-600" },
-              { label: "Total Evidence Items", value: totalEvidence, color: "text-gray-700" },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="flex flex-col" data-testid={`stat-${label.toLowerCase().replace(/\s/g, '-')}`}>
-                <span className={`text-xl font-bold ${color}`}>{value}</span>
-                <span className="text-xs text-gray-400">{label}</span>
-              </div>
-            ))}
-            {stats.last_meeting_date && (
-              <div className="ml-auto flex flex-col items-end">
-                <span className="text-xs text-gray-400">Last supervision</span>
-                <span className="text-xs font-medium text-gray-600">
-                  {new Date(stats.last_meeting_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                </span>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Always-visible two-column grid */}
