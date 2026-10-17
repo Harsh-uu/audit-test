@@ -802,28 +802,46 @@ async def sign_off(meeting_id: str, background_tasks: BackgroundTasks, current_u
     unreviewed_names: list = []  # status == "reviewed" means all have reviewed
     sign_off_record = {"signed_by": current_user["id"], "signed_by_name": current_user["name"], "signed_at": now}
 
+    # sign_off_manager_id is sometimes still NULL at this point — meeting
+    # creation only auto-assigns it when exactly one manager/admin was among
+    # the attendees (see create_meeting's comment); with 0 or 2+ it's left
+    # for manual selection via PUT /{id}/manager, which often never happens.
+    # Every downstream consumer of this field relies on it being correct —
+    # Team Insights' per-manager registers, the Download Audio permission
+    # check, and critically My Portfolio's "meetings I conducted for my own
+    # staff" exclusion filter, which otherwise leaks the real conducting
+    # manager's own supervision into their own personal portfolio.
+    #
+    # IMPORTANT: do NOT default to "whoever clicked sign-off" — admins are
+    # explicitly allowed to sign off on behalf of someone else (the 403
+    # check above only blocks a non-admin manager who isn't the assigned
+    # one), so an admin doing bulk/administrative sign-off is almost never
+    # the actual supervising manager. Prefer the same unambiguous-attendee
+    # inference used at meeting creation; only fall back to the signer
+    # themselves when that's ambiguous AND the signer is a manager (who, by
+    # having passed the check above, is either the assigned manager or
+    # there wasn't one set, making them the most likely actual conductor).
+    # If attendees remain ambiguous and an admin is signing off on someone
+    # else's behalf, leave it NULL rather than guess — same as creation.
+    fallback_manager_id = meeting.get("sign_off_manager_id")
+    fallback_manager_name = None
+    if not fallback_manager_id:
+        manager_attendees = [a for a in attendees if a.get("role") in ("manager", "admin")]
+        if len(manager_attendees) == 1:
+            fallback_manager_id = manager_attendees[0].get("user_id")
+            fallback_manager_name = manager_attendees[0].get("name")
+        elif current_user["role"] != "admin":
+            fallback_manager_id = current_user["id"]
+            fallback_manager_name = current_user["name"]
+
     async with database.with_org(org_id) as conn:
-        # sign_off_manager_id is sometimes still NULL at this point — meeting
-        # creation only auto-assigns it when exactly one manager/admin was
-        # among the attendees (see create_meeting's comment); with 0 or 2+
-        # it's left for manual selection via PUT /{id}/manager, which often
-        # never happens. Backfilling it here with COALESCE (never overwriting
-        # an already-assigned manager, so an admin's override sign-off still
-        # counts toward the originally-assigned manager's stats) is the
-        # authoritative fallback: whoever actually signs off IS the
-        # supervising manager for every downstream consumer of this field —
-        # Team Insights' per-manager registers, the Download Audio
-        # permission check, and critically My Portfolio's "meetings I
-        # conducted for my own staff" exclusion filter, which relied on this
-        # being non-NULL and otherwise leaked the signer's own conducted
-        # supervision into their own personal portfolio.
         await conn.execute(
             """UPDATE meetings SET status='signed_off', sign_off_record=$1::jsonb,
                sign_off_manager_id=COALESCE(sign_off_manager_id, $2::uuid),
                sign_off_manager_name=COALESCE(sign_off_manager_name, $3),
                audio_deletion_status='grace_period', audio_grace_period_started_at=$4, updated_at=$4
                WHERE id=$5""",
-            sign_off_record, current_user["id"], current_user["name"], now, meeting_id,
+            sign_off_record, fallback_manager_id, fallback_manager_name, now, meeting_id,
         )
 
     _admin_stats_cache.pop(org_id, None)
