@@ -1,18 +1,18 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronRight, ExternalLink, Award, BookOpen, ClipboardList } from "lucide-react";
+import { Check, ChevronRight, ExternalLink, Award, BookOpen, ClipboardList, Repeat } from "lucide-react";
 
-// ── My Portfolio's Actions / Learning Needs / Achievements timeline ────────
-// Same visual language as Team Insights' Registers (pages/TeamInsights.js)
-// for consistency, but scoped to one person (no per-person grouping) and
-// split into Outstanding (top) vs Completed/history (below) per spec.
-// Achievements are read-only (no doneField, no toggle dot) — a recognition
-// record, not a to-do.
+// ── My Portfolio's Actions / Learning Needs / Achievements list ────────────
+// Row style mirrors the Meeting Report's EvidenceTab.js exactly (checkbox
+// toggle, same badge/colour conventions) rather than a generic timeline, per
+// user feedback — so ticking an item off here feels identical to doing it
+// from inside a meeting. Split into Outstanding (top) vs Completed/history
+// (below) per spec. Achievements are read-only (a static icon, no checkbox).
 
 const TYPE_CFG = {
-  achievements:   { icon: Award,         accent: "#059669", noun: "achievement" },
-  learning_needs: { icon: BookOpen,      accent: "#0D9488", noun: "learning need" },
-  actions:        { icon: ClipboardList, accent: "#D97706", noun: "action" },
+  achievements:   { icon: Award,         noun: "achievement" },
+  learning_needs: { icon: BookOpen,      noun: "learning need" },
+  actions:        { icon: ClipboardList, noun: "action" },
 };
 
 export function PersonalRegisterTimeline({ type, items, canToggle, onToggle }) {
@@ -44,90 +44,78 @@ export function PersonalRegisterTimeline({ type, items, canToggle, onToggle }) {
   const renderRow = (item, idx, listKey, { standing = false, overdue = false, done = false } = {}) => {
     const key = `${listKey}-${item.meeting_id}-${item.id}-${idx}`;
     const isExpanded = expanded.has(key);
-    const dotColor = isReadOnly ? cfg.accent : done ? "#059669" : standing ? "#6366F1" : cfg.accent;
     return (
-      <div key={key} className="relative">
+      <div
+        key={key}
+        className={`flex items-start gap-3 p-2.5 rounded-md border transition-all ${
+          done ? "bg-gray-50 border-gray-100 opacity-70"
+            : overdue ? "bg-red-50 border-red-200"
+            : item.is_rolled_over ? "bg-amber-50 border-amber-200"
+            : "bg-gray-50 border-transparent"
+        }`}
+      >
         {isReadOnly ? (
-          <div
-            className="absolute left-[-28px] top-1 w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center flex-shrink-0"
-            style={{ background: dotColor }}
-          >
-            <Icon className="w-2.5 h-2.5 text-white" />
+          <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Icon className="w-3 h-3 text-emerald-600" />
           </div>
         ) : (
           <button
-            onClick={e => { e.stopPropagation(); canToggle && onToggle(item, !done); }}
+            onClick={() => canToggle && onToggle(item, !done)}
             disabled={!canToggle}
-            className={`absolute left-[-28px] top-1 w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center flex-shrink-0 ${canToggle ? "cursor-pointer" : "cursor-default"}`}
-            style={{ background: dotColor }}
-            title={canToggle ? (done ? "Mark as outstanding" : "Mark as done") : ""}
+            className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
+              done ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-300 hover:border-emerald-400"
+            } ${canToggle ? "cursor-pointer" : "cursor-default opacity-60"}`}
+            title={canToggle ? (standing ? (done ? "Reopen" : "Close") : (done ? "Mark as outstanding" : "Mark as complete")) : ""}
             data-testid={`${type}-toggle-${key}`}
           >
-            {done ? <Check className="w-2.5 h-2.5 text-white" /> : <Icon className="w-2.5 h-2.5 text-white" />}
+            {done && <Check className="w-3 h-3" />}
           </button>
         )}
 
-        <button className="w-full text-left group" onClick={() => toggleExpand(key)} data-testid={`${type}-item-${key}`}>
-          <div className="flex items-start gap-2">
-            <p className={`text-sm font-medium leading-snug flex-1 transition-colors ${done ? "line-through text-gray-400" : "text-gray-900"}`}>
-              {item.text}
-            </p>
-            {item.is_rolled_over && (
-              <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5">Rolled over</span>
-            )}
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleExpand(key)} data-testid={`${type}-item-${key}`}>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className={`text-sm ${done ? "line-through text-gray-400" : "text-gray-800"}`}>{item.text}</p>
             {standing && (
-              <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5">Standing</span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700 flex-shrink-0">
+                <Repeat className="w-2.5 h-2.5" /> Standing
+              </span>
             )}
             {overdue && (
-              <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5">Overdue</span>
+              <span className="text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full flex-shrink-0">Overdue</span>
             )}
-            <ChevronRight className={`w-3.5 h-3.5 text-gray-300 flex-shrink-0 mt-1 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-          </div>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-xs text-gray-400">{item.meeting_title}</span>
-            <span className="text-gray-200 text-xs">·</span>
-            <span className="text-xs font-medium text-gray-500">{fmtDate(item.meeting_date)}</span>
-            {!isReadOnly && !standing && item.due_date && (
-              <>
-                <span className="text-gray-200 text-xs">·</span>
-                <span className={`text-xs ${overdue ? "text-red-500 font-medium" : "text-gray-400"}`}>Due: {item.due_date}</span>
-              </>
-            )}
-            {standing && item.trigger && (
-              <>
-                <span className="text-gray-200 text-xs">·</span>
-                <span className="text-xs text-gray-400">Trigger: {item.trigger}</span>
-              </>
-            )}
-            {done && item.completed_at && (
-              <>
-                <span className="text-gray-200 text-xs">·</span>
-                <span className="text-xs text-emerald-600">Completed {fmtDate(item.completed_at)}</span>
-              </>
+            {item.is_rolled_over && (
+              <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full flex-shrink-0">Rolled over</span>
             )}
           </div>
-        </button>
-
-        {isExpanded && (
-          <div className="mt-2.5 bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <p className="text-sm text-gray-700 leading-relaxed mb-3">{item.text}</p>
-            <button
-              onClick={() => navigate(`/meetings/${item.meeting_id}/report`)}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1E3A8A] hover:text-[#1E3A8A]/80 hover:underline"
-              data-testid={`${type}-view-meeting-${key}`}
-            >
-              <ExternalLink className="w-3.5 h-3.5" /> View in meeting report
-            </button>
-          </div>
-        )}
+          <p className="text-xs text-gray-500 mt-0.5">
+            {item.meeting_title} · {fmtDate(item.meeting_date)}
+            {!isReadOnly && !standing && item.due_date && ` · Due: ${item.due_date}`}
+            {standing && item.trigger && ` · Trigger: ${item.trigger}`}
+            {done && item.completed_at && ` · Completed ${fmtDate(item.completed_at)}`}
+          </p>
+          {isExpanded && (
+            <div className="mt-2 pt-2 border-t border-gray-200">
+              <button
+                onClick={(e) => { e.stopPropagation(); navigate(`/meetings/${item.meeting_id}/report`); }}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1E3A8A] hover:underline"
+                data-testid={`${type}-view-meeting-${key}`}
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> View in meeting report
+              </button>
+            </div>
+          )}
+        </div>
+        <ChevronRight
+          className={`w-3.5 h-3.5 text-gray-300 flex-shrink-0 mt-1 transition-transform cursor-pointer ${isExpanded ? "rotate-90" : ""}`}
+          onClick={() => toggleExpand(key)}
+        />
       </div>
     );
   };
 
   if (isReadOnly) {
     return (
-      <div className="relative pl-7 space-y-5" data-testid="achievements-timeline">
-        <div className="absolute left-[11px] top-1 bottom-1 w-0.5 bg-gray-100" />
+      <div className="space-y-2" data-testid="achievements-list">
         {items.map((item, idx) => renderRow(item, idx, "ach"))}
       </div>
     );
@@ -148,30 +136,28 @@ export function PersonalRegisterTimeline({ type, items, canToggle, onToggle }) {
   return (
     <div className="space-y-8">
       <div>
-        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-2">
           Outstanding
           {outstanding.length > 0 && <span className="text-[10px] bg-gray-100 text-gray-600 rounded-full px-1.5">{outstanding.length}</span>}
         </h3>
         {outstanding.length === 0 ? (
           <p className="text-sm text-gray-400" data-testid={`${type}-outstanding-empty`}>Nothing outstanding — you're all caught up.</p>
         ) : (
-          <div className="relative pl-7 space-y-5">
-            <div className="absolute left-[11px] top-1 bottom-1 w-0.5 bg-gray-100" />
+          <div className="space-y-2">
             {outstanding.map((item, idx) => renderRow(item, idx, "outstanding", { standing: isStanding(item), overdue: isOverdue(item), done: false }))}
           </div>
         )}
       </div>
 
       <div>
-        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-2">
           Completed
           {completed.length > 0 && <span className="text-[10px] bg-gray-100 text-gray-600 rounded-full px-1.5">{completed.length}</span>}
         </h3>
         {completed.length === 0 ? (
           <p className="text-sm text-gray-400" data-testid={`${type}-completed-empty`}>Nothing completed yet — your progress history will build up here.</p>
         ) : (
-          <div className="relative pl-7 space-y-5">
-            <div className="absolute left-[11px] top-1 bottom-1 w-0.5 bg-gray-100" />
+          <div className="space-y-2">
             {completed.map((item, idx) => renderRow(item, idx, "completed", { standing: isStanding(item), overdue: false, done: true }))}
           </div>
         )}
