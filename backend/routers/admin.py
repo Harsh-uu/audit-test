@@ -2588,6 +2588,16 @@ class FixOrgRequest(BaseModel):
 async def fix_user_org_by_email(data: FixOrgRequest, email: str, current_user=Depends(get_current_user)):
     """Super Admin / Admin: assign an org_id to a user whose org_id is NULL.
     Used to repair invited users who somehow ended up without an org assignment.
+
+    SECURITY (P0-01): a non-super_admin caller may only repair a user whose
+    org_id is CURRENTLY NULL — that is the only legitimate documented use
+    case for this endpoint. Without this check, any org's admin could look
+    up ANY other org's user by email (the lookup runs on with_admin(), which
+    bypasses RLS) and silently reassign them into their own org, after which
+    the existing org-scoped reset-password/update-user endpoints would treat
+    that user as their own and allow a full account takeover. super_admin is
+    exempt since cross-org reassignment is a legitimate support action for
+    that role. Every successful reassignment is now audit-logged.
     """
     if current_user["role"] not in ("admin", "super_admin"):
         raise HTTPException(403, "Admin only")
@@ -2600,6 +2610,13 @@ async def fix_user_org_by_email(data: FixOrgRequest, email: str, current_user=De
         if not u:
             raise HTTPException(404, "User not found")
 
+        # SECURITY (P0-01): non-super_admins can only repair a user whose
+        # org_id is currently NULL. Returns the same 404 as "not found" so a
+        # caller cannot use this endpoint to probe whether a given email
+        # belongs to a (differently-orged) existing account.
+        if current_user["role"] != "super_admin" and u["org_id"] is not None:
+            raise HTTPException(404, "User not found")
+
         # Non-super_admins can only assign their own org
         target_org = data.org_id
         if current_user["role"] != "super_admin" and target_org != caller_org:
@@ -2610,7 +2627,12 @@ async def fix_user_org_by_email(data: FixOrgRequest, email: str, current_user=De
         if not org_row:
             raise HTTPException(404, "Organisation not found")
 
+        previous_org = "NULL" if u["org_id"] is None else str(u["org_id"])
         await conn.execute("UPDATE users SET org_id=$1 WHERE id=$2", target_org, u["id"])
+        await _audit(
+            conn, None, target_org, "user_org_fixed_by_email", current_user["id"], current_user.get("name", ""),
+            f"Assigned org_id for {email} (previously {previous_org}) to {org_row['name']} by {current_user['role']} {current_user.get('name', '')}",
+        )
 
     return {"message": f"User org_id set to {target_org} ({org_row['name']})", "user_id": str(u["id"])}
 

@@ -113,23 +113,138 @@ class TestAuthMe:
         assert data.get("role") == "admin", f"Expected admin role, got: {data.get('role')}"
 
 
-# fix-org-by-email endpoint
-class TestFixOrgByEmail:
-    def test_fix_org_endpoint_exists(self, admin_token):
-        """POST /api/admin/users/fix-org-by-email should not 404"""
-        # Get admin's org_id first
-        me = requests.get(f"{BASE_URL}/api/auth/me", headers=auth(admin_token))
-        admin_org_id = me.json().get("org_id")
-        assert admin_org_id, "Admin has no org_id"
+# fix-org-by-email endpoint — P0-01 security fix verification
+#
+# Uses its own session-cookie login (not the Bearer-token `admin_token`
+# fixture above, which pre-dates the cookie-based auth migration and no
+# longer authenticates) and reads DATABASE_URL straight from backend/.env,
+# matching the proven-working pattern in tests/test_idor_sec001.py.
+import asyncio
+import uuid
+from datetime import datetime, timezone
 
-        # user@supervision.com should already have org_id, so this should
-        # succeed (sets to same org) or say user already in org
-        r = requests.post(
-            f"{BASE_URL}/api/admin/users/fix-org-by-email",
+import asyncpg
+from dotenv import dotenv_values
+
+_be_env = dotenv_values("/app/backend/.env")
+_fe_env = dotenv_values("/app/frontend/.env")
+_DSN = _be_env.get("DATABASE_URL")
+# Module-level BASE_URL (above) relies on REACT_APP_BACKEND_URL being present
+# in the backend process env, which it isn't when running pytest from
+# /app/backend — fall back to reading it straight from frontend/.env.
+_BASE_URL = BASE_URL or _fe_env.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+
+
+class TestFixOrgByEmailSecurity:
+    """P0-01: an admin of any organisation was able to reassign ANY user
+    (found by email, globally, no org filter) into their own org, with no
+    check on the target's CURRENT org_id — even though the endpoint's own
+    docstring says it exists only to repair users whose org_id is NULL.
+    Once reassigned, the existing org-scoped reset-password/update-user
+    endpoints would treat that user as the attacker's own, enabling full
+    cross-tenant account takeover with zero audit trail.
+
+    Fix: non-super_admin callers may now only repair a user whose org_id is
+    CURRENTLY NULL (404 otherwise, same as "not found" to avoid leaking
+    cross-org account existence), and every successful reassignment is now
+    audit-logged (action=user_org_fixed_by_email).
+    """
+
+    @pytest.fixture(scope="class")
+    def admin_session(self):
+        s = requests.Session()
+        r = s.post(f"{_BASE_URL}/api/auth/login", json={"email": ADMIN_EMAIL, "password": "Admin123!X"})
+        assert r.status_code == 200, f"Admin login failed: {r.text}"
+        me = s.get(f"{_BASE_URL}/api/auth/me")
+        assert me.status_code == 200, f"/auth/me failed: {me.text}"
+        org_id = me.json().get("org_id")
+        assert org_id, "Admin has no org_id"
+        return s, org_id
+
+    @pytest.fixture
+    def null_org_user(self):
+        """Disposable user with org_id=NULL — the endpoint's documented
+        legitimate use case. Created/removed per-test so it never pollutes
+        other suites."""
+        email = f"p0-01-nullorg-{uuid.uuid4().hex[:8]}@example.com"
+        uid = str(uuid.uuid4())
+
+        async def _create():
+            conn = await asyncpg.connect(_DSN, ssl="require")
+            try:
+                await conn.execute(
+                    "INSERT INTO users (id, email, password_hash, name, role, org_id, is_active, "
+                    "must_change_password, created_at) VALUES ($1,$2,'x','P0-01 Test Fixture','attendee',"
+                    "NULL,TRUE,TRUE,$3)",
+                    uid, email, datetime.now(timezone.utc),
+                )
+            finally:
+                await conn.close()
+
+        async def _cleanup():
+            conn = await asyncpg.connect(_DSN, ssl="require")
+            try:
+                await conn.execute(
+                    "DELETE FROM audit_logs WHERE action='user_org_fixed_by_email' AND detail LIKE $1",
+                    f"%{email}%",
+                )
+                await conn.execute("DELETE FROM users WHERE id=$1", uid)
+            finally:
+                await conn.close()
+
+        asyncio.run(_create())
+        yield uid, email
+        asyncio.run(_cleanup())
+
+    def test_blocks_reassigning_user_with_existing_org(self, admin_session):
+        """A user who already has a non-NULL org_id (user@supervision.com,
+        a DIFFERENT org in the real exploit scenario) must NOT be
+        reassignable by a plain admin — must 404, not silently succeed."""
+        session, admin_org_id = admin_session
+        r = session.post(
+            f"{_BASE_URL}/api/admin/users/fix-org-by-email",
             params={"email": USER_EMAIL},
             json={"org_id": admin_org_id},
-            headers=auth(admin_token),
         )
-        # 200 = fixed; 403 could happen if user is already in a different org
-        assert r.status_code in (200, 403, 400), f"Unexpected status {r.status_code}: {r.text}"
-        print(f"fix-org-by-email status: {r.status_code}, response: {r.text}")
+        assert r.status_code == 404, f"Expected 404 (org_id not NULL), got {r.status_code}: {r.text}"
+
+    def test_repairs_user_with_null_org(self, admin_session, null_org_user):
+        """The documented legitimate use case — repairing a NULL-org user
+        into the caller's own org — must still work for a plain admin, and
+        must now write an audit_logs row."""
+        session, admin_org_id = admin_session
+        uid, email = null_org_user
+        r = session.post(
+            f"{_BASE_URL}/api/admin/users/fix-org-by-email",
+            params={"email": email},
+            json={"org_id": admin_org_id},
+        )
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        assert r.json()["user_id"] == uid
+
+        async def _check_audit():
+            conn = await asyncpg.connect(_DSN, ssl="require")
+            try:
+                return await conn.fetchrow(
+                    "SELECT detail FROM audit_logs WHERE action='user_org_fixed_by_email' AND detail LIKE $1",
+                    f"%{email}%",
+                )
+            finally:
+                await conn.close()
+
+        audit_row = asyncio.run(_check_audit())
+        assert audit_row is not None, "Expected an audit_logs row for this org reassignment"
+
+    def test_cannot_assign_to_a_different_org_than_own(self, admin_session, null_org_user):
+        """Non-super_admin destination restriction must still hold: even a
+        NULL-org user cannot be assigned into an org the caller doesn't
+        belong to."""
+        session, _admin_org_id = admin_session
+        _uid, email = null_org_user
+        other_org_id = "3628a11d-36b8-42df-9d46-0479450ee22c"  # IDOR Test Org B fixture
+        r = session.post(
+            f"{_BASE_URL}/api/admin/users/fix-org-by-email",
+            params={"email": email},
+            json={"org_id": other_org_id},
+        )
+        assert r.status_code == 403, f"Expected 403, got {r.status_code}: {r.text}"
