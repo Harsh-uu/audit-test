@@ -20,7 +20,10 @@ def _read_env(path, key):
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL") or _read_env("/app/frontend/.env", "REACT_APP_BACKEND_URL")
 BASE_URL = BASE_URL.rstrip("/")
-JWT_SECRET = "supervision2_jwt_secret_d5f8e9a3b2c1f4e7a8b9c0d1e2f3a4b5c6d7e8f9"
+# P0-02: never hardcode the signing secret — read the live value from
+# backend/.env (same pattern tests/test_security_jwt_idor.py already uses
+# via os.environ["JWT_SECRET"] after load_dotenv()).
+JWT_SECRET = os.environ.get("JWT_SECRET") or _read_env("/app/backend/.env", "JWT_SECRET")
 EXPECTED_ORG_ID = "b00bf04f-a1b9-4673-8430-b4a08ba15d6c"  # Test Company
 
 # --- helpers -----------------------------------------------------------------

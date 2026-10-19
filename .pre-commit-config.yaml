@@ -1,0 +1,13 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-secrets
+        name: Block hardcoded secret literals (P0-02)
+        description: >
+          Blocks commits that hardcode a SECRET/API_KEY/PRIVATE_KEY/ACCESS_KEY
+          literal instead of reading it from the environment — the exact
+          class of bug that leaked JWT_SECRET via a git-tracked test file.
+        entry: python3 scripts/check_secrets.py
+        language: system
+        pass_filenames: false
+        always_run: true
