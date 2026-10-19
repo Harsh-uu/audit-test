@@ -561,20 +561,16 @@ async def get_meetings_page_data(
     return {"meetings": meetings, "month_summary": month_summary, "org_structure": org_structure}
 
 
-async def _get_meeting_data(meeting_id: str, current_user: dict, conn) -> dict:
-    """Does every read for GET /{meeting_id} on a single already-open connection
-    (meeting row, access check, transcript, analysis, comments, attendee-email
-    enrichment) — see get_meeting()'s docstring for why this used to be 2
-    separate with_org()/with_admin() blocks (~10-12 round trips) and now isn't."""
-    org_id = current_user.get("org_id", "")
+async def _check_meeting_access(conn, current_user: dict, org_id: str, meeting: dict) -> None:
+    """Shared access check for GET /{meeting_id} and GET /{meeting_id}/transcript-text
+    (P0-04: transcript-text used to duplicate only half of this inline, missing
+    the manager-scope branch below, so a team/setting-scoped manager could read
+    the transcript text of ANY meeting in their org, bypassing the exact same
+    restriction get_meeting enforces). Raises 404 (never 403, to avoid leaking
+    meeting existence) if the caller cannot access this meeting."""
     user_id = current_user.get("id", "")
 
-    row = await conn.fetchrow(f"SELECT {_DETAIL_COLS} FROM meetings WHERE id = $1", meeting_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    meeting = _parse_meeting_row(dict(row))
-
-    # Access check: attendees and shared_with reviewers can read their own meetings.
+    # Attendees and shared_with reviewers can read their own meetings.
     if current_user["role"] not in ["admin", "manager", "super_admin"]:
         attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
         shared_with = meeting["shared_with"]
@@ -593,6 +589,22 @@ async def _get_meeting_data(meeting_id: str, current_user: dict, conn) -> dict:
             creator = str(meeting.get("created_by", ""))
             if not (attendee_ids & scoped_str) and creator not in scoped_str:
                 raise HTTPException(status_code=404, detail="Meeting not found")
+
+
+async def _get_meeting_data(meeting_id: str, current_user: dict, conn) -> dict:
+    """Does every read for GET /{meeting_id} on a single already-open connection
+    (meeting row, access check, transcript, analysis, comments, attendee-email
+    enrichment) — see get_meeting()'s docstring for why this used to be 2
+    separate with_org()/with_admin() blocks (~10-12 round trips) and now isn't."""
+    org_id = current_user.get("org_id", "")
+    user_id = current_user.get("id", "")
+
+    row = await conn.fetchrow(f"SELECT {_DETAIL_COLS} FROM meetings WHERE id = $1", meeting_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting = _parse_meeting_row(dict(row))
+
+    await _check_meeting_access(conn, current_user, org_id, meeting)
 
     # Attach transcript
     if meeting.get("transcript_id"):
@@ -809,13 +821,10 @@ async def get_transcript_text(meeting_id: str, current_user=Depends(get_current_
             raise HTTPException(status_code=404, detail="Not found")
         meeting = _parse_meeting_row(dict(row))
 
-        # Access check (mirrors get_meeting)
-        if current_user["role"] not in ["admin", "manager", "super_admin"]:
-            attendee_ids = [a.get("user_id", "") for a in meeting["attendees"]]
-            shared_with = meeting["shared_with"]
-            is_shared = any(isinstance(s, dict) and s.get("user_id") == user_id for s in shared_with)
-            if user_id not in attendee_ids and not is_shared and user_id != meeting.get("created_by", ""):
-                raise HTTPException(status_code=404, detail="Not found")
+        # Access check — shared helper (P0-04: this used to only duplicate
+        # the non-manager half of _get_meeting_data's check inline, missing
+        # the manager-scope branch entirely).
+        await _check_meeting_access(conn, current_user, org_id, meeting)
 
         if not meeting.get("transcript_id"):
             raise HTTPException(status_code=404, detail="No transcript")
