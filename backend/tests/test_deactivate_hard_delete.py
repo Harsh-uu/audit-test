@@ -237,3 +237,41 @@ class TestDeactivateAndHardDelete:
         fake_id = str(uuid.uuid4())
         r = admin_session.delete(f"{BASE_URL}/api/admin/users/{fake_id}/hard-delete")
         assert r.status_code == 404
+
+    def test_11_hard_delete_user_with_one_meeting_cascades(self, admin_session):
+        """P0-03 regression: a user who is the attendee/subject of a meeting must
+        have that meeting (and its cascaded rows) actually deleted, not silently
+        skipped. Covers two compounding bugs that were fixed together:
+        (1) the meeting lookup double-JSON-encoded its $1::jsonb parameter on the
+        pooled connection, so `attendees @> $1::jsonb` never matched anything and
+        meeting_ids was always empty; (2) the downstream DELETE statements cast
+        meeting_ids to ::text[] against native `uuid` columns, which Postgres
+        rejects outright — but was unreachable in practice because of bug (1)."""
+        user = _create_throwaway_user(admin_session)
+
+        meeting_id = str(uuid.uuid4())
+        admin_id = _db_fetchval("SELECT id FROM users WHERE email=$1", ADMIN_EMAIL)
+        org_id = _db_fetchval("SELECT org_id FROM users WHERE email=$1", ADMIN_EMAIL)
+        attendees = [{"user_id": user["id"], "role": "attendee", "name": user["name"]}]
+        _db_execute(
+            "INSERT INTO meetings (id, org_id, title, status, attendees, created_by, created_at) "
+            "VALUES ($1::uuid,$2::uuid,'P0-03 Regression Meeting','draft',$3::jsonb,$4::uuid, now())",
+            meeting_id, str(org_id), __import__("json").dumps(attendees), str(admin_id),
+        )
+        # A cascaded row to prove the DELETE loop actually reaches dependent tables.
+        _db_execute(
+            "INSERT INTO transcripts (id, meeting_id, org_id, text, created_at) VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'repro transcript', now())",
+            meeting_id, str(org_id),
+        )
+
+        # Deactivate then hard-delete
+        rd = admin_session.delete(f"{BASE_URL}/api/admin/users/{user['id']}")
+        assert rd.status_code == 200
+        rh = admin_session.delete(f"{BASE_URL}/api/admin/users/{user['id']}/hard-delete")
+        assert rh.status_code == 200, f"Hard delete failed: {rh.status_code} {rh.text}"
+        assert rh.json()["meetings_deleted"] == 1, f"Expected 1 meeting deleted, got: {rh.json()}"
+
+        meeting_still_exists = _db_fetchval("SELECT id FROM meetings WHERE id=$1::uuid", meeting_id)
+        assert meeting_still_exists is None, "Meeting must be gone after hard-delete"
+        transcript_still_exists = _db_fetchval("SELECT id FROM transcripts WHERE meeting_id=$1::uuid", meeting_id)
+        assert transcript_still_exists is None, "Cascaded transcript row must be gone after hard-delete"

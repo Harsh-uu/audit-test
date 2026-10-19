@@ -266,25 +266,29 @@ async def hard_delete_user(user_id: str, current_user=Depends(get_current_user))
 
         meeting_ids = [r["id"] for r in await conn.fetch(
             "SELECT id FROM meetings WHERE attendees @> $1::jsonb",
-            json.dumps([{"user_id": user_id, "role": "attendee"}]),
+            [{"user_id": user_id, "role": "attendee"}],
         )]
         audio_paths = []
         if meeting_ids:
             audio_paths = [
                 r["storage_path"] for r in await conn.fetch(
-                    "SELECT storage_path FROM audio_files WHERE meeting_id = ANY($1::text[]) AND storage_path IS NOT NULL",
+                    "SELECT storage_path FROM audio_files WHERE meeting_id = ANY($1::uuid[]) AND storage_path IS NOT NULL",
                     meeting_ids,
                 )
             ]
-            await conn.execute("DELETE FROM meetings WHERE id = ANY($1::text[])", meeting_ids)
+            await conn.execute("DELETE FROM meetings WHERE id = ANY($1::uuid[])", meeting_ids)
             # Redundant with FK ON DELETE CASCADE, kept as a defence-in-depth
             # safety net matching delete_meeting()'s existing convention.
+            # All of these meeting_id columns are native UUID (verified live
+            # via information_schema.columns — a prior comment here claiming
+            # they were TEXT was wrong for this database, which silently
+            # made every one of these DELETEs a no-op: uuid = text has no
+            # operator in Postgres, so each statement would raise, except it
+            # was never even reached because meeting_ids was always empty —
+            # see the json.dumps() fix above).
             for table in ["transcripts", "analyses", "audio_files", "reviewer_comments", "review_edits",
-                          "audit_logs", "evidence_feedback", "jobs", "meeting_prep"]:
-                await conn.execute(f"DELETE FROM {table} WHERE meeting_id = ANY($1::text[])", meeting_ids)
-            # need_review_signals.meeting_id is native UUID (unlike the other
-            # tables' TEXT columns that merely hold UUID-shaped strings).
-            await conn.execute("DELETE FROM need_review_signals WHERE meeting_id = ANY($1::uuid[])", meeting_ids)
+                          "audit_logs", "evidence_feedback", "jobs", "meeting_prep", "need_review_signals"]:
+                await conn.execute(f"DELETE FROM {table} WHERE meeting_id = ANY($1::uuid[])", meeting_ids)
 
         upload_paths = [
             r["storage_path"] for r in await conn.fetch(
